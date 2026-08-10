@@ -14,6 +14,43 @@ interface AdvisorDashboardProps {
   activeMenu: string;
 }
 
+/**
+ * Report-outline statuses only. Deliberately not folded into ui/StatusBadge:
+ * `report_outlines.status` shares key names with `intent_forms.status` while
+ * meaning something else, so the shared table would translate them wrongly.
+ */
+const OUTLINE_STATUS: Record<string, { text: string; tone: string }> = {
+  pending_mentor: {
+    text: 'รอพี่เลี้ยงตรวจ',
+    tone: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900/50',
+  },
+  pending_advisor: {
+    text: 'รอที่ปรึกษาอนุมัติ',
+    tone: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/50',
+  },
+  approved: {
+    text: 'อนุมัติเรียบร้อย',
+    tone: 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-900/50',
+  },
+  rejected: {
+    text: 'ตีกลับแก้ไข',
+    tone: 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-900/50',
+  },
+};
+
+/**
+ * `student_name` is declared optional on IntentForm but `/api/intents` never
+ * sends it — the query returns `first_name` and `last_name`. The approval queue
+ * read `intent.student_name || 'ไม่ระบุชื่อ'`, so it has always shown "ไม่ระบุ
+ * ชื่อ" for every student, and the advisor approved by student code alone.
+ * (StaffDashboard reads the same missing field in two places — not touched here.)
+ */
+const intentStudentName = (intent?: IntentForm | null): string =>
+  [intent?.first_name, intent?.last_name].filter(Boolean).join(' ').trim()
+  || intent?.student_name
+  || intent?.student_code
+  || 'ไม่ระบุชื่อ';
+
 const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [intents, setIntents] = useState<IntentForm[]>([]);
   const [students, setStudents] = useState<any[]>([]);
@@ -45,19 +82,28 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [rejectReason, setRejectReason] = useState('');
   const [customReason, setCustomReason] = useState('');
   const [submittingAction, setSubmittingAction] = useState<number | null>(null);
+  /** Shown inside the rejection dialog — see handleRejectSubmit. */
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   const loadData = async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
-      const [intentsRes, studentsRes, outlinesRes] = await Promise.all([
-        api.get('/intents'),
-        api.get('/students'),
-        api.get('/outlines/advisor').catch(() => ({ data: [] }))
-      ]);
-      const outlineList = Array.isArray(outlinesRes) ? outlinesRes : (outlinesRes?.data || []);
-      setIntents(intentsRes || []);
-      setStudents(studentsRes || []);
-      setReportOutlines(outlineList);
+
+      // Fetch what this menu actually draws. All three used to be requested on
+      // every menu, and `useDashboardData` repeats that every ten seconds — so
+      // reading the outline queue re-fetched every intent and every student in
+      // the department, six times a minute, to render nothing.
+      if (activeMenu === 'report_outlines') {
+        const outlinesRes = await api.get('/outlines/advisor').catch(() => ({ data: [] }));
+        setReportOutlines(Array.isArray(outlinesRes) ? outlinesRes : (outlinesRes?.data || []));
+      } else {
+        const [intentsRes, studentsRes] = await Promise.all([
+          api.get('/intents'),
+          api.get('/students'),
+        ]);
+        setIntents(intentsRes || []);
+        setStudents(studentsRes || []);
+      }
     } catch (err) {
       console.error('Failed to load advisor dashboard data:', err);
       if (!isBackground) setError('ไม่สามารถโหลดข้อมูลใบความจำนงหรือรายชื่อนักศึกษาได้ กรุณาลองใหม่อีกครั้ง');
@@ -101,10 +147,17 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
   // Inline Approve handler (required for E2E tests and quick actions)
   const handleApprove = async (id: number) => {
+    const intent = intents.find((i) => i.form_id === id);
     setSubmittingAction(id);
     setError(null);
+    setSuccess(null);
     try {
       await api.patch(`/intents/${id}/status`, { status: 'approved_by_advisor' });
+      // Approving moves the form on to the department head and cannot be undone
+      // from here, and the only visible effect used to be the row disappearing.
+      setSuccess(
+        `อนุมัติใบความจำนงของ ${intentStudentName(intent)} แล้ว ส่งต่อให้หัวหน้าสาขาวิชาพิจารณาเป็นลำดับถัดไป`
+      );
       // Dispatch update event to sync bell notification and reload list
       window.dispatchEvent(new CustomEvent('intent-updated'));
     } catch (err: any) {
@@ -117,23 +170,31 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   // Inline Reject submit handler
   const handleRejectSubmit = async () => {
     if (rejectingIntentId === null) return;
-    const finalReason = rejectReason === 'other' ? customReason : rejectReason;
+    const intent = intents.find((i) => i.form_id === rejectingIntentId);
+    const finalReason = rejectReason === 'other' ? customReason.trim() : rejectReason;
     if (!finalReason) {
-      setError('กรุณาระบุหรือเลือกเหตุผลการตีกลับ');
+      // Inside the dialog, not on the page behind it: the page banner is
+      // covered by the backdrop, so choosing nothing looked like a dead button.
+      setRejectError('กรุณาเลือกสาเหตุการตีกลับ หรือกรอกเหตุผลของท่านเอง');
       return;
     }
 
     setSubmittingAction(rejectingIntentId);
     setError(null);
+    setSuccess(null);
+    setRejectError(null);
     try {
       await api.patch(`/intents/${rejectingIntentId}/status`, { status: 'rejected', reason: finalReason });
       setRejectingIntentId(null);
       setRejectReason('');
       setCustomReason('');
+      setSuccess(
+        `ตีกลับใบความจำนงของ ${intentStudentName(intent)} แล้ว นักศึกษาจะเห็นเหตุผลและยื่นใหม่ได้`
+      );
       // Dispatch update event to sync bell notification and reload list
       window.dispatchEvent(new CustomEvent('intent-updated'));
     } catch (err: any) {
-      setError(err.response?.data?.message || 'การปฏิเสธใบความจำนงล้มเหลว');
+      setRejectError(err.response?.data?.message || 'การปฏิเสธใบความจำนงล้มเหลว');
     } finally {
       setSubmittingAction(null);
     }
@@ -233,7 +294,15 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
   // Filter computations
   const pendingIntents = intents.filter(i => i.status === 'pending_advisor');
-  const approvedIntents = intents.filter(i => i.status !== 'pending_advisor' && i.status !== 'rejected' && i.status !== 'company_rejected');
+  // The three statuses that mean "this form is dead" are the same three
+  // `models/intent.ts` uses. `rejected_by_dept_head` was missing here, so a form
+  // the department head had sent back was counted under "อนุมัติแล้ว" — the same
+  // slip found on the student job board in round 8. Keep this list in step with
+  // the server's.
+  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected', 'rejected_by_dept_head'];
+  const approvedIntents = intents.filter(
+    i => i.status !== 'pending_advisor' && !DEAD_INTENT_STATUSES.includes(i.status)
+  );
 
   // Filter students based on search and selected options
   const filteredStudents = students.filter(student => {
@@ -268,6 +337,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         </div>
 
         <AlertBanner variant="error" message={error} />
+        <AlertBanner variant="success" message={success} />
 
         {/* Filter Bar */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center">
@@ -319,7 +389,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">นักศึกษา</th>
-                    <th className="p-4 font-semibold">สาขาวิชา / เเกรดเฉลี่ย</th>
+                    <th className="p-4 font-semibold">สาขาวิชา / เกรดเฉลี่ย</th>
                     <th className="p-4 font-semibold text-center">สิทธิ์สมัคร</th>
                     <th className="p-4 font-semibold text-center">ผ่านปฐมนิเทศ</th>
                     <th className="p-4 font-semibold">สถานะคำขอปัจจุบัน</th>
@@ -474,25 +544,26 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           : '-'}
                       </td>
                       <td className="p-4 text-center">
+                        {/* Kept local rather than moved into ui/StatusBadge: the
+                            keys collide across domains — an appointment's
+                            `accepted` is not an intent's, and an outline's
+                            `rejected` may come from the mentor, not the advisor.
+                            A shared table keyed on the bare status would hand
+                            back confidently wrong Thai. What is fixed here is
+                            the fallback, which used to call *any* unrecognised
+                            status "ตีกลับแก้ไข" — inventing a rejection. */}
                         <span className={`inline-block px-2.5 py-1 rounded-full text-xs font-bold border ${
-                          item.status === 'pending_mentor'
-                            ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400'
-                            : item.status === 'pending_advisor'
-                            ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400'
-                            : item.status === 'approved'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400'
-                            : 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400'
-                        }`}>
-                          {item.status === 'pending_mentor'
-                            ? 'รอพี่เลี้ยงตรวจ'
-                            : item.status === 'pending_advisor'
-                            ? 'รอที่ปรึกษาอนุมัติ'
-                            : item.status === 'approved'
-                            ? 'อนุมัติเรียบร้อย'
-                            : 'ตีกลับแก้ไข'}
+                          OUTLINE_STATUS[item.status]?.tone
+                            ?? 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700'
+                        }`}
+                        title={OUTLINE_STATUS[item.status] ? undefined : `สถานะที่ยังไม่ได้กำหนดคำอธิบาย: ${item.status}`}>
+                          {OUTLINE_STATUS[item.status]?.text ?? item.status}
                         </span>
                       </td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
+                      <td className="p-4 text-right">
+                        {/* The flex lived on the <td> itself, which drops the
+                            cell out of the table's column sizing. Wrap instead. */}
+                        <div className="flex items-center justify-end gap-2">
                         {item.latest_file_path && (
                           <a
                             href={`${API_BASE_URL}/files/${item.latest_file_path}`}
@@ -514,6 +585,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                         >
                           {item.status === 'pending_advisor' ? 'เปิดตรวจอนุมัติ' : 'ดูประวัติ/ผลตรวจ'}
                         </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -553,6 +625,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       </div>
 
       <AlertBanner variant="error" message={error} />
+      <AlertBanner variant="success" message={success} />
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -622,7 +695,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                   return (
                     <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                        <span className="block font-bold">{intent.student_name || 'ไม่ระบุชื่อ'}</span>
+                        <span className="block font-bold">{intentStudentName(intent)}</span>
                         <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
@@ -631,7 +704,10 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
                         {intent.job_title || 'ฝึกงานทั่วไป'}
                       </td>
-                      <td className="p-4 text-right flex items-center justify-end gap-2">
+                      <td className="p-4 text-right">
+                        {/* The flex lived on the <td> itself, which drops the
+                            cell out of the table's column sizing. Wrap instead. */}
+                        <div className="flex items-center justify-end gap-2">
                         {/* 1. Review button for detailed popup modal */}
                         <button
                           type="button"
@@ -664,6 +740,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                         >
                           {isPendingAction ? 'รอ...' : 'อนุมัติ'}
                         </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -685,6 +762,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             setRejectingIntentId(null);
             setRejectReason('');
             setCustomReason('');
+            setRejectError(null);
           }}
           size="md"
           closeOnBackdrop={false}
@@ -692,6 +770,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         >
           <ModalBody>
             <div className="space-y-4">
+              <AlertBanner variant="error" message={rejectError} />
               <div>
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   สาเหตุการตีกลับหลัก
@@ -730,15 +809,23 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <Button
               variant="secondary"
               size="sm"
+              disabled={submittingAction !== null}
               onClick={() => {
                 setRejectingIntentId(null);
                 setRejectReason('');
                 setCustomReason('');
+                setRejectError(null);
               }}
             >
               ยกเลิก
             </Button>
-            <Button variant="danger" size="sm" onClick={handleRejectSubmit}>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={submittingAction === rejectingIntentId}
+              loadingLabel="กำลังส่งข้อมูล..."
+              onClick={handleRejectSubmit}
+            >
               ยืนยันการปฏิเสธ
             </Button>
           </ModalFooter>

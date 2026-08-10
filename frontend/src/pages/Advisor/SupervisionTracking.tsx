@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import api, { API_BASE_URL } from '../../services/api';
+import { useDashboardData } from '../../hooks/useDashboardData';
 import { AuthContext } from '../../context/AuthContext';
 import { MapPin, Calendar, Users, FileText, Send } from 'lucide-react';
 import SupervisionLogForm from './SupervisionLogForm';
@@ -22,6 +23,8 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
 
   // Which appointment the "agreed out of band" confirmation is asking about.
   const [bypassingId, setBypassingId] = useState<number | null>(null);
+  /** Which appointment the "accept the mentor's new date" confirmation is about. */
+  const [acceptingRescheduleId, setAcceptingRescheduleId] = useState<number | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
 
   // Create draft form state
@@ -36,9 +39,9 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
   // Log form state
   const [showLogForm, setShowLogForm] = useState<number | null>(null); // appointmentId
 
-  const fetchData = async () => {
+  const fetchData = async (isBackground = false) => {
     try {
-      setLoading(true);
+      if (!isBackground) setLoading(true);
       const [studentsRes, appRes] = await Promise.all([
         api.get('/personnel/supervised-students'),
         api.get('/appointments')
@@ -48,13 +51,15 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
     } catch (err) {
       console.error('Fetch supervision data error:', err);
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  // This screen sits waiting for a mentor to answer an email — accept the visit
+  // or propose another day — and it was the one screen that never refreshed,
+  // while AdvisorDashboard polled every ten seconds for data that only the
+  // advisor changes. Same hook, same visibility check, no bespoke timer.
+  useDashboardData(fetchData);
 
   const handleCreateDraft = async (studentId: number) => {
     setError(null);
@@ -91,15 +96,23 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
     }
   };
 
-  const handleAcceptReschedule = async (appointmentId: number) => {
+  // Accepting overwrites the agreed date and time with the mentor's proposal,
+  // so it asks first and blocks a second click while it is in flight.
+  const handleAcceptReschedule = async () => {
+    if (acceptingRescheduleId === null) return;
     setError(null);
     setSuccess(null);
+    setConfirmBusy(true);
     try {
-      await api.put(`/appointments/${appointmentId}/accept-reschedule`);
-      setSuccess('ยอมรับการเลื่อนนัดหมายสำเร็จ');
+      await api.put(`/appointments/${acceptingRescheduleId}/accept-reschedule`);
+      setAcceptingRescheduleId(null);
+      setSuccess('ยอมรับการเลื่อนนัดหมายสำเร็จ วันและเวลานัดหมายถูกเปลี่ยนตามที่พี่เลี้ยงเสนอแล้ว');
       fetchData();
     } catch (err: any) {
+      setAcceptingRescheduleId(null);
       setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -109,8 +122,17 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
     );
   }
 
+  // Province → how many students are placed there, busiest first.
+  const provinceSummary = Object.entries(
+    students.reduce<Record<string, number>>((acc, s) => {
+      const province = s.company_province || 'ไม่ระบุจังหวัด';
+      acc[province] = (acc[province] || 0) + 1;
+      return acc;
+    }, {})
+  ).sort((a, b) => b[1] - a[1]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา</h2>
@@ -138,22 +160,46 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
 
-      {/* Map Dashboard (Clustering) */}
+      {/* Where the students actually are. This was a 256px grey box captioned
+          "Google Maps API Integration" that claimed to plot 15 students — a
+          fixed number, printed above an empty list reading "ไม่มีนักศึกษาใน
+          ความดูแล" for an advisor who had none. The real map is still a plan
+          (.system_memory/design_student_address_map.md); grouping by the
+          province already in the payload answers the same question — how far
+          do I have to travel, and how many stops — without inventing data. */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
-        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
-          <MapPin className="text-red-500 w-5 h-5" /> 
-          แผนที่การกระจายตัวของนักศึกษา
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-1 flex items-center gap-2">
+          <MapPin className="text-red-500 w-5 h-5" />
+          พื้นที่ที่ต้องเดินทางไปนิเทศ
         </h3>
-        <div className="w-full h-64 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400">
-          <MapPin className="w-8 h-8 mb-2 opacity-50" />
-          <p className="text-sm font-medium">Google Maps API Integration (Clustering)</p>
-          <p className="text-xs mt-1">แสดงพิกัดนักศึกษา 15 คน ในความดูแล</p>
-        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+          นักศึกษาในความดูแล {students.length} คน ใน {provinceSummary.length} จังหวัด
+        </p>
+
+        {provinceSummary.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {provinceSummary.map(([province, count]) => (
+              <span
+                key={province}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
+              >
+                {province}
+                <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-brand-blue dark:bg-blue-900/40 dark:text-blue-300">
+                  {count} คน
+                </span>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            ยังไม่มีข้อมูลจังหวัดของสถานประกอบการ
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6">
         {students.length === 0 && (
-          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+          <div className="text-center py-12 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400">
             ไม่มีนักศึกษาในความดูแล
           </div>
         )}
@@ -176,8 +222,8 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
             : 'ผู้ดูแล';
 
           return (
-            <div key={student.student_id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-              <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between md:items-center gap-4">
+            <div key={student.student_id} className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
                   <h3 className="font-bold text-lg text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
                     <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
@@ -253,12 +299,12 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                   </div>
                 ) : (
                   <div>
-                    <button 
+                    <Button
+                      icon={<Calendar className="w-4 h-4" />}
                       onClick={() => setShowDraftForm(showDraftForm === student.student_id ? null : student.student_id)}
-                      className="px-4 py-2 bg-brand-blue text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
                     >
-                      <Calendar className="w-4 h-4" /> กำหนดวันนิเทศ
-                    </button>
+                      กำหนดวันนิเทศ
+                    </Button>
                   </div>
                 )}
               </div>
@@ -287,30 +333,36 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                     
                     <div className="flex flex-col justify-end gap-3">
                       {(appointment.status === 'pending_company' || appointment.status === 'rescheduled') && (
-                        <button 
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setBypassingId(appointment.appointment_id)}
-                          className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-100 transition-colors self-start md:self-end"
+                          className="self-start md:self-end"
                         >
                           ตกลงกับสถานประกอบการนอกรอบแล้ว (Bypass)
-                        </button>
+                        </Button>
                       )}
 
                       {appointment.status === 'rescheduled' && (
-                        <button 
-                          onClick={() => handleAcceptReschedule(appointment.appointment_id)}
-                          className="px-4 py-2 bg-yellow-500 text-white rounded-xl text-sm font-medium hover:bg-yellow-600 transition-colors shadow-sm self-start md:self-end"
+                        <Button
+                          size="sm"
+                          onClick={() => setAcceptingRescheduleId(appointment.appointment_id)}
+                          className="self-start md:self-end"
                         >
                           ยอมรับการเลื่อนนัดหมาย (Accept Reschedule)
-                        </button>
+                        </Button>
                       )}
 
                       {(appointment.status === 'accepted' || appointment.status === 'offline_agreed') && (
-                        <button 
+                        <Button
+                          variant="success"
+                          size="sm"
+                          icon={<FileText className="w-4 h-4" />}
                           onClick={() => setShowLogForm(appointment.appointment_id)}
-                          className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors shadow-sm self-start md:self-end flex items-center gap-2"
+                          className="self-start md:self-end"
                         >
-                          <FileText className="w-4 h-4" /> บันทึกผลการนิเทศ (Log)
-                        </button>
+                          บันทึกผลการนิเทศ (Log)
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -362,18 +414,16 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                     </div>
                   </div>
                   <div className="mt-6 flex justify-end gap-3">
-                    <button 
-                      onClick={() => setShowDraftForm(null)}
-                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 text-gray-600 dark:hover:bg-gray-800 dark:border-gray-800 dark:text-gray-400"
-                    >
+                    <Button variant="secondary" onClick={() => setShowDraftForm(null)}>
                       ยกเลิก
-                    </button>
-                    <button 
+                    </Button>
+                    <Button
+                      icon={<Send className="w-4 h-4" />}
+                      disabled={!draftData.appointment_date || !draftData.student_time || !draftData.mentor_time}
                       onClick={() => handleCreateDraft(student.student_id)}
-                      className="px-4 py-2 bg-brand-blue text-white rounded-xl text-sm font-medium hover:bg-blue-600 flex items-center gap-2"
                     >
-                      <Send className="w-4 h-4" /> บันทึกและส่งให้ส่วนกลาง
-                    </button>
+                      บันทึกและส่งให้ส่วนกลาง
+                    </Button>
                   </div>
                 </div>
               )}
@@ -393,6 +443,16 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={acceptingRescheduleId !== null}
+        title="ยืนยันการยอมรับวันนัดหมายใหม่"
+        message="ยอมรับวันและเวลาที่พี่เลี้ยงเสนอมาใช่หรือไม่? วันและเวลานัดหมายเดิมจะถูกแทนที่ และเวลานัดของนักศึกษาจะถูกปรับตามไปด้วย"
+        confirmLabel="ยืนยัน ใช้วันใหม่"
+        busy={confirmBusy}
+        onConfirm={handleAcceptReschedule}
+        onCancel={() => setAcceptingRescheduleId(null)}
+      />
 
       <ConfirmDialog
         open={bypassingId !== null}

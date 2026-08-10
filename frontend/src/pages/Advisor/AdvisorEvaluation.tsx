@@ -3,6 +3,8 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import api, { API_BASE_URL } from '../../services/api';
 import { User, ClipboardList, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 interface StudentProgress {
   studentId: number;
@@ -29,19 +31,26 @@ const AdvisorEvaluation: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Rubrics state (10 items, 1-10 points each)
-  const [scores, setScores] = useState<Record<string, number>>({
-    structure: 10,
-    objectives: 10,
-    literature: 10,
-    methodology: 10,
-    results: 10,
-    discussion: 10,
-    references: 10,
-    formatting: 10,
-    innovation: 10,
-    understanding: 10
+  /**
+   * Rubric scores, 1–10 each. Every item starts unset on purpose: the form used
+   * to open with all ten pre-filled at 10, so an advisor who opened it and
+   * pressed save had just awarded 100/100 without making a single judgement,
+   * and there was no way to tell a deliberate perfect score from an untouched
+   * form. The system does not get to guess an academic verdict.
+   */
+  const [scores, setScores] = useState<Record<string, number | ''>>({
+    structure: '',
+    objectives: '',
+    literature: '',
+    methodology: '',
+    results: '',
+    discussion: '',
+    references: '',
+    formatting: '',
+    innovation: '',
+    understanding: ''
   });
+  const [confirmingSubmit, setConfirmingSubmit] = useState(false);
 
   const [comments, setComments] = useState<string>('');
   const [rejectionComment, setRejectionComment] = useState<string>('');
@@ -84,29 +93,31 @@ const AdvisorEvaluation: React.FC = () => {
     setComments('');
     setRejectionComment('');
     setScores({
-      structure: 10,
-      objectives: 10,
-      literature: 10,
-      methodology: 10,
-      results: 10,
-      discussion: 10,
-      references: 10,
-      formatting: 10,
-      innovation: 10,
-      understanding: 10
+      structure: '',
+      objectives: '',
+      literature: '',
+      methodology: '',
+      results: '',
+      discussion: '',
+      references: '',
+      formatting: '',
+      innovation: '',
+      understanding: ''
     });
   };
 
-  const handleScoreChange = (rubricId: string, val: number) => {
+  const handleScoreChange = (rubricId: string, val: number | '') => {
     setScores(prev => ({
       ...prev,
       [rubricId]: val
     }));
   };
 
-  const calculateTotal = () => {
-    return Object.values(scores).reduce((a, b) => a + b, 0);
-  };
+  /** Sum of what has been scored so far — not a final grade until all ten are in. */
+  const calculateTotal = () =>
+    Object.values(scores).reduce((sum: number, v) => sum + (v === '' ? 0 : v), 0);
+
+  const unscoredRubrics = rubrics.filter((r) => scores[r.id] === '');
 
   // Review status submission: Approve or Reject
   const handleReviewReport = async (status: 'approved' | 'rejected') => {
@@ -141,6 +152,25 @@ const AdvisorEvaluation: React.FC = () => {
     e.preventDefault();
     if (!selectedStudent) return;
 
+    // The API totals whatever rubric keys arrive, so a partly filled form would
+    // be stored as a real, quietly wrong score.
+    if (unscoredRubrics.length > 0) {
+      setError(
+        `ยังให้คะแนนไม่ครบ เหลืออีก ${unscoredRubrics.length} ข้อ: ${unscoredRubrics
+          .map((r) => r.label.split('.')[0])
+          .join(', ')}`
+      );
+      setSuccess(null);
+      return;
+    }
+
+    setError(null);
+    setConfirmingSubmit(true);
+  };
+
+  const submitEvaluation = async () => {
+    if (!selectedStudent) return;
+
     try {
       setActionLoading(true);
       setError(null);
@@ -157,9 +187,11 @@ const AdvisorEvaluation: React.FC = () => {
       await api.post('/final-evaluations', payload);
 
       setSuccess('บันทึกคะแนนรายงานวิชาการของอาจารย์นิเทศสำเร็จเรียบร้อย');
+      setConfirmingSubmit(false);
       setSelectedStudent(null);
       await loadData();
     } catch (err: any) {
+      setConfirmingSubmit(false);
       setError(err.response?.data?.message || 'ส่งคะแนนประเมินล้มเหลว');
     } finally {
       setActionLoading(false);
@@ -173,13 +205,13 @@ const AdvisorEvaluation: React.FC = () => {
   }
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6 page-enter">
       <AlertBanner variant="error" message={error} />
 
       <AlertBanner variant="success" message={success} />
 
       {!selectedStudent ? (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 md:p-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-brand-blue dark:text-blue-400" />
             การประเมินเล่มรายงานสหกิจศึกษา (อาจารย์นิเทศ)
@@ -191,10 +223,13 @@ const AdvisorEvaluation: React.FC = () => {
           {students.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {students.map((std) => (
-                <div
+                // Was a <div onClick>, which no keyboard could reach — this is
+                // the only way into the grading form.
+                <button
+                  type="button"
                   key={std.studentId}
                   onClick={() => handleSelectStudent(std)}
-                  className="p-5 border border-gray-200 dark:border-gray-700 hover:border-brand-blue rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all duration-200 dark:bg-gray-800/40"
+                  className="w-full p-5 text-left border border-gray-200 dark:border-gray-700 hover:border-brand-blue rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all duration-200 dark:bg-gray-900/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
                 >
                   <div className="space-y-1.5">
                     <h3 className="font-bold text-gray-900 dark:text-white">
@@ -243,7 +278,7 @@ const AdvisorEvaluation: React.FC = () => {
                       <span className="text-xs text-gray-400">พี่เลี้ยงยังไม่ประเมิน</span>
                     )}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           ) : (
@@ -257,15 +292,12 @@ const AdvisorEvaluation: React.FC = () => {
       ) : (
         <div className="space-y-6">
           {/* Back button */}
-          <button
-            onClick={() => setSelectedStudent(null)}
-            className="flex items-center text-sm font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white"
-          >
+          <Button variant="ghost" size="sm" onClick={() => setSelectedStudent(null)}>
             &larr; ย้อนกลับไปรายชื่อนักศึกษา
-          </button>
+          </Button>
 
           {/* Section 1: Final Report Approval */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6 md:p-8">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
               <FileText className="w-5 h-5 text-brand-blue dark:text-blue-400" />
               การพิจารณาตรวจสอบเล่มรายงาน (สหกิจ 14)
@@ -282,12 +314,16 @@ const AdvisorEvaluation: React.FC = () => {
                 <p className="text-sm text-gray-600 dark:text-gray-300"><b>บริษัท:</b> {selectedStudent.companyName}</p>
                 <p className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
                   <b>สถานะไฟล์ปัจจุบัน:</b> 
+                  {/* `dark:text-gray-400` used to sit outside this ternary, so in
+                      dark mode every state rendered the same grey text — approved
+                      and rejected became indistinguishable apart from a faint
+                      background. Each branch carries its own dark pair now. */}
                   <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold ${
-                    selectedStudent.finalReportStatus === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30' :
-                    selectedStudent.finalReportStatus === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30' :
-                    selectedStudent.finalReportStatus === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30' :
-                    'bg-gray-100 text-gray-500'
-                  } dark:text-gray-400`}>
+                    selectedStudent.finalReportStatus === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                    selectedStudent.finalReportStatus === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
+                    selectedStudent.finalReportStatus === 'submitted' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                    'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
+                  }`}>
                     {selectedStudent.finalReportStatus === 'approved' ? 'อนุมัติแล้ว' :
                      selectedStudent.finalReportStatus === 'rejected' ? 'ส่งตีกลับแก้ไข' :
                      selectedStudent.finalReportStatus === 'submitted' ? 'ส่งเล่มรออนุมัติ' :
@@ -333,24 +369,26 @@ const AdvisorEvaluation: React.FC = () => {
                   </div>
 
                   <div className="flex gap-3">
-                    <button
-                      type="button"
+                    <Button
+                      variant="danger"
+                      loading={actionLoading}
+                      loadingLabel="กำลังส่ง..."
+                      icon={<XCircle className="w-4 h-4" />}
                       onClick={() => handleReviewReport('rejected')}
-                      disabled={actionLoading}
-                      className="flex-1 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-bold text-sm transition shadow-sm flex items-center justify-center gap-1.5"
+                      className="flex-1"
                     >
-                      <XCircle className="w-4 h-4" />
                       ตีกลับไปแก้ไข
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="success"
+                      loading={actionLoading}
+                      loadingLabel="กำลังส่ง..."
+                      icon={<CheckCircle className="w-4 h-4" />}
                       onClick={() => handleReviewReport('approved')}
-                      disabled={actionLoading}
-                      className="flex-1 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold text-sm transition shadow-sm flex items-center justify-center gap-1.5"
+                      className="flex-1"
                     >
-                      <CheckCircle className="w-4 h-4" />
                       อนุมัติรายงาน
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -365,7 +403,7 @@ const AdvisorEvaluation: React.FC = () => {
           </div>
 
           {/* Section 2: Advisor Evaluation Form */}
-          <form onSubmit={handleSubmitEvaluation} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <form onSubmit={handleSubmitEvaluation} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 overflow-hidden">
             <div className="bg-brand-blue px-6 py-6 text-white flex justify-between items-center flex-wrap gap-4">
               <div>
                 <span className="text-xs font-bold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full">
@@ -378,6 +416,11 @@ const AdvisorEvaluation: React.FC = () => {
                 <span className="text-xs uppercase block opacity-80">คะแนนประเมินรายงาน</span>
                 <span className="text-3xl font-extrabold">{calculateTotal()}</span>
                 <span className="text-xs opacity-75"> / 100</span>
+                <span className="mt-0.5 block text-xs opacity-90">
+                  {unscoredRubrics.length > 0
+                    ? `ยังเหลืออีก ${unscoredRubrics.length} ข้อ`
+                    : 'ให้คะแนนครบทุกข้อแล้ว'}
+                </span>
               </div>
             </div>
 
@@ -395,9 +438,17 @@ const AdvisorEvaluation: React.FC = () => {
                         <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">คะแนน (1-10):</label>
                         <select
                           value={scores[rub.id]}
-                          onChange={(e) => handleScoreChange(rub.id, Number(e.target.value))}
-                          className="w-20 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-semibold focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          onChange={(e) =>
+                            handleScoreChange(rub.id, e.target.value === '' ? '' : Number(e.target.value))
+                          }
+                          aria-invalid={scores[rub.id] === ''}
+                          className={`w-28 px-3 py-1.5 rounded-lg border bg-white text-sm font-semibold focus:outline-none dark:bg-gray-800 dark:text-white ${
+                            scores[rub.id] === ''
+                              ? 'border-amber-400 dark:border-amber-500/70'
+                              : 'border-gray-200 focus:border-brand-blue dark:border-gray-700'
+                          }`}
                         >
+                          <option value="">ยังไม่ให้</option>
                           {[...Array(10)].map((_, i) => (
                             <option key={i + 1} value={i + 1}>{i + 1}</option>
                           ))}
@@ -422,23 +473,37 @@ const AdvisorEvaluation: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-gray-50 dark:bg-gray-900/60 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-4">
-              <button
+            <div className="bg-gray-50 dark:bg-gray-900/60 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-end">
+              {unscoredRubrics.length > 0 && (
+                <span className="text-xs text-amber-700 dark:text-amber-400">
+                  ยังให้คะแนนไม่ครบ {unscoredRubrics.length} ข้อ
+                </span>
+              )}
+              <Button
                 type="submit"
-                disabled={actionLoading}
-                className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-green-500/10 flex items-center gap-2"
+                variant="success"
+                loading={actionLoading}
+                loadingLabel="กำลังบันทึก..."
+                icon={<CheckCircle className="w-5 h-5" />}
               >
-                {actionLoading ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <CheckCircle className="w-5 h-5" />
-                )}
                 บันทึกคะแนนรายงาน (คะแนน: {calculateTotal()})
-              </button>
+              </Button>
             </div>
           </form>
         </div>
       )}
+
+      {/* The score lands in the sealed evaluation and the audit log; it is not
+          something to hand over on a single stray click. */}
+      <ConfirmDialog
+        open={confirmingSubmit}
+        title="ยืนยันการบันทึกคะแนนรายงาน"
+        message={`บันทึกคะแนน ${calculateTotal()}/100 ให้ ${selectedStudent?.studentName ?? ''} ใช่หรือไม่? คะแนนจะถูกส่งเข้าระบบประเมินผลและแก้ไขเองภายหลังไม่ได้`}
+        confirmLabel="ยืนยัน บันทึกคะแนน"
+        busy={actionLoading}
+        onConfirm={submitEvaluation}
+        onCancel={() => setConfirmingSubmit(false)}
+      />
     </div>
   );
 };
