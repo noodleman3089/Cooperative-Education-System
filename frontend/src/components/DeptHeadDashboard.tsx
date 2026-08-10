@@ -80,14 +80,22 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   const loadData = async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
-      const [studentsRes, personnelRes, intentsRes] = await Promise.all([
-        api.get('/students'),
-        api.get('/personnel?role=advisor'),
-        api.get('/intents?status=approved_by_advisor')
-      ]);
-      setStudents(studentsRes || []);
-      setAdvisors(personnelRes || []);
-      setPendingIntents(intentsRes || []);
+
+      // The approval queue needs the intents; nothing else does. All three were
+      // fetched on every menu, repeated by `useDashboardData` every ten seconds,
+      // so reading the approval queue also pulled every student and every
+      // advisor in the department six times a minute to draw nothing.
+      if (activeMenu === 'approval') {
+        const intentsRes = await api.get('/intents?status=approved_by_advisor');
+        setPendingIntents(intentsRes || []);
+      } else {
+        const [studentsRes, personnelRes] = await Promise.all([
+          api.get('/students'),
+          api.get('/personnel?role=advisor'),
+        ]);
+        setStudents(studentsRes || []);
+        setAdvisors(personnelRes || []);
+      }
     } catch (err) {
       console.error('Failed to load department head dashboard data:', err);
       if (!isBackground) setError('ไม่สามารถเรียกข้อมูลนักศึกษาและรายชื่ออาจารย์ในสาขาวิชาได้');
@@ -96,7 +104,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
     }
   };
 
-  useDashboardData(loadData);
+  useDashboardData(loadData, [activeMenu]);
 
   // ── Intent Approval Quick Handler ──
   const handleApproveIntent = async () => {
@@ -422,7 +430,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
                     <th className="p-4 font-semibold">รหัสนักศึกษา</th>
                     <th className="p-4 font-semibold">สถานะสิทธิ์</th>
                     <th className="p-4 font-semibold">อาจารย์ที่ปรึกษา</th>
@@ -470,7 +478,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
                   <th className="p-4 w-12 text-center">
                     <input
                       type="checkbox"
@@ -512,8 +520,14 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         <span className="block text-xs font-semibold">{student.company_name || <span className="text-gray-400 font-normal">ยังไม่มีสถานประกอบการ</span>}</span>
                         <span className="block text-xs text-gray-500 mt-0.5 dark:text-gray-400">{student.company_province || ''}</span>
                       </td>
-                      <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {student.is_eligible ? 'ผ่านเกณฑ์แล้ว' : 'ไม่ผ่านเกณฑ์'}
+                      <td className="p-4">
+                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
+                          student.is_eligible
+                            ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
+                            : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                        }`}>
+                          {student.is_eligible ? 'ผ่านเกณฑ์' : 'ไม่ผ่านเกณฑ์'}
+                        </span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
                         {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่กำหนด</span>}
@@ -525,8 +539,9 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         <button
                           type="button"
                           onClick={() => openSingleAssign(student)}
-                          className="p-1.5 rounded-lg border border-gray-200 hover:border-brand-blue hover:text-brand-blue transition-all dark:border-gray-800 dark:hover:text-blue-400"
+                          className="p-1.5 rounded-lg border border-gray-200 hover:border-brand-blue hover:text-brand-blue transition-all dark:border-gray-800 dark:hover:text-blue-400 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
                           title="แก้ไขจัดสรรอาจารย์รายบุคคล"
+                          aria-label={`แก้ไขการจัดสรรอาจารย์ของ ${studentDisplayName(student)}`}
                         >
                           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -563,7 +578,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
                   <th className="p-4 font-semibold">รหัสนักศึกษา</th>
                   <th className="p-4 font-semibold">สิทธิ์สะสม (Eligibility)</th>
                   <th className="p-4 font-semibold">สถานะปฐมนิเทศ (Orientation)</th>
@@ -637,7 +652,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
                     <th className="p-4 font-semibold">นักศึกษา</th>
                     <th className="p-4 font-semibold">สถานประกอบการ</th>
                     <th className="p-4 font-semibold">ตำแหน่งงาน</th>
@@ -662,13 +677,13 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                           {intent.job_title || 'ฝึกงานทั่วไป'}
                         </td>
                         <td className="p-4 text-center">
-                          <button
-                            type="button"
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => window.dispatchEvent(new CustomEvent('open-intent-review', { detail: intent.form_id }))}
-                            className="py-1 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-bold transition-all text-gray-700 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800"
                           >
                             ตรวจทาน
-                          </button>
+                          </Button>
                         </td>
                         <td className="p-4 text-right">
                           {/* The flex was on the <td>, which drops the cell out
@@ -710,7 +725,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   ไม่มีรายการคำร้องใบความจำนงรอตรวจสอบในขณะนี้
                 </h4>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-                  รายการจะปรากฏในหน้านี้เมื่อคำร้องยื่นจากนักศึกษาถูกอนุมัติผ่านด่านอาจารย์ที่ปรึกษาแล้ว (สถานะ: approved_by_advisor)
+                  รายการจะปรากฏในหน้านี้เมื่อนักศึกษายื่นคำร้องและอาจารย์ที่ปรึกษาอนุมัติผ่านแล้ว
                 </p>
                 <div className="inline-flex items-center gap-2 text-xs bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400">
                   <span>นักศึกษายื่นคำร้อง</span>
