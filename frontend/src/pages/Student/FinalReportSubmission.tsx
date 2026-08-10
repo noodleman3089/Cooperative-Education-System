@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { AuthContext } from '../../context/AuthContext';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { FileUp, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 
@@ -200,8 +200,11 @@ const FinalReportSubmission: React.FC = () => {
                             {getStatusText(version.status)}
                           </span>
                         </div>
+                        {/* Same dead /uploads/ link the advisor's screen had —
+                            a student could not reopen the report they had just
+                            submitted. */}
                         <a
-                          href={`http://localhost:5000/uploads/${version.file_path}`}
+                          href={`${API_BASE_URL}/files/${version.file_path}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm font-medium text-brand-blue hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"

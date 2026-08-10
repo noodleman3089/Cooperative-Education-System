@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { User, ClipboardList, CheckCircle, XCircle, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 
@@ -295,10 +295,14 @@ const AdvisorEvaluation: React.FC = () => {
                   </span>
                 </p>
 
+                {/* finalReportPath is already "final_reports/<file>", which is
+                    the category/filename shape /api/files expects. The old
+                    hardcoded http://localhost:5000/uploads/ URL was served by
+                    nothing at all — there is no express.static for /uploads. */}
                 {selectedStudent.finalReportPath ? (
                   <div className="pt-2">
                     <a
-                      href={`http://localhost:5000/uploads/${selectedStudent.finalReportPath}`}
+                      href={`${API_BASE_URL}/files/${selectedStudent.finalReportPath}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-600 text-white rounded-xl text-sm font-semibold transition shadow-sm"

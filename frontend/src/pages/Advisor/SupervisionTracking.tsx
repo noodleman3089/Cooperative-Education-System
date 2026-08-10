@@ -1,16 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
+import { AuthContext } from '../../context/AuthContext';
 import { MapPin, Calendar, Users, FileText, Send } from 'lucide-react';
 import SupervisionLogForm from './SupervisionLogForm';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import Button from '../../components/ui/Button';
 
 interface SupervisionTrackingProps {
   // Can pass props if needed, but we'll fetch data here
 }
 
 const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
+  const auth = useContext(AuthContext);
   const [students, setStudents] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,11 +111,28 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา</h2>
-        <p className="text-xs text-gray-400 mt-1">
-          จัดการการนัดหมาย บันทึกผลการนิเทศ และติดตามความคืบหน้าของนักศึกษา
-        </p>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา</h2>
+          <p className="text-xs text-gray-400 mt-1">
+            จัดการการนัดหมาย บันทึกผลการนิเทศ และติดตามความคืบหน้าของนักศึกษา
+          </p>
+        </div>
+
+        {/* This button, and the whole panel of visit information below it, used
+            to live in AdvisorDashboard's `activeMenu === 'supervision'` branch —
+            which Dashboard.tsx never routes to, because it sends `supervision`
+            here instead. The template exists on the server and nothing else in
+            the application links to it, so until now an advisor could not print
+            the travel memo at all. */}
+        <Button
+          variant="secondary"
+          icon={<FileText className="h-4 w-4" />}
+          onClick={() => window.open(`${API_BASE_URL}/files/download/travel-request-template`, '_blank')}
+          className="shrink-0 self-start sm:self-auto"
+        >
+          พิมพ์บันทึกข้อความขออนุมัติเดินทางราชการ
+        </Button>
       </div>
 
       <AlertBanner variant="error" message={error} />
@@ -140,25 +160,56 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
 
         {students.map(student => {
           const appointment = appointments.find(a => a.student_id === student.student_id);
-          
+
+          // `/personnel/supervised-students` returns anyone this account advises
+          // *or* supervises, and the two jobs are different on a visit day. The
+          // old version of this read `localStorage.getItem('userId')`, which is
+          // never written anywhere in the app — so it compared against 0 and
+          // every student came out as the generic "ผู้ดูแล".
+          const myId = auth?.user?.userId;
+          const isAdvisor = !!myId && student.advisor_id === myId;
+          const isSupervisor = !!myId && student.supervisor_id === myId;
+          const roleTag =
+            isAdvisor && isSupervisor ? 'ที่ปรึกษา & ผู้นิเทศ'
+            : isAdvisor ? 'ที่ปรึกษาสหกิจ'
+            : isSupervisor ? 'อาจารย์นิเทศ'
+            : 'ผู้ดูแล';
+
           return (
             <div key={student.student_id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
               <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between md:items-center gap-4">
                 <div>
-                  <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                  <h3 className="font-bold text-lg text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
                     <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
                     {student.first_name} {student.last_name} ({student.student_code})
+                    <span className="rounded-full border border-blue-200 bg-brand-blue/10 px-2 py-0.5 text-xs font-bold text-brand-blue dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                      {roleTag}
+                    </span>
                   </h3>
                   <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-4 mt-2">
                     <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {student.company_name || 'ไม่ระบุ'}</span>
                   </div>
 
+                  {/* Who and where to call on the day. Also stranded in the
+                      unreachable branch until now — the advisor had the company
+                      name and nothing else. */}
+                  <div className="mt-4 grid grid-cols-1 gap-x-6 gap-y-1 rounded-xl border border-gray-100 bg-gray-50 p-4 text-xs text-gray-600 sm:grid-cols-2 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+                    <div className="sm:col-span-2 font-bold text-gray-700 dark:text-gray-300">
+                      ข้อมูลติดต่อสำหรับวันนิเทศ
+                    </div>
+                    <div>จังหวัดที่ตั้ง: {student.company_province || 'ไม่ระบุ'}</div>
+                    <div>เบอร์นักศึกษา: {student.phone || 'ไม่ระบุ'}</div>
+                    <div>พี่เลี้ยง: {student.mentor_name || 'ยังไม่ระบุ'}</div>
+                    <div>เบอร์พี่เลี้ยง: {student.mentor_phone || 'ไม่ระบุ'}</div>
+                  </div>
+
                   {/* Accommodation info (System 3) */}
                   {student.accommodation_address && (
-                    <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-xs space-y-1">
+                    <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-xs space-y-1 text-gray-600 dark:text-gray-300">
                       <div className="font-bold text-gray-700 dark:text-gray-300">ข้อมูลที่พัก & ติดต่อฉุกเฉิน</div>
                       <div>ที่พัก: {student.accommodation_address}</div>
-                      <div>ผู้ติดต่อฉุกเฉิน: {student.emergency_contact} ({student.emergency_phone})</div>
+                      <div>เบอร์ติดต่อที่พัก: {student.accommodation_phone || '-'}</div>
+                      <div>ผู้ติดต่อฉุกเฉิน: {student.emergency_contact || '-'} ({student.emergency_phone || '-'})</div>
                     </div>
                   )}
 

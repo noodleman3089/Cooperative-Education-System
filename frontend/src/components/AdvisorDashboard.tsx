@@ -17,7 +17,6 @@ interface AdvisorDashboardProps {
 const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [intents, setIntents] = useState<IntentForm[]>([]);
   const [students, setStudents] = useState<any[]>([]);
-  const [supervisedStudents, setSupervisedStudents] = useState<any[]>([]);
   const [reportOutlines, setReportOutlines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,11 +58,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       setIntents(intentsRes || []);
       setStudents(studentsRes || []);
       setReportOutlines(outlineList);
-
-      if (activeMenu === 'supervision') {
-        const supRes = await api.get('/personnel/supervised-students');
-        setSupervisedStudents(supRes || []);
-      }
     } catch (err) {
       console.error('Failed to load advisor dashboard data:', err);
       if (!isBackground) setError('ไม่สามารถโหลดข้อมูลใบความจำนงหรือรายชื่อนักศึกษาได้ กรุณาลองใหม่อีกครั้ง');
@@ -537,152 +531,15 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
     );
   }
 
-  // Render Supervision & Field Visit View
-  if (activeMenu === 'supervision') {
-    return (
-      <div className="space-y-6 page-enter">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา (Supervision & Field Visit)</h2>
-            <p className="text-xs text-gray-400 mt-1">
-              ข้อมูลนักศึกษา สถานประกอบการ แผนปฏิบัติงาน และข้อมูลที่พัก สำหรับการออกนิเทศนักศึกษา
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => window.open(`${API_BASE_URL}/files/download/travel-request-template`, '_blank')}
-            className="px-4 py-2 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs transition-all shadow-md shadow-blue-500/10 flex items-center gap-2 self-start sm:self-auto active:scale-[0.98]"
-          >
-            <FileText className="h-4 w-4" />
-            พิมพ์บันทึกข้อความขออนุมัติเดินทางราชการ
-          </button>
-        </div>
+  // The supervision view that used to live here was unreachable: Dashboard.tsx
+  // routes advisor "supervision" to pages/Advisor/SupervisionTracking, so this
+  // branch never rendered. Everything it showed that the live screen lacked —
+  // the travel-request button, the mentor and company contact block, the
+  // accommodation phone, the advisor/supervisor role tag — has been moved
+  // there. The one thing deliberately left behind is the "รูปแบบการนิเทศ"
+  // panel, which hardcoded "On-site" for every student next to a note saying
+  // the real calculation was coming later.
 
-        <AlertBanner variant="error" message={error} />
-
-        {/* Supervision List */}
-        <div className="space-y-4">
-          {supervisedStudents.length > 0 ? (
-            supervisedStudents.map((student) => {
-              const isAdvisor = student.advisor_id && student.advisor_id === parseInt(localStorage.getItem('userId') || '0', 10);
-              const isSupervisor = student.supervisor_id && student.supervisor_id === parseInt(localStorage.getItem('userId') || '0', 10);
-              
-              let roleTag = 'ผู้ดูแล';
-              if (isAdvisor && isSupervisor) roleTag = 'ที่ปรึกษา & ผู้นิเทศ';
-              else if (isAdvisor) roleTag = 'ที่ปรึกษาสหกิจ';
-              else if (isSupervisor) roleTag = 'อาจารย์นิเทศ';
-
-              return (
-                <div key={student.student_id} className="bg-white rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 overflow-hidden shadow-sm">
-                  {/* Header: Student Info & Role */}
-                  <div className="px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800 flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h3 className="text-sm font-bold text-gray-800 dark:text-white">
-                          {student.first_name} {student.last_name}
-                        </h3>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-brand-blue/10 text-brand-blue dark:bg-blue-900/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-                          {roleTag}
-                        </span>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        รหัส: {student.student_code} | โทรศัพท์: {student.phone || 'ไม่ระบุ'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {/* Section 2: Company & Mentor */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                        ข้อมูลสถานประกอบการและพี่เลี้ยง
-                      </h4>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
-                        <p><span className="font-semibold">สถานประกอบการ:</span> {student.company_name || 'ยังไม่ระบุ'}</p>
-                        <p><span className="font-semibold">จังหวัด:</span> {student.company_province || 'ไม่ระบุ'}</p>
-                        <p><span className="font-semibold">พี่เลี้ยง (Mentor):</span> {student.mentor_name || 'ยังไม่ระบุ'}</p>
-                        <p><span className="font-semibold">เบอร์พี่เลี้ยง:</span> {student.mentor_phone || 'ไม่ระบุ'}</p>
-                      </div>
-                    </div>
-
-                    {/* Section 3: Accommodation */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
-                        ข้อมูลที่พักอาศัยระหว่างฝึกงาน
-                      </h4>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1.5">
-                        <p><span className="font-semibold">ที่อยู่:</span> {student.accommodation_address || 'ยังไม่ให้ข้อมูล'}</p>
-                        <p><span className="font-semibold">เบอร์ติดต่อที่พัก:</span> {student.accommodation_phone || '-'}</p>
-                        <p><span className="font-semibold">ผู้ติดต่อฉุกเฉิน:</span> {student.emergency_contact || '-'}</p>
-                        <p><span className="font-semibold">เบอร์ฉุกเฉิน:</span> {student.emergency_phone || '-'}</p>
-                      </div>
-                    </div>
-
-                    {/* Section 5: Supervision Mode (Future integration) */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2 border-b border-gray-100 dark:border-gray-800 pb-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        รูปแบบการนิเทศ (ประเมินเบื้องต้น)
-                      </h4>
-                      <div className="text-xs text-gray-600 dark:text-gray-400 p-3 bg-gray-50 dark:bg-gray-800 rounded-xl border border-gray-100 dark:border-gray-800">
-                        <div className="flex justify-between items-center mb-2">
-                          <span className="font-semibold">แนะนำการนิเทศแบบ:</span>
-                          <span className="px-2 py-0.5 rounded text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">On-site</span>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                          (ฟังก์ชันคำนวณความเสี่ยงและระยะทางอัตโนมัติจะเปิดใช้งานในเฟสถัดไป)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 4: Work Plan */}
-                  <div className="px-6 pb-6 border-t border-gray-100 dark:border-gray-800 pt-4">
-                    <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300 flex items-center gap-2 mb-3">
-                      <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                      แผนปฏิบัติงานรายสัปดาห์ (Weekly Work Plan)
-                    </h4>
-                    {student.weekly_plans && student.weekly_plans.length > 0 ? (
-                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                        {student.weekly_plans.map((plan: any) => (
-                          <div key={plan.plan_id} className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-800 rounded-xl text-xs">
-                            <div className="flex justify-between items-center mb-1.5">
-                              <span className="font-bold text-gray-800 dark:text-white">สัปดาห์ที่ {plan.week_number}</span>
-                              <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                plan.status === 'approved' ? 'bg-green-100 text-green-700' :
-                                plan.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                                'bg-yellow-100 text-yellow-700'
-                              }`}>
-                                {plan.status === 'approved' ? 'อนุมัติ' : plan.status === 'rejected' ? 'ปรับปรุง' : 'รอตรวจสอบ'}
-                              </span>
-                            </div>
-                            <p className="text-gray-600 dark:text-gray-400 line-clamp-2" title={plan.tasks}>
-                              {plan.tasks || 'ไม่มีรายละเอียด'}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 border border-dashed border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50 dark:bg-gray-800 text-gray-400 text-xs">
-                        นักศึกษายังไม่ได้จัดทำแผนปฏิบัติงานรายสัปดาห์
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          ) : (
-            <div className="text-center py-12 text-gray-400 text-sm bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800">
-              ไม่พบรายชื่อนักศึกษาในความดูแลของท่าน
-            </div>
-          )}
-        </div>
-        {advisorModals}
-      </div>
-    );
-  }
 
   // Render Dashboard View (Default)
   return (

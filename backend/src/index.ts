@@ -328,7 +328,12 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
   try {
     const { category, filename } = req.params;
     
-    const allowedCategories = ['resumes', 'signatures', 'acceptance_evidence', 'parental_consents'];
+    // `final_reports` was missing here, and there is no express.static on
+    // /uploads, so a submitted Co-op 14 report could not be opened by anybody —
+    // not the advisor who has to grade it, and not the student who uploaded it.
+    // Both screens linked straight at http://localhost:5000/uploads/..., which
+    // has never resolved to anything.
+    const allowedCategories = ['resumes', 'signatures', 'acceptance_evidence', 'parental_consents', 'final_reports'];
     if (!allowedCategories.includes(category)) {
       res.status(404).json({ message: 'Category not found.' });
       return;
@@ -382,8 +387,11 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
         const filePrefix = `resume-user-${userId}-`;
         const evidencePrefix = `evidence-user-${userId}-`;
         const consentPrefix = `consent-user-${userId}-`;
-        
-        const isOwner = safeName.startsWith(filePrefix) || safeName.startsWith(evidencePrefix) || safeName.startsWith(consentPrefix);
+        // multer names these `finalreport-user-<id>-…`, so the owner test is the
+        // same shape as the other three.
+        const reportPrefix = `finalreport-user-${userId}-`;
+
+        const isOwner = safeName.startsWith(filePrefix) || safeName.startsWith(evidencePrefix) || safeName.startsWith(consentPrefix) || safeName.startsWith(reportPrefix);
         if (!isOwner) {
           res.status(403).json({ message: 'Forbidden. You do not have access to this file.' });
           return;
