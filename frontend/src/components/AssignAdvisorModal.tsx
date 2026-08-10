@@ -9,7 +9,19 @@ interface Personnel {
   email: string;
   major_id: number;
   status: string;
+  first_name?: string | null;
+  last_name?: string | null;
 }
+
+/**
+ * These dropdowns are how a department head picks the person who will look
+ * after a student, and they used to list nothing but email addresses.
+ * The address stays as a secondary line — two advisors can share a surname.
+ */
+const advisorLabel = (p: Personnel): string => {
+  const name = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+  return name ? `${name} (${p.email})` : p.email;
+};
 
 interface AssignAdvisorModalProps {
   isOpen: boolean;
@@ -97,7 +109,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
               <option value="">-- กรุณาเลือกอาจารย์ที่ปรึกษา --</option>
               {advisors.map((adv) => (
                 <option key={adv.personnel_id} value={adv.personnel_id}>
-                  {adv.email}
+                  {advisorLabel(adv)}
                 </option>
               ))}
             </select>
@@ -115,7 +127,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
               <option value="">-- กรุณาเลือกอาจารย์นิเทศ --</option>
               {advisors.map((sup) => (
                 <option key={sup.personnel_id} value={sup.personnel_id}>
-                  {sup.email}
+                  {advisorLabel(sup)}
                 </option>
               ))}
             </select>

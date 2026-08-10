@@ -28,8 +28,13 @@ export class PersonnelController {
         }
       }
 
+      // first_name/last_name are selected because the screens that consume this
+      // list are choosing a person — the department head assigns an advisor to a
+      // student — and without them the only label available was the email
+      // address, so the UI read "advisor1@test.com" where a name belongs.
       let queryStr = `
         SELECT p.personnel_id, p.major_id, m.major_name_th, p.e_signature_file, p.status,
+               p.first_name, p.last_name,
                u.email,
                COALESCE(json_agg(r.role_name) FILTER (WHERE r.role_name IS NOT NULL), '[]') as roles
         FROM personnel p
@@ -48,7 +53,7 @@ export class PersonnelController {
         queryStr += ` AND p.major_id = $${queryParams.length}`;
       }
 
-      queryStr += ` GROUP BY p.personnel_id, m.major_name_th, u.email`;
+      queryStr += ` GROUP BY p.personnel_id, p.first_name, p.last_name, m.major_name_th, u.email`;
 
       const result = await query(queryStr, queryParams);
       let rows = result.rows;

@@ -5,17 +5,47 @@ import api from '../services/api';
 import type { StudentProfile, IntentForm } from '../types/api';
 import AssignAdvisorModal from './AssignAdvisorModal';
 import AlertBanner from './ui/AlertBanner';
+import Button from './ui/Button';
+import ConfirmDialog from './ui/ConfirmDialog';
+import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 
 interface Personnel {
   personnel_id: number;
   email: string;
   major_id: number;
   status: string;
+  first_name?: string | null;
+  last_name?: string | null;
 }
 
 interface DeptHeadDashboardProps {
   activeMenu?: string;
 }
+
+/**
+ * Why the department head is sending a form back. Deliberately a different list
+ * from the advisor's: the advisor judges whether this placement suits this
+ * student, while the head answers to the programme's rules and its capacity.
+ * Every option below corresponds to something the system actually records —
+ * `job_posts.quota`/`applied_count`, `students.is_eligible`,
+ * `students.is_orientation_passed`, `companies.is_verified` — rather than
+ * wording invented for the dropdown.
+ */
+const DEPT_HEAD_REJECT_REASONS = [
+  'โควตารับนักศึกษาของตำแหน่งงาน/สาขาวิชาเต็มแล้ว',
+  'คุณสมบัติเบื้องต้นยังไม่ผ่านเกณฑ์ของหลักสูตร (หน่วยกิต/เกรดเฉลี่ยสะสม)',
+  'ยังไม่ผ่านการปฐมนิเทศสหกิจศึกษาตามระเบียบ',
+  'สถานประกอบการยังไม่ผ่านการรับรองจากสาขาวิชา',
+  'เอกสารประกอบคำร้องไม่ครบถ้วนตามระเบียบ',
+];
+
+/** `/students` sends first_name/last_name; every table here showed only the code. */
+const studentDisplayName = (s: { first_name?: string | null; last_name?: string | null; student_code?: string }): string =>
+  [s.first_name, s.last_name].filter(Boolean).join(' ').trim() || s.student_code || 'ไม่ระบุชื่อ';
+
+/** Falls back to the email only when the personnel record has no name on it. */
+const personnelDisplayName = (p?: Personnel): string =>
+  p ? ([p.first_name, p.last_name].filter(Boolean).join(' ').trim() || p.email) : '';
 
 const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'dashboard' }) => {
   const [students, setStudents] = useState<StudentProfile[]>([]);
@@ -27,6 +57,12 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   // Intent Approval States
   const [pendingIntents, setPendingIntents] = useState<IntentForm[]>([]);
   const [submittingAction, setSubmittingAction] = useState<number | null>(null);
+  const [approvingIntentId, setApprovingIntentId] = useState<number | null>(null);
+  const [rejectingIntentId, setRejectingIntentId] = useState<number | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [customReason, setCustomReason] = useState('');
+  /** Shown inside the rejection dialog, not on the page it covers. */
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   // Assignment Modal States
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
@@ -55,36 +91,77 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   useDashboardData(loadData);
 
   // ── Intent Approval Quick Handler ──
-  const handleApproveIntent = async (id: number) => {
+  const handleApproveIntent = async () => {
+    const id = approvingIntentId;
+    if (id === null) return;
+    const intent = pendingIntents.find((i) => i.form_id === id);
     setSubmittingAction(id);
     setError(null);
     setSuccess(null);
     try {
       await api.patch(`/intents/${id}/dept-head-status`, { status: 'approved_by_dept_head' });
-      setSuccess('อนุมัติคำร้องสำเร็จ — สถานะเปลี่ยนเป็น "ผ่านการพิจารณา รอออกจดหมายขอความอนุเคราะห์"');
+      setApprovingIntentId(null);
+      setSuccess(
+        `อนุมัติคำร้องของ ${intent ? studentDisplayName(intent) : 'นักศึกษา'} แล้ว — ส่งต่อให้เจ้าหน้าที่ออกจดหมายขอความอนุเคราะห์`
+      );
       await loadData();
       window.dispatchEvent(new CustomEvent('intent-updated'));
     } catch (err: any) {
+      setApprovingIntentId(null);
       setError(err.response?.data?.message || 'การอนุมัติคำร้องล้มเหลว');
     } finally {
       setSubmittingAction(null);
     }
   };
 
-  const handleRejectIntent = async (id: number) => {
+  /**
+   * The reason was never being sent. The API has always accepted it, written it
+   * to the audit log, and passed it into the student's notification email —
+   * which carries a dedicated line for it (`utils/email.ts`, the
+   * `rejected_by_dept_head` branch). Because the UI sent only the status, that
+   * line could never render: every student rejected at this stage was told the
+   * head had sent the form back, and nothing about what to change.
+   */
+  const handleRejectIntent = async () => {
+    const id = rejectingIntentId;
+    if (id === null) return;
+    const intent = pendingIntents.find((i) => i.form_id === id);
+    const finalReason = rejectReason === 'other' ? customReason.trim() : rejectReason;
+
+    if (!finalReason) {
+      setRejectError('กรุณาเลือกเหตุผลการตีกลับ หรือระบุเหตุผลของท่านเอง');
+      return;
+    }
+
     setSubmittingAction(id);
     setError(null);
     setSuccess(null);
+    setRejectError(null);
     try {
-      await api.patch(`/intents/${id}/dept-head-status`, { status: 'rejected_by_dept_head' });
-      setSuccess('ปฏิเสธคำร้องสำเร็จ — คำร้องถูกส่งกลับให้นักศึกษาแก้ไข');
+      await api.patch(`/intents/${id}/dept-head-status`, {
+        status: 'rejected_by_dept_head',
+        reason: finalReason,
+      });
+      setRejectingIntentId(null);
+      setRejectReason('');
+      setCustomReason('');
+      setSuccess(
+        `ตีกลับคำร้องของ ${intent ? studentDisplayName(intent) : 'นักศึกษา'} แล้ว — ระบบแจ้งเหตุผลไปยังอีเมลนักศึกษาเรียบร้อย`
+      );
       await loadData();
       window.dispatchEvent(new CustomEvent('intent-updated'));
     } catch (err: any) {
-      setError(err.response?.data?.message || 'การปฏิเสธคำร้องล้มเหลว');
+      setRejectError(err.response?.data?.message || 'การปฏิเสธคำร้องล้มเหลว');
     } finally {
       setSubmittingAction(null);
     }
+  };
+
+  const closeRejectDialog = () => {
+    setRejectingIntentId(null);
+    setRejectReason('');
+    setCustomReason('');
+    setRejectError(null);
   };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -232,7 +309,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                     return (
                       <tr key={student.student_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/10">
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                          {student.student_code}
+                          <span className="block font-bold">{studentDisplayName(student)}</span>
+                          <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                         </td>
                         <td className="p-4">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -244,10 +322,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                           </span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
-                          {advisor?.email || <span className="text-gray-400">ยังไม่ระบุ</span>}
+                          {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่ระบุ</span>}
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
-                          {supervisor?.email || <span className="text-gray-400">ยังไม่ระบุ</span>}
+                          {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-400">ยังไม่ระบุ</span>}
                         </td>
                       </tr>
                     );
@@ -299,8 +377,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         />
                       </td>
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                        <span className="block font-bold">รหัส: {student.student_code}</span>
-                        <span className="block text-xs text-gray-400 mt-0.5">ID: #{student.student_id}</span>
+                        <span className="block font-bold">{studentDisplayName(student)}</span>
+                        <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                       </td>
                       <td className="p-4 text-gray-800 dark:text-gray-200">
                         <span className="block text-xs font-semibold">{student.company_name || <span className="text-gray-400 font-normal">ยังไม่มีสถานประกอบการ</span>}</span>
@@ -310,10 +388,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         {student.is_eligible ? 'ผ่านเกณฑ์แล้ว' : 'ไม่ผ่านเกณฑ์'}
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {advisor?.email || <span className="text-gray-400">ยังไม่กำหนด</span>}
+                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่กำหนด</span>}
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {supervisor?.email || <span className="text-gray-400">ยังไม่กำหนด</span>}
+                        {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-400">ยังไม่กำหนด</span>}
                       </td>
                       <td className="p-4 text-right">
                         <button
@@ -355,7 +433,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   return (
                     <tr key={student.student_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                        <span className="block font-bold">{student.student_code}</span>
+                        <span className="block font-bold">{studentDisplayName(student)}</span>
+                        <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                       </td>
                       <td className="p-4">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -376,7 +455,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         </span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {advisor?.email || <span className="text-gray-400">ยังไม่ระบุอาจารย์ที่ปรึกษา</span>}
+                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่ระบุอาจารย์ที่ปรึกษา</span>}
                       </td>
                     </tr>
                   );
@@ -415,7 +494,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                     return (
                       <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                          <span className="block font-bold">{intent.first_name || ''} {intent.last_name || ''}</span>
+                          <span className="block font-bold">{studentDisplayName(intent)}</span>
                           <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
@@ -433,31 +512,27 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                             ตรวจทาน
                           </button>
                         </td>
-                        <td className="p-4 text-right flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleApproveIntent(intent.form_id)}
-                            disabled={isPendingAction}
-                            className={`py-1.5 px-2.5 rounded-lg text-white font-bold transition-all ${
-                              !isPendingAction
-                                ? 'bg-brand-blue hover:bg-blue-600 shadow-sm'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800'
-                            }`}
-                          >
-                            {isPendingAction ? 'รอ...' : 'อนุมัติ'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRejectIntent(intent.form_id)}
-                            disabled={isPendingAction}
-                            className={`py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all ${
-                              !isPendingAction
-                                ? 'bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 dark:border-red-900/30 dark:bg-red-950/20 dark:hover:bg-red-900/40'
-                                : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800'
-                            }`}
-                          >
-                            {isPendingAction ? 'รอ...' : 'ปฏิเสธ'}
-                          </button>
+                        <td className="p-4 text-right">
+                          {/* The flex was on the <td>, which drops the cell out
+                              of the table's column sizing. */}
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              size="sm"
+                              disabled={isPendingAction}
+                              onClick={() => setApprovingIntentId(intent.form_id)}
+                            >
+                              อนุมัติ
+                            </Button>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={isPendingAction}
+                              className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/30"
+                              onClick={() => setRejectingIntentId(intent.form_id)}
+                            >
+                              ตีกลับ
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -490,6 +565,104 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
             </div>
           )}
         </div>
+      )}
+
+      {/* Approving hands the form to the co-op office to raise the official
+          letter, and the head cannot take it back from here. */}
+      <ConfirmDialog
+        open={approvingIntentId !== null}
+        title="ยืนยันการอนุมัติคำร้อง"
+        message={`อนุมัติคำร้องของ ${
+          pendingIntents.find((i) => i.form_id === approvingIntentId)
+            ? studentDisplayName(pendingIntents.find((i) => i.form_id === approvingIntentId)!)
+            : 'นักศึกษา'
+        } ใช่หรือไม่? คำร้องจะถูกส่งต่อให้เจ้าหน้าที่ออกจดหมายขอความอนุเคราะห์ และย้อนกลับเองไม่ได้`}
+        confirmLabel="ยืนยัน อนุมัติคำร้อง"
+        busy={submittingAction === approvingIntentId}
+        onConfirm={handleApproveIntent}
+        onCancel={() => setApprovingIntentId(null)}
+      />
+
+      {/* Rejection now collects the reason the API, the audit log and the
+          student's email have all been ready to receive since day one. */}
+      {rejectingIntentId !== null && (
+        <Modal
+          onClose={closeRejectDialog}
+          size="md"
+          closeOnBackdrop={false}
+          title="ตีกลับคำร้องใบความจำนง"
+        >
+          <ModalBody>
+            <div className="space-y-4">
+              <AlertBanner variant="error" message={rejectError} />
+
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                เหตุผลที่เลือกจะถูกส่งไปยังอีเมลของนักศึกษา และบันทึกลงประวัติการตรวจสอบ
+                กรุณาเลือกให้ตรงกับสาเหตุจริง เพื่อให้นักศึกษาแก้ไขได้ถูกจุด
+              </p>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  เหตุผลเชิงระเบียบ / การบริหารจัดการของสาขาวิชา
+                </label>
+                <select
+                  value={rejectReason}
+                  onChange={(e) => {
+                    setRejectReason(e.target.value);
+                    setRejectError(null);
+                  }}
+                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                >
+                  <option value="">-- กรุณาเลือกเหตุผล --</option>
+                  {DEPT_HEAD_REJECT_REASONS.map((reason) => (
+                    <option key={reason} value={reason}>
+                      {reason}
+                    </option>
+                  ))}
+                  <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
+                </select>
+              </div>
+
+              {rejectReason === 'other' && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    ระบุเหตุผลเพิ่มเติม (ข้อความนี้จะไปถึงนักศึกษาโดยตรง)
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="เช่น ตำแหน่งงานนี้สาขาวิชาจัดสรรให้นักศึกษาชั้นปีที่ 4 ก่อนเป็นลำดับแรก"
+                    value={customReason}
+                    onChange={(e) => {
+                      setCustomReason(e.target.value);
+                      setRejectError(null);
+                    }}
+                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  />
+                </div>
+              )}
+            </div>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={submittingAction !== null}
+              onClick={closeRejectDialog}
+            >
+              ยกเลิก
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={submittingAction === rejectingIntentId}
+              loadingLabel="กำลังส่งข้อมูล..."
+              onClick={handleRejectIntent}
+            >
+              ยืนยันการตีกลับ
+            </Button>
+          </ModalFooter>
+        </Modal>
       )}
 
       {/* Assignment Modal Component */}
