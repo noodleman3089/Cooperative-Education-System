@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { ClipboardList, Users, Search, Mail, Download, RefreshCw, CheckCircle, Clock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import PageSkeleton from '../../components/ui/Skeleton';
 
 interface StudentProgress {
   studentId: number;
@@ -36,6 +39,8 @@ const FinalProgressDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [notifyingMap, setNotifyingMap] = useState<Record<number, boolean>>({});
+  /** Which student the "email their mentor" confirmation is about. */
+  const [notifyTarget, setNotifyTarget] = useState<StudentProgress | null>(null);
 
   const loadData = async () => {
     try {
@@ -54,7 +59,13 @@ const FinalProgressDashboard: React.FC = () => {
     loadData();
   }, []);
 
-  const handleNotifyMentor = async (student: StudentProgress) => {
+  /**
+   * Sends a real email to an outside party, and the server then refuses another
+   * for 24 hours — so a mis-click costs a day of waiting. It asks first.
+   */
+  const handleNotifyMentor = async () => {
+    const student = notifyTarget;
+    if (!student) return;
     try {
       setNotifyingMap(prev => ({ ...prev, [student.studentId]: true }));
       setError(null);
@@ -62,12 +73,14 @@ const FinalProgressDashboard: React.FC = () => {
 
       await api.post(`/final-reports/notify-mentor/${student.studentId}`);
 
+      setNotifyTarget(null);
       setSuccess(`ส่งอีเมลแจ้งเตือนหาพี่เลี้ยงของ ${student.studentName} สำเร็จ`);
       
       // Reload page data
       const res = await api.get('/coop-progress/dashboard');
       setStudents(res.data || []);
     } catch (err: any) {
+      setNotifyTarget(null);
       setError(err.response?.data?.message || 'ล้มเหลวในการส่งแจ้งเตือนเนื่องจากเงื่อนไข Cooldown');
     } finally {
       setNotifyingMap(prev => ({ ...prev, [student.studentId]: false }));
@@ -95,7 +108,7 @@ const FinalProgressDashboard: React.FC = () => {
 
   // Export data client-side to CSV format
   const handleExportCSV = () => {
-    if (students.length === 0) return;
+    if (filteredStudents.length === 0) return;
 
     // Header definition
     const headers = [
@@ -123,9 +136,14 @@ const FinalProgressDashboard: React.FC = () => {
       std.totalScore
     ]);
 
+    // A value containing a double quote used to break the row it sat in \u2014
+    // RFC 4180 escapes one by doubling it. Company names are free text typed by
+    // whoever registered the placement. The BOM is what lets Excel read the
+    // Thai, and was already right.
+    const csvCell = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
     const csvContent = '\uFEFF' + [
-      headers.join(','),
-      ...rows.map(e => e.map(val => `"${val}"`).join(','))
+      headers.map(csvCell).join(','),
+      ...rows.map(e => e.map(csvCell).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -146,10 +164,10 @@ const FinalProgressDashboard: React.FC = () => {
   );
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 page-enter">
       {/* Overview Cards */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-brand-blue rounded-xl dark:text-blue-400">
             <Users className="w-6 h-6" />
           </div>
@@ -159,7 +177,7 @@ const FinalProgressDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-xl">
             <CheckCircle className="w-6 h-6" />
           </div>
@@ -171,7 +189,7 @@ const FinalProgressDashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm flex items-center gap-4">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-orange-50 dark:bg-orange-900/20 text-orange-500 rounded-xl">
             <Clock className="w-6 h-6" />
           </div>
@@ -185,7 +203,7 @@ const FinalProgressDashboard: React.FC = () => {
       </div>
 
       {/* Main Table */}
-      <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 md:p-8 shadow-sm">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
@@ -198,20 +216,23 @@ const FinalProgressDashboard: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={loadData}
               title="ดึงข้อมูลใหม่"
-              className="p-2.5 rounded-xl border border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-700 transition dark:text-gray-400"
+              aria-label="ดึงข้อมูลใหม่"
             >
               <RefreshCw className="w-4 h-4" />
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
               onClick={handleExportCSV}
-              disabled={students.length === 0}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-semibold text-xs transition shadow-md shadow-blue-500/10 disabled:opacity-50"
+              disabled={filteredStudents.length === 0}
+              icon={<Download className="w-4 h-4" />}
             >
-              <Download className="w-4 h-4" /> Export คะแนน (CSV)
-            </button>
+              Export คะแนน (CSV)
+            </Button>
           </div>
         </div>
 
@@ -232,9 +253,7 @@ const FinalProgressDashboard: React.FC = () => {
         <AlertBanner variant="success" message={success} className="mb-6" />
 
         {loading ? (
-          <div className="py-16 flex justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-blue border-t-transparent" />
-          </div>
+          <PageSkeleton variant="table" />
         ) : filteredStudents.length === 0 ? (
           <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">
             ไม่พบข้อมูลนักศึกษาสหกิจศึกษาตรงตามเกณฑ์
@@ -296,14 +315,15 @@ const FinalProgressDashboard: React.FC = () => {
                               <Clock className="w-3 h-3" /> Cooldown ({formatRemainingCooldown(std.lastNotifiedAt)})
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleNotifyMentor(std)}
-                              disabled={notifyingMap[std.studentId]}
-                              className="px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 dark:bg-green-950/20 dark:text-green-400 dark:hover:bg-green-950/40 border border-green-200 dark:border-green-800 font-semibold text-xs rounded-lg transition flex items-center gap-1 disabled:opacity-50"
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              disabled={!!notifyingMap[std.studentId]}
+                              icon={<Mail className="w-3.5 h-3.5" />}
+                              onClick={() => setNotifyTarget(std)}
                             >
-                              <Mail className="w-3.5 h-3.5" /> แจ้งเตือนพี่เลี้ยง
-                            </button>
+                              แจ้งเตือนพี่เลี้ยง
+                            </Button>
                           )}
                         </div>
                       )}
@@ -315,6 +335,16 @@ const FinalProgressDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={notifyTarget !== null}
+        title="ยืนยันการส่งอีเมลแจ้งเตือนพี่เลี้ยง"
+        message={`ส่งอีเมลแจ้งเตือนไปยังพี่เลี้ยงของ ${notifyTarget?.studentName ?? ''} ใช่หรือไม่? ระบบจะส่งอีเมลออกทันที และจะส่งซ้ำให้นักศึกษาคนนี้ไม่ได้อีกภายใน 24 ชั่วโมง`}
+        confirmLabel="ยืนยัน ส่งอีเมล"
+        busy={!!(notifyTarget && notifyingMap[notifyTarget.studentId])}
+        onConfirm={handleNotifyMentor}
+        onCancel={() => setNotifyTarget(null)}
+      />
     </div>
   );
 };
