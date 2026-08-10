@@ -1,0 +1,433 @@
+import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { StudentModel } from '../models/student';
+import { PersonnelModel } from '../models/personnel';
+import { MasterModel } from '../models/master';
+import { UserModel } from '../models/user';
+
+import { hashPassword } from '../utils/password';
+import { StudentProfileSetupBody, PersonnelProfileSetupBody } from '../types';
+
+export class ProfileController {
+  /**
+   * Set up a user's profile for the first time.
+   * Route: POST /api/profile/setup
+   * Security: Authenticated users only
+   */
+  static async setupProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'ไม่มีสิทธิ์เข้าถึง กรุณาเข้าสู่ระบบ' });
+        return;
+      }
+
+      const { userId } = req.user;
+      const { type, password } = req.body;
+
+      if (!type || !['student', 'personnel'].includes(type)) {
+        res.status(400).json({ message: "ประเภทโปรไฟล์ไม่ถูกต้อง ต้องเป็น 'student' หรือ 'personnel'" });
+        return;
+      }
+
+      // password is optional now. Only validate and hash if provided
+      if (password !== undefined && password !== null && password !== '') {
+        if (typeof password !== 'string' || password.length < 6) {
+          res.status(400).json({ message: 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร' });
+          return;
+        }
+        const hashedPassword = await hashPassword(password);
+        await UserModel.updatePassword(userId, hashedPassword);
+      }
+
+      if (type === 'student') {
+        const body = req.body as StudentProfileSetupBody;
+        let { student_code, major_id, province_id, enrollment_year } = body;
+
+        // Auto-extract student code if missing
+        if (!student_code) {
+          const email = req.user.email || '';
+          const emailLocalPart = email.split('@')[0].toLowerCase();
+          student_code = (emailLocalPart.startsWith('s') && /^s\d+/.test(emailLocalPart))
+            ? emailLocalPart.substring(1)
+            : emailLocalPart;
+        }
+
+        // Validation: Required fields (student_code, major_id, and enrollment_year)
+        if (!student_code || major_id === undefined || enrollment_year === undefined || enrollment_year === null) {
+          res.status(400).json({ message: 'กรุณากรอกข้อมูลที่จำเป็น: รหัสนักศึกษา, สาขาวิชา, และปีการศึกษาที่เข้าศึกษา' });
+          return;
+        }
+
+        // Check if student profile already exists
+        const existingProfile = await StudentModel.findByStudentId(userId);
+        if (existingProfile) {
+          res.status(400).json({ message: 'บัญชีนี้ได้รับการตั้งค่าโปรไฟล์นักศึกษาเรียบร้อยแล้ว' });
+          return;
+        }
+
+        // Check if student code is already registered
+        const isCodeTaken = await StudentModel.existsByStudentCode(student_code);
+        if (isCodeTaken) {
+          res.status(400).json({ message: 'รหัสนักศึกษานี้ได้รับการลงทะเบียนในระบบแล้ว' });
+          return;
+        }
+
+        // Validate major existence
+        const majorExists = await MasterModel.verifyMajorExists(major_id);
+        if (!majorExists) {
+          res.status(400).json({ message: 'รหัสสาขาวิชาไม่ถูกต้อง ไม่พบข้อมูลสาขาวิชานี้ในระบบ' });
+          return;
+        }
+
+        // Validate province if provided
+        if (province_id !== undefined && province_id !== null) {
+          const provinceExists = await MasterModel.verifyProvinceExists(province_id);
+          if (!provinceExists) {
+            res.status(400).json({ message: 'รหัสจังหวัดไม่ถูกต้อง ไม่พบข้อมูลจังหวัดนี้ในระบบ' });
+            return;
+          }
+        }
+
+        // SEC-02: eligibility and GPA come from the staff-managed staging list only.
+        // A student creating their own profile must NOT be able to grant themselves
+        // the right to submit an intent form — that is the whole point of Co-op 01.
+        //
+        // Inheriting a staging row also means we must be sure the caller owns that
+        // student_code, otherwise claiming a classmate's code would inherit their
+        // eligibility. The code counts as bound when either the account email is
+        // itself the student code, or staff recorded the email on the staging row.
+        const accountEmail = (req.user.email || '').trim().toLowerCase();
+        const accountLocalPart = accountEmail.split('@')[0];
+        const emailIsStudentCode = /^s?[\d-]+$/.test(accountLocalPart);
+
+        const eligibilityRecord = await StudentModel.findEligibilityRecord(student_code);
+        const stagedEmail = (eligibilityRecord?.email || '').trim().toLowerCase();
+
+        const codeIsBoundToCaller =
+          emailIsStudentCode || (!!stagedEmail && stagedEmail === accountEmail);
+
+        if (eligibilityRecord && stagedEmail && stagedEmail !== accountEmail && !emailIsStudentCode) {
+          console.warn(
+            `[SEC-02] Rejected profile setup: user ${userId} (${accountEmail}) attempted to claim student_code ${student_code} bound to ${stagedEmail}.`
+          );
+          res.status(403).json({
+            message: 'รหัสนักศึกษานี้ผูกกับบัญชีอีเมลอื่น กรุณาติดต่อเจ้าหน้าที่สหกิจศึกษา',
+          });
+          return;
+        }
+
+        const inheritsEligibility = !!eligibilityRecord && codeIsBoundToCaller;
+        const seededGpa = inheritsEligibility ? Number(eligibilityRecord!.cumulative_gpa) : null;
+        const seededEligible = inheritsEligibility ? eligibilityRecord!.is_eligible : false;
+
+        // Save profile to STUDENT table
+        const profile = await StudentModel.createStudent(
+          userId,
+          student_code,
+          major_id,
+          province_id !== undefined && province_id !== null ? province_id : null,
+          seededGpa, // GPA is authoritative from the staff import, never self-reported
+          null, // first_name
+          null, // last_name
+          null, // nickname
+          null, // year_level
+          null, // birth_date
+          null, // alt_email
+          null, // phone
+          null, // current_address
+          null, // parent_name
+          null, // parent_phone
+          Number(enrollment_year),
+          seededEligible,
+          false // orientation is confirmed by staff after the briefing session
+        );
+
+        // Assign 'student' role in USER_ROLES
+        await UserModel.addRole(userId, 'student');
+
+        res.status(201).json({
+          message: eligibilityRecord
+            ? 'บันทึกโปรไฟล์นักศึกษาเรียบร้อยแล้ว'
+            : 'บันทึกโปรไฟล์นักศึกษาเรียบร้อยแล้ว (ยังไม่พบรายชื่อในบัญชีผู้มีสิทธิ์สหกิจศึกษา กรุณาติดต่อเจ้าหน้าที่)',
+          profile,
+        });
+        return;
+
+      } else {
+        const body = req.body as PersonnelProfileSetupBody;
+        const { major_id, e_signature_file, first_name, last_name } = body;
+
+        if (major_id === undefined) {
+          res.status(400).json({ message: 'กรุณาระบุข้อมูลสาขาวิชา' });
+          return;
+        }
+
+        // ── Option A: Admin pre-creates accounts ──
+        // Verify this user already has a personnel role assigned by admin.
+        // Self-registration is NOT allowed; admin must create the account
+        // with the correct role(s) before the user logs in.
+        const PERSONNEL_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
+        const currentUser = await UserModel.findById(userId);
+        const personnelRoles = (currentUser?.roles || []).filter((r: string) =>
+          PERSONNEL_ROLES.includes(r)
+        );
+
+        if (personnelRoles.length === 0) {
+          res.status(403).json({
+            message: 'บัญชีของคุณยังไม่ได้ผ่านการลงทะเบียนล่วงหน้าโดยผู้ดูแลระบบ กรุณาติดต่อเจ้าหน้าที่เพื่อสร้างบัญชีพร้อมระบุบทบาทที่ถูกต้อง'
+          });
+          return;
+        }
+
+        // Check if personnel profile already exists
+        const existingProfile = await PersonnelModel.findByPersonnelId(userId);
+        if (existingProfile) {
+          res.status(400).json({ message: 'บัญชีนี้ได้รับการตั้งค่าโปรไฟล์บุคลากรเรียบร้อยแล้ว' });
+          return;
+        }
+
+        // Validate major existence
+        const majorExists = await MasterModel.verifyMajorExists(major_id);
+        if (!majorExists) {
+          res.status(400).json({ message: 'รหัสสาขาวิชาไม่ถูกต้อง ไม่พบข้อมูลสาขาวิชานี้ในระบบ' });
+          return;
+        }
+
+        // Save profile to PERSONNEL table
+        // Roles are already assigned by admin — no role mutation here.
+        const profile = await PersonnelModel.createPersonnel(
+          userId,
+          major_id,
+          e_signature_file || null,
+          first_name || null,
+          last_name || null
+        );
+
+        res.status(201).json({
+          message: 'เปิดใช้งานโปรไฟล์บุคลากรเรียบร้อยแล้ว',
+          profile,
+          assignedRoles: personnelRoles
+        });
+        return;
+      }
+    } catch (error) {
+      console.error('Profile Setup Error:', error);
+      res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ระหว่างการตั้งค่าโปรไฟล์' });
+    }
+  }
+
+  /**
+   * Get the current user's profile details.
+   * Route: GET /api/profile/me
+   */
+  static async getMyProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const { userId, roles } = req.user;
+
+      if (roles.includes('student')) {
+        const profile = await StudentModel.findByStudentId(userId);
+        if (!profile) {
+          res.status(404).json({ message: 'Student profile not set up yet.' });
+          return;
+        }
+        res.status(200).json({ roles, profile });
+      } else if (roles.some((r) => ['advisor', 'dean', 'staff', 'dept_head'].includes(r))) {
+        const profile = await PersonnelModel.findByPersonnelId(userId);
+        if (!profile) {
+          res.status(404).json({ message: 'Personnel profile not set up yet.' });
+          return;
+        }
+        res.status(200).json({ roles, profile });
+      } else {
+        res.status(400).json({ message: `Profile retrieval is not supported for current roles.` });
+      }
+    } catch (error) {
+      console.error('Get Profile Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred while retrieving profile.' });
+    }
+  }
+
+  /**
+   * Update student profile (including resume file upload).
+   * Route: PUT /api/profile/student
+   */
+  static async updateStudentProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const { userId } = req.user;
+      const {
+        province_id,
+        first_name,
+        last_name,
+        nickname,
+        year_level,
+        birth_date,
+        alt_email,
+        phone,
+        current_address,
+        parent_name,
+        parent_phone,
+      } = req.body;
+
+      // SEC-05: student_code, major_id, cumulative_gpa and enrollment_year are
+      // registry data, not profile data. Letting students write them meant they
+      // could award themselves a GPA, move into another department to dodge the
+      // major-matching approval guards, or push enrollment_year forward to escape
+      // the graduation auto-deactivation. They are read from the existing record
+      // below and any values in the request body are ignored.
+      const parsedProvinceId = province_id !== undefined && province_id !== null && province_id !== '' ? parseInt(province_id, 10) : null;
+      const parsedYearLevel = year_level !== undefined && year_level !== null && year_level !== '' ? parseInt(year_level, 10) : null;
+
+      const cleanFirstName = first_name || null;
+      const cleanLastName = last_name || null;
+      const cleanNickname = nickname || null;
+      const cleanBirthDate = birth_date || null;
+      const cleanAltEmail = alt_email || null;
+      const cleanPhone = phone || null;
+      const cleanCurrentAddress = current_address || null;
+      const cleanParentName = parent_name || null;
+      const cleanParentPhone = parent_phone || null;
+
+      const existingProfile = await StudentModel.findByStudentId(userId);
+      if (!existingProfile) {
+        res.status(404).json({ message: 'Student profile not found. Please set up profile first.' });
+        return;
+      }
+
+      // Registry fields are carried over untouched from the stored record.
+      const lockedStudentCode = existingProfile.student_code;
+      const lockedMajorId = existingProfile.major_id;
+      const lockedGpa = existingProfile.cumulative_gpa !== null && existingProfile.cumulative_gpa !== undefined
+        ? Number(existingProfile.cumulative_gpa)
+        : null;
+      const lockedEnrollmentYear = existingProfile.enrollment_year ?? null;
+
+      // Validate province only — major is not user-supplied any more.
+      if (parsedProvinceId !== null) {
+        const provinceExists = await MasterModel.verifyProvinceExists(parsedProvinceId);
+        if (!provinceExists) {
+          res.status(400).json({ message: 'Invalid province_id. Referenced province does not exist.' });
+          return;
+        }
+      }
+
+      let resumeFile = null;
+      if (req.file) {
+        resumeFile = `resumes/${req.file.filename}`;
+
+        // Delete old resume file if exists
+        if (existingProfile.resume_file) {
+          const oldFilePath = path.join(process.cwd(), 'uploads', existingProfile.resume_file);
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlinkSync(oldFilePath);
+          }
+        }
+      }
+
+      const updated = await StudentModel.updateStudent(
+        userId,
+        lockedStudentCode,
+        lockedMajorId,
+        parsedProvinceId,
+        lockedGpa,
+        resumeFile,
+        cleanFirstName,
+        cleanLastName,
+        cleanNickname,
+        parsedYearLevel,
+        cleanBirthDate,
+        cleanAltEmail,
+        cleanPhone,
+        cleanCurrentAddress,
+        cleanParentName,
+        cleanParentPhone,
+        lockedEnrollmentYear
+      );
+
+      res.status(200).json({
+        message: 'Student profile updated successfully.',
+        profile: updated,
+      });
+    } catch (error) {
+      console.error('Update Student Profile Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred while updating student profile.' });
+    }
+  }
+
+  /**
+   * Update personnel profile (including signature file upload).
+   * Route: PUT /api/profile/personnel
+   */
+  static async updatePersonnelProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const { userId } = req.user;
+      const { major_id, first_name, last_name, birth_date } = req.body;
+
+      if (major_id === undefined) {
+        res.status(400).json({ message: 'Required field: major_id.' });
+        return;
+      }
+
+      const parsedMajorId = parseInt(major_id, 10);
+      const cleanBirthDate = birth_date !== undefined && birth_date !== null && birth_date !== '' ? birth_date : null;
+
+      const existingProfile = await PersonnelModel.findByPersonnelId(userId);
+      if (!existingProfile) {
+        res.status(404).json({ message: 'Personnel profile not found. Please set up profile first.' });
+        return;
+      }
+
+      // Validate major
+      const majorExists = await MasterModel.verifyMajorExists(parsedMajorId);
+      if (!majorExists) {
+        res.status(400).json({ message: 'Invalid major_id. Referenced major does not exist.' });
+        return;
+      }
+
+      let signatureFile = null;
+      if (req.file) {
+        signatureFile = `signatures/${req.file.filename}`;
+
+        // Delete old signature file if exists
+        if (existingProfile.e_signature_file) {
+          const oldFilePath = path.join(process.cwd(), 'uploads', existingProfile.e_signature_file);
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlinkSync(oldFilePath);
+          }
+        }
+      }
+
+      const updated = await PersonnelModel.updatePersonnel(
+        userId,
+        parsedMajorId,
+        signatureFile,
+        first_name !== undefined ? first_name : null,
+        last_name !== undefined ? last_name : null,
+        cleanBirthDate
+      );
+
+      res.status(200).json({
+        message: 'Personnel profile updated successfully.',
+        profile: updated,
+      });
+    } catch (error) {
+      console.error('Update Personnel Profile Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred while updating personnel profile.' });
+    }
+  }
+}

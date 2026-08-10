@@ -1,0 +1,359 @@
+import React, { useState, useEffect } from 'react';
+import PageSkeleton from '../../components/ui/Skeleton';
+import api from '../../services/api';
+import { MapPin, Calendar, Users, FileText, Send } from 'lucide-react';
+import SupervisionLogForm from './SupervisionLogForm';
+import AlertBanner from '../../components/ui/AlertBanner';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+
+interface SupervisionTrackingProps {
+  // Can pass props if needed, but we'll fetch data here
+}
+
+const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
+  const [students, setStudents] = useState<any[]>([]);
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Which appointment the "agreed out of band" confirmation is asking about.
+  const [bypassingId, setBypassingId] = useState<number | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
+  // Create draft form state
+  const [showDraftForm, setShowDraftForm] = useState<number | null>(null);
+  const [draftData, setDraftData] = useState({
+    appointment_date: '',
+    student_time: '',
+    mentor_time: '',
+    tour_requested: false
+  });
+  
+  // Log form state
+  const [showLogForm, setShowLogForm] = useState<number | null>(null); // appointmentId
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const [studentsRes, appRes] = await Promise.all([
+        api.get('/personnel/supervised-students'),
+        api.get('/appointments')
+      ]);
+      setStudents(studentsRes || []);
+      setAppointments(appRes.data || []);
+    } catch (err) {
+      console.error('Fetch supervision data error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleCreateDraft = async (studentId: number) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.post('/appointments/draft', {
+        student_id: studentId,
+        ...draftData
+      });
+      setSuccess('สร้างแบบร่างสำเร็จ ส่งให้เจ้าหน้าที่ประสานงานต่อไป');
+      setShowDraftForm(null);
+      setDraftData({ appointment_date: '', student_time: '', mentor_time: '', tour_requested: false });
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    }
+  };
+
+  const handleBypass = async () => {
+    if (bypassingId === null) return;
+    setError(null);
+    setSuccess(null);
+    setConfirmBusy(true);
+    try {
+      await api.put(`/appointments/${bypassingId}/bypass`);
+      setBypassingId(null);
+      setSuccess('บันทึกสถานะตกลงนอกรอบสำเร็จ');
+      fetchData();
+    } catch (err: any) {
+      setBypassingId(null);
+      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    } finally {
+      setConfirmBusy(false);
+    }
+  };
+
+  const handleAcceptReschedule = async (appointmentId: number) => {
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.put(`/appointments/${appointmentId}/accept-reschedule`);
+      setSuccess('ยอมรับการเลื่อนนัดหมายสำเร็จ');
+      fetchData();
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    }
+  };
+
+  if (loading) {
+    return (
+      <PageSkeleton variant='cards' />
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา</h2>
+        <p className="text-xs text-gray-400 mt-1">
+          จัดการการนัดหมาย บันทึกผลการนิเทศ และติดตามความคืบหน้าของนักศึกษา
+        </p>
+      </div>
+
+      <AlertBanner variant="error" message={error} />
+      <AlertBanner variant="success" message={success} />
+
+      {/* Map Dashboard (Clustering) */}
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm">
+        <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
+          <MapPin className="text-red-500 w-5 h-5" /> 
+          แผนที่การกระจายตัวของนักศึกษา
+        </h3>
+        <div className="w-full h-64 bg-gray-100 dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 flex flex-col items-center justify-center text-gray-400">
+          <MapPin className="w-8 h-8 mb-2 opacity-50" />
+          <p className="text-sm font-medium">Google Maps API Integration (Clustering)</p>
+          <p className="text-xs mt-1">แสดงพิกัดนักศึกษา 15 คน ในความดูแล</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
+        {students.length === 0 && (
+          <div className="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
+            ไม่มีนักศึกษาในความดูแล
+          </div>
+        )}
+
+        {students.map(student => {
+          const appointment = appointments.find(a => a.student_id === student.student_id);
+          
+          return (
+            <div key={student.student_id} className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between md:items-center gap-4">
+                <div>
+                  <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
+                    <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
+                    {student.first_name} {student.last_name} ({student.student_code})
+                  </h3>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-4 mt-2">
+                    <span className="flex items-center gap-1"><MapPin className="w-4 h-4" /> {student.company_name || 'ไม่ระบุ'}</span>
+                  </div>
+
+                  {/* Accommodation info (System 3) */}
+                  {student.accommodation_address && (
+                    <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-xs space-y-1">
+                      <div className="font-bold text-gray-700 dark:text-gray-300">ข้อมูลที่พัก & ติดต่อฉุกเฉิน</div>
+                      <div>ที่พัก: {student.accommodation_address}</div>
+                      <div>ผู้ติดต่อฉุกเฉิน: {student.emergency_contact} ({student.emergency_phone})</div>
+                    </div>
+                  )}
+
+                  {/* Weekly Plans (System 3) */}
+                  {student.weekly_plans && student.weekly_plans.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <div className="text-xs font-bold text-gray-700 dark:text-gray-300">แผนปฏิบัติงานรายสัปดาห์:</div>
+                      <div className="max-h-[150px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 bg-gray-50/30 dark:bg-gray-900/30">
+                        {student.weekly_plans.map((p: any) => (
+                          <div key={p.plan_id} className="p-3 text-xs flex justify-between gap-4">
+                            <div>
+                              <span className="font-bold block text-gray-600 dark:text-gray-400">สัปดาห์ที่ {p.week_number}</span>
+                              <span className="text-gray-500 block mt-0.5 dark:text-gray-400">{p.tasks}</span>
+                            </div>
+                            <span className="text-xs text-gray-400 self-start whitespace-nowrap">
+                              {new Date(p.start_date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})} - {new Date(p.end_date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {appointment ? (
+                  <div className="text-right">
+                    <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold ${
+                      appointment.status === 'accepted' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+                      appointment.status === 'draft' ? 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300' :
+                      appointment.status === 'offline_agreed' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' :
+                      'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                    }`}>
+                      สถานะนัดหมาย: {
+                        appointment.status === 'draft' ? 'แบบร่าง (รอส่ง)' :
+                        appointment.status === 'pending_company' ? 'รอสถานประกอบการตอบกลับ' :
+                        appointment.status === 'rescheduled' ? 'ขอเลื่อนเวลา' :
+                        appointment.status === 'accepted' ? 'ยืนยันนัดหมายแล้ว' :
+                        appointment.status === 'offline_agreed' ? 'ตกลงนอกรอบแล้ว' : appointment.status
+                      }
+                    </span>
+                  </div>
+                ) : (
+                  <div>
+                    <button 
+                      onClick={() => setShowDraftForm(showDraftForm === student.student_id ? null : student.student_id)}
+                      className="px-4 py-2 bg-brand-blue text-white rounded-xl text-sm font-medium hover:bg-blue-600 transition-colors flex items-center gap-2"
+                    >
+                      <Calendar className="w-4 h-4" /> กำหนดวันนิเทศ
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Appointment Details / Actions */}
+              {appointment && (
+                <div className="p-6 bg-gray-50 dark:bg-gray-900/50">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-3">รายละเอียดการนัดหมาย</h4>
+                      <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                        <p><strong>วันที่:</strong> {new Date(appointment.appointment_date).toLocaleDateString('th-TH')}</p>
+                        <p><strong>เวลานิเทศนักศึกษา:</strong> {appointment.student_time}</p>
+                        <p><strong>เวลาพบพี่เลี้ยง:</strong> {appointment.mentor_time}</p>
+                        <p><strong>รูปแบบ:</strong> {appointment.tour_requested ? 'ขอเยี่ยมชมสถานประกอบการด้วย' : 'พบปะพูดคุยปกติ'}</p>
+                        
+                        {appointment.status === 'rescheduled' && appointment.proposed_reschedule_date && (
+                          <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                            <p className="font-semibold text-yellow-800 dark:text-yellow-500 mb-1">พี่เลี้ยงขอเลื่อนเป็น:</p>
+                            <p className="text-yellow-700 dark:text-yellow-600"><strong>วันที่:</strong> {new Date(appointment.proposed_reschedule_date).toLocaleDateString('th-TH')}</p>
+                            <p className="text-yellow-700 dark:text-yellow-600"><strong>เวลาพบพี่เลี้ยง:</strong> {appointment.proposed_mentor_time}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex flex-col justify-end gap-3">
+                      {(appointment.status === 'pending_company' || appointment.status === 'rescheduled') && (
+                        <button 
+                          onClick={() => setBypassingId(appointment.appointment_id)}
+                          className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-700 rounded-xl text-sm font-medium hover:bg-blue-100 transition-colors self-start md:self-end"
+                        >
+                          ตกลงกับสถานประกอบการนอกรอบแล้ว (Bypass)
+                        </button>
+                      )}
+
+                      {appointment.status === 'rescheduled' && (
+                        <button 
+                          onClick={() => handleAcceptReschedule(appointment.appointment_id)}
+                          className="px-4 py-2 bg-yellow-500 text-white rounded-xl text-sm font-medium hover:bg-yellow-600 transition-colors shadow-sm self-start md:self-end"
+                        >
+                          ยอมรับการเลื่อนนัดหมาย (Accept Reschedule)
+                        </button>
+                      )}
+
+                      {(appointment.status === 'accepted' || appointment.status === 'offline_agreed') && (
+                        <button 
+                          onClick={() => setShowLogForm(appointment.appointment_id)}
+                          className="px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-medium hover:bg-green-700 transition-colors shadow-sm self-start md:self-end flex items-center gap-2"
+                        >
+                          <FileText className="w-4 h-4" /> บันทึกผลการนิเทศ (Log)
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Draft Form */}
+              {showDraftForm === student.student_id && (
+                <div className="p-6 bg-blue-50/50 dark:bg-blue-900/10 border-t border-gray-100 dark:border-gray-800">
+                  <h4 className="font-semibold text-sm text-brand-blue mb-4 dark:text-blue-400">สร้างแบบร่างวันนิเทศ</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">วันที่</label>
+                      <input 
+                        type="date" 
+                        value={draftData.appointment_date}
+                        onChange={e => setDraftData({...draftData, appointment_date: e.target.value})}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-brand-blue"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">เวลาพบนิสิต</label>
+                      <input 
+                        type="time" 
+                        value={draftData.student_time}
+                        onChange={e => setDraftData({...draftData, student_time: e.target.value})}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-brand-blue"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">เวลาพบพี่เลี้ยง</label>
+                      <input 
+                        type="time" 
+                        value={draftData.mentor_time}
+                        onChange={e => setDraftData({...draftData, mentor_time: e.target.value})}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-brand-blue"
+                      />
+                    </div>
+                    <div className="flex items-center mt-6">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
+                        <input 
+                          type="checkbox" 
+                          checked={draftData.tour_requested}
+                          onChange={e => setDraftData({...draftData, tour_requested: e.target.checked})}
+                          className="w-4 h-4 rounded text-brand-blue focus:ring-brand-blue dark:text-blue-400"
+                        />
+                        ต้องการเยี่ยมชมสถานประกอบการด้วย
+                      </label>
+                    </div>
+                  </div>
+                  <div className="mt-6 flex justify-end gap-3">
+                    <button 
+                      onClick={() => setShowDraftForm(null)}
+                      className="px-4 py-2 border border-gray-200 rounded-xl text-sm font-medium hover:bg-gray-50 text-gray-600 dark:hover:bg-gray-800 dark:border-gray-800 dark:text-gray-400"
+                    >
+                      ยกเลิก
+                    </button>
+                    <button 
+                      onClick={() => handleCreateDraft(student.student_id)}
+                      className="px-4 py-2 bg-brand-blue text-white rounded-xl text-sm font-medium hover:bg-blue-600 flex items-center gap-2"
+                    >
+                      <Send className="w-4 h-4" /> บันทึกและส่งให้ส่วนกลาง
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Render SupervisionLogForm full screen modal if open */}
+      {showLogForm && (
+        <SupervisionLogForm
+          appointmentId={showLogForm}
+          onClose={() => setShowLogForm(null)}
+          onSuccess={() => {
+            setShowLogForm(null);
+            fetchData();
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={bypassingId !== null}
+        title="ยืนยันการตกลงนัดหมายนอกรอบ"
+        message="ยืนยันว่าได้ตกลงวันและเวลานิเทศกับสถานประกอบการนอกระบบเรียบร้อยแล้ว? ระบบจะข้ามขั้นตอนการส่งอีเมลนัดหมายให้พี่เลี้ยง"
+        confirmLabel="ยืนยัน ตกลงนอกรอบแล้ว"
+        busy={confirmBusy}
+        onConfirm={handleBypass}
+        onCancel={() => setBypassingId(null)}
+      />
+    </div>
+  );
+};
+
+export default SupervisionTracking;

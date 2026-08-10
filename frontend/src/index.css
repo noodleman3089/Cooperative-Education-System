@@ -1,0 +1,157 @@
+/* The Google Fonts <link> lives in index.html — see the note there. */
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Noto Sans', 'Noto Sans Thai', system-ui, -apple-system, sans-serif;
+
+  /* Thai stacks up to three levels on one line — a vowel above, a tone mark
+     above that, a vowel below — inside the same box Latin fills with one. At
+     the sizes this app was built on (12px for body copy, 9–11px in places) the
+     marks collide and สระ /  ่ื/ stop being distinguishable. Raising the ramp
+     one step lifts every screen at once, which 550 hand-edited class names
+     would not have done any better. Line heights are set generously for the
+     same reason: the default leading crowds the marks against the line above. */
+  --text-xs: 0.8125rem;      /* 13px, was 12 */
+  --text-xs--line-height: 1.6;
+  --text-sm: 0.9375rem;      /* 15px, was 14 */
+  --text-sm--line-height: 1.6;
+  --text-base: 1rem;
+  --text-base--line-height: 1.7;
+  --text-lg: 1.1875rem;      /* 19px, was 18 */
+  --text-lg--line-height: 1.6;
+
+  --color-brand-blue: #2563EB;
+  --color-brand-navy: #1E3A8A;
+
+  --animate-shimmer: shimmer 1.5s infinite linear;
+
+  /* Modal entrances. The backdrop fades, the panel fades and grows slightly —
+     it reads as the dialog coming toward you rather than blinking into place. */
+  --animate-fade-in: fade-in 180ms ease-out;
+  --animate-scale-in: scale-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97) translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  margin: 0;
+  padding: 0;
+  background-color: #F3F4F6;
+  color: #1F2937;
+  min-height: 100vh;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.dark body {
+  background-color: #111827;
+  color: #F3F4F6;
+}
+
+/* Shimmer Loading Effect Utility */
+.shimmer-placeholder {
+  background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+.dark .shimmer-placeholder {
+  background: linear-gradient(90deg, #1F2937 25%, #374151 50%, #1F2937 75%);
+  background-size: 200% 100%;
+}
+
+/* Smooth Fade and Slide Page Transitions.
+   This used to be a `-enter` / `-enter-active` pair, the shape you use when
+   something toggles the second class a tick after mounting. Nothing ever did:
+   all twenty call sites wrote both classes together, so the element was born in
+   its final state and the transition never had two values to move between. A
+   keyframe animation runs on mount by itself, which is what was wanted. */
+.page-enter {
+  animation: page-enter 250ms ease-out both;
+}
+
+/* Custom Scrollbar for clean UI appearance */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #4B5563;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6B7280;
+}
+
+/* Respect the OS setting. Everything above is decoration; none of it carries
+   meaning, so it can all be turned off without the page losing anything. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

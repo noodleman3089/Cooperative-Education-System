@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coop System - DocuSign Test Console</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    body {
+      background: radial-gradient(circle at top, #0f172a, #020617);
+      color: #f8fafc;
+      min-height: 100vh;
+      padding: 2rem;
+      overflow-x: hidden;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .sessions {
+      display: flex;
+      gap: 1rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+    }
+    .badge-dot.active {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 350px 1fr;
+      gap: 2rem;
+    }
+    .card {
+      background: rgba(30, 41, 59, 0.45);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+    }
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-bottom: 0.5rem;
+      font-weight: 500;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      color: #f8fafc;
+      font-size: 0.9rem;
+      transition: all 0.2s;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #818cf8;
+      box-shadow: 0 0 0 2px rgba(129, 140, 248, 0.2);
+    }
+    .btn {
+      width: 100%;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: none;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #4f46e5, #6366f1);
+      color: white;
+    }
+    .btn-primary:hover:not(:disabled) {
+      background: linear-gradient(135deg, #4338ca, #4f46e5);
+      box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: #f8fafc;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      width: auto;
+    }
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+    .btn-action {
+      padding: 0.4rem 0.8rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      width: auto;
+      display: inline-flex;
+    }
+    .btn-sign {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: white;
+    }
+    .btn-sign:hover {
+      box-shadow: 0 0 10px rgba(3, 105, 161, 0.4);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    th {
+      padding: 1rem;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    td {
+      padding: 1.25rem 1rem;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      color: #cbd5e1;
+    }
+    tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .status-pending {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .status-signed {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .notification {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      display: none;
+    }
+    .notification-success {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .notification-error {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .loading-spinner {
+      border: 3px solid rgba(255, 255, 255, 0.1);
+      border-top: 3px solid #818cf8;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    .no-data {
+      text-align: center;
+      padding: 3rem;
+      color: #64748b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>Cooperative Education System</h1>
+        <p style="color: #94a3b8; font-size: 0.9rem; margin-top: 0.25rem;">DocuSign API Integration Sandbox Console</p>
+      </div>
+      <div class="sessions">
+        <div class="badge">
+          <div id="staff-dot" class="badge-dot"></div>
+          Staff Session
+        </div>
+        <div class="badge">
+          <div id="dean-dot" class="badge-dot"></div>
+          Dean Session
+        </div>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Left Column: Generate Document -->
+      <div class="card">
+        <div class="card-title">Generate Document</div>
+        
+        <div class="form-group">
+          <label>Student Profile</label>
+          <select id="student-select">
+            <option value="2">student2@test.com (Code: 640101001)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Company Target</label>
+          <select id="company-select">
+            <option value="1">Test Company Ltd</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Template Type</label>
+          <select id="template-select">
+            <option value="1">Cover Letter Template</option>
+          </select>
+        </div>
+
+        <button id="generate-btn" class="btn btn-primary">
+          Generate & Submit to DocuSign
+        </button>
+
+        <div id="gen-noti" class="notification"></div>
+      </div>
+
+      <!-- Right Column: Document List -->
+      <div class="card" style="display: flex; flex-direction: column;">
+        <div class="card-title">
+          <span>Official Documents</span>
+          <button id="refresh-btn" class="btn btn-secondary btn-action">Refresh List</button>
+        </div>
+
+        <div style="flex-grow: 1; overflow-x: auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Doc ID</th>
+                <th>Type</th>
+                <th>Student Code</th>
+                <th>Company</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="docs-tbody">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+          <div id="no-data-msg" class="no-data" style="display: none;">
+            No official documents found in the database.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // The session is an httpOnly cookie, so this console can only hold ONE at a
+    // time — it re-logs-in as whichever role the next call needs.
+    const ACCOUNTS = {
+      staff: { email: 'staff1@test.com', password: 'password123' },
+      dean: { email: 'dean1@test.com', password: 'password123' }
+    };
+    let currentRole = null;
+    const available = { staff: false, dean: false };
+
+    async function loginAs(role) {
+      if (currentRole === role) return true;
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(ACCOUNTS[role])
+      });
+      currentRole = res.ok ? role : null;
+      return res.ok;
+    }
+
+    // Probe both accounts on load so the status dots reflect what is seeded
+    async function backgroundLogin() {
+      try {
+        available.staff = await loginAs('staff');
+        if (available.staff) document.getElementById('staff-dot').classList.add('active');
+
+        available.dean = await loginAs('dean');
+        if (available.dean) document.getElementById('dean-dot').classList.add('active');
+
+        if (available.staff) {
+          await loadDocuments();
+        }
+      } catch (err) {
+        console.error('Background login failed:', err);
+      }
+    }
+
+    // Load Documents list
+    async function loadDocuments() {
+      if (!available.staff) return;
+
+      try {
+        await loginAs('staff');
+        const res = await fetch('/api/documents');
+
+        if (!res.ok) throw new Error('Failed to fetch documents');
+        
+        const docs = await res.json();
+        const tbody = document.getElementById('docs-tbody');
+        tbody.innerHTML = '';
+
+        if (docs.length === 0) {
+          document.getElementById('no-data-msg').style.display = 'block';
+          return;
+        } else {
+          document.getElementById('no-data-msg').style.display = 'none';
+        }
+
+        docs.forEach(doc => {
+          const tr = document.createElement('tr');
+          
+          // Doc ID
+          const tdId = document.createElement('td');
+          tdId.textContent = doc.doc_id;
+          tr.appendChild(tdId);
+
+          // Type
+          const tdType = document.createElement('td');
+          tdType.textContent = doc.type;
+          tr.appendChild(tdType);
+
+          // Student Code
+          const tdCode = document.createElement('td');
+          tdCode.textContent = doc.student_code;
+          tr.appendChild(tdCode);
+
+          // Company
+          const tdCompany = document.createElement('td');
+          tdCompany.textContent = doc.company_name_th;
+          tr.appendChild(tdCompany);
+
+          // Status
+          const tdStatus = document.createElement('td');
+          const isSigned = doc.status === 'signed';
+          tdStatus.innerHTML = `<span class="status-badge ${isSigned ? 'status-signed' : 'status-pending'}">${doc.status}</span>`;
+          tr.appendChild(tdStatus);
+
+          // Actions
+          const tdActions = document.createElement('td');
+          if (doc.status === 'pending_sign') {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-sign btn-action';
+            btn.textContent = 'Sign via DocuSign';
+            btn.onclick = () => signDocument(doc.doc_id);
+            tdActions.appendChild(btn);
+          } else if (doc.status === 'signed') {
+            const link = document.createElement('a');
+            link.href = '/' + doc.generated_file_path;
+            link.className = 'btn btn-secondary btn-action';
+            link.textContent = 'View PDF';
+            link.target = '_blank';
+            tdActions.appendChild(link);
+          } else {
+            tdActions.textContent = '-';
+          }
+          tr.appendChild(tdActions);
+
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    // Generate Document
+    document.getElementById('generate-btn').onclick = async () => {
+      if (!available.staff) {
+        showNotification('gen-noti', 'error', 'Staff authentication is missing.');
+        return;
+      }
+
+      const generateBtn = document.getElementById('generate-btn');
+      const originalText = generateBtn.innerHTML;
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = '<div class="loading-spinner"></div> Generating...';
+
+      const student_id = document.getElementById('student-select').value;
+      const company_id = document.getElementById('company-select').value;
+      const template_id = document.getElementById('template-select').value;
+
+      try {
+        await loginAs('staff');
+        const res = await fetch('/api/documents/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ student_id, company_id, template_id })
+        });
+
+        const data = await res.json();
+        if (res.status === 201) {
+          showNotification('gen-noti', 'success', 'Document successfully generated & uploaded to DocuSign.');
+          await loadDocuments();
+        } else {
+          showNotification('gen-noti', 'error', data.message || 'Generation failed.');
+        }
+      } catch (err) {
+        showNotification('gen-noti', 'error', err.message);
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = originalText;
+      }
+    };
+
+    // Sign Document (Dean)
+    async function signDocument(docId) {
+      if (!available.dean) {
+        alert('Dean session is missing. Make sure dean1@test.com is seeded.');
+        return;
+      }
+
+      try {
+        await loginAs('dean');
+        const res = await fetch('/api/documents/batch-sign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ doc_ids: [docId] })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.signing_urls && data.signing_urls.length > 0) {
+          const url = data.signing_urls[0].signing_url;
+          // Open DocuSign signing ceremony in a new tab
+          window.open(url, '_blank');
+        } else {
+          alert('Failed to get signing URL: ' + (data.message || 'Unknown error'));
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Error initiating signing: ' + err.message);
+      }
+    }
+
+    // Refresh button
+    document.getElementById('refresh-btn').onclick = async () => {
+      await loadDocuments();
+    };
+
+    // Helper notification
+    function showNotification(id, type, msg) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = 'notification notification-' + type;
+      el.style.display = 'block';
+      setTimeout(() => {
+        el.style.display = 'none';
+      }, 5000);
+    }
+
+    // Run on load
+    backgroundLogin();
+  </script>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="ระบบสารสนเทศเพื่อการบริหารจัดการงานสหกิจศึกษา มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO)" />
+    <title>ระบบบริหารจัดการสหกิจศึกษา | Cooperative Education Management System</title>
+
+    <!--
+      Applied before the first paint. This used to live in main.tsx, which meant
+      it did not run until the application bundle had downloaded and executed —
+      so anyone using dark mode got a full-page white flash on every load.
+    -->
+    <script>
+      try {
+        if (localStorage.getItem('theme') === 'dark') {
+          document.documentElement.classList.add('dark');
+        }
+      } catch (e) {
+        /* private mode blocks localStorage; light is the default anyway */
+      }
+    </script>
+
+    <!--
+      Fonts were an @import on the first line of index.css. A CSS @import cannot
+      begin until the stylesheet that names it has downloaded and parsed, so the
+      two requests queued instead of running side by side. Here they start with
+      the document.
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@300;400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>ใบสมัครงานสหกิจศึกษา (สหกิจ03)</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    body {
+      font-family: 'TH Sarabun New', 'TH SarabunPSK', 'Sarabun', 'Tahoma', sans-serif;
+      font-size: 15px;
+      line-height: 1.45;
+      color: #000;
+      background-color: #fff;
+      margin: 0;
+      padding: 0;
+    }
+    .page {
+      width: 210mm;
+      height: 297mm;
+      padding: 20mm 20mm 15mm 20mm;
+      box-sizing: border-box;
+      position: relative;
+      page-break-after: always;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .page:last-child {
+      page-break-after: avoid;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 10px;
+    }
+    .header-logo-text {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+    }
+    .logo-img {
+      height: 70px;
+      width: auto;
+    }
+    .header-text {
+      font-size: 13px;
+      font-weight: bold;
+      line-height: 1.3;
+    }
+    .photo-box {
+      width: 3cm;
+      height: 4cm;
+      border: 1px dashed #000;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      font-size: 11px;
+      color: #333;
+      padding: 5px;
+      box-sizing: border-box;
+      line-height: 1.3;
+    }
+    .photo-box img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .doc-tag {
+      font-size: 14px;
+      font-weight: bold;
+      text-align: right;
+      margin-top: 5px;
+    }
+    .title {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      margin: 5px 0 15px 0;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: bold;
+      background-color: #f1f5f9;
+      padding: 3px 8px;
+      margin: 10px 0 8px 0;
+      border-left: 3px solid #000;
+    }
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+      align-items: baseline;
+    }
+    .field-label {
+      font-weight: normal;
+      margin-right: 5px;
+    }
+    .field-value {
+      border-bottom: 1px dotted #000;
+      flex-grow: 1;
+      padding: 0 5px;
+      font-weight: bold;
+      min-height: 20px;
+    }
+    .field-value-fixed {
+      border-bottom: 1px dotted #000;
+      padding: 0 5px;
+      font-weight: bold;
+      display: inline-block;
+      text-align: center;
+      white-space: nowrap;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 8px 0;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid #000;
+      padding: 4px 6px;
+      text-align: left;
+    }
+    th {
+      background-color: #f8fafc;
+      font-weight: bold;
+      text-align: center;
+    }
+    .center-text {
+      text-align: center;
+    }
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: #475569;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      padding-top: 5px;
+      margin-top: auto;
+    }
+    ol, ul {
+      margin: 5px 0 5px 20px;
+      padding: 0;
+    }
+    li {
+      margin-bottom: 4px;
+    }
+    .signature-block {
+      align-self: flex-end;
+      text-align: center;
+      width: 250px;
+      margin-top: 15px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==================== PAGE 1 ==================== -->
+  <div class="page">
+    <div>
+      <header>
+        <div class="header-logo-text">
+          <img class="logo-img" src="data:image/jpeg;base64,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" alt="RMUTTO Logo" />
+          <div class="header-text">
+            คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ<br>
+            มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก วิทยาเขตจักรพงษภูวนารถ
+          </div>
+        </div>
+        <div class="photo-box">
+          {{#if student_photo_base64}}
+            <img src="data:image/jpeg;base64,{{student_photo_base64}}" alt="Student Photo" />
+          {{else}}
+            รูปถ่ายหน้าตรง<br>ขนาด 1 นิ้ว<br>พื้นหลังสีฟ้า
+          {{/if}}
+        </div>
+      </header>
+
+      <div class="doc-tag">(สหกิจ03)</div>
+      <div class="title">ใบสมัครงานสหกิจศึกษา</div>
+
+      <div class="row">
+        <span class="field-label">ชื่อสถานที่ประกอบการที่ต้องการสมัคร</span>
+        <div class="field-value">{{company_name}}</div>
+      </div>
+      <div class="row">
+        <span class="field-label">สมัครงานในตำแหน่ง</span>
+        <div class="field-value">{{job_position}}</div>
+      </div>
+      <div class="row">
+        <span class="field-label">ระยะเวลาปฏิบัติงานสหกิจศึกษา</span>
+        <div class="field-value">{{coop_duration}}</div>
+      </div>
+
+      <div class="section-title">ข้อมูลส่วนตัวนักศึกษา</div>
+      
+      <div class="row">
+        <span class="field-label">ชื่อ – นามสกุล (นาย/นาง/นางสาว)</span>
+        <div class="field-value">{{student_name_th}}</div>
+      </div>
+      <div class="row">
+        <span class="field-label">Name & Surname (Mr./ Miss / Ms.)</span>
+        <div class="field-value">{{student_name_en}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">รหัสนักศึกษา</span>
+        <div class="field-value-fixed" style="width: 150px;">{{student_code}}</div>
+        <span class="field-label" style="margin-left: 15px;">สาขาวิชา</span>
+        <div class="field-value">{{major_name}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">นักศึกษาชั้นปีที่</span>
+        <div class="field-value-fixed" style="width: 60px;">{{year_level}}</div>
+        <span class="field-label" style="margin-left: 15px;">อาจารย์ที่ปรึกษา</span>
+        <div class="field-value">{{advisor_name}}</div>
+        <span class="field-label" style="margin-left: 15px;">เกรดเฉลี่ยรวม</span>
+        <div class="field-value-fixed" style="width: 60px;">{{gpa}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">เลขที่บัตรประจำตัวประชาชน</span>
+        <div class="field-value-fixed" style="width: 180px;">{{citizen_id}}</div>
+        <span class="field-label" style="margin-left: 15px;">ออกให้ ณ เขต/อำเภอ</span>
+        <div class="field-value">{{citizen_issued_at}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">หมดอายุวันที่</span>
+        <div class="field-value-fixed" style="width: 130px; font-size: 13px;">{{citizen_expire_date}}</div>
+        <span class="field-label" style="margin-left: 15px;">เกิดวันที่</span>
+        <div class="field-value-fixed" style="width: 130px; font-size: 13px;">{{birth_date}}</div>
+        <span class="field-label" style="margin-left: 15px;">อายุ</span>
+        <div class="field-value-fixed" style="width: 40px;">{{age}}</div>
+        <span class="field-label">ปี</span>
+        <span class="field-label" style="margin-left: 15px;">เพศ</span>
+        <div class="field-value-fixed" style="width: 60px;">{{gender}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">เชื้อชาติ</span>
+        <div class="field-value-fixed" style="width: 100px;">{{nationality}}</div>
+        <span class="field-label" style="margin-left: 15px;">สัญชาติ</span>
+        <div class="field-value-fixed" style="width: 100px;">{{race}}</div>
+        <span class="field-label" style="margin-left: 15px;">ศาสนา</span>
+        <div class="field-value">{{religion}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">ที่อยู่ปัจจุบัน</span>
+        <div class="field-value">{{address}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">โทรศัพท์</span>
+        <div class="field-value-fixed" style="width: 120px;">{{phone}}</div>
+        <span class="field-label" style="margin-left: 15px;">โทรศัพท์เคลื่อนที่</span>
+        <div class="field-value-fixed" style="width: 150px;">{{mobile_phone}}</div>
+        <span class="field-label" style="margin-left: 15px;">โทรสาร</span>
+        <div class="field-value">{{fax}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">E – mail</span>
+        <div class="field-value">{{email}}</div>
+      </div>
+
+      <div class="section-title">บุคคลที่ติดต่อได้ในกรณีฉุกเฉิน</div>
+
+      <div class="row">
+        <span class="field-label">ชื่อ–สกุล (นาย/นาง/นางสาว)</span>
+        <div class="field-value-fixed" style="width: 250px;">{{emergency_name}}</div>
+        <span class="field-label" style="margin-left: 15px;">ความสัมพันธ์</span>
+        <div class="field-value">{{emergency_relation}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">ที่อยู่</span>
+        <div class="field-value">{{emergency_address}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">โทรศัพท์</span>
+        <div class="field-value-fixed" style="width: 120px;">{{emergency_phone}}</div>
+        <span class="field-label" style="margin-left: 15px;">โทรศัพท์เคลื่อนที่</span>
+        <div class="field-value-fixed" style="width: 150px;">{{emergency_mobile}}</div>
+        <span class="field-label" style="margin-left: 15px;">โทรสาร</span>
+        <div class="field-value">{{emergency_fax}}</div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>หน้าที่ 1/3</span>
+      <span>ปรับปรุงเมื่อ 11 ก.พ. 63</span>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 2 ==================== -->
+  <div class="page">
+    <div>
+      <header>
+        <div class="header-logo-text">
+          <img class="logo-img" src="data:image/jpeg;base64,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" alt="RMUTTO Logo" />
+          <div class="header-text">
+            คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ<br>
+            มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก วิทยาเขตจักรพงษภูวนารถ
+          </div>
+        </div>
+      </header>
+
+      <div class="doc-tag">(สหกิจ03)</div>
+      
+      <div class="section-title" style="margin-top: 15px;">ข้อมูลครอบครัว</div>
+
+      <div class="row">
+        <span class="field-label">ชื่อบิดา</span>
+        <div class="field-value-fixed" style="width: 200px;">{{father_name}}</div>
+        <span class="field-label" style="margin-left: 15px;">อายุ</span>
+        <div class="field-value-fixed" style="width: 40px;">{{father_age}}</div>
+        <span class="field-label">ปี</span>
+        <span class="field-label" style="margin-left: 15px;">อาชีพ</span>
+        <div class="field-value">{{father_occupation}}</div>
+      </div>
+      <div class="row">
+        <span class="field-label">โทรศัพท์</span>
+        <div class="field-value">{{father_phone}}</div>
+      </div>
+
+      <div class="row">
+        <span class="field-label">ชื่อมารดา</span>
+        <div class="field-value-fixed" style="width: 200px;">{{mother_name}}</div>
+        <span class="field-label" style="margin-left: 15px;">อายุ</span>
+        <div class="field-value-fixed" style="width: 40px;">{{mother_age}}</div>
+        <span class="field-label">ปี</span>
+        <span class="field-label" style="margin-left: 15px;">อาชีพ</span>
+        <div class="field-value">{{mother_occupation}}</div>
+      </div>
+      <div class="row">
+        <span class="field-label">โทรศัพท์</span>
+        <div class="field-value">{{mother_phone}}</div>
+      </div>
+
+      <div class="row" style="margin-top: 10px;">
+        <span class="field-label">จำนวนพี่น้อง</span>
+        <div class="field-value-fixed" style="width: 40px;">{{siblings_count}}</div>
+        <span class="field-label">คน</span>
+        <span class="field-label" style="margin-left: 15px;">เป็นบุตรคนที่</span>
+        <div class="field-value-fixed" style="width: 40px;">{{siblings_order}}</div>
+        <span class="field-label">ตามรายละเอียดข้างล่างนี้</span>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 80px;">ลำดับที่</th>
+            <th>ชื่อ – นามสกุล</th>
+            <th style="width: 80px;">อายุ (ปี)</th>
+            <th style="width: 200px;">อาชีพ</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#if siblings}}
+            {{#each siblings}}
+              <tr>
+                <td class="center-text">{{this.no}}</td>
+                <td>{{this.name}}</td>
+                <td class="center-text">{{this.age}}</td>
+                <td>{{this.occupation}}</td>
+              </tr>
+            {{/each}}
+          {{else}}
+            <tr>
+              <td class="center-text">1</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td class="center-text">2</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td class="center-text">3</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+          {{/if}}
+        </tbody>
+      </table>
+
+      <div class="section-title">จุดมุ่งหมายอาชีพ</div>
+      <p style="font-size: 13px; color: #475569; margin-bottom: 5px;">ระบุสายงานและลักษณะงานที่นักศึกษาสนใจ</p>
+      <ol>
+        {{#if career_goals}}
+          {{#each career_goals}}
+            <li>{{this}}</li>
+          {{/each}}
+        {{else}}
+          <li>................................................................................................................................................</li>
+          <li>................................................................................................................................................</li>
+          <li>................................................................................................................................................</li>
+        {{/if}}
+      </ol>
+
+      <div class="section-title">กิจกรรมนอกหลักสูตร</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 150px;">ระยะเวลา</th>
+            <th>ตำแหน่งและหน้าที่</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#if activities}}
+            {{#each activities}}
+              <tr>
+                <td class="center-text">{{this.duration}}</td>
+                <td>{{this.position}}</td>
+              </tr>
+            {{/each}}
+          {{else}}
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+          {{/if}}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      <span>หน้าที่ 2/3</span>
+      <span>ปรับปรุงเมื่อ 11 ก.พ. 63</span>
+    </div>
+  </div>
+
+  <!-- ==================== PAGE 3 ==================== -->
+  <div class="page">
+    <div>
+      <header>
+        <div class="header-logo-text">
+          <img class="logo-img" src="data:image/jpeg;base64,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" alt="RMUTTO Logo" />
+          <div class="header-text">
+            คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ<br>
+            มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก วิทยาเขตจักรพงษภูวนารถ
+          </div>
+        </div>
+      </header>
+
+      <div class="doc-tag">(สหกิจ03)</div>
+
+      <div class="section-title" style="margin-top: 15px;">ความสามารถพิเศษทางภาษา</div>
+      <table>
+        <thead>
+          <tr>
+            <th>ภาษา</th>
+            <th style="width: 120px;">อ่าน</th>
+            <th style="width: 120px;">พูด</th>
+            <th style="width: 120px;">เขียน</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>ภาษาอังกฤษ</strong></td>
+            <td class="center-text">{{lang_en_read}}</td>
+            <td class="center-text">{{lang_en_speak}}</td>
+            <td class="center-text">{{lang_en_write}}</td>
+          </tr>
+          <tr>
+            <td><strong>ภาษาอื่น:</strong> {{lang_other_name}}</td>
+            <td class="center-text">{{lang_other_read}}</td>
+            <td class="center-text">{{lang_other_speak}}</td>
+            <td class="center-text">{{lang_other_write}}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">ประวัติการศึกษา</div>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 100px;">ระดับ</th>
+            <th>สถานศึกษา</th>
+            <th style="width: 70px;">ปีที่เริ่ม</th>
+            <th style="width: 70px;">ปีที่จบ</th>
+            <th style="width: 120px;">วุฒิการศึกษา</th>
+            <th style="width: 120px;">วิชา/สาขาวิชา</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>มัธยมต้น</td>
+            <td>{{edu_mid_school}}</td>
+            <td class="center-text">{{edu_mid_start}}</td>
+            <td class="center-text">{{edu_mid_end}}</td>
+            <td>{{edu_mid_degree}}</td>
+            <td>{{edu_mid_major}}</td>
+          </tr>
+          <tr>
+            <td>มัธยมปลาย</td>
+            <td>{{edu_high_school}}</td>
+            <td class="center-text">{{edu_high_start}}</td>
+            <td class="center-text">{{edu_high_end}}</td>
+            <td>{{edu_high_degree}}</td>
+            <td>{{edu_high_major}}</td>
+          </tr>
+          <tr>
+            <td>ต่ำกว่าอนุปริญญา</td>
+            <td>{{edu_cert_school}}</td>
+            <td class="center-text">{{edu_cert_start}}</td>
+            <td class="center-text">{{edu_cert_end}}</td>
+            <td>{{edu_cert_degree}}</td>
+            <td>{{edu_cert_major}}</td>
+          </tr>
+          <tr>
+            <td>อนุปริญญา</td>
+            <td>{{edu_dip_school}}</td>
+            <td class="center-text">{{edu_dip_start}}</td>
+            <td class="center-text">{{edu_dip_end}}</td>
+            <td>{{edu_dip_degree}}</td>
+            <td>{{edu_dip_major}}</td>
+          </tr>
+          <tr>
+            <td>ปริญญาตรี</td>
+            <td>{{edu_bach_school}}</td>
+            <td class="center-text">{{edu_bach_start}}</td>
+            <td class="center-text">{{edu_bach_end}}</td>
+            <td>{{edu_bach_degree}}</td>
+            <td>{{edu_bach_major}}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="section-title">ประวัติการฝึกอบรมและปฏิบัติงานสหกิจศึกษา (แนบเอกสารเพิ่มเติม)</div>
+      <table>
+        <thead>
+          <tr>
+            <th colspan="2" style="width: 160px;">ระยะเวลาฝึก</th>
+            <th rowspan="2">สถานที่ปฏิบัติงาน/ที่อยู่</th>
+            <th rowspan="2" style="width: 200px;">ตำแหน่ง/หัวข้ออบรม/หน้าที่</th>
+          </tr>
+          <tr>
+            <th style="width: 80px;">จาก</th>
+            <th style="width: 80px;">ถึง</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#if experiences}}
+            {{#each experiences}}
+              <tr>
+                <td class="center-text">{{this.from_date}}</td>
+                <td class="center-text">{{this.to_date}}</td>
+                <td>{{this.location}}</td>
+                <td>{{this.position}}</td>
+              </tr>
+            {{/each}}
+          {{else}}
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+          {{/if}}
+        </tbody>
+      </table>
+
+      <div class="signature-block">
+        ลงชื่อ <div class="field-value-fixed" style="width: 120px;"></div> นักศึกษาสหกิจศึกษา<br>
+        ( <div class="field-value-fixed" style="width: 140px;">{{student_name_th}}</div> )<br>
+        <span style="font-size: 13px;">ลงวันที่ <div class="field-value-fixed" style="width: 130px;">{{current_date}}</div></span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>หน้าที่ 3/3</span>
+      <span>ปรับปรุงเมื่อ 11 ก.พ. 63</span>
+    </div>
+  </div>
+
+</body>
+</html>

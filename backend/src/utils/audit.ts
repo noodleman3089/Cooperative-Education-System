@@ -1,0 +1,88 @@
+import { Request } from 'express';
+import { query } from '../config/database';
+
+/**
+ * Append-only audit trail (SEC-07).
+ *
+ * The system mints signed official documents, grants roles and records grades but
+ * kept no record of who did any of it. Every privileged or irreversible action
+ * should leave a row in `audit_log`.
+ *
+ * There is deliberately no read API — inspect the table directly:
+ *   SELECT created_at, actor_email, action, entity_id, detail
+ *   FROM audit_log ORDER BY audit_id DESC LIMIT 50;
+ */
+
+export const AuditAction = {
+  PERSONNEL_CLAIMED: 'personnel.claimed',
+  PERSONNEL_CLAIM_REJECTED: 'personnel.claim_rejected',
+  USER_CREATED: 'user.created',
+  USER_UPDATED: 'user.updated',
+  USER_DELETED: 'user.deleted',
+  USER_AUTO_DEACTIVATED: 'user.auto_deactivated',
+  PASSWORD_RESET: 'user.password_reset',
+  INTENT_APPROVED_ADVISOR: 'intent.approved_by_advisor',
+  INTENT_REJECTED_ADVISOR: 'intent.rejected_by_advisor',
+  INTENT_APPROVED_DEPT_HEAD: 'intent.approved_by_dept_head',
+  INTENT_REJECTED_DEPT_HEAD: 'intent.rejected_by_dept_head',
+  ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
+  DOCUMENT_GENERATED: 'document.generated',
+  DOCUMENT_SIGNED: 'document.signed',
+  ELIGIBILITY_CHANGED: 'student.eligibility_changed',
+  REGISTRY_CHANGED: 'student.registry_changed',
+  EVALUATION_SUBMITTED: 'evaluation.submitted',
+  FINAL_REPORT_REVIEWED: 'final_report.reviewed',
+} as const;
+
+export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
+
+export interface AuditEntry {
+  action: AuditActionValue | string;
+  entityType: string;
+  entityId?: string | number | null;
+  /** The user this action was performed *on* (e.g. the student being graded). */
+  subjectId?: number | null;
+  detail?: Record<string, unknown>;
+}
+
+/**
+ * Record an audit entry. Never throws — an unwritable audit log must not take
+ * down the request it describes.
+ *
+ * @param req    omit for actions with no HTTP caller (schedulers, callbacks);
+ *               the entry is then attributed to 'system'.
+ * @param client pass the transaction client when the entry must commit or roll
+ *               back together with the change it describes.
+ */
+export async function writeAudit(
+  entry: AuditEntry,
+  req?: Request,
+  client?: { query: (text: string, params?: unknown[]) => Promise<unknown> }
+): Promise<void> {
+  const sql = `INSERT INTO audit_log
+      (actor_id, actor_email, actor_roles, action, entity_type, entity_id, subject_id, detail, ip_address)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`;
+
+  const params = [
+    req?.user?.userId ?? null,
+    req?.user?.email ?? 'system',
+    req?.user?.roles ? req.user.roles.join(',') : 'system',
+    entry.action,
+    entry.entityType,
+    entry.entityId !== undefined && entry.entityId !== null ? String(entry.entityId) : null,
+    entry.subjectId ?? null,
+    entry.detail ? JSON.stringify(entry.detail) : null,
+    // Requires TRUST_PROXY to be set behind a reverse proxy to be meaningful.
+    req?.ip ?? null,
+  ];
+
+  try {
+    if (client) {
+      await client.query(sql, params);
+    } else {
+      await query(sql, params);
+    }
+  } catch (error) {
+    console.error('[AUDIT] Failed to write audit entry', entry.action, error);
+  }
+}

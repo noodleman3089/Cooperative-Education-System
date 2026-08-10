@@ -1,0 +1,758 @@
+import nodemailer from 'nodemailer';
+import { escapeHtml as esc } from '../middlewares/validation';
+import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
+
+/**
+ * These emails are assembled as HTML strings, and several of the values that go
+ * into them are typed by users — a student picks the company name and contact
+ * address on a self-found placement, and reviewers write free-text rejection
+ * reasons. Anything interpolated into the markup below therefore goes through
+ * `esc()` first. Plain-text fields (mail subjects, the `to:` address) are left
+ * verbatim, since escaping there would show entities to the reader.
+ */
+
+// Configure transporter
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
+  port: parseInt(process.env.SMTP_PORT || '2525', 10),
+  auth: {
+    user: process.env.SMTP_USER || 'mock_user',
+    pass: process.env.SMTP_PASS || 'mock_pass',
+  },
+});
+
+const SMTP_FROM = process.env.SMTP_FROM || 'coop-system@rmutto.ac.th';
+
+// ponytail: Shared template helper to avoid duplicate email layout boilerplate.
+const renderEmailHtml = (options: {
+  title: string;
+  themeColor?: string;
+  content: string;
+  highlightBox?: string;
+  footnote?: string;
+}) => {
+  const theme = options.themeColor || '#1a73e8';
+  return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 8px;">
+      <h2 style="color: ${theme}; border-bottom: 2px solid ${theme}; padding-bottom: 10px;">${options.title}</h2>
+      ${options.content}
+      ${options.highlightBox ? `
+        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; border-left: 5px solid ${theme}; margin: 15px 0;">
+          ${options.highlightBox}
+        </div>
+      ` : ''}
+      ${options.footnote || ''}
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+      <p style="font-size: 0.85em; color: #888; text-align: center;">
+        จดหมายข่าวส่งอัตโนมัติโดยระบบบริหารจัดการงานสหกิจศึกษา RMUTTO<br>
+        กรุณาอย่าตอบกลับอีเมลนี้
+      </p>
+    </div>
+  `;
+};
+
+/**
+ * Renders the "set your password" call to action shared by both invitation
+ * emails. The link is the only credential these emails carry — no password is
+ * ever mailed, so nothing usable is left behind in the recipient's inbox.
+ */
+const inviteCallToAction = (inviteLink: string, buttonColor: string) => `
+  <div style="text-align: center; margin: 24px 0;">
+    <a href="${inviteLink}"
+       style="display: inline-block; padding: 12px 32px; background-color: ${buttonColor}; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+      ตั้งรหัสผ่านและเข้าใช้งาน
+    </a>
+  </div>
+`;
+
+const inviteFootnote = (loginUrl: string) => `
+  <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+    ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${INVITE_TTL_LABEL}<br/>
+    หากลิงก์หมดอายุแล้ว กรุณาไปที่ <a href="${loginUrl}" style="color: #2563eb;">หน้าเข้าสู่ระบบสถานประกอบการ</a>
+    แล้วกด "ลืมรหัสผ่าน" เพื่อขอลิงก์ใหม่<br/>
+    หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่ดูแลงานสหกิจศึกษา
+  </p>
+`;
+
+/**
+ * Invites a company representative to set their own password.
+ */
+export const sendCompanyInviteEmail = async (
+  toEmail: string,
+  inviteLink: string
+): Promise<void> => {
+  const content = `
+    <p>ท่านได้รับสิทธิ์การเข้าใช้งาน <b>ระบบบริหารจัดการงานสหกิจศึกษาออนไลน์ (Online Cooperative Education Management System)</b> ของ มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO)</p>
+    <p>บัญชีของท่านคือ <b>${esc(toEmail)}</b> กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง แล้วเข้าใช้งานระบบ</p>
+    ${inviteCallToAction(inviteLink, '#2563eb')}
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: 'เชิญเปิดใช้งานบัญชีสำหรับสถานประกอบการ - ระบบสหกิจศึกษาออนไลน์',
+    html: renderEmailHtml({
+      title: 'สวัสดีครับ/ค่ะ ตัวแทนสถานประกอบการ',
+      themeColor: '#1a73e8',
+      content,
+      footnote: inviteFootnote(companyLoginUrl())
+    })
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Company invitation email successfully sent to: ${toEmail}`);
+  } catch (error) {
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] COMPANY INVITE (SMTP failed — dev console fallback)`);
+    console.error(`  To: ${toEmail}`);
+    console.error(`  Link: ${inviteLink}`);
+    console.error('════════════════════════════════════════════════════');
+  }
+};
+
+/**
+ * Invites a mentor to set their own password.
+ */
+export const sendMentorInviteEmail = async (
+  toEmail: string,
+  inviteLink: string
+): Promise<void> => {
+  const content = `
+    <p>ท่านได้รับการลงทะเบียนเป็น <b>พี่เลี้ยงดูแลนักศึกษาฝึกปฏิบัติสหกิจศึกษา (Coop Mentor)</b> ในระบบบริหารจัดการงานสหกิจศึกษาออนไลน์ ของ มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO)</p>
+    <p>บัญชีของท่านคือ <b>${esc(toEmail)}</b> กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง แล้วเข้าใช้งานเพื่อประเมินและติดตามนักศึกษา</p>
+    ${inviteCallToAction(inviteLink, '#2e7d32')}
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: 'เชิญเปิดใช้งานบัญชีสำหรับพี่เลี้ยงนักศึกษาสหกิจ - ระบบสหกิจศึกษาออนไลน์',
+    html: renderEmailHtml({
+      title: 'สวัสดีครับ/ค่ะ พี่เลี้ยงนักศึกษา (Mentor)',
+      themeColor: '#2e7d32',
+      content,
+      footnote: inviteFootnote(companyLoginUrl())
+    })
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Mentor invitation email successfully sent to: ${toEmail}`);
+  } catch (error) {
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] MENTOR INVITE (SMTP failed — dev console fallback)`);
+    console.error(`  To: ${toEmail}`);
+    console.error(`  Link: ${inviteLink}`);
+    console.error('════════════════════════════════════════════════════');
+  }
+};
+
+/**
+ * Tells an account holder their password was just set or changed.
+ *
+ * An invitation link is delivered to a mailbox that is often shared, so there
+ * is a window in which someone other than the intended recipient could claim
+ * the account. This is what closes it: the real owner finds out the moment it
+ * happens rather than the next time they fail to log in.
+ */
+export const sendPasswordSetNoticeEmail = async (
+  toEmail: string,
+  isFirstActivation: boolean
+): Promise<void> => {
+  const title = isFirstActivation ? 'บัญชีของท่านเปิดใช้งานแล้ว' : 'รหัสผ่านของท่านถูกเปลี่ยน';
+  const what = isFirstActivation
+    ? 'บัญชีของท่านถูกเปิดใช้งานและตั้งรหัสผ่านเรียบร้อยแล้ว'
+    : 'รหัสผ่านของบัญชีของท่านถูกเปลี่ยนเรียบร้อยแล้ว';
+
+  const content = `
+    <p>เรียน ผู้ใช้งาน <b>${esc(toEmail)}</b></p>
+    <p>${what} เมื่อ ${new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' })}</p>
+    <p style="color: #b45309;"><b>หากไม่ใช่ท่านเป็นผู้ดำเนินการ</b> กรุณาติดต่อเจ้าหน้าที่ดูแลงานสหกิจศึกษาโดยด่วน เพื่อระงับบัญชีและออกลิงก์ใหม่ให้ท่าน</p>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: toEmail,
+      subject: `${title} - ระบบสหกิจศึกษาออนไลน์`,
+      html: renderEmailHtml({ title, themeColor: '#1e3a5f', content }),
+    });
+    console.log(`[Email] Password-set notice sent to: ${toEmail}`);
+  } catch (error) {
+    console.error(`[Email] Failed to send password-set notice to ${toEmail}`);
+  }
+};
+
+/**
+ * Sends signed official document to company representative.
+ */
+export const sendSignedDocumentEmail = async (
+  toEmail: string,
+  companyName: string,
+  documentType: string,
+  pdfFilePath: string,
+  inviteLink?: string
+): Promise<void> => {
+  const docTypeLabel = documentType === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
+  // companyName is student-supplied on a self-found placement.
+  const safeCompanyName = esc(companyName);
+
+  let content = `
+    <p>มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) ขอจัดส่งเอกสารจดหมายราชการ <b>${docTypeLabel}</b> เพื่อขอความอนุเคราะห์นำนักศึกษาเข้ารับการฝึกปฏิบัติงานสหกิจศึกษา ณ สถานประกอบการของท่าน</p>
+    <p>รายละเอียดเอกสารตัวจริงที่ได้รับการลงนามอนุมัติอิเล็กทรอนิกส์โดยคณบดีอย่างเป็นทางการ ได้แนบมาพร้อมกับอีเมลฉบับนี้ในรูปแบบไฟล์ PDF เรียบร้อยแล้ว</p>
+  `;
+
+  // A newly opened account gets an invitation link instead of a password.
+  if (inviteLink) {
+    content += `<p>นอกจากนี้ ระบบได้เปิดบัญชีเข้าใช้งานให้สถานประกอบการของท่าน (<b>${esc(toEmail)}</b>) เพื่อเข้าตรวจสอบ ติดตาม และตอบรับกระบวนการสหกิจศึกษา กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง:</p>`;
+    content += inviteCallToAction(inviteLink, '#2563eb');
+  } else {
+    content += `<p>ท่านสามารถเข้าสู่ระบบที่ <a href="${companyLoginUrl()}" style="color: #2563eb;">หน้าเข้าสู่ระบบสถานประกอบการ</a> เพื่อดำเนินการตอบรับนักศึกษา หรือตรวจสอบรายละเอียดตำแหน่งงาน</p>`;
+  }
+
+  content += `<p>หากมีข้อสงสัยกรุณาติดต่อประสานงานกลับมายังงานสหกิจศึกษาคณะ</p>`;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: `ส่งเอกสารทางการเรียนเชิญปฏิบัติงานสหกิจศึกษา - ${companyName}`,
+    html: renderEmailHtml({
+      title: `สวัสดีครับ/ค่ะ ตัวแทน ${safeCompanyName}`,
+      themeColor: '#1a73e8',
+      content,
+      footnote: inviteLink ? inviteFootnote(companyLoginUrl()) : undefined
+    }),
+    attachments: [
+      {
+        filename: `${documentType}_signed.pdf`,
+        path: pdfFilePath,
+      }
+    ]
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Signed document email with PDF attachment successfully sent to: ${toEmail}`);
+  } catch (error) {
+    console.error('========================================================');
+    console.error(`FAILED TO SEND SIGNED DOCUMENT EMAIL to ${toEmail}`);
+    console.error(`Please configure SMTP settings in .env`);
+    console.error('========================================================');
+  }
+};
+
+/**
+ * Sends a password reset email with a clickable link.
+ * Falls back to console logging if SMTP fails.
+ */
+export const sendPasswordResetEmail = async (
+  toEmail: string,
+  resetLink: string
+): Promise<void> => {
+  const content = `
+    <p style="color: #6b7280; font-size: 14px; line-height: 1.6;">
+      ท่านได้ขอรีเซ็ตรหัสผ่านสำหรับระบบสหกิจศึกษา RMUTTO<br/>
+      กรุณาคลิกปุ่มด้านล่างเพื่อตั้งรหัสผ่านใหม่:
+    </p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${resetLink}" 
+         style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        ตั้งรหัสผ่านใหม่
+      </a>
+    </div>
+  `;
+
+  const footnote = `
+    <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+      ลิงก์นี้จะหมดอายุใน 1 ชั่วโมง<br/>
+      หากท่านไม่ได้ร้องขอ กรุณาเพิกเฉยอีเมลนี้
+    </p>
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: 'รีเซ็ตรหัสผ่าน — ระบบสหกิจศึกษา RMUTTO',
+    html: renderEmailHtml({
+      title: '🔑 รีเซ็ตรหัสผ่าน',
+      themeColor: '#1e3a5f',
+      content,
+      footnote
+    }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`[Email] Password reset email sent to: ${toEmail}`);
+  } catch (error) {
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] PASSWORD RESET (SMTP failed — dev console fallback)`);
+    console.error(`  To: ${toEmail}`);
+    console.error(`  Link: ${resetLink}`);
+    console.error('════════════════════════════════════════════════════');
+  }
+};
+
+/**
+ * Sends a status update email to a student's primary and (optional) alternative emails.
+ */
+export const sendStudentStatusUpdateEmail = async (
+  studentId: number,
+  studentName: string,
+  subject: string,
+  statusLabel: string,
+  /** Already-built markup — callers must escape any user data they put in it. */
+  detailsHtml: string
+): Promise<void> => {
+  try {
+    const { query } = await import('../config/database');
+    const studentQuery = await query(
+      `SELECT u.email as primary_email, s.alt_email
+       FROM students s
+       JOIN users u ON s.student_id = u.user_id
+       WHERE s.student_id = $1`,
+      [studentId]
+    );
+
+    if ((studentQuery.rowCount ?? 0) === 0) {
+      console.warn(`[Email] Student ID ${studentId} not found, skipping email notification.`);
+      return;
+    }
+
+    const { primary_email, alt_email } = studentQuery.rows[0];
+    const recipients: string[] = [];
+    if (primary_email) recipients.push(primary_email.trim());
+    if (alt_email && alt_email.trim()) recipients.push(alt_email.trim());
+
+    if (recipients.length === 0) {
+      console.warn(`[Email] Student ID ${studentId} has no emails configured, skipping email notification.`);
+      return;
+    }
+
+    const highlightBox = `
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="width: 35%; font-weight: bold; padding: 5px 0;">สถานะปัจจุบัน:</td>
+          <td style="padding: 5px 0; color: #1a73e8; font-weight: bold;">${esc(statusLabel)}</td>
+        </tr>
+      </table>
+    `;
+
+    const content = `
+      <p>ระบบงานสหกิจศึกษาออนไลน์ มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) ขอแจ้งสถานะการดำเนินการคำขอฝึกปฏิบัติสหกิจศึกษาของท่าน ดังนี้:</p>
+      <div style="margin: 15px 0;">
+        ${detailsHtml}
+      </div>
+      <p>ท่านสามารถเข้าสู่ระบบสหกิจศึกษาเพื่อตรวจสอบรายละเอียดเพิ่มเติมและดำเนินการในขั้นตอนต่อไปได้ที่เว็บไซต์ของระบบ</p>
+    `;
+
+    const mailOptions = {
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: recipients.join(', '),
+      subject: subject,
+      html: renderEmailHtml({
+        title: `สวัสดีครับ/ค่ะ คุณ ${esc(studentName)}`,
+        themeColor: '#1a73e8',
+        content,
+        highlightBox
+      }),
+    };
+
+    await transporter.sendMail(mailOptions);
+    console.log(`[Email] Student status update email successfully sent to: ${recipients.join(', ')}`);
+  } catch (error) {
+    console.error(`[Email] FAILED TO SEND student status update email for Student ID ${studentId}:`, error);
+  }
+};
+
+/**
+ * Helper to notify student of a status change on an intent form.
+ */
+export const notifyStudentStatusChange = async (
+  intentId: number,
+  status: string,
+  reason?: string
+): Promise<void> => {
+  try {
+    const { query } = await import('../config/database');
+    const intentQuery = await query(
+      `SELECT 
+        i.student_id,
+        s.first_name,
+        s.last_name,
+        c.name_th as company_name,
+        j.title as job_title
+       FROM intent_forms i
+       JOIN students s ON i.student_id = s.student_id
+       JOIN companies c ON i.company_id = c.company_id
+       LEFT JOIN job_posts j ON i.job_id = j.job_id
+       WHERE i.form_id = $1`,
+      [intentId]
+    );
+
+    if ((intentQuery.rowCount ?? 0) === 0) {
+      console.warn(`[Email] Intent Form ID ${intentId} not found, skipping student status notification.`);
+      return;
+    }
+
+    const { student_id, first_name, last_name, company_name, job_title } = intentQuery.rows[0];
+    // studentName is escaped by sendStudentStatusUpdateEmail; do not escape twice.
+    const studentName = `${first_name || ''} ${last_name || ''}`.trim() || 'นักศึกษา';
+
+    // Escaped once here so every branch below is safe. company_name is typed by
+    // the student on a self-found placement and `reason` is reviewer free text.
+    const safeCompanyName = esc(company_name || '');
+    const safeReason = reason ? esc(reason) : '';
+
+    let subject = 'อัปเดตสถานะการพิจารณาคำขอสหกิจศึกษา — RMUTTO';
+    let statusLabel = '';
+    let detailsHtml = '';
+
+    const jobInfo = job_title ? `ตำแหน่งงาน: ${esc(job_title)}` : 'สมัครงานทั่วไป';
+
+    if (status === 'approved_by_advisor') {
+      statusLabel = 'อาจารย์ที่ปรึกษาอนุมัติแล้ว';
+      detailsHtml = `
+        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้รับการพิจารณา<b>อนุมัติ</b>จากอาจารย์ที่ปรึกษาสหกิจศึกษาเรียบร้อยแล้ว</p>
+        <p>ขณะนี้ระบบได้ส่งคำขอต่อไปยังหัวหน้าสาขาวิชาเพื่อพิจารณาอนุมัติในขั้นตอนต่อไป</p>
+      `;
+    } else if (status === 'rejected') {
+      statusLabel = 'อาจารย์ที่ปรึกษาตีกลับใบคำร้อง';
+      detailsHtml = `
+        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยอาจารย์ที่ปรึกษาสหกิจศึกษา</p>
+        ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลการตีกลับ: ${safeReason}</p>` : ''}
+        <p>กรุณาเข้าระบบเพื่อตรวจสอบรายละเอียด ปรับปรุงข้อมูล หรือทำเรื่องเลือกสถานประกอบการอื่นใหม่</p>
+      `;
+    } else if (status === 'approved_by_dept_head') {
+      statusLabel = 'หัวหน้าสาขาวิชาอนุมัติแล้ว';
+      detailsHtml = `
+        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้รับการพิจารณา<b>อนุมัติ</b>จากหัวหน้าสาขาวิชาเรียบร้อยแล้ว</p>
+        <p>ขณะนี้คำร้องอยู่ในขั้นตอนเสนอเจ้าหน้าที่งานสหกิจเพื่อเตรียมดำเนินการออกจดหมายอย่างเป็นทางการเสนอคณบดีลงนามต่อไป</p>
+      `;
+    } else if (status === 'rejected_by_dept_head') {
+      statusLabel = 'หัวหน้าสาขาวิชาตีกลับใบคำร้อง';
+      detailsHtml = `
+        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยหัวหน้าสาขาวิชา</p>
+        ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลการตีกลับ: ${safeReason}</p>` : ''}
+        <p>กรุณาเข้าระบบเพื่อปรับปรุงข้อมูล หรือติดต่ออาจารย์ที่ปรึกษาเพื่อรับคำแนะนำ</p>
+      `;
+    } else if (status === 'accepted') {
+      statusLabel = 'ตอบรับเข้าปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว';
+      detailsHtml = `
+        <p>ยินดีด้วย! สถานประกอบการ <b>${safeCompanyName}</b> ได้ดำเนินการ<b>ตอบรับคุณเข้าปฏิบัติงานสหกิจศึกษา</b>เป็นที่เรียบร้อยแล้ว</p>
+        <p>ระบบได้ทำการบันทึกข้อมูลพี่เลี้ยง (Mentor) และวันเริ่มงานของคุณในระบบเรียบร้อยแล้ว กรุณาเข้าตรวจสอบข้อมูลและเตรียมพร้อมก่อนเริ่มปฏิบัติงาน</p>
+      `;
+    } else if (status === 'company_rejected') {
+      statusLabel = 'สถานประกอบการปฏิเสธคำขอ';
+      detailsHtml = `
+        <p>ใบสมัครฝึกงานที่ <b>${safeCompanyName}</b> ของคุณได้รับการ<b>ปฏิเสธ</b>จากทางสถานประกอบการ หรือข้อมูลสัมภาษณ์ไม่ผ่านเกณฑ์</p>
+        <p>ระบบได้ดำเนินการ<b>ปลดล็อกสิทธิ์</b>เรียบร้อยแล้ว คุณสามารถเข้าสู่ระบบเพื่อเลือกและยื่นความจำนงสมัครงานที่บริษัทอื่นใหม่ได้ทันที</p>
+      `;
+    } else if (status === 'pending_officer_approval') {
+      statusLabel = 'รอเจ้าหน้าที่ตรวจสอบเอกสารตอบรับ';
+      detailsHtml = `
+        <p>คุณได้ทำการอัปโหลดหลักฐานเอกสารใบตอบรับสำหรับ <b>${safeCompanyName}</b> เรียบร้อยแล้ว</p>
+        <p>ขณะนี้อยู่ในขั้นตอน<b>รอเจ้าหน้าที่ตรวจสอบเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยง</b>ในระบบ</p>
+      `;
+    } else if (status === 'evidence_rejected') {
+      statusLabel = 'เจ้าหน้าที่ตีกลับเอกสารตอบรับ';
+      detailsHtml = `
+        <p>เอกสารหลักฐานการตอบรับเข้าฝึกงานที่ <b>${safeCompanyName}</b> ที่คุณอัปโหลดได้รับการ<b>ตีกลับ / ปฏิเสธ</b>โดยเจ้าหน้าที่งานสหกิจศึกษา</p>
+        ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลการตีกลับ: ${safeReason}</p>` : ''}
+        <p>กรุณาเข้าระบบเพื่อตรวจสอบความถูกต้องของเอกสาร อัปโหลดไฟล์หลักฐานใหม่ หรือทำการยื่นเรื่องเลือกสถานประกอบการอื่นต่อไป</p>
+      `;
+    } else {
+      statusLabel = status.replace(/_/g, ' ');
+      detailsHtml = `<p>มีการเปลี่ยนแปลงสถานะใบคำร้องของคุณที่ <b>${safeCompanyName}</b> เป็นสถานะ: <b>${statusLabel}</b></p>`;
+    }
+
+    await sendStudentStatusUpdateEmail(student_id, studentName, subject, statusLabel, detailsHtml);
+  } catch (error) {
+    console.error(`[Email] Error in notifyStudentStatusChange for Intent ID ${intentId}:`, error);
+  }
+};
+
+/**
+ * Helper to notify student of a document status update (signed by Dean).
+ */
+export const notifyStudentStatusChangeByDocId = async (
+  docId: number,
+  status: string
+): Promise<void> => {
+  try {
+    const { query } = await import('../config/database');
+    const docQuery = await query(
+      `SELECT 
+        d.student_id,
+        s.first_name,
+        s.last_name,
+        c.name_th as company_name,
+        d.type as doc_type
+       FROM official_documents d
+       JOIN students s ON d.student_id = s.student_id
+       JOIN companies c ON d.company_id = c.company_id
+       WHERE d.doc_id = $1`,
+      [docId]
+    );
+
+    if ((docQuery.rowCount ?? 0) === 0) {
+      console.warn(`[Email] Document ID ${docId} not found, skipping student document status notification.`);
+      return;
+    }
+
+    const { student_id, first_name, last_name, company_name, doc_type } = docQuery.rows[0];
+    const studentName = `${first_name || ''} ${last_name || ''}`.trim() || 'นักศึกษา';
+    const safeCompanyName = esc(company_name || '');
+    const docTypeLabel = doc_type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์รับนักศึกษา' : 'หนังสือส่งตัวนักศึกษา';
+
+    let subject = 'เอกสารทางการสหกิจศึกษาได้รับการลงนามแล้ว — RMUTTO';
+    let statusLabel = '';
+    let detailsHtml = '';
+
+    if (status === 'signed') {
+      statusLabel = 'คณบดีลงนามเอกสารเรียบร้อยแล้ว';
+      detailsHtml = `
+        <p>เอกสารราชการ <b>${docTypeLabel}</b> สำหรับการฝึกงานของคุณที่ <b>${safeCompanyName}</b> ได้รับการ<b>ลงนามอนุมัติอิเล็กทรอนิกส์โดยคณบดี</b>เป็นที่เรียบร้อยแล้ว</p>
+        <p>ระบบได้ส่งเอกสารดังกล่าวไปยังอีเมลผู้ติดต่อของสถานประกอบการเรียบร้อยแล้ว และคุณสามารถเข้าไปดาวน์โหลดเอกสาร PDF ดังกล่าวได้จากหน้าแดชบอร์ดนักศึกษาของคุณ</p>
+      `;
+    } else {
+      statusLabel = status.replace(/_/g, ' ');
+      detailsHtml = `<p>เอกสาร ${docTypeLabel} ได้รับการเปลี่ยนสถานะเป็น: ${statusLabel}</p>`;
+    }
+
+    await sendStudentStatusUpdateEmail(student_id, studentName, subject, statusLabel, detailsHtml);
+  } catch (error) {
+    console.error(`[Email] Error in notifyStudentStatusChangeByDocId for Doc ID ${docId}:`, error);
+  }
+};
+
+/**
+ * Helper to notify student, advisor, and supervisor of an assignment.
+ */
+export const sendPersonnelAssignmentEmail = async (
+  studentId: number,
+  advisorId: number,
+  supervisorId: number
+): Promise<void> => {
+  try {
+    const { query } = await import('../config/database');
+    const dataQuery = await query(
+      `SELECT 
+        s.first_name as student_fname, s.last_name as student_lname, u_s.email as student_email,
+        a.first_name as adv_fname, a.last_name as adv_lname, u_a.email as adv_email,
+        sup.first_name as sup_fname, sup.last_name as sup_lname, u_sup.email as sup_email,
+        c.name_th as company_name
+       FROM students s
+       JOIN users u_s ON s.student_id = u_s.user_id
+       LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')
+       LEFT JOIN companies c ON i.company_id = c.company_id
+       JOIN personnel a ON a.personnel_id = $2
+       JOIN users u_a ON a.personnel_id = u_a.user_id
+       JOIN personnel sup ON sup.personnel_id = $3
+       JOIN users u_sup ON sup.personnel_id = u_sup.user_id
+       WHERE s.student_id = $1`,
+      [studentId, advisorId, supervisorId]
+    );
+
+    if ((dataQuery.rowCount ?? 0) === 0) return;
+
+    const row = dataQuery.rows[0];
+    // Escaped for the markup below; names and company come from user input.
+    const studentName = esc(`${row.student_fname || ''} ${row.student_lname || ''}`.trim());
+    const advName = esc(`${row.adv_fname || ''} ${row.adv_lname || ''}`.trim());
+    const supName = esc(`${row.sup_fname || ''} ${row.sup_lname || ''}`.trim());
+    const company = esc(row.company_name || 'สถานประกอบการ');
+
+    const subject = 'การมอบหมายอาจารย์ที่ปรึกษาและอาจารย์นิเทศสหกิจศึกษา — RMUTTO';
+    const highlightBox = `
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+        <tr>
+          <td style="width: 35%; font-weight: bold; padding: 5px 0;">ชื่อนักศึกษา:</td>
+          <td style="padding: 5px 0;">${studentName}</td>
+        </tr>
+        <tr>
+          <td style="width: 35%; font-weight: bold; padding: 5px 0;">สถานประกอบการ:</td>
+          <td style="padding: 5px 0;">${company}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; padding: 5px 0;">อาจารย์ที่ปรึกษาสหกิจ:</td>
+          <td style="padding: 5px 0; color: #1a73e8;">${advName}</td>
+        </tr>
+        <tr>
+          <td style="font-weight: bold; padding: 5px 0;">อาจารย์นิเทศสหกิจ:</td>
+          <td style="padding: 5px 0; color: #d93025;">${supName}</td>
+        </tr>
+      </table>
+    `;
+
+    // 1. Notify Student
+    if (row.student_email) {
+      const studentHtml = `
+        <p>หัวหน้าสาขาวิชาได้ทำการมอบหมาย <b>อาจารย์ที่ปรึกษา</b> และ <b>อาจารย์นิเทศ</b> ประจำตัวสำหรับการออกปฏิบัติสหกิจศึกษาของท่านเรียบร้อยแล้ว</p>
+        <p>ท่านสามารถติดต่อประสานงานกับอาจารย์ทั้งสองท่านในกรณีที่มีข้อสงสัย ปรึกษาแผนปฏิบัติงาน หรือรายงานตัวได้ตามรายละเอียดที่แสดงในแดชบอร์ดนักศึกษาของท่าน</p>
+      `;
+      await transporter.sendMail({
+        from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+        to: row.student_email,
+        subject,
+        html: renderEmailHtml({ title: `สวัสดีคุณ ${studentName}`, content: studentHtml, highlightBox })
+      });
+    }
+
+    // 2. Notify Personnel (Advisor and Supervisor)
+    const personnelEmails = [];
+    if (row.adv_email) personnelEmails.push(row.adv_email);
+    if (row.sup_email && row.sup_email !== row.adv_email) personnelEmails.push(row.sup_email);
+
+    if (personnelEmails.length > 0) {
+      const personnelHtml = `
+        <p>ท่านได้รับการมอบหมายให้ดูแลนักศึกษาสหกิจศึกษาประจำปีการศึกษานี้เรียบร้อยแล้ว</p>
+        <p>กรุณาเข้าสู่ระบบเพื่อตรวจสอบข้อมูลนักศึกษา แผนปฏิบัติงาน และข้อมูลติดต่อสถานประกอบการที่เมนู <b>"นิเทศและติดตามนักศึกษา"</b></p>
+      `;
+      await transporter.sendMail({
+        from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+        to: personnelEmails.join(', '),
+        subject: `[Notification] ได้รับมอบหมายดูแลนักศึกษาสหกิจ - ${studentName}`,
+        html: renderEmailHtml({ title: `เรียน อาจารย์ที่ปรึกษา/อาจารย์นิเทศ`, content: personnelHtml, highlightBox })
+      });
+    }
+
+    console.log(`[Email] Personnel assignment emails sent successfully for Student ID ${studentId}.`);
+  } catch (error) {
+    console.error(`[Email] Error in sendPersonnelAssignmentEmail for Student ID ${studentId}:`, error);
+  }
+};
+
+/**
+ * Sends a supervision appointment email to the mentor.
+ */
+export const sendSupervisionAppointmentEmail = async (
+  mentorEmail: string,
+  appointmentDetails: {
+    studentName: string;
+    companyName: string;
+    appointmentDate: string;
+    studentTime: string;
+    mentorTime: string;
+    tourRequested: boolean;
+  },
+  tokenLink: string
+): Promise<void> => {
+  const subject = 'ขอนัดหมายนิเทศนักศึกษาสหกิจศึกษา — RMUTTO';
+
+  // studentTime / mentorTime are free-text fields typed by the advisor.
+  const d = {
+    studentName: esc(appointmentDetails.studentName || ''),
+    companyName: esc(appointmentDetails.companyName || ''),
+    appointmentDate: esc(appointmentDetails.appointmentDate || ''),
+    studentTime: esc(appointmentDetails.studentTime || ''),
+    mentorTime: esc(appointmentDetails.mentorTime || ''),
+    tourRequested: appointmentDetails.tourRequested,
+  };
+
+  const highlightBox = `
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.9em;">
+      <tr>
+        <td style="width: 35%; font-weight: bold; padding: 5px 0;">ชื่อนักศึกษา:</td>
+        <td style="padding: 5px 0;">${d.studentName}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 5px 0;">วันที่ขอนัดหมาย:</td>
+        <td style="padding: 5px 0; color: #1a73e8; font-weight: bold;">${d.appointmentDate}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 5px 0;">เวลาสำหรับนักศึกษา:</td>
+        <td style="padding: 5px 0;">${d.studentTime}</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 5px 0;">เวลาสำหรับพี่เลี้ยง:</td>
+        <td style="padding: 5px 0; color: #d93025;">${d.mentorTime}</td>
+      </tr>
+      ${d.tourRequested ? `
+      <tr>
+        <td style="font-weight: bold; padding: 5px 0;">หมายเหตุ:</td>
+        <td style="padding: 5px 0; color: #e67e22;">อาจารย์นิเทศขอความอนุเคราะห์เข้าเยี่ยมชมสถานประกอบการ (ถ้าเป็นไปได้)</td>
+      </tr>
+      ` : ''}
+    </table>
+  `;
+
+  const content = `
+    <p>เรียน พี่เลี้ยงนักศึกษาสหกิจศึกษา บริษัท <b>${d.companyName}</b></p>
+    <p>มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) ขอความอนุเคราะห์นัดหมายเพื่อออกนิเทศและติดตามความก้าวหน้าการปฏิบัติงานของนักศึกษาสหกิจศึกษา ตามรายละเอียดด้านล่างนี้</p>
+    
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${tokenLink}" 
+         style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        ตอบรับ / ขอเลื่อนนัด
+      </a>
+    </div>
+    
+    <p>ท่านสามารถคลิกปุ่มด้านบนเพื่อ <b>ตอบรับการนัดหมาย</b> หรือ <b>เสนอเวลาใหม่</b> ได้โดยไม่ต้องเข้าสู่ระบบ</p>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: mentorEmail,
+      subject,
+      html: renderEmailHtml({ title: 'นัดหมายนิเทศสหกิจศึกษา', themeColor: '#1a73e8', content, highlightBox })
+    });
+    console.log(`[Email] Supervision appointment email sent successfully to ${mentorEmail}`);
+  } catch (error) {
+    console.error(`[Email] Error sending supervision appointment email to ${mentorEmail}:`, error);
+  }
+};
+
+/**
+ * Sends a notification email to a mentor when a student submits their final report.
+ */
+export const sendFinalReportNotificationEmail = async (
+  mentorEmail: string,
+  mentorName: string,
+  studentName: string,
+  studentCode: string
+): Promise<void> => {
+  // Subject is plain text and stays verbatim; the markup below gets escaped.
+  const subject = `แจ้งเตือนทำแบบประเมินผลการฝึกงานของนักศึกษา: ${studentName} - ระบบสหกิจศึกษาออนไลน์`;
+  const safeStudentName = esc(studentName || '');
+  const safeStudentCode = esc(studentCode || '');
+  const safeMentorName = esc(mentorName || '');
+  const highlightBox = `
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr>
+        <td style="width: 30%; font-weight: bold; padding: 5px 0;">ชื่อนักศึกษา:</td>
+        <td style="padding: 5px 0;">${safeStudentName} (รหัส: ${safeStudentCode})</td>
+      </tr>
+      <tr>
+        <td style="font-weight: bold; padding: 5px 0;">สถานะงาน:</td>
+        <td style="padding: 5px 0; color: #2e7d32; font-weight: bold;">ส่งเล่มรายงานสมบูรณ์แล้ว</td>
+      </tr>
+    </table>
+  `;
+
+  const content = `
+    <p>เรียน พี่เลี้ยงคุณ <b>${safeMentorName}</b>,</p>
+    <p>นักศึกษาในความดูแลของท่าน ได้ทำการอัปโหลด <b>รายงานปฏิบัติงานสหกิจศึกษาฉบับสมบูรณ์ (Final Report)</b> เข้าสู่ระบบเรียบร้อยแล้ว</p>
+    <p>ขอความอนุเคราะห์ท่านเข้าสู่ระบบสหกิจศึกษา RMUTTO เพื่อทำ <b>แบบประเมินพฤติกรรมและผลงานของนักศึกษา (สหกิจ 15 & 16)</b> เพื่อที่ทางมหาวิทยาลัยจะได้นำคะแนนไปประมวลผลการตัดเกรดต่อไป</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${companyLoginUrl()}"
+         style="display: inline-block; padding: 12px 32px; background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        เข้าสู่ระบบเพื่อประเมิน
+      </a>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: mentorEmail,
+      subject,
+      html: renderEmailHtml({ title: 'แบบประเมินผลการฝึกงานของนักศึกษา', themeColor: '#2e7d32', content, highlightBox })
+    });
+    console.log(`[Email] Final report notification email sent successfully to ${mentorEmail}`);
+  } catch (error) {
+    console.error(`[Email] Error sending final report email to ${mentorEmail}:`, error);
+  }
+};

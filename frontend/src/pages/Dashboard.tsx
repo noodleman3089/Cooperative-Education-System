@@ -1,0 +1,293 @@
+import React, { useContext, useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { AuthContext } from '../context/AuthContext';
+import Navbar from '../components/Navbar';
+import Sidebar from '../components/Sidebar';
+import PageSkeleton, { skeletonFor } from '../components/ui/Skeleton';
+import Button from '../components/ui/Button';
+import { statusText } from '../components/ui/StatusBadge';
+import api from '../services/api';
+import { Lock } from 'lucide-react';
+
+/**
+ * Every screen in the application hangs off this one switch, so this is also
+ * the only place worth splitting it. Imported eagerly, the whole product —
+ * every role's dashboard and every form — was one 3 MB file that a student had
+ * to finish downloading before the login page could paint. Split, a session
+ * fetches the handful of screens that session actually opens.
+ */
+const StudentDashboard = lazy(() => import('../components/StudentDashboard'));
+const SmartJobBoard = lazy(() => import('../components/SmartJobBoard'));
+const StudentProfile = lazy(() => import('../components/StudentProfile'));
+const AdvisorDashboard = lazy(() => import('../components/AdvisorDashboard'));
+const DeptHeadDashboard = lazy(() => import('../components/DeptHeadDashboard'));
+const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
+const StaffDashboard = lazy(() => import('../components/StaffDashboard'));
+const DispatchLetterCreator = lazy(() => import('./Staff/DispatchLetterCreator'));
+const CompanyDashboard = lazy(() => import('../components/CompanyDashboard'));
+const PersonnelProfile = lazy(() => import('../components/PersonnelProfile'));
+const AccommodationWorkPlan = lazy(() => import('./Student/AccommodationWorkPlan'));
+const ReportOutline = lazy(() => import('./Student/ReportOutline'));
+const WeeklyLog = lazy(() => import('./Student/WeeklyLog'));
+const SupervisionTracking = lazy(() => import('./Advisor/SupervisionTracking'));
+const AppointmentAudit = lazy(() => import('./Staff/AppointmentAudit'));
+const FinalReportSubmission = lazy(() => import('./Student/FinalReportSubmission'));
+const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
+const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
+const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
+
+/**
+ * The four student screens that belong to the co-op itself rather than to
+ * getting placed on one. The server already refuses every one of them without
+ * an accepted intent — `weeklyLog.ts`, `reportOutline.ts` and the accommodation
+ * handler in `student.ts` all answer 400 "No accepted cooperative education
+ * intent found" — so this is not a new rule, it is the existing rule finally
+ * showing up before the student fills a form out.
+ *
+ * `jobs` is deliberately not here: browsing postings before applying is the
+ * point of that screen, and the board already explains its own disabled button.
+ */
+const STAGE_GATED_STUDENT_MENUS = [
+  'accommodation_plan',
+  'report_outline',
+  'weekly_log',
+  'final_report',
+] as const;
+
+interface StudentStage {
+  hasProfile: boolean;
+  intentStatus: string | null;
+}
+
+/** Full-screen version of the padlock in the sidebar, with the way forward. */
+const StageLockedScreen: React.FC<{
+  reason: string;
+  actionLabel: string;
+  onAction: () => void;
+}> = ({ reason, actionLabel, onAction }) => (
+  <div className="page-enter mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
+    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">
+      <Lock className="h-7 w-7" />
+    </div>
+    <h3 className="text-lg font-bold text-gray-800 dark:text-white">ยังไม่ถึงขั้นตอนนี้</h3>
+    <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-500 dark:text-gray-400">
+      {reason}
+    </p>
+    <Button className="mt-6" onClick={onAction}>
+      {actionLabel}
+    </Button>
+  </div>
+);
+
+const Dashboard: React.FC = () => {
+  const auth = useContext(AuthContext);
+  
+  const [currentRole, setCurrentRole] = useState<string>('student');
+  const [activeMenu, setActiveMenu] = useState<string>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (auth?.user && auth.user.roles.length > 0) {
+      setCurrentRole(auth.user.roles[0]);
+    }
+  }, [auth?.user]);
+
+  // How far through the co-op this student is, purely to decide which menus are
+  // usable yet. Only the two facts the gate needs are kept.
+  const [stage, setStage] = useState<StudentStage | null>(null);
+
+  useEffect(() => {
+    if (currentRole !== 'student') {
+      setStage(null);
+      return;
+    }
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const data = await api.get('/students/dashboard');
+        if (!cancelled) {
+          setStage({ hasProfile: true, intentStatus: data?.activeIntent?.status ?? null });
+        }
+      } catch (err: any) {
+        // 404 is the student who has not filled the profile in yet. Anything
+        // else is the server having a bad day, and a bad day must not invent a
+        // padlock — leave the menus as they were.
+        if (!cancelled && err?.response?.status === 404) {
+          setStage({ hasProfile: false, intentStatus: null });
+        }
+      }
+    };
+
+    load();
+
+    // Unlocking is somebody else's action — the company answering, or staff
+    // approving the paper acceptance — so there is nothing here to poll for.
+    // Re-check when the tab comes back and when a screen says an intent moved.
+    window.addEventListener('focus', load);
+    window.addEventListener('intent-updated', load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', load);
+      window.removeEventListener('intent-updated', load);
+    };
+  }, [currentRole]);
+
+  const lockedMenus = useMemo<Record<string, string>>(() => {
+    if (currentRole !== 'student' || !stage || stage.intentStatus === 'accepted') return {};
+
+    const reason = !stage.hasProfile
+      ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่มีข้อมูลประวัตินักศึกษาในระบบ กรุณากรอกประวัติให้ครบก่อน'
+      : stage.intentStatus === null
+        ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่ได้ยื่นแบบแจ้งความจำนงไปที่สถานประกอบการใด'
+        : `เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว สถานะใบความจำนงตอนนี้: ${statusText(stage.intentStatus)}`;
+
+    return Object.fromEntries(STAGE_GATED_STUDENT_MENUS.map((id) => [id, reason]));
+  }, [currentRole, stage]);
+
+  useEffect(() => {
+    const handleNavigation = (e: Event) => {
+      const customEvent = e as CustomEvent<string>;
+      if (customEvent.detail) {
+        setActiveMenu(customEvent.detail);
+      }
+    };
+    window.addEventListener('navigate', handleNavigation);
+    return () => window.removeEventListener('navigate', handleNavigation);
+  }, []);
+
+  if (!auth || !auth.user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#F3F4F6] dark:bg-[#111827]">
+        <div className="text-sm text-gray-500 dark:text-gray-400">กรุณาเข้าสู่ระบบก่อนใช้งาน</div>
+      </div>
+    );
+  }
+
+  // Render sub-component content dynamically based on currentRole and activeMenu
+  const renderDashboardContent = () => {
+    switch (currentRole) {
+      case 'student':
+        if (lockedMenus[activeMenu]) {
+          const needsProfile = stage ? !stage.hasProfile : false;
+          return (
+            <StageLockedScreen
+              reason={lockedMenus[activeMenu]}
+              actionLabel={
+                needsProfile
+                  ? 'กรอกประวัตินักศึกษา'
+                  : stage?.intentStatus
+                    ? 'ดูสถานะใบความจำนง'
+                    : 'เลือกตำแหน่งงานเพื่อยื่นความจำนง'
+              }
+              onAction={() =>
+                setActiveMenu(needsProfile ? 'profile' : stage?.intentStatus ? 'dashboard' : 'jobs')
+              }
+            />
+          );
+        }
+        if (activeMenu === 'jobs') return <SmartJobBoard />;
+        if (activeMenu === 'profile') return <StudentProfile />;
+        if (activeMenu === 'accommodation_plan') return <AccommodationWorkPlan />;
+        if (activeMenu === 'report_outline') return <ReportOutline />;
+        if (activeMenu === 'weekly_log') return <WeeklyLog />;
+        if (activeMenu === 'final_report') return <FinalReportSubmission />;
+        return <StudentDashboard />;
+        
+      case 'advisor':
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'supervision') return <SupervisionTracking />;
+        if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
+        return <AdvisorDashboard activeMenu={activeMenu} />;
+        
+      case 'dept_head':
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        return <DeptHeadDashboard activeMenu={activeMenu} />;
+        
+      case 'dean':
+        if (activeMenu === 'signature') return <DeanDashboard activeMenu="signature" />;
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        return <DeanDashboard activeMenu="dashboard" />;
+        
+      case 'staff':
+        if (activeMenu === 'dispatch_letters') return <DispatchLetterCreator />;
+        if (activeMenu === 'appointments') return <AppointmentAudit />;
+        if (activeMenu === 'jobs') return <StaffDashboard activeMenu="jobs" />;
+        if (activeMenu === 'announcements') return <StaffDashboard activeMenu="announcements" />;
+        if (activeMenu === 'users') return <StaffDashboard activeMenu="users" />;
+        if (activeMenu === 'import') return <StaffDashboard activeMenu="import" />;
+        if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        return <StaffDashboard activeMenu="dashboard" />;
+        
+      case 'company':
+        if (activeMenu === 'jobs') return <CompanyDashboard activeMenu="jobs" />;
+        if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
+        if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
+        if (activeMenu === 'profile') return <CompanyDashboard activeMenu="profile" />;
+        return <CompanyDashboard activeMenu="dashboard" />;
+
+      case 'mentor':
+        if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
+        if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        return <MentorEvaluation />;
+        
+      default:
+        if (activeMenu === 'profile') return (
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-400">
+            ไม่รองรับบทบาทการแสดงผลนี้ กรุณาเปลี่ยนบทบาทการใช้งานของท่านด้านบน
+          </div>
+        );
+        return (
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-400">
+            ไม่รองรับบทบาทการแสดงผลนี้ กรุณาเปลี่ยนบทบาทการใช้งานของท่านด้านบน
+          </div>
+        );
+    }
+  };
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-[#F3F4F6] dark:bg-[#111827] transition-colors relative">
+      {/* Backdrop overlay for mobile drawer */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-30 md:hidden transition-opacity duration-300"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
+
+      <Sidebar 
+        currentRole={currentRole} 
+        activeMenu={activeMenu} 
+        onMenuChange={(menu) => {
+          setActiveMenu(menu);
+          setSidebarOpen(false);
+        }} 
+        onLogout={() => auth.logout()}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+        lockedMenus={lockedMenus}
+      />
+      
+      <div className="flex-1 flex flex-col overflow-hidden w-full">
+        <Navbar 
+          currentRole={currentRole} 
+          onRoleChange={(role) => {
+            setCurrentRole(role);
+            setActiveMenu('dashboard'); // Reset to home dashboard on role swap
+          }} 
+          onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        />
+        
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F3F4F6] dark:bg-[#111827] transition-colors w-full">
+          <Suspense fallback={<PageSkeleton variant={skeletonFor(currentRole, activeMenu)} />}>
+            {renderDashboardContent()}
+          </Suspense>
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
