@@ -161,7 +161,12 @@ CREATE TABLE IF NOT EXISTS job_posts (
     quota INT NOT NULL,
     applied_count INT NOT NULL DEFAULT 0,
     expire_date TIMESTAMP NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'published', 'closed'))
+    -- 'rejected' is distinct from 'closed' on purpose: closed means the posting
+    -- ran its course, rejected means staff turned it down. Reusing 'closed' for
+    -- both would have told the company its advert expired when in fact it was
+    -- refused, and left nowhere to put the reason.
+    status VARCHAR(50) NOT NULL DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'published', 'closed', 'rejected')),
+    reject_reason TEXT
 );
 
 -- 6.1. PR Announcements Table (Staff PR & News System)
@@ -251,7 +256,9 @@ CREATE TABLE IF NOT EXISTS official_documents (
 CREATE TABLE IF NOT EXISTS eligible_students_list (
     student_code VARCHAR(50) PRIMARY KEY,
     cumulative_gpa NUMERIC(3, 2) NOT NULL,
-    is_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+    -- SEC-02: defaults to FALSE. Every insert supplies this column explicitly
+    -- today, so the default is only a trap waiting for the next one that doesn't.
+    is_eligible BOOLEAN NOT NULL DEFAULT FALSE,
     email VARCHAR(255)
 );
 

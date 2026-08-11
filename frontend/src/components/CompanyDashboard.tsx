@@ -47,6 +47,8 @@ interface JobPosting {
   applied_count: number;
   expire_date: string;
   status: string;
+  /** Present only when status is 'rejected'. */
+  reject_reason?: string | null;
 }
 
 interface ReportOutlineItem {
@@ -387,11 +389,31 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                           <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                             job.status === 'published'
                               ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
+                              : job.status === 'rejected'
+                              ? 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                              : job.status === 'closed'
+                              ? 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
                               : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400'
                           }`}>
-                            {job.status === 'published' ? 'เผยแพร่อยู่' : 'รอเจ้าหน้าที่เปิดจดหมายอนุมัติ'}
+                            {job.status === 'published'
+                              ? 'เผยแพร่อยู่'
+                              : job.status === 'rejected'
+                              ? 'เจ้าหน้าที่ไม่อนุมัติ'
+                              : job.status === 'closed'
+                              ? 'ปิดรับสมัครแล้ว'
+                              : 'รอเจ้าหน้าที่ตรวจอนุมัติ'}
                           </span>
                         </div>
+                        {/* A refusal the author cannot act on is the same as the
+                            system losing their posting. */}
+                        {job.status === 'rejected' && job.reject_reason && (
+                          <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-700 dark:border-red-950/40 dark:bg-red-950/20 dark:text-red-300">
+                            <span className="font-bold">เหตุผลที่ไม่อนุมัติ:</span> {job.reject_reason}
+                            <div className="mt-1 text-red-600/80 dark:text-red-400/80">
+                              แก้ไขตามนี้แล้วสร้างประกาศใหม่ได้ทันที
+                            </div>
+                          </div>
+                        )}
                         <p className="text-gray-500 dark:text-gray-400 leading-relaxed whitespace-pre-line">{job.description}</p>
                         <div className="flex gap-4 text-gray-400 text-xs pt-2">
                           <span>จำนวนโควตาที่เปิดรับ: {job.quota} คน</span>

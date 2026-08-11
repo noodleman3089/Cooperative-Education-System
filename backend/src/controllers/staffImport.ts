@@ -4,6 +4,9 @@ import { sanitizeCsvCell } from '../middlewares/validation';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const ELIGIBLE_TRUE = ['true', '1', 'yes', 'y', 'ผ่าน'];
+const ELIGIBLE_FALSE = ['false', '0', 'no', 'n', 'ไม่ผ่าน'];
+
 export class StaffImportController {
   /**
    * Import eligible students from a CSV payload.
@@ -15,7 +18,8 @@ export class StaffImportController {
       interface StudentImportRow {
         student_code: string;
         cumulative_gpa: number | null;
-        is_eligible: boolean;
+        /** null means "this file says nothing about eligibility" — leave it be. */
+        is_eligible: boolean | null;
         email: string | null;
       }
 
@@ -46,9 +50,24 @@ export class StaffImportController {
             const student_code = sanitizeCsvCell(parts[0] || '');
             if (!student_code) continue;
 
-            // is_eligible parses 'true', '1', 'yes' as true, others as false
+            // SEC-02: a blank cell used to mean "eligible", so a roster with no
+            // eligibility column granted co-op eligibility to everyone in the
+            // file. Blank now means "not stated" and changes nothing — the same
+            // rule the GPA column two lines down has always followed. Only an
+            // explicit value decides, and an unrecognised one is reported rather
+            // than quietly read as a refusal.
             const isEligibleStr = parts[1] ? sanitizeCsvCell(parts[1]).toLowerCase() : '';
-            const is_eligible = isEligibleStr ? ['true', '1', 'yes', 'y'].includes(isEligibleStr) : true;
+            let is_eligible: boolean | null = null;
+            if (isEligibleStr) {
+              if (ELIGIBLE_TRUE.includes(isEligibleStr)) {
+                is_eligible = true;
+              } else if (ELIGIBLE_FALSE.includes(isEligibleStr)) {
+                is_eligible = false;
+              } else {
+                invalidRows.push(`${student_code} (ค่าสิทธิ์ '${isEligibleStr}' ไม่ใช่ true/false)`);
+                continue;
+              }
+            }
 
             // DATA-01: the GPA column used to be ignored and every imported row was
             // written as a flat 3.00, overwriting real transcript values on re-import.
@@ -111,11 +130,11 @@ export class StaffImportController {
             //    so a roster-only re-import never destroys transcript data.
             await client.query(
                `INSERT INTO eligible_students_list (student_code, cumulative_gpa, is_eligible, email)
-               VALUES ($1, COALESCE($2, 0.00), $3, $4)
+               VALUES ($1, COALESCE($2, 0.00), COALESCE($3, FALSE), $4)
                ON CONFLICT (student_code)
                DO UPDATE SET
                  cumulative_gpa = COALESCE($2, eligible_students_list.cumulative_gpa),
-                 is_eligible = EXCLUDED.is_eligible,
+                 is_eligible = COALESCE($3, eligible_students_list.is_eligible),
                  email = COALESCE(EXCLUDED.email, eligible_students_list.email)
                RETURNING student_code`,
               [studentCode, gpa, isEligible, row.email]
@@ -133,7 +152,7 @@ export class StaffImportController {
               wasAlreadyRegistered = true;
               await client.query(
                 `UPDATE students
-                 SET cumulative_gpa = COALESCE($2, cumulative_gpa), is_eligible = $3
+                 SET cumulative_gpa = COALESCE($2, cumulative_gpa), is_eligible = COALESCE($3, is_eligible)
                  WHERE student_code = $1`,
                 [studentCode, gpa, isEligible]
               );

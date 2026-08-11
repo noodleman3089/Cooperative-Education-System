@@ -41,8 +41,8 @@ export class JobPostModel {
    */
   static async findById(jobId: number): Promise<JobPost | null> {
     const res = await query(
-      `SELECT job_id, company_id, title, description, image_path, created_by, quota, applied_count, expire_date, status 
-       FROM job_posts 
+      `SELECT job_id, company_id, title, description, image_path, created_by, quota, applied_count, expire_date, status, reject_reason
+       FROM job_posts
        WHERE job_id = $1`,
       [jobId]
     );
@@ -55,10 +55,25 @@ export class JobPostModel {
    */
   static async publish(jobId: number): Promise<boolean> {
     const res = await query(
-      `UPDATE job_posts 
-       SET status = 'published' 
+      `UPDATE job_posts
+       SET status = 'published', reject_reason = NULL
        WHERE job_id = $1`,
       [jobId]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Turn a job post down. The reason is stored on the row rather than only in
+   * the audit log, because the company that wrote the posting is the one who
+   * needs to read it, and there is no read API for `audit_log` by design.
+   */
+  static async reject(jobId: number, reason: string): Promise<boolean> {
+    const res = await query(
+      `UPDATE job_posts
+       SET status = 'rejected', reject_reason = $2
+       WHERE job_id = $1`,
+      [jobId, reason]
     );
     return (res.rowCount ?? 0) > 0;
   }
@@ -90,8 +105,8 @@ export class JobPostModel {
     status?: string;
   }): Promise<JobPostWithCompany[]> {
     let queryStr = `
-      SELECT j.job_id, j.company_id, j.title, j.description, j.image_path, j.created_by, 
-             j.quota, j.applied_count, j.expire_date, j.status,
+      SELECT j.job_id, j.company_id, j.title, j.description, j.image_path, j.created_by,
+             j.quota, j.applied_count, j.expire_date, j.status, j.reject_reason,
              c.name_th as company_name_th, c.name_en as company_name_en
       FROM job_posts j
       JOIN companies c ON j.company_id = c.company_id

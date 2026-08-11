@@ -27,4 +27,11 @@ router.put(
   JobPostController.publishJobPost
 );
 
+// Route: PUT /api/jobs/:id/reject (Admin/Staff only) — requires a reason
+router.put(
+  '/:id/reject',
+  authorizeRoles('staff', 'advisor', 'dean'),
+  JobPostController.rejectJobPost
+);
+
 export default router;

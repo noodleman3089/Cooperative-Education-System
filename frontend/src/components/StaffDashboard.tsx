@@ -18,12 +18,27 @@ interface StudentIntent {
   student_id: number;
   student_code: string;
   student_name?: string;
+  first_name?: string;
+  last_name?: string;
   company_id: number;
   company_name_th: string;
   job_id: number;
   job_title?: string;
   status: string;
 }
+
+/**
+ * `student_name` is declared on the type but `/api/intents` never sends it — the
+ * query returns `first_name` and `last_name`. The placement list fell back to
+ * the literal "นักศึกษาสหกิจ" and the generation panel had no fallback at all,
+ * so the officer issuing an official letter read "นักศึกษา: (640101001)".
+ * (The same fix was made in AdvisorDashboard; these were the two sites left.)
+ */
+const intentStudentName = (intent?: StudentIntent | null): string =>
+  [intent?.first_name, intent?.last_name].filter(Boolean).join(' ').trim()
+  || intent?.student_name
+  || intent?.student_code
+  || 'ไม่ระบุชื่อ';
 
 interface DocumentTemplate {
   template_id: number;
@@ -47,12 +62,24 @@ interface GeneratedDocument {
 
 interface ParsedStudent {
   student_code: string;
-  is_eligible: boolean;
+  /**
+   * Three states, not two. A blank cell means the file says nothing about this
+   * student's eligibility and it must be left alone — the same rule
+   * `cumulative_gpa` in the very next column has always followed. It used to be
+   * a plain boolean defaulting to `true`, so a roster carrying only student
+   * codes granted co-op eligibility to everyone in it.
+   */
+  is_eligible: boolean | null;
   /** Blank keeps whatever GPA is already on record instead of overwriting it. */
   cumulative_gpa: string;
   /** Binds the student_code to one SSO account at profile setup. */
   email: string;
 }
+
+/** Column headings accepted for the eligibility column, in either language. */
+const ELIGIBLE_HEADERS = ['is_eligible', 'ผ่านเกณฑ์', 'สถานะผ่านเกณฑ์'];
+const ELIGIBLE_TRUE = ['true', '1', 'yes', 'y', 'ผ่าน'];
+const ELIGIBLE_FALSE = ['false', '0', 'no', 'n', 'ไม่ผ่าน'];
 
 /**
  * The four stages an intent passes through, in order, as the staff dashboard
@@ -108,6 +135,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [publishingJobId, setPublishingJobId] = useState<number | null>(null);
+  const [rejectingJob, setRejectingJob] = useState<any | null>(null);
+  const [jobRejectReason, setJobRejectReason] = useState('');
+  const [jobRejectCustom, setJobRejectCustom] = useState('');
+  const [jobRejectError, setJobRejectError] = useState<string | null>(null);
+  const [isRejectingJob, setIsRejectingJob] = useState(false);
 
   // PR Announcements state
   const [announcements, setAnnouncements] = useState<any[]>([]);
@@ -121,6 +153,8 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   // CSV/Excel Import states
   const [dragOver, setDragOver] = useState(false);
   const [parsedStudents, setParsedStudents] = useState<ParsedStudent[]>([]);
+  /** Whether the dropped file carried an eligibility column at all. */
+  const [eligibleColumnPresent, setEligibleColumnPresent] = useState(false);
   const [importSummary, setImportSummary] = useState<any | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -236,6 +270,36 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setError(err.response?.data?.message || 'ไม่สามารถอนุมัติตำแหน่งงานได้');
     } finally {
       setPublishingJobId(null);
+    }
+  };
+
+  /**
+   * The queue only ever had an approve button, so a posting that should not go
+   * out could be neither refused nor explained. The reasons below are the ones
+   * a co-op officer actually judges a posting on — the same standard the advisor
+   * and the department head have been held to since they gained reject dialogs.
+   */
+  const handleRejectJob = async () => {
+    const finalReason = (jobRejectReason === 'custom' ? jobRejectCustom : jobRejectReason).trim();
+    if (!finalReason) {
+      setJobRejectError('กรุณาเลือกหรือระบุเหตุผลที่ไม่อนุมัติ');
+      return;
+    }
+
+    try {
+      setIsRejectingJob(true);
+      setJobRejectError(null);
+      await api.put(`/jobs/${rejectingJob.job_id}/reject`, { reason: finalReason });
+      setSuccess(`ไม่อนุมัติประกาศ "${rejectingJob.title}" แล้ว สถานประกอบการจะเห็นเหตุผลนี้ในหน้าประกาศของตนเอง`);
+      setRejectingJob(null);
+      setJobRejectReason('');
+      setJobRejectCustom('');
+      await loadAllJobs();
+    } catch (err: any) {
+      console.error('Reject job error:', err);
+      setJobRejectError(err.response?.data?.message || 'ไม่สามารถบันทึกการไม่อนุมัติได้');
+    } finally {
+      setIsRejectingJob(false);
     }
   };
 
@@ -403,20 +467,40 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
         const workbook = XLSX.read(data, { type: 'binary' });
         const firstSheetName = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheetName];
-        
-        // Convert to JSON
-        const rawRows = XLSX.utils.sheet_to_json<any>(worksheet);
-        
+
+        // The header row has to be read separately: sheet_to_json omits keys for
+        // empty cells, so a row object alone cannot tell "the file has no
+        // eligibility column" apart from "this row left it blank" — and those
+        // two now mean different things.
+        const headerRow: string[] = (XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 })[0] || [])
+          .map((h: any) => String(h ?? '').trim());
+        const hasEligibleColumn = headerRow.some(h => ELIGIBLE_HEADERS.includes(h));
+
+        // defval keeps blank cells present as '' so a cleared cell is visible.
+        const rawRows = XLSX.utils.sheet_to_json<any>(worksheet, { defval: '' });
+
         // Map and validate columns
         const formatted: ParsedStudent[] = rawRows.map((row, idx) => {
           const student_code = String(row.student_code || row['รหัสนักศึกษา'] || '').trim();
-          
-          let is_eligible = false;
-          const eligValue = row.is_eligible || row['ผ่านเกณฑ์'] || row['สถานะผ่านเกณฑ์'];
+
+          // `||` was wrong here: Excel hands back a real boolean for a FALSE
+          // cell, and `false || undefined` fell through to the "no column at
+          // all" branch, which then set eligibility to true. Typing FALSE
+          // flipped to eligible — the opposite of what was written.
+          const eligValue = ELIGIBLE_HEADERS
+            .map(h => row[h])
+            .find(v => v !== undefined && String(v).trim() !== '');
+
+          let is_eligible: boolean | null = null;
           if (eligValue !== undefined) {
-            is_eligible = String(eligValue).toLowerCase() === 'true' || eligValue === 1 || String(eligValue) === 'ผ่าน';
-          } else {
-            is_eligible = true;
+            const normalized = String(eligValue).trim().toLowerCase();
+            if (ELIGIBLE_TRUE.includes(normalized)) {
+              is_eligible = true;
+            } else if (ELIGIBLE_FALSE.includes(normalized)) {
+              is_eligible = false;
+            } else {
+              throw new Error(`แถวที่ ${idx + 2}: ค่าสิทธิ์ '${eligValue}' ไม่ใช่ true/false`);
+            }
           }
 
           if (!student_code) {
@@ -451,11 +535,13 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
         }
 
         setParsedStudents(formatted);
+        setEligibleColumnPresent(hasEligibleColumn);
         setSuccess(`อ่านไฟล์สำเร็จ พบข้อมูลนักศึกษา ${formatted.length} รายการ (กรุณาตรวจสอบข้อมูลและกดปุ่มยืนยัน)`);
       } catch (err: any) {
         console.error('File parsing error:', err);
         setError(`ไม่สามารถอ่านไฟล์ได้: ${err.message || 'โครงสร้างไฟล์ไม่ถูกต้อง'}`);
         setParsedStudents([]);
+        setEligibleColumnPresent(false);
       }
     };
 
@@ -475,10 +561,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
     setSuccess(null);
 
     try {
-      // Build CSV content string matching expected schema
+      // Build CSV content string matching expected schema.
+      // An unstated eligibility travels as an empty cell, which is what the
+      // importer reads as "leave this student's eligibility alone".
       const csvHeader = 'student_code,is_eligible,cumulative_gpa,email';
       const csvLines = parsedStudents.map(
-        s => `${s.student_code},${s.is_eligible},${s.cumulative_gpa},${s.email}`
+        s => `${s.student_code},${s.is_eligible === null ? '' : s.is_eligible},${s.cumulative_gpa},${s.email}`
       );
       const csvString = [csvHeader, ...csvLines].join('\n');
 
@@ -732,6 +820,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   // Filter student intents that have placement accepted
   const acceptedPlacements = intents.filter(i => i.status === 'accepted');
 
+  const eligibilityPlan = {
+    grant: parsedStudents.filter(s => s.is_eligible === true).length,
+    revoke: parsedStudents.filter(s => s.is_eligible === false).length,
+    untouched: parsedStudents.filter(s => s.is_eligible === null).length,
+  };
+
   const getDocTypeLabel = (type: string) => {
     if (type === 'cover_letter') return 'หนังสือขอความอนุเคราะห์';
     if (type === 'send_letter') return 'หนังสือส่งตัวนักศึกษา';
@@ -824,7 +918,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               ลากและวางไฟล์ตรวจสอบรายชื่อนักศึกษาผู้มีสิทธิ์ฝึกงาน (CSV, XLSX, XLS) หรือคลิกเพื่อค้นหา
             </p>
             <p className="text-xs text-gray-400 mt-2 text-center">
-              รองรับโครงสร้างคอลัมน์: student_code (รหัสนักศึกษา), is_eligible (สิทธิ์สมัคร: true/false), cumulative_gpa (เกรดเฉลี่ย — เว้นว่างเพื่อคงค่าเดิม), email (อีเมลผูกบัญชี)
+              รองรับโครงสร้างคอลัมน์: student_code (รหัสนักศึกษา), is_eligible (สิทธิ์สมัคร: true/false — เว้นว่างหรือไม่มีคอลัมน์นี้ = คงสิทธิ์เดิมไว้ ไม่ใช่ให้สิทธิ์), cumulative_gpa (เกรดเฉลี่ย — เว้นว่างเพื่อคงค่าเดิม), email (อีเมลผูกบัญชี)
             </p>
             
             <input
@@ -869,6 +963,31 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
           {parsedStudents.length > 0 && (
             <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 space-y-4">
+              {/* What this file is about to do, before it does it. Withdrawing
+                  eligibility is the one line here that is hard to walk back, so
+                  it is stated in its own colour rather than left to be inferred
+                  from a table the officer would have to scroll. */}
+              <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs dark:border-blue-950/40 dark:bg-blue-950/20">
+                {!eligibleColumnPresent ? (
+                  <p className="text-gray-700 dark:text-gray-200">
+                    ไฟล์นี้<strong>ไม่มีคอลัมน์สิทธิ์</strong> — จะอัปเดตเฉพาะเกรดเฉลี่ยและอีเมล
+                    <strong> ไม่แตะสิทธิ์สหกิจของใครทั้งสิ้น</strong>
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-gray-700 dark:text-gray-200">
+                    <span>
+                      ให้สิทธิ์ <strong className="text-green-700 dark:text-green-400">{eligibilityPlan.grant}</strong> คน
+                    </span>
+                    <span>
+                      ถอนสิทธิ์ <strong className="text-red-700 dark:text-red-400">{eligibilityPlan.revoke}</strong> คน
+                    </span>
+                    <span>
+                      ไม่แตะ <strong className="text-gray-600 dark:text-gray-300">{eligibilityPlan.untouched}</strong> คน
+                    </span>
+                  </div>
+                )}
+              </div>
+
               <div className="flex justify-between items-center border-b border-gray-100 pb-4 dark:border-gray-800">
                 <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
                   มีไฟล์พร้อมนำเข้า ({parsedStudents.length} รายการ)
@@ -888,7 +1007,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800 sticky top-0">
                       <th className="p-3 font-semibold">รหัสนักศึกษา</th>
-                      <th className="p-3 font-semibold">คุณสมบัติการสมัคร</th>
+                      <th className="p-3 font-semibold">สิทธิ์สมัครสหกิจหลังนำเข้า</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -899,11 +1018,17 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                         </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded-full font-bold text-xs ${
-                            student.is_eligible 
-                              ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400' 
-                              : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                            student.is_eligible === true
+                              ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
+                              : student.is_eligible === false
+                              ? 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
+                              : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
                           }`}>
-                            {student.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ไม่ผ่านเกณฑ์'}
+                            {student.is_eligible === true
+                              ? 'ให้สิทธิ์สหกิจ'
+                              : student.is_eligible === false
+                              ? 'ถอนสิทธิ์สหกิจ'
+                              : 'คงสิทธิ์เดิมไว้'}
                           </span>
                         </td>
                       </tr>
@@ -1500,9 +1625,17 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                             ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
                             : job.status === 'pending_approval'
                             ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 animate-pulse'
+                            : job.status === 'rejected'
+                            ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
                             : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
                         }`}>
-                          {job.status === 'published' ? 'เผยแพร่แล้ว' : job.status === 'pending_approval' ? 'รอเจ้าหน้าที่ตรวจอนุมัติ' : 'ปิดรับสมัคร'}
+                          {job.status === 'published'
+                            ? 'เผยแพร่แล้ว'
+                            : job.status === 'pending_approval'
+                            ? 'รอเจ้าหน้าที่ตรวจอนุมัติ'
+                            : job.status === 'rejected'
+                            ? 'ไม่อนุมัติ'
+                            : 'ปิดรับสมัคร'}
                         </span>
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1511,6 +1644,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                         วันปิดรับสมัคร: <span className="font-semibold text-gray-700 dark:text-gray-300">{new Date(job.expire_date).toLocaleDateString('th-TH')}</span>
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mt-1">{job.description}</p>
+                      {job.status === 'rejected' && job.reject_reason && (
+                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                          เหตุผลที่ไม่อนุมัติ: {job.reject_reason}
+                        </p>
+                      )}
                     </div>
 
                     {job.status === 'pending_approval' && (
@@ -1522,6 +1660,17 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                         >
                           {publishingJobId === job.job_id ? 'กำลังอนุมัติ...' : '✓ อนุมัติเผยแพร่'}
                         </button>
+                        <button
+                          onClick={() => {
+                            setRejectingJob(job);
+                            setJobRejectReason('');
+                            setJobRejectCustom('');
+                            setJobRejectError(null);
+                          }}
+                          className="px-4 py-2 border border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 font-bold text-xs rounded-xl transition-all"
+                        >
+                          ไม่อนุมัติ
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1531,6 +1680,74 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               <div className="text-center py-12 text-gray-400 text-sm">ไม่มีรายการตำแหน่งงานในขณะนี้</div>
             )}
           </div>
+
+          {rejectingJob && (
+            <Modal
+              onClose={() => setRejectingJob(null)}
+              size="md"
+              closeOnBackdrop={false}
+              title="ไม่อนุมัติประกาศรับสมัครงาน"
+            >
+              <ModalBody>
+                <div className="space-y-4">
+                  <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-800 text-xs">
+                    <div className="font-bold text-gray-800 dark:text-white">{rejectingJob.title}</div>
+                    <div className="text-gray-500 dark:text-gray-400 mt-0.5">
+                      โดย {rejectingJob.company_name_th || 'สถานประกอบการ'}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                      เหตุผลที่ไม่อนุมัติ * (สถานประกอบการจะเห็นข้อความนี้)
+                    </label>
+                    <select
+                      value={jobRejectReason}
+                      onChange={(e) => setJobRejectReason(e.target.value)}
+                      className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                    >
+                      <option value="">-- เลือกเหตุผล --</option>
+                      <option value="รายละเอียดงานไม่ครบถ้วน นักศึกษาใช้ตัดสินใจไม่ได้">รายละเอียดงานไม่ครบถ้วน นักศึกษาใช้ตัดสินใจไม่ได้</option>
+                      <option value="ลักษณะงานไม่ตรงกับหลักสูตรสหกิจศึกษา">ลักษณะงานไม่ตรงกับหลักสูตรสหกิจศึกษา</option>
+                      <option value="สถานประกอบการยังไม่ผ่านการตรวจสอบข้อมูลจากคณะ">สถานประกอบการยังไม่ผ่านการตรวจสอบข้อมูลจากคณะ</option>
+                      <option value="จำนวนที่รับหรือวันปิดรับสมัครไม่สอดคล้องกับปฏิทินสหกิจศึกษา">จำนวนที่รับหรือวันปิดรับสมัครไม่สอดคล้องกับปฏิทินสหกิจศึกษา</option>
+                      <option value="ประกาศซ้ำกับตำแหน่งที่เผยแพร่อยู่แล้ว">ประกาศซ้ำกับตำแหน่งที่เผยแพร่อยู่แล้ว</option>
+                      <option value="custom">ระบุเหตุผลเอง</option>
+                    </select>
+                  </div>
+
+                  {jobRejectReason === 'custom' && (
+                    <textarea
+                      rows={3}
+                      value={jobRejectCustom}
+                      onChange={(e) => setJobRejectCustom(e.target.value)}
+                      placeholder="ระบุสิ่งที่สถานประกอบการต้องแก้ไขก่อนส่งประกาศเข้ามาใหม่"
+                      className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    />
+                  )}
+
+                  {/* The error belongs inside the dialog: a banner behind an
+                      open modal is a banner nobody reads. */}
+                  <AlertBanner variant="error" message={jobRejectError} />
+
+                  <div className="flex flex-wrap justify-end gap-2 pt-2">
+                    <Button variant="secondary" size="sm" onClick={() => setRejectingJob(null)}>
+                      ยกเลิก
+                    </Button>
+                    <Button
+                      variant="danger"
+                      size="sm"
+                      onClick={handleRejectJob}
+                      loading={isRejectingJob}
+                      loadingLabel="กำลังบันทึก..."
+                    >
+                      ยืนยันไม่อนุมัติ
+                    </Button>
+                  </div>
+                </div>
+              </ModalBody>
+            </Modal>
+          )}
         </div>
       ) : currentTab === 'announcements' ? (
         <div className="space-y-6">
@@ -1760,7 +1977,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     {acceptedPlacements.map((intent) => (
                       <div key={intent.form_id} className="p-4 flex justify-between items-center hover:bg-gray-50/50 dark:hover:bg-gray-800/10 text-xs">
                         <div>
-                          <span className="block font-bold text-gray-800 dark:text-gray-200">{intent.student_name || 'นักศึกษาสหกิจ'}</span>
+                          <span className="block font-bold text-gray-800 dark:text-gray-200">{intentStudentName(intent)}</span>
                           <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code} | บริษัท: {intent.company_name_th}</span>
                         </div>
                         <button
@@ -1788,7 +2005,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">ขั้นตอนทำจดหมายจดทะเบียนกลุ่ม</h3>
                   
                   <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg text-xs space-y-1">
-                    <div><span className="text-gray-400">นักศึกษา:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.student_name} ({selectedIntent.student_code})</span></div>
+                    <div><span className="text-gray-400">นักศึกษา:</span> <span className="font-bold text-gray-800 dark:text-white">{intentStudentName(selectedIntent)} ({selectedIntent.student_code})</span></div>
                     <div><span className="text-gray-400">สถานประกอบการ:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.company_name_th}</span></div>
                     <div><span className="text-gray-400">ตำแหน่งงาน:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.job_title || 'ระบุทั่วไป'}</span></div>
                   </div>

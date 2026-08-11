@@ -30,6 +30,8 @@ export const AuditAction = {
   DOCUMENT_SIGNED: 'document.signed',
   ELIGIBILITY_CHANGED: 'student.eligibility_changed',
   REGISTRY_CHANGED: 'student.registry_changed',
+  JOB_POST_PUBLISHED: 'job_post.published',
+  JOB_POST_REJECTED: 'job_post.rejected',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   FINAL_REPORT_REVIEWED: 'final_report.reviewed',
 } as const;

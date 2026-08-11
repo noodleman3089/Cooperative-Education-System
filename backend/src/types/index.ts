@@ -141,7 +141,9 @@ export interface JobPost {
   quota: number;
   applied_count: number;
   expire_date: Date | string;
-  status: 'pending_approval' | 'published' | 'closed';
+  status: 'pending_approval' | 'published' | 'closed' | 'rejected';
+  /** Set only when status is 'rejected'; this is what the company is shown. */
+  reject_reason?: string | null;
 }
 
 export interface IntentForm {

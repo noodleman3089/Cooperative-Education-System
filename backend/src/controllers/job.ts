@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { JobPostModel } from '../models/job';
 import { CompanyModel } from '../models/company';
 import { CreateJobPostBody } from '../types';
+import { writeAudit, AuditAction } from '../utils/audit';
 
 export class JobPostController {
   /**
@@ -116,6 +117,16 @@ export class JobPostController {
       // Publish the job post
       await JobPostModel.publish(jobId);
 
+      await writeAudit(
+        {
+          action: AuditAction.JOB_POST_PUBLISHED,
+          entityType: 'job_post',
+          entityId: jobId,
+          detail: { title: job.title, company_id: job.company_id },
+        },
+        req
+      );
+
       res.status(200).json({
         message: 'Job post published successfully.',
         job_id: jobId,
@@ -123,6 +134,65 @@ export class JobPostController {
     } catch (error) {
       console.error('Publish Job Post Error:', error);
       res.status(500).json({ message: 'An internal server error occurred while publishing the job post.' });
+    }
+  }
+
+  /**
+   * Turn a job post down, with a reason the company will read.
+   * Route: PUT /api/jobs/:id/reject
+   * Access: staff, advisor, dean
+   *
+   * The reason is mandatory here for the same reason it is mandatory for an
+   * advisor and a department head rejecting an intent form: a refusal the author
+   * cannot act on is indistinguishable from the system losing their submission.
+   */
+  static async rejectJobPost(req: Request, res: Response): Promise<void> {
+    try {
+      const jobId = parseInt(req.params.id, 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ message: 'Invalid job ID format.' });
+        return;
+      }
+
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        res.status(400).json({ message: 'A rejection reason is required.' });
+        return;
+      }
+
+      const job = await JobPostModel.findById(jobId);
+      if (!job) {
+        res.status(404).json({ message: 'Job post not found.' });
+        return;
+      }
+
+      // Only a posting still awaiting a decision can be refused. Un-publishing a
+      // live advert that students may already have applied to is a different
+      // action with different consequences, and is not this one.
+      if (job.status !== 'pending_approval') {
+        res.status(400).json({ message: 'Only a job post awaiting approval can be rejected.' });
+        return;
+      }
+
+      await JobPostModel.reject(jobId, reason);
+
+      await writeAudit(
+        {
+          action: AuditAction.JOB_POST_REJECTED,
+          entityType: 'job_post',
+          entityId: jobId,
+          detail: { title: job.title, company_id: job.company_id, reason },
+        },
+        req
+      );
+
+      res.status(200).json({
+        message: 'Job post rejected.',
+        job_id: jobId,
+      });
+    } catch (error) {
+      console.error('Reject Job Post Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred while rejecting the job post.' });
     }
   }
 
