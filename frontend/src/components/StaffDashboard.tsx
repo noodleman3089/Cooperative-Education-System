@@ -135,6 +135,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [allJobs, setAllJobs] = useState<any[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [publishingJobId, setPublishingJobId] = useState<number | null>(null);
+  const [jobStatusFilter, setJobStatusFilter] = useState<'all' | 'pending_approval' | 'published' | 'rejected' | 'closed'>('all');
   const [rejectingJob, setRejectingJob] = useState<any | null>(null);
   const [jobRejectReason, setJobRejectReason] = useState('');
   const [jobRejectCustom, setJobRejectCustom] = useState('');
@@ -155,6 +156,8 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [parsedStudents, setParsedStudents] = useState<ParsedStudent[]>([]);
   /** Whether the dropped file carried an eligibility column at all. */
   const [eligibleColumnPresent, setEligibleColumnPresent] = useState(false);
+  /** Rows the file gave up on, named individually rather than as one failure. */
+  const [rejectedRows, setRejectedRows] = useState<string[]>([]);
   const [importSummary, setImportSummary] = useState<any | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
@@ -479,8 +482,16 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
         // defval keeps blank cells present as '' so a cleared cell is visible.
         const rawRows = XLSX.utils.sheet_to_json<any>(worksheet, { defval: '' });
 
-        // Map and validate columns
-        const formatted: ParsedStudent[] = rawRows.map((row, idx) => {
+        // One bad row used to throw out of the whole .map(), so a single wrong
+        // grade in a file of 300 meant nothing was imported and only that row
+        // was named. The backend has reported per-row failures in
+        // `summary.invalidRows` all along — it just never got the chance,
+        // because this threw first. Rows are collected here the same way.
+        const formatted: ParsedStudent[] = [];
+        const rejected: string[] = [];
+
+        rawRows.forEach((row, idx) => {
+          const rowNo = idx + 2; // +1 for the header, +1 because sheets are 1-based
           const student_code = String(row.student_code || row['รหัสนักศึกษา'] || '').trim();
 
           // `||` was wrong here: Excel hands back a real boolean for a FALSE
@@ -499,12 +510,14 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             } else if (ELIGIBLE_FALSE.includes(normalized)) {
               is_eligible = false;
             } else {
-              throw new Error(`แถวที่ ${idx + 2}: ค่าสิทธิ์ '${eligValue}' ไม่ใช่ true/false`);
+              rejected.push(`แถวที่ ${rowNo}: ค่าสิทธิ์ '${eligValue}' ไม่ใช่ true/false`);
+              return;
             }
           }
 
           if (!student_code) {
-            throw new Error(`แถวที่ ${idx + 2}: ไม่พบรหัสนักศึกษา`);
+            rejected.push(`แถวที่ ${rowNo}: ไม่พบรหัสนักศึกษา`);
+            return;
           }
 
           const rawGpa = row.cumulative_gpa ?? row['เกรดเฉลี่ย'] ?? row['GPAX'];
@@ -516,31 +529,49 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
           if (cumulative_gpa !== '') {
             const gpaNum = Number(cumulative_gpa);
             if (isNaN(gpaNum) || gpaNum < 0 || gpaNum > 4) {
-              throw new Error(`แถวที่ ${idx + 2}: เกรดเฉลี่ย '${cumulative_gpa}' ต้องอยู่ระหว่าง 0.00-4.00`);
+              rejected.push(`แถวที่ ${rowNo}: เกรดเฉลี่ย '${cumulative_gpa}' ต้องอยู่ระหว่าง 0.00-4.00`);
+              return;
             }
           }
 
           const email = String(row.email ?? row['อีเมล'] ?? '').trim().toLowerCase();
 
-          return {
-            student_code,
-            is_eligible,
-            cumulative_gpa,
-            email
-          };
+          // These four values are handed to the importer as CSV, and its parser
+          // is a plain split(',') with no quoting. A comma inside a value would
+          // silently shift every column after it — the write-side twin of the
+          // export bug fixed on the progress board. None of these four fields
+          // can legitimately contain one, so the row is named and dropped
+          // rather than quoted into a format the reader cannot parse back.
+          const offending = [student_code, cumulative_gpa, email].find(v => /[",\r\n]/.test(v));
+          if (offending !== undefined) {
+            rejected.push(`แถวที่ ${rowNo}: ค่า '${offending}' มีจุลภาคหรือเครื่องหมายคำพูด ซึ่งใช้ในไฟล์นำเข้าไม่ได้`);
+            return;
+          }
+
+          formatted.push({ student_code, is_eligible, cumulative_gpa, email });
         });
 
         if (formatted.length === 0) {
-          throw new Error('ไม่พบข้อมูลนักศึกษาในไฟล์');
+          throw new Error(
+            rejected.length > 0
+              ? `ไม่มีแถวที่นำเข้าได้เลย · ${rejected.slice(0, 3).join(' · ')}`
+              : 'ไม่พบข้อมูลนักศึกษาในไฟล์'
+          );
         }
 
         setParsedStudents(formatted);
+        setRejectedRows(rejected);
         setEligibleColumnPresent(hasEligibleColumn);
-        setSuccess(`อ่านไฟล์สำเร็จ พบข้อมูลนักศึกษา ${formatted.length} รายการ (กรุณาตรวจสอบข้อมูลและกดปุ่มยืนยัน)`);
+        setSuccess(
+          rejected.length > 0
+            ? `อ่านไฟล์สำเร็จ นำเข้าได้ ${formatted.length} รายการ ข้าม ${rejected.length} แถว (ดูรายการด้านล่าง)`
+            : `อ่านไฟล์สำเร็จ พบข้อมูลนักศึกษา ${formatted.length} รายการ (กรุณาตรวจสอบข้อมูลและกดปุ่มยืนยัน)`
+        );
       } catch (err: any) {
         console.error('File parsing error:', err);
         setError(`ไม่สามารถอ่านไฟล์ได้: ${err.message || 'โครงสร้างไฟล์ไม่ถูกต้อง'}`);
         setParsedStudents([]);
+        setRejectedRows([]);
         setEligibleColumnPresent(false);
       }
     };
@@ -574,6 +605,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setImportSummary(res.summary);
       setSuccess('นำเข้าและซิงโครไนซ์ข้อมูลรายชื่อนักศึกษากับระบบฐานข้อมูลสำเร็จแล้ว');
       setParsedStudents([]);
+      setRejectedRows([]);
     } catch (err: any) {
       console.error('Import sync error:', err);
       setError(err.response?.data?.message || 'การเชื่อมต่อส่งไฟล์เพื่อซิงค์ข้อมูลกับฐานข้อมูลล้มเหลว');
@@ -820,6 +852,24 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   // Filter student intents that have placement accepted
   const acceptedPlacements = intents.filter(i => i.status === 'accepted');
 
+  /**
+   * The queue mixed published, pending and closed postings in one undifferentiated
+   * list ordered by id, so the badge could say "3 awaiting approval" while the
+   * officer scrolled looking for them. Waiting work sorts to the top, and the
+   * filter is there for when the list is long enough that sorting is not enough.
+   */
+  const JOB_STATUS_ORDER: Record<string, number> = {
+    pending_approval: 0,
+    published: 1,
+    rejected: 2,
+    closed: 3,
+  };
+
+  const visibleJobs = allJobs
+    .filter(j => jobStatusFilter === 'all' || j.status === jobStatusFilter)
+    .slice()
+    .sort((a, b) => (JOB_STATUS_ORDER[a.status] ?? 9) - (JOB_STATUS_ORDER[b.status] ?? 9));
+
   const eligibilityPlan = {
     grant: parsedStudents.filter(s => s.is_eligible === true).length,
     revoke: parsedStudents.filter(s => s.is_eligible === false).length,
@@ -958,6 +1008,37 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <span className="text-lg font-bold mt-1 block">{importSummary.unchangedCount} ราย</span>
                 </div>
               </div>
+
+              {/* The importer has always returned these; nothing ever rendered
+                  them, so a row the server refused vanished without a word. */}
+              {(importSummary.invalidRows?.length > 0 || importSummary.skippedCodes?.length > 0) && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-900/40 dark:bg-amber-950/20">
+                  <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">
+                    แถวที่ฐานข้อมูลไม่รับ ({(importSummary.invalidRows?.length || 0) + (importSummary.skippedCodes?.length || 0)} รายการ)
+                  </p>
+                  <ul className="list-disc pl-4 space-y-0.5 text-amber-800 dark:text-amber-300">
+                    {[...(importSummary.invalidRows || []), ...(importSummary.skippedCodes || [])].map((r: string, i: number) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Rows this browser could not read. They are listed next to the ones
+              that did parse, so the officer can fix a handful of cells and drop
+              the file again instead of hunting for one failure at a time. */}
+          {rejectedRows.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="font-bold text-amber-800 dark:text-amber-300 mb-1.5">
+                ข้ามไป {rejectedRows.length} แถว — แถวที่เหลือยังนำเข้าได้ตามปกติ
+              </p>
+              <ul className="list-disc pl-4 space-y-0.5 max-h-40 overflow-y-auto text-amber-800 dark:text-amber-300">
+                {rejectedRows.map((r, i) => (
+                  <li key={i}>{r}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -1602,20 +1683,34 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       ) : currentTab === 'jobs' ? (
         <div className="space-y-6">
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800 shadow-sm">
-            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex justify-between items-center">
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex flex-col md:flex-row md:justify-between md:items-center gap-3">
               <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
                 คิวตรวจสอบอนุมัติโพสต์รับสมัครงานของบริษัท
               </span>
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
-                รออนุมัติ: {allJobs.filter(j => j.status === 'pending_approval').length} รายการ
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
+                  รออนุมัติ: {allJobs.filter(j => j.status === 'pending_approval').length} รายการ
+                </span>
+                <select
+                  value={jobStatusFilter}
+                  onChange={(e) => setJobStatusFilter(e.target.value as typeof jobStatusFilter)}
+                  aria-label="กรองตามสถานะประกาศ"
+                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                >
+                  <option value="all">ทุกสถานะ ({allJobs.length})</option>
+                  <option value="pending_approval">รอตรวจอนุมัติ ({allJobs.filter(j => j.status === 'pending_approval').length})</option>
+                  <option value="published">เผยแพร่แล้ว ({allJobs.filter(j => j.status === 'published').length})</option>
+                  <option value="rejected">ไม่อนุมัติ ({allJobs.filter(j => j.status === 'rejected').length})</option>
+                  <option value="closed">ปิดรับสมัคร ({allJobs.filter(j => j.status === 'closed').length})</option>
+                </select>
+              </div>
             </div>
 
             {loadingJobs ? (
-              <div className="p-8 text-center text-sm text-gray-400">กำลังโหลดรายการตำแหน่งงาน...</div>
-            ) : allJobs.length > 0 ? (
+              <PageSkeleton variant="table" />
+            ) : visibleJobs.length > 0 ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                {allJobs.map((job) => (
+                {visibleJobs.map((job) => (
                   <div key={job.job_id} className="p-6 hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1.5 flex-1">
                       <div className="flex items-center gap-2">
@@ -1624,7 +1719,10 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                           job.status === 'published'
                             ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
                             : job.status === 'pending_approval'
-                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 animate-pulse'
+                            /* Was animate-pulse. A permanent status is not an
+                               event, and twenty of them blinking at once is
+                               twenty things demanding attention forever. */
+                            ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
                             : job.status === 'rejected'
                             ? 'bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-400'
                             : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
@@ -1654,7 +1752,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     {job.status === 'pending_approval' && (
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => handlePublishJob(job.job_id)}
+                          onClick={() => setPendingConfirm({
+                            title: 'อนุมัติเผยแพร่ตำแหน่งงาน',
+                            message: `เผยแพร่ "${job.title}" ของ ${job.company_name_th || 'สถานประกอบการ'} ขึ้นกระดานหางาน? นักศึกษาทุกคนจะเห็นและยื่นความจำนงได้ทันที`,
+                            confirmLabel: 'อนุมัติเผยแพร่',
+                            run: () => handlePublishJob(job.job_id),
+                          })}
                           disabled={publishingJobId === job.job_id}
                           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
                         >
@@ -1676,8 +1779,19 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   </div>
                 ))}
               </div>
+            ) : allJobs.length > 0 ? (
+              <div className="text-center py-12 text-sm space-y-2">
+                <p className="text-gray-500 dark:text-gray-400">ไม่มีประกาศที่ตรงกับตัวกรองนี้</p>
+                <button
+                  type="button"
+                  onClick={() => setJobStatusFilter('all')}
+                  className="text-xs font-bold text-brand-blue dark:text-blue-400 hover:underline"
+                >
+                  แสดงทุกสถานะ ({allJobs.length} รายการ)
+                </button>
+              </div>
             ) : (
-              <div className="text-center py-12 text-gray-400 text-sm">ไม่มีรายการตำแหน่งงานในขณะนี้</div>
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">ไม่มีรายการตำแหน่งงานในขณะนี้</div>
             )}
           </div>
 
@@ -2090,7 +2204,8 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                           <span className={`inline-block px-2 py-0.5 rounded-full font-bold text-xs ${
                             doc.status === 'signed'
                               ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
-                              : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400 animate-pulse'
+                              /* Same reasoning as the job queue badge above. */
+                              : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400'
                           }`}>
                             {doc.status === 'signed' ? 'ลงนามเสร็จสิ้น' : 'รอลงนาม'}
                           </span>

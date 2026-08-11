@@ -4,6 +4,7 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 interface DispatchEligibleStudent {
   form_id: number;
@@ -25,6 +26,7 @@ const DispatchLetterCreator: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const fetchEligibleStudents = async (isBackground = false) => {
     try {
@@ -58,7 +60,11 @@ const DispatchLetterCreator: React.FC = () => {
     );
   };
 
-  const handleGenerate = async () => {
+  /**
+   * Checks what is missing before opening the dialog, so the confirmation is
+   * never shown for a request that cannot go through anyway.
+   */
+  const requestGenerate = () => {
     if (selectedStudentIds.length === 0) {
       setError('กรุณาเลือกนักศึกษาอย่างน้อย 1 คน');
       return;
@@ -67,6 +73,16 @@ const DispatchLetterCreator: React.FC = () => {
       setError('กรุณากรอกเลขที่หนังสือส่งออก');
       return;
     }
+    setError(null);
+    setConfirmOpen(true);
+  };
+
+  /**
+   * This consumes an official document number and pushes the letters into the
+   * dean's signing queue — neither of which can be taken back from here.
+   */
+  const handleGenerate = async () => {
+    setConfirmOpen(false);
 
     try {
       setIsGenerating(true);
@@ -122,7 +138,7 @@ const DispatchLetterCreator: React.FC = () => {
                 property, where the winner is decided by stylesheet order
                 rather than by which one is written last. */}
             <Button
-              onClick={handleGenerate}
+              onClick={requestGenerate}
               disabled={selectedStudentIds.length === 0}
               loading={isGenerating}
               loadingLabel="กำลังสร้างเอกสาร..."
@@ -214,6 +230,16 @@ const DispatchLetterCreator: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ยืนยันการออกหนังสือส่งตัว"
+        message={`ออกหนังสือส่งตัวเลขที่ ${documentNumber.trim()} ให้นักศึกษา ${selectedStudentIds.length} คน และส่งเข้าคิวรอคณบดีลงนาม? เลขที่หนังสือนี้จะถูกใช้ไปและเรียกคืนจากหน้านี้ไม่ได้`}
+        confirmLabel="ออกหนังสือส่งตัว"
+        busy={isGenerating}
+        onConfirm={handleGenerate}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 };
