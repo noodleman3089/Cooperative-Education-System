@@ -111,8 +111,10 @@ const DispatchLetterCreator: React.FC = () => {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-6 dark:text-gray-200">ออกหนังสือส่งตัวนักศึกษาสหกิจศึกษา (Dispatch Letters)</h1>
+    /* Was `p-6` on top of the padding `main` already provides, and an <h1>
+       where every other screen uses <h2> under the app's single page title. */
+    <div className="max-w-6xl mx-auto page-enter">
+      <h2 className="text-xl font-bold text-gray-800 mb-6 dark:text-white">ออกหนังสือส่งตัวนักศึกษาสหกิจศึกษา (Dispatch Letters)</h2>
 
       <AlertBanner variant="error" message={error} className="mb-4" />
 
@@ -122,7 +124,7 @@ const DispatchLetterCreator: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="w-full md:w-1/3">
             <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-              เลขที่หนังสือส่งออก <span className="text-red-500">*</span>
+              เลขที่หนังสือส่งออก <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -187,11 +189,11 @@ const DispatchLetterCreator: React.FC = () => {
                           <span>1. นักศึกษายื่นความจำนงสหกิจศึกษา</span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-300">
-                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">✓</span>
                           <span>2. อาจารย์ที่ปรึกษาพิจารณาอนุมัติ</span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 dark:text-gray-300">
-                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs">✓</span>
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 flex items-center justify-center font-bold text-xs">✓</span>
                           <span>3. หัวหน้าสาขาวิชาพิจารณาอนุมัติ</span>
                         </div>
                         <div className="flex items-center space-x-2 text-amber-700 font-medium dark:text-amber-400">
@@ -200,7 +202,7 @@ const DispatchLetterCreator: React.FC = () => {
                         </div>
                       </div>
 
-                      <p className="text-xs text-gray-400">
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
                         * เมื่อมีนักศึกษาถึงขั้นตอนที่ 4 รายชื่อจะปรากฏในหน้านี้ให้ออกหนังสือส่งตัวทันที
                       </p>
                     </div>

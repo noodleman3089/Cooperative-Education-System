@@ -5,7 +5,7 @@ import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
-import { Megaphone, Pin, BarChart3, ChevronRight } from 'lucide-react';
+import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
 
 interface StaffDashboardProps {
@@ -902,8 +902,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             ? 'จัดการข่าวสารและประกาศปักหมุดประชาสัมพันธ์ (PR Announcements)'
             : 'ภาพรวมออกเอกสารจัดส่งตัว (Official Document Control)'}
         </h2>
-        <p className="text-xs text-gray-400 mt-1">
-          {currentTab === 'import' 
+        {/* gray-600, not gray-500 like the descriptions inside cards: this one
+            sits on the page's gray background rather than on white, which costs
+            it just enough contrast to fall under AA (4.39:1 measured). */}
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {currentTab === 'import'
             ? 'ตรวจสอบความพร้อมในการสมัครสหกิจ นำเข้าเกรดเฉลี่ย และคัดกรองคุณสมบัตินักศึกษา' 
             : currentTab === 'users'
             ? 'สร้าง แก้ไข และลบสิทธิ์บัญชีผู้ใช้ระบบ พร้อมเตรียมสิทธิ์นำเข้าบุคลากรล่วงหน้า'
@@ -928,7 +931,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               className={`py-2.5 px-4 font-semibold text-xs border-b-2 transition-all ${
                 studentSubTab === 'bulk'
                   ? 'border-brand-blue text-brand-blue dark:text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
               }`}
             >
               นำเข้าด้วยไฟล์ (Bulk Import)
@@ -938,7 +941,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               className={`py-2.5 px-4 font-semibold text-xs border-b-2 transition-all ${
                 studentSubTab === 'manual'
                   ? 'border-brand-blue text-brand-blue dark:text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
               }`}
             >
               เพิ่มรายบุคคล (Manual Add Student)
@@ -967,7 +970,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             <p className="text-sm font-bold text-gray-700 dark:text-gray-200 text-center">
               ลากและวางไฟล์ตรวจสอบรายชื่อนักศึกษาผู้มีสิทธิ์ฝึกงาน (CSV, XLSX, XLS) หรือคลิกเพื่อค้นหา
             </p>
-            <p className="text-xs text-gray-400 mt-2 text-center">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
               รองรับโครงสร้างคอลัมน์: student_code (รหัสนักศึกษา), is_eligible (สิทธิ์สมัคร: true/false — เว้นว่างหรือไม่มีคอลัมน์นี้ = คงสิทธิ์เดิมไว้ ไม่ใช่ให้สิทธิ์), cumulative_gpa (เกรดเฉลี่ย — เว้นว่างเพื่อคงค่าเดิม), email (อีเมลผูกบัญชี)
             </p>
             
@@ -992,19 +995,19 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">ผลการเชื่อมโยงซิงโครไนซ์ข้อมูลล่าสุด</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
                 <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
-                  <span className="text-gray-400 block font-medium">รายการที่อ่านพบทั้งสิ้น</span>
+                  <span className="text-gray-500 dark:text-gray-400 block font-medium">รายการที่อ่านพบทั้งสิ้น</span>
                   <span className="text-lg font-bold text-gray-800 dark:text-white mt-1 block">{importSummary.totalProcessed} ราย</span>
                 </div>
                 <div className="p-3 bg-green-50 dark:bg-green-950/15 rounded-lg text-green-700 dark:text-green-400">
-                  <span className="text-gray-400 block font-medium">นำเข้าเพิ่มใหม่</span>
+                  <span className="text-gray-500 dark:text-gray-400 block font-medium">นำเข้าเพิ่มใหม่</span>
                   <span className="text-lg font-bold mt-1 block">{importSummary.importedCount} ราย</span>
                 </div>
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/15 rounded-lg text-brand-blue dark:text-blue-400">
-                  <span className="text-gray-400 block font-medium">อัปเดตสิทธิ์ใหม่</span>
+                  <span className="text-gray-500 dark:text-gray-400 block font-medium">อัปเดตสิทธิ์ใหม่</span>
                   <span className="text-lg font-bold mt-1 block">{importSummary.updatedCount} ราย</span>
                 </div>
                 <div className="p-3 bg-yellow-50 dark:bg-yellow-950/15 rounded-lg text-yellow-700 dark:text-yellow-400">
-                  <span className="text-gray-400 block font-medium">ไม่พบการเปลี่ยนแปลง</span>
+                  <span className="text-gray-500 dark:text-gray-400 block font-medium">ไม่พบการเปลี่ยนแปลง</span>
                   <span className="text-lg font-bold mt-1 block">{importSummary.unchangedCount} ราย</span>
                 </div>
               </div>
@@ -1073,20 +1076,15 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
                   มีไฟล์พร้อมนำเข้า ({parsedStudents.length} รายการ)
                 </span>
-                <button
-                  type="button"
-                  onClick={handleConfirmImport}
-                  disabled={isImporting}
-                  className="py-1.5 px-4 rounded-xl bg-brand-blue text-white hover:bg-blue-600 text-xs font-bold transition-all shadow-sm"
-                >
-                  {isImporting ? 'กำลังประมวลผลซิงค์ข้อมูล...' : 'ยืนยันเซฟเข้าฐานข้อมูล'}
-                </button>
+                <Button size="sm" onClick={handleConfirmImport} loading={isImporting} loadingLabel="กำลังประมวลผลซิงค์ข้อมูล...">
+                  ยืนยันเซฟเข้าฐานข้อมูล
+                </Button>
               </div>
 
               <div className="max-h-[300px] overflow-y-auto">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800 sticky top-0">
+                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800 sticky top-0">
                       <th className="p-3 font-semibold">รหัสนักศึกษา</th>
                       <th className="p-3 font-semibold">สิทธิ์สมัครสหกิจหลังนำเข้า</th>
                     </tr>
@@ -1188,13 +1186,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   </p>
                 </div>
                 <div className="flex justify-end pt-2">
-                  <button
-                    type="submit"
-                    disabled={isAddingStudent}
-                    className="py-2 px-6 rounded-xl bg-brand-blue text-white hover:bg-brand-navy font-semibold text-xs transition-all shadow-md"
-                  >
-                    {isAddingStudent ? 'กำลังบันทึกข้อมูล...' : 'บันทึกข้อมูลนักศึกษา'}
-                  </button>
+                  <Button type="submit" size="sm" loading={isAddingStudent} loadingLabel="กำลังบันทึกข้อมูล...">
+                    บันทึกข้อมูลนักศึกษา
+                  </Button>
                 </div>
               </form>
             </div>
@@ -1209,7 +1203,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               className={`py-2.5 px-4 font-semibold text-xs border-b-2 transition-all ${
                 usersSubTab === 'active'
                   ? 'border-brand-blue text-brand-blue dark:text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
               }`}
             >
               บัญชีผู้ใช้งานระบบ (Active Users)
@@ -1219,7 +1213,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               className={`py-2.5 px-4 font-semibold text-xs border-b-2 transition-all ${
                 usersSubTab === 'preseed'
                   ? 'border-brand-blue text-brand-blue dark:text-blue-400'
-                  : 'border-transparent text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                  : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'
               }`}
             >
               เตรียมรายชื่อบุคลากรล่วงหน้า (Pre-seed Personnel)
@@ -1234,27 +1228,27 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
                     รายชื่อสมาชิกและสิทธิ์ในระบบทั้งหมด
                   </span>
-                  <button
-                    type="button"
+                  <Button
+                    size="sm"
+                    icon={<Plus className="h-3.5 w-3.5" />}
                     onClick={() => {
                       setUserEmail('');
                       setUserPassword('');
                       setUserRoles(['student']);
                       setIsAddUserModalOpen(true);
                     }}
-                    className="py-1.5 px-4 rounded-xl bg-brand-blue text-white hover:bg-blue-600 text-xs font-bold transition-all shadow-sm"
                   >
-                    + เพิ่มบัญชีผู้ใช้ใหม่
-                  </button>
+                    เพิ่มบัญชีผู้ใช้ใหม่
+                  </Button>
                 </div>
 
                 {loadingUsers ? (
-                  <div className="p-6 text-center text-gray-400">กำลังโหลดรายการผู้ใช้งาน...</div>
+                  <div className="p-6 text-center text-gray-500 dark:text-gray-400">กำลังโหลดรายการผู้ใช้งาน...</div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                           <th className="p-4 font-semibold">รหัสผู้ใช้</th>
                           <th className="p-4 font-semibold">อีเมลบัญชีผู้ใช้</th>
                           <th className="p-4 font-semibold">สิทธิ์ (Roles)</th>
@@ -1278,41 +1272,47 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                               <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${u.is_active ? 'bg-green-500' : 'bg-red-500'}`} />
                               {u.is_active ? 'เปิดใช้งาน' : 'ระงับบัญชี'}
                             </td>
-                            <td className="p-4 text-center space-x-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedUser(u);
-                                  setUserEmail(u.email);
-                                  setUserRoles(u.roles);
-                                  setUserIsActive(u.is_active);
-                                  setIsEditUserModalOpen(true);
-                                }}
-                                className="py-1 px-3 rounded-lg border border-brand-blue text-brand-blue hover:bg-blue-50/10 font-bold transition-all text-xs dark:text-blue-400"
-                              >
-                                แก้ไข
-                              </button>
-                              {/* External partners have no other way back in —
-                                  they cannot reach the login form, and so cannot
-                                  reach "forgot password", without their email. */}
-                              {u.roles.some((r: string) => ['company', 'mentor'].includes(r)) && (
-                                <button
-                                  type="button"
-                                  disabled={resendingInvite === u.user_id}
-                                  onClick={() => setPendingConfirm({ title: 'ส่งลิงก์เชิญใหม่', message: `ส่งลิงก์เชิญเข้าใช้งานใหม่ไปที่ ${u.email}? ลิงก์เดิม (ถ้ามี) จะใช้ไม่ได้ทันที`, confirmLabel: 'ส่งลิงก์เชิญ', run: () => handleResendInvite(u.user_id, u.email) })}
-                                  className="py-1 px-3 rounded-lg border border-amber-500 text-amber-600 hover:bg-amber-50/10 font-bold transition-all text-xs disabled:opacity-50"
-                                  title="ส่งลิงก์ตั้งรหัสผ่านเข้าใช้งานใหม่ทางอีเมล"
+                            <td className="p-4 text-center">
+                              <div className="flex flex-wrap gap-2 justify-center">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedUser(u);
+                                    setUserEmail(u.email);
+                                    setUserRoles(u.roles);
+                                    setUserIsActive(u.is_active);
+                                    setIsEditUserModalOpen(true);
+                                  }}
+                                  className="border-brand-blue text-brand-blue dark:text-blue-400 dark:border-blue-800"
                                 >
-                                  {resendingInvite === u.user_id ? 'กำลังส่ง...' : 'ส่งลิงก์เชิญใหม่'}
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => setPendingConfirm({ title: 'ลบบัญชีผู้ใช้', message: `ลบบัญชี ${u.email} และข้อมูลโปรไฟล์ที่เกี่ยวข้องทั้งหมด? การลบนี้ไม่สามารถย้อนคืนได้`, confirmLabel: 'ลบบัญชีถาวร', destructive: true, run: () => handleDeleteUser(u.user_id) })}
-                                className="py-1 px-3 rounded-lg border border-red-500 text-red-500 hover:bg-red-50/10 font-bold transition-all text-xs"
-                              >
-                                ลบ
-                              </button>
+                                  แก้ไข
+                                </Button>
+                                {/* External partners have no other way back in —
+                                    they cannot reach the login form, and so cannot
+                                    reach "forgot password", without their email. */}
+                                {u.roles.some((r: string) => ['company', 'mentor'].includes(r)) && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    loading={resendingInvite === u.user_id}
+                                    loadingLabel="กำลังส่ง..."
+                                    onClick={() => setPendingConfirm({ title: 'ส่งลิงก์เชิญใหม่', message: `ส่งลิงก์เชิญเข้าใช้งานใหม่ไปที่ ${u.email}? ลิงก์เดิม (ถ้ามี) จะใช้ไม่ได้ทันที`, confirmLabel: 'ส่งลิงก์เชิญ', run: () => handleResendInvite(u.user_id, u.email) })}
+                                    className="border-amber-500 text-amber-700 dark:text-amber-400 dark:border-amber-800"
+                                    title="ส่งลิงก์ตั้งรหัสผ่านเข้าใช้งานใหม่ทางอีเมล"
+                                  >
+                                    ส่งลิงก์เชิญใหม่
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => setPendingConfirm({ title: 'ลบบัญชีผู้ใช้', message: `ลบบัญชี ${u.email} และข้อมูลโปรไฟล์ที่เกี่ยวข้องทั้งหมด? การลบนี้ไม่สามารถย้อนคืนได้`, confirmLabel: 'ลบบัญชีถาวร', destructive: true, run: () => handleDeleteUser(u.user_id) })}
+                                  className="border-red-500 text-red-600 dark:text-red-400 dark:border-red-800"
+                                >
+                                  ลบ
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1468,14 +1468,17 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 <button
                   type="button"
                   onClick={() => setPreseedActiveTab('csv')}
-                  className={`py-2 px-4 font-semibold text-xs border-b-2 transition-colors ${preseedActiveTab === 'csv' ? 'border-brand-blue text-brand-blue dark:text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-600'} dark:text-blue-400 dark:hover:text-gray-400`}
+                  /* The dark: colours used to sit outside the ternary, so in
+                     dark mode both tabs were blue and the active one could not
+                     be told apart. They belong to their own branch. */
+                  className={`py-2 px-4 font-semibold text-xs border-b-2 transition-colors ${preseedActiveTab === 'csv' ? 'border-brand-blue text-brand-blue dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'}`}
                 >
                   นำเข้าด้วยไฟล์ CSV (Bulk Import)
                 </button>
                 <button
                   type="button"
                   onClick={() => setPreseedActiveTab('manual')}
-                  className={`py-2 px-4 font-semibold text-xs border-b-2 transition-colors ${preseedActiveTab === 'manual' ? 'border-brand-blue text-brand-blue dark:text-blue-400' : 'border-transparent text-gray-400 hover:text-gray-600'} dark:text-blue-400 dark:hover:text-gray-400`}
+                  className={`py-2 px-4 font-semibold text-xs border-b-2 transition-colors ${preseedActiveTab === 'manual' ? 'border-brand-blue text-brand-blue dark:text-blue-400' : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300'}`}
                 >
                   เพิ่มรายบุคคล (Manual Add)
                 </button>
@@ -1617,13 +1620,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     )}
                   </div>
                   <div className="flex justify-end pt-2">
-                    <button
-                      type="submit"
-                      disabled={isUploadingPreseed}
-                      className="py-2 px-6 rounded-xl bg-brand-blue text-white hover:bg-brand-navy font-semibold text-xs"
-                    >
-                      {isUploadingPreseed ? 'กำลังบันทึก...' : 'เพิ่มข้อมูลบุคลากร'}
-                    </button>
+                    <Button type="submit" size="sm" loading={isUploadingPreseed} loadingLabel="กำลังบันทึก...">
+                      เพิ่มข้อมูลบุคลากร
+                    </Button>
                   </div>
                 </form>
               )}
@@ -1634,12 +1633,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <span className="text-sm font-bold text-gray-700 dark:text-gray-300">รายชื่อรหัสบุคลากรล่วงหน้าในฐานข้อมูล</span>
                 </div>
                 {loadingPreseed ? (
-                  <div className="p-6 text-center text-gray-400">กำลังโหลดข้อมูล...</div>
+                  <div className="p-6 text-center text-gray-500 dark:text-gray-400">กำลังโหลดข้อมูล...</div>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                        <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                           <th className="p-4 font-semibold">รหัสพนักงาน</th>
                           <th className="p-4 font-semibold">ชื่อ - นามสกุล</th>
                           <th className="p-4 font-semibold">บทบาท (Role)</th>
@@ -1661,14 +1660,16 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                               </span>
                             </td>
                             <td className="p-4 text-center">
-                              <button
-                                type="button"
+                              <Button
+                                variant="secondary"
+                                size="sm"
                                 onClick={() => setPendingConfirm({ title: 'ลบรหัสบุคลากรล่วงหน้า', message: `ลบรหัสบุคลากรล่วงหน้า ${p.employee_code} ออกจากรายชื่อ? เจ้าของรหัสนี้จะยืนยันตัวตนผ่าน SSO ไม่ได้อีก`, confirmLabel: 'ลบรหัสนี้', destructive: true, run: () => handleDeletePreseed(p.employee_code) })}
                                 disabled={p.is_claimed}
-                                className={`py-1 px-3 rounded-lg border font-bold transition-all text-xs ${p.is_claimed ? 'border-gray-200 text-gray-300 cursor-not-allowed' : 'border-red-500 text-red-500 hover:bg-red-50/10'} dark:border-gray-800`}
+                                title={p.is_claimed ? 'ยืนยันตัวตนไปแล้ว ลบรหัสนี้ไม่ได้' : undefined}
+                                className={p.is_claimed ? '' : 'border-red-500 text-red-600 dark:text-red-400 dark:border-red-800'}
                               >
                                 ลบ
-                              </button>
+                              </Button>
                             </td>
                           </tr>
                         ))}
@@ -1751,29 +1752,34 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
                     {job.status === 'pending_approval' && (
                       <div className="flex items-center gap-2">
-                        <button
+                        <Button
+                          variant="success"
+                          size="sm"
+                          icon={<Check className="h-3.5 w-3.5" />}
                           onClick={() => setPendingConfirm({
                             title: 'อนุมัติเผยแพร่ตำแหน่งงาน',
                             message: `เผยแพร่ "${job.title}" ของ ${job.company_name_th || 'สถานประกอบการ'} ขึ้นกระดานหางาน? นักศึกษาทุกคนจะเห็นและยื่นความจำนงได้ทันที`,
                             confirmLabel: 'อนุมัติเผยแพร่',
                             run: () => handlePublishJob(job.job_id),
                           })}
-                          disabled={publishingJobId === job.job_id}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all"
+                          loading={publishingJobId === job.job_id}
+                          loadingLabel="กำลังอนุมัติ..."
                         >
-                          {publishingJobId === job.job_id ? 'กำลังอนุมัติ...' : '✓ อนุมัติเผยแพร่'}
-                        </button>
-                        <button
+                          อนุมัติเผยแพร่
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => {
                             setRejectingJob(job);
                             setJobRejectReason('');
                             setJobRejectCustom('');
                             setJobRejectError(null);
                           }}
-                          className="px-4 py-2 border border-red-500 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 font-bold text-xs rounded-xl transition-all"
+                          className="border-red-500 text-red-600 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30"
                         >
                           ไม่อนุมัติ
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -1919,13 +1925,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               </div>
 
               <div className="flex justify-end pt-2">
-                <button
-                  type="submit"
-                  disabled={isSubmittingAnn}
-                  className="px-6 py-2.5 bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow-md transition-all"
-                >
-                  {isSubmittingAnn ? 'กำลังลงประกาศ...' : 'เผยแพร่ข่าวประชาสัมพันธ์'}
-                </button>
+                <Button type="submit" loading={isSubmittingAnn} loadingLabel="กำลังลงประกาศ...">
+                  เผยแพร่ข่าวประชาสัมพันธ์
+                </Button>
               </div>
             </form>
           </div>
@@ -1934,11 +1936,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex justify-between items-center">
               <span className="text-sm font-bold text-gray-700 dark:text-gray-300">รายการข่าวประชาสัมพันธ์ทั้งหมด</span>
-              <span className="text-xs text-gray-400">ทั้งหมด {announcements.length} รายการ</span>
+              <span className="text-xs text-gray-500 dark:text-gray-400">ทั้งหมด {announcements.length} รายการ</span>
             </div>
 
             {loadingAnnouncements ? (
-              <div className="p-8 text-center text-sm text-gray-400">กำลังโหลดประกาศข่าวสาร...</div>
+              <div className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">กำลังโหลดประกาศข่าวสาร...</div>
             ) : announcements.length > 0 ? (
               <div className="divide-y divide-gray-100 dark:divide-gray-800">
                 {announcements.map((ann) => (
@@ -1948,35 +1950,35 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                         {ann.is_pinned && <span className="text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Pin className="h-3 w-3" /> ปักหมุดด่วน</span>}
                         <span className="font-bold text-base text-gray-900 dark:text-white">{ann.title}</span>
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
                         ประกาศเมื่อ: {new Date(ann.created_at).toLocaleString('th-TH')} | โดย: {ann.author_name || 'เจ้าหน้าที่'}
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mt-1">{ann.content}</p>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => handleTogglePin(ann.announcement_id)}
-                        className={`px-3 py-1.5 font-bold text-xs rounded-xl border transition-all ${
-                          ann.is_pinned
-                            ? 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
-                            : 'border-gray-200 text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:text-gray-300'
-                        }`}
+                        className={ann.is_pinned ? 'border-amber-300 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800' : ''}
                       >
                         {ann.is_pinned ? 'ถอนปักหมุด' : 'ปักหมุด'}
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
                         onClick={() => setPendingConfirm({ title: 'ลบข่าวประชาสัมพันธ์', message: `ลบประกาศ "${ann.title}" ออกจากระบบ?`, confirmLabel: 'ลบประกาศ', destructive: true, run: () => handleDeleteAnnouncement(ann.announcement_id) })}
-                        className="px-3 py-1.5 font-bold text-xs rounded-xl border border-red-200 text-red-600 dark:text-red-400 hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950/30 transition-all"
+                        className="border-red-300 text-red-600 dark:text-red-400 dark:border-red-900"
                       >
                         ลบประกาศ
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400 text-sm">ยังไม่มีข่าวประชาสัมพันธ์ในขณะนี้</div>
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">ยังไม่มีข่าวประชาสัมพันธ์ในขณะนี้</div>
             )}
           </div>
         </div>
@@ -1994,7 +1996,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <BarChart3 className="h-5 w-5 shrink-0 text-brand-blue dark:text-blue-400" />
                   ภาพรวมสถานะขั้นตอนนักศึกษาสหกิจศึกษา
                 </h3>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   จำนวนนักศึกษาที่ค้างอยู่ในแต่ละด่าน เรียงตามลำดับการอนุมัติ
                 </p>
               </div>
@@ -2053,12 +2055,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                               ? 'text-emerald-700 dark:text-emerald-400'
                               : count > 0
                                 ? 'text-gray-800 dark:text-white'
-                                : 'text-gray-400 dark:text-gray-400'
+                                : 'text-gray-500 dark:text-gray-400'
                           }`}
                         >
                           {count}
                         </span>
-                        <span className="text-xs text-gray-400">คน</span>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">คน</span>
                       </div>
 
                       {/* Was the raw column value (pending_advisor). This says
@@ -2092,20 +2094,21 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                       <div key={intent.form_id} className="p-4 flex justify-between items-center hover:bg-gray-50/50 dark:hover:bg-gray-800/10 text-xs">
                         <div>
                           <span className="block font-bold text-gray-800 dark:text-gray-200">{intentStudentName(intent)}</span>
-                          <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code} | บริษัท: {intent.company_name_th}</span>
+                          <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">รหัส: {intent.student_code} | บริษัท: {intent.company_name_th}</span>
                         </div>
-                        <button
-                          type="button"
+                        <Button
+                          variant="secondary"
+                          size="sm"
                           onClick={() => setSelectedIntent(intent)}
-                          className="py-1 px-3 rounded-lg border border-brand-blue text-brand-blue hover:bg-blue-50/10 font-bold transition-all dark:text-blue-400"
+                          className="shrink-0 border-brand-blue text-brand-blue dark:text-blue-400 dark:border-blue-800"
                         >
                           เลือกออกจดหมาย
-                        </button>
+                        </Button>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-12 text-gray-400 text-xs">
+                  <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-xs">
                     ไม่มีนักศึกษาที่ได้รับการตอบรับและรอออกจดหมายส่งตัวในขณะนี้
                   </div>
                 )}
@@ -2119,9 +2122,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">ขั้นตอนทำจดหมายจดทะเบียนกลุ่ม</h3>
                   
                   <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg text-xs space-y-1">
-                    <div><span className="text-gray-400">นักศึกษา:</span> <span className="font-bold text-gray-800 dark:text-white">{intentStudentName(selectedIntent)} ({selectedIntent.student_code})</span></div>
-                    <div><span className="text-gray-400">สถานประกอบการ:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.company_name_th}</span></div>
-                    <div><span className="text-gray-400">ตำแหน่งงาน:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.job_title || 'ระบุทั่วไป'}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">นักศึกษา:</span> <span className="font-bold text-gray-800 dark:text-white">{intentStudentName(selectedIntent)} ({selectedIntent.student_code})</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">สถานประกอบการ:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.company_name_th}</span></div>
+                    <div><span className="text-gray-500 dark:text-gray-400">ตำแหน่งงาน:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.job_title || 'ระบุทั่วไป'}</span></div>
                   </div>
 
                   <div>
@@ -2143,28 +2146,24 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     </select>
                   </div>
 
-                  <div className="flex justify-end gap-2 text-xs pt-4">
-                    <button
-                      type="button"
+                  <div className="flex flex-wrap justify-end gap-2 pt-4">
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => {
                         setSelectedIntent(null);
                         setSelectedTemplateId('');
                       }}
-                      className="py-1.5 px-3 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 font-bold dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-700"
                     >
                       ยกเลิก
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isGeneratingDoc}
-                      className="py-1.5 px-4 rounded-lg bg-brand-blue text-white hover:bg-blue-600 font-bold transition-all shadow-sm"
-                    >
-                      {isGeneratingDoc ? 'กำลังออกเอกสาร...' : 'ยืนยันการออกเอกสาร'}
-                    </button>
+                    </Button>
+                    <Button type="submit" size="sm" loading={isGeneratingDoc} loadingLabel="กำลังออกเอกสาร...">
+                      ยืนยันการออกเอกสาร
+                    </Button>
                   </div>
                 </form>
               ) : (
-                <div className="text-center py-16 text-gray-400 text-xs">
+                <div className="text-center py-16 text-gray-500 dark:text-gray-400 text-xs">
                   กรุณาเลือกนักศึกษาจากตารางซ้ายมือเพื่อทำการออกเอกสารจดหมายราชการ
                 </div>
               )}
@@ -2184,7 +2183,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                       <th className="p-4 font-semibold">รหัสอ้างอิงเอกสาร</th>
                       <th className="p-4 font-semibold">ประเภทจดหมาย</th>
                       <th className="p-4 font-semibold">รหัสนักศึกษา</th>
@@ -2221,7 +2220,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                               เปิดไฟล์ PDF
                             </a>
                           ) : (
-                            <span className="text-gray-400">ไม่มีไฟล์</span>
+                            <span className="text-gray-500 dark:text-gray-400">ไม่มีไฟล์</span>
                           )}
                         </td>
                       </tr>
@@ -2230,7 +2229,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 </table>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400 text-sm">
+              <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">
                 ยังไม่มีการออกจดหมายอย่างเป็นทางการบันทึกในระบบในขณะนี้
               </div>
             )}

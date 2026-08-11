@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { Calendar, Send } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import Button from '../../components/ui/Button';
 
 interface AppointmentDraft {
   appointment_id: number;
@@ -25,7 +26,12 @@ const AppointmentAudit: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [sendingId, setSendingId] = useState<number | null>(null);
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  /**
+   * The whole draft, not just its id: with ten rows on screen the dialog has to
+   * say whose appointment is about to go out, and the server refuses a repeat
+   * send for 24 hours, so a wrong row costs a day and cannot be undone.
+   */
+  const [confirmingDraft, setConfirmingDraft] = useState<AppointmentDraft | null>(null);
 
   const fetchDrafts = async () => {
     try {
@@ -45,17 +51,18 @@ const AppointmentAudit: React.FC = () => {
   }, []);
 
   const handleSendEmail = async () => {
-    if (confirmingId === null) return;
+    if (!confirmingDraft) return;
+    const draft = confirmingDraft;
     setError(null);
     setSuccess(null);
     try {
-      setSendingId(confirmingId);
-      await api.put(`/appointments/${confirmingId}/audit-send`);
-      setConfirmingId(null);
-      setSuccess('ส่งอีเมลเรียบร้อยแล้ว');
+      setSendingId(draft.appointment_id);
+      await api.put(`/appointments/${draft.appointment_id}/audit-send`);
+      setConfirmingDraft(null);
+      setSuccess(`ส่งอีเมลนัดหมายของ ${draft.first_name} ${draft.last_name} ไปยังพี่เลี้ยงเรียบร้อยแล้ว`);
       fetchDrafts();
     } catch (err: any) {
-      setConfirmingId(null);
+      setConfirmingDraft(null);
       setError(err.response?.data?.message || 'ไม่สามารถส่งอีเมลได้ กรุณาตรวจสอบว่ามีอีเมลพี่เลี้ยงหรือไม่');
     } finally {
       setSendingId(null);
@@ -69,10 +76,13 @@ const AppointmentAudit: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 page-enter">
       <div>
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">ตรวจสอบการนัดหมาย (ส่งอีเมล)</h2>
-        <p className="text-xs text-gray-400 mt-1">
+        {/* gray-600 rather than gray-500: this description sits on the page's
+            grey background, not on a white card, which costs it enough contrast
+            to land under AA (4.39:1 measured). */}
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
           ตรวจสอบวันนัดหมายนิเทศที่อาจารย์ที่ปรึกษากำหนดไว้ และส่งอีเมลแจ้งสถานประกอบการ
         </p>
       </div>
@@ -116,18 +126,14 @@ const AppointmentAudit: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
-                      <button
-                        onClick={() => setConfirmingId(draft.appointment_id)}
-                        disabled={sendingId === draft.appointment_id}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-brand-blue hover:bg-blue-600 disabled:bg-blue-300 text-white text-sm font-medium rounded-xl transition-colors shadow-sm"
+                      <Button
+                        icon={<Send className="w-4 h-4" />}
+                        onClick={() => setConfirmingDraft(draft)}
+                        loading={sendingId === draft.appointment_id}
+                        loadingLabel="กำลังส่ง..."
                       >
-                        {sendingId === draft.appointment_id ? (
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          <Send className="w-4 h-4" />
-                        )}
                         ส่งอีเมลแจ้งพี่เลี้ยง
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -138,13 +144,15 @@ const AppointmentAudit: React.FC = () => {
       </div>
 
       <ConfirmDialog
-        open={confirmingId !== null}
+        open={confirmingDraft !== null}
         title="ยืนยันการส่งอีเมลนัดหมาย"
-        message="ระบบจะส่งอีเมลแจ้งวันและเวลานิเทศไปยังพี่เลี้ยงที่สถานประกอบการ พร้อมลิงก์สำหรับตอบรับหรือขอเลื่อนนัด"
+        message={confirmingDraft
+          ? `ส่งอีเมลนัดหมายนิเทศของ ${confirmingDraft.first_name} ${confirmingDraft.last_name} (${confirmingDraft.student_code}) วันที่ ${new Date(confirmingDraft.appointment_date).toLocaleDateString('th-TH')} ไปยังพี่เลี้ยงที่ ${confirmingDraft.company_name}? อีเมลจะมีลิงก์ให้ตอบรับหรือขอเลื่อนนัด และส่งซ้ำได้อีกครั้งหลังผ่านไป 24 ชั่วโมง`
+          : ''}
         confirmLabel="ส่งอีเมล"
         busy={sendingId !== null}
         onConfirm={handleSendEmail}
-        onCancel={() => setConfirmingId(null)}
+        onCancel={() => setConfirmingDraft(null)}
       />
     </div>
   );
