@@ -39,17 +39,23 @@ export class PersonnelModel {
     return (res.rowCount ?? 0) > 0;
   }
 
+  /**
+   * Every field here is left alone when the caller passes null — except
+   * `major_id`, which used to be written unconditionally. That is how saving an
+   * e-signature (a screen that has no business knowing anyone's department, and
+   * sent a hardcoded `major_id: 1`) silently moved personnel between majors.
+   */
   static async updatePersonnel(
     personnelId: number,
-    majorId: number,
+    majorId: number | null,
     eSignatureFile: string | null,
     firstName: string | null = null,
     lastName: string | null = null,
     birthDate: string | Date | null = null
   ): Promise<Personnel> {
     const res = await query(
-      `UPDATE personnel 
-       SET major_id = $2, 
+      `UPDATE personnel
+       SET major_id = COALESCE($2, major_id),
            e_signature_file = COALESCE($3, e_signature_file),
            first_name = COALESCE($4, first_name),
            last_name = COALESCE($5, last_name),

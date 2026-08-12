@@ -3,6 +3,7 @@ import PageSkeleton, { skeletonFor } from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal from './ui/Modal';
+import ConfirmDialog from './ui/ConfirmDialog';
 
 interface DeanDashboardProps {
   activeMenu?: string;
@@ -35,6 +36,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
   
   // Selection state
   const [selectedDocIds, setSelectedDocIds] = useState<number[]>([]);
+  const [confirmSignOpen, setConfirmSignOpen] = useState(false);
   
   // Preview PDF state
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
@@ -49,12 +51,20 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
   const [savedSigPath, setSavedSigPath] = useState<string | null>(null);
   const [isSavingSig, setIsSavingSig] = useState(false);
 
-  // Fetch documents and profile signature
-  const loadDashboardData = async () => {
+  /**
+   * `isBackground` exists because refreshing after an action used to erase the
+   * result of that action: this function begins by clearing `error`, and
+   * handleBatchSign called it immediately after setting one. The message was
+   * wiped in the same commit and never reached the screen, so a failed batch
+   * looked exactly like nothing happening at all.
+   */
+  const loadDashboardData = async (isBackground = false) => {
     try {
-      setLoading(true);
-      setError(null);
-      
+      if (!isBackground) {
+        setLoading(true);
+        setError(null);
+      }
+
       const [docsData, profileData] = await Promise.all([
         api.get('/documents'),
         api.get('/profile/me')
@@ -67,9 +77,9 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       }
     } catch (err) {
       console.error('Failed to load Dean dashboard data:', err);
-      setError('ไม่สามารถเรียกข้อมูลเอกสารหรือโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+      if (!isBackground) setError('ไม่สามารถเรียกข้อมูลเอกสารหรือโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
@@ -94,10 +104,15 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
     }
   };
 
-  // Batch sign documents
+  /**
+   * Applies the dean's signature to official letters and releases them to the
+   * companies. There is no way back from here, which is why it now asks first —
+   * every other role in the system already confirms far smaller actions.
+   */
   const handleBatchSign = async () => {
     if (selectedDocIds.length === 0) return;
-    
+    setConfirmSignOpen(false);
+
     // Check if e-signature is set up
     if (!savedSigPath) {
       setError('กรุณาตั้งค่าลายมือชื่อดิจิทัลก่อนลงนามเอกสาร');
@@ -110,26 +125,32 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
 
     try {
       const res = await api.post('/documents/batch-sign', { doc_ids: selectedDocIds });
-      
-      // If DocuSign mode is returned
-      if (res.mode === 'docusign' && res.signing_urls && res.signing_urls.length > 0) {
-        setSuccess(`สร้างลิ้งค์สำหรับลงนามแบบกลุ่มสำเร็จ (จำนวน ${res.signing_urls.length} รายการ) กำลังเปิดหน้าต่างลงนาม DocuSign...`);
-        // Open DocuSign signing ceremony
-        const url = res.signing_urls[0].signing_url;
-        window.open(url, '_blank');
-      } else {
-        const signedCount = res.signed_count || 0;
-        const failedCount = res.failed_documents?.length || 0;
-        
-        if (failedCount > 0) {
-          setError(`ลงนามสำเร็จ ${signedCount} รายการ, ล้มเหลว ${failedCount} รายการ: ${res.failed_documents[0].error}`);
-        } else {
-          setSuccess(`ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`);
-        }
+
+      const signedCount = res.signed_count || 0;
+      const urls = res.signing_urls || [];
+      const failed = res.failed_documents || [];
+
+      // A batch can now come back mixed: some documents signed here, others
+      // handed back as DocuSign ceremonies for the dean to complete.
+      const parts: string[] = [];
+      if (signedCount > 0) parts.push(`ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`);
+      if (urls.length > 0) parts.push(`สร้างลิ้งค์สำหรับลงนามแบบกลุ่มสำเร็จ (จำนวน ${urls.length} รายการ) กำลังเปิดหน้าต่างลงนาม DocuSign...`);
+
+      if (parts.length > 0) setSuccess(parts.join(' · '));
+
+      if (failed.length > 0) {
+        setError(
+          `ลงนามไม่สำเร็จ ${failed.length} รายการ: ` +
+          failed.map((f: any) => `#DOC-${f.doc_id} (${f.error})`).join(' · ')
+        );
       }
-      
+
+      if (urls.length > 0) window.open(urls[0].signing_url, '_blank');
+
       setSelectedDocIds([]);
-      await loadDashboardData();
+      // Background refresh: a foreground one clears `error` and swaps the page
+      // for a skeleton, which is what used to eat the message just set above.
+      await loadDashboardData(true);
     } catch (err: any) {
       console.error('Batch sign error:', err);
       setError(err.response?.data?.message || 'การลงนามแบบกลุ่มล้มเหลว กรุณาลองใหม่อีกครั้ง');
@@ -138,24 +159,34 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
     }
   };
 
+  /**
+   * The pad's backing store is a fixed 500×220 while the element itself is
+   * `w-full`, so a pointer position in CSS pixels is not a canvas coordinate.
+   * Feeding one straight into the other drew the stroke in the wrong place —
+   * measured 57px to the right of the cursor on a 613px-wide pad, with the
+   * right-hand 113px unreachable entirely, and squashed into the left half on a
+   * phone. Every position now goes through the pad's own scale.
+   */
+  const canvasPoint = (
+    canvas: HTMLCanvasElement,
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ): { x: number; y: number } => {
+    const rect = canvas.getBoundingClientRect();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    return {
+      x: (clientX - rect.left) * (canvas.width / rect.width),
+      y: (clientY - rect.top) * (canvas.height / rect.height),
+    };
+  };
+
   // Signature Pad Canvas drawing logic
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
-    setIsDrawing(true);
-    const rect = canvas.getBoundingClientRect();
-    let x = 0;
-    let y = 0;
 
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-    
+    setIsDrawing(true);
+    const { x, y } = canvasPoint(canvas, e);
     setLastX(x);
     setLastY(y);
   };
@@ -166,19 +197,9 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
 
-    const rect = canvas.getBoundingClientRect();
-    let x = 0;
-    let y = 0;
-
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-      // Prevent default scrolling behaviour on mobile/tablet touch move
-      e.preventDefault();
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
+    // Prevent default scrolling behaviour on mobile/tablet touch move
+    if ('touches' in e) e.preventDefault();
+    const { x, y } = canvasPoint(canvas, e);
 
     ctx.strokeStyle = brushColor;
     ctx.lineWidth = brushSize;
@@ -242,7 +263,10 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
 
       const formData = new FormData();
       formData.append('signature', blob, 'signature.png');
-      formData.append('major_id', '1'); // Fallback default major for Personnel
+      // No major_id: this screen has nothing to do with departments. It used to
+      // send a hardcoded '1', and because the model wrote major_id
+      // unconditionally, saving a signature moved the dean into
+      // "วิทยาการคอมพิวเตอร์" every single time.
 
       const res = await api.put('/profile/personnel', formData);
       setSuccess('บันทึกลายเซ็นอิเล็กทรอนิกส์ของท่านเข้าสู่ระบบสำเร็จ');
@@ -432,7 +456,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
               {pendingDocs.length > 0 && (
                 <button
                   type="button"
-                  onClick={handleBatchSign}
+                  onClick={() => setConfirmSignOpen(true)}
                   disabled={selectedDocIds.length === 0 || signingInProgress}
                   className={`py-1.5 px-4 rounded-xl text-white font-bold text-xs transition-all flex items-center gap-1.5 ${
                     selectedDocIds.length > 0 && !signingInProgress
@@ -532,6 +556,16 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmSignOpen}
+        title="ยืนยันการลงนามเอกสารราชการ"
+        message={`ลงนามเอกสาร ${selectedDocIds.length} ฉบับด้วยลายมือชื่อของท่าน? ระบบจะประทับลายเซ็นลงบนไฟล์ PDF และแจ้งนักศึกษากับสถานประกอบการทันที การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้`}
+        confirmLabel={`ลงนาม ${selectedDocIds.length} ฉบับ`}
+        busy={signingInProgress}
+        onConfirm={handleBatchSign}
+        onCancel={() => setConfirmSignOpen(false)}
+      />
 
       {/* Embedded PDF Preview Modal */}
       {previewDocUrl && (

@@ -352,109 +352,31 @@ export class DocumentController {
         return;
       }
 
-      // BRANCH A: DocuSign Integration (if configured)
-      if (DocuSignService.isConfigured()) {
-        console.log('Processing DocuSign embedded signature URLs...');
-        const signingUrls: { doc_id: number; signing_url: string }[] = [];
-        const failedDocs: { doc_id: number; error: string }[] = [];
+      /**
+       * The signing route is chosen per document, not per environment.
+       *
+       * This used to be `if (DocuSignService.isConfigured())` around the whole
+       * batch, with the local pdf-lib overlay sitting in its `else`. Generating
+       * a document tolerates a failed DocuSign envelope (it logs and carries on,
+       * leaving `docusign_envelope_id` NULL), so any document that lost its
+       * envelope became permanently unsignable: the DocuSign branch rejected it
+       * for having no envelope, and the fallback written for exactly that case
+       * was unreachable because DocuSign *was* configured.
+       */
+      const docuSignAvailable = DocuSignService.isConfigured();
 
-        for (const docId of doc_ids) {
-          try {
-            const parsedDocId = parseInt(docId as any, 10);
-            if (isNaN(parsedDocId)) {
-              failedDocs.push({ doc_id: docId, error: 'Invalid document ID format.' });
-              continue;
-            }
-
-            const doc = await OfficialDocumentModel.findById(parsedDocId);
-            if (!doc) {
-              failedDocs.push({ doc_id: parsedDocId, error: 'Official document not found.' });
-              continue;
-            }
-
-            if (doc.status !== 'pending_sign') {
-              failedDocs.push({
-                doc_id: parsedDocId,
-                error: `Document status must be 'pending_sign'. Current: '${doc.status}'`,
-              });
-              continue;
-            }
-
-            if (!doc.docusign_envelope_id) {
-              failedDocs.push({ doc_id: parsedDocId, error: 'No DocuSign envelope ID linked to this document.' });
-              continue;
-            }
-
-            const secret = process.env.DOCUSIGN_WEBHOOK_SECRET || JWT_SECRET!;
-            const hmac = crypto.createHmac('sha256', secret);
-            hmac.update(`${parsedDocId}:${doc.docusign_envelope_id}`);
-            const callbackToken = hmac.digest('hex');
-
-            const returnUrl = (process.env.DOCUSIGN_RETURN_URL || 'http://localhost:5000/api/documents/signing-complete') + `?doc_id=${parsedDocId}&token=${callbackToken}`;
-            
-            const recipientName = req.user.email === 'dean1@test.com'
-              ? 'Dean of Science and Technology'
-              : req.user.email.split('@')[0];
-
-            // Generate embedded signing URL for the dean
-            const signingUrl = await DocuSignService.getEnvelopeSigningUrl(doc.docusign_envelope_id, {
-              recipientName: recipientName,
-              recipientEmail: req.user.email,
-              returnUrl: returnUrl,
-            });
-
-            signingUrls.push({ doc_id: parsedDocId, signing_url: signingUrl });
-          } catch (err: any) {
-            failedDocs.push({ doc_id: docId, error: err.message || 'Error generating DocuSign URL' });
-          }
-        }
-
-        res.status(200).json({
-          message: 'DocuSign embedded signing URLs generated.',
-          mode: 'docusign',
-          signing_urls: signingUrls,
-          signed_count: signingUrls.length,
-          failed_documents: failedDocs,
-        });
-        return;
-      }
-
-      // BRANCH B: Fallback Local E-Signature Drawing
-      console.log('DocuSign unconfigured. Running local pdf-lib drawing fallback...');
-
-      // Resolve Local Signature File Path Robustly
-      let finalSignaturePath = '';
-      if (fs.existsSync(deanProfile.e_signature_file)) {
-        finalSignaturePath = deanProfile.e_signature_file;
-      } else {
-        const privateSigPath = path.join(
-          process.cwd(),
-          'secure_private',
-          'signatures',
-          path.basename(deanProfile.e_signature_file)
-        );
-        if (fs.existsSync(privateSigPath)) {
-          finalSignaturePath = privateSigPath;
-        } else {
-          const uploadsSigPath = path.join(
-            process.cwd(),
-            'uploads',
-            deanProfile.e_signature_file
-          );
-          if (fs.existsSync(uploadsSigPath)) {
-            finalSignaturePath = uploadsSigPath;
-          } else {
-            res.status(400).json({
-              message: `Dean e-signature file not found in secure storage: ${deanProfile.e_signature_file}`,
-            });
-            return;
-          }
-        }
-      }
-
-      const sigImageBytes = fs.readFileSync(finalSignaturePath);
+      const signingUrls: { doc_id: number; signing_url: string }[] = [];
       const signedDocIds: number[] = [];
       const failedDocs: { doc_id: number; error: string }[] = [];
+
+      // Only documents taking the local route need the signature image, so it is
+      // read on first use rather than up front.
+      let cachedSigBytes: Buffer | null = null;
+      const signatureBytes = (): Buffer => {
+        if (cachedSigBytes) return cachedSigBytes;
+        cachedSigBytes = fs.readFileSync(DocumentController.resolveDeanSignaturePath(deanProfile.e_signature_file!));
+        return cachedSigBytes;
+      };
 
       for (const docId of doc_ids) {
         try {
@@ -478,6 +400,34 @@ export class DocumentController {
             continue;
           }
 
+          // ROUTE 1: this document has a DocuSign envelope waiting for the dean.
+          if (docuSignAvailable && doc.docusign_envelope_id) {
+            const secret = process.env.DOCUSIGN_WEBHOOK_SECRET || JWT_SECRET!;
+            const hmac = crypto.createHmac('sha256', secret);
+            hmac.update(`${parsedDocId}:${doc.docusign_envelope_id}`);
+            const callbackToken = hmac.digest('hex');
+
+            const returnUrl = (process.env.DOCUSIGN_RETURN_URL || 'http://localhost:5000/api/documents/signing-complete') + `?doc_id=${parsedDocId}&token=${callbackToken}`;
+            
+            const recipientName = req.user.email === 'dean1@test.com'
+              ? 'Dean of Science and Technology'
+              : req.user.email.split('@')[0];
+
+            // Generate embedded signing URL for the dean
+            const signingUrl = await DocuSignService.getEnvelopeSigningUrl(doc.docusign_envelope_id, {
+              recipientName: recipientName,
+              recipientEmail: req.user.email,
+              returnUrl: returnUrl,
+            });
+
+            signingUrls.push({ doc_id: parsedDocId, signing_url: signingUrl });
+            continue;
+          }
+
+          // ROUTE 2: no envelope for this document — stamp the dean's stored
+          // signature onto the PDF here. This is the path the system falls back
+          // to when DocuSign is switched off entirely, and now also when a
+          // single document never got an envelope.
           if (!doc.generated_file_path) {
             failedDocs.push({ doc_id: parsedDocId, error: 'Document does not have a generated file path.' });
             continue;
@@ -489,6 +439,7 @@ export class DocumentController {
             continue;
           }
 
+          const sigImageBytes = signatureBytes();
           const pdfBytes = fs.readFileSync(absolutePdfPath);
           const pdfDoc = await PDFDocument.load(pdfBytes);
           const pages = pdfDoc.getPages();
@@ -534,12 +485,17 @@ export class DocumentController {
           await DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId);
         } catch (err: any) {
           console.error(`Error processing doc_id: ${docId}`, err);
-          failedDocs.push({ doc_id: docId, error: err.message || 'Unknown error during local overlay.' });
+          failedDocs.push({ doc_id: docId, error: err.message || 'Unknown error while signing.' });
         }
       }
 
+      // `signed_count` counts documents that are actually signed now. It used to
+      // be set to the number of DocuSign URLs handed out, which are only an
+      // invitation to go and sign — nothing was signed at that point.
       res.status(200).json({
-        message: 'Batch local e-signature process completed.',
+        message: 'Batch signature process completed.',
+        mode: signingUrls.length > 0 ? (signedDocIds.length > 0 ? 'mixed' : 'docusign') : 'local',
+        signing_urls: signingUrls,
         signed_count: signedDocIds.length,
         signed_doc_ids: signedDocIds,
         failed_documents: failedDocs,
@@ -548,6 +504,25 @@ export class DocumentController {
       console.error('Batch Sign Documents Error:', error);
       res.status(500).json({ message: 'An internal server error occurred during batch signature.' });
     }
+  }
+
+  /**
+   * Locate the dean's signature image. The stored value has been written by
+   * three different code paths over time, so all three locations are tried
+   * before giving up. Throws so the caller records it against the document it
+   * was signing rather than failing a whole batch.
+   */
+  private static resolveDeanSignaturePath(storedPath: string): string {
+    const candidates = [
+      storedPath,
+      path.join(process.cwd(), 'secure_private', 'signatures', path.basename(storedPath)),
+      path.join(process.cwd(), 'uploads', storedPath),
+    ];
+    const found = candidates.find((p) => fs.existsSync(p));
+    if (!found) {
+      throw new Error(`Dean e-signature file not found in secure storage: ${storedPath}`);
+    }
+    return found;
   }
 
   /**

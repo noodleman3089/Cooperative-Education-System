@@ -378,12 +378,17 @@ export class ProfileController {
       const { userId } = req.user;
       const { major_id, first_name, last_name, birth_date } = req.body;
 
-      if (major_id === undefined) {
-        res.status(400).json({ message: 'Required field: major_id.' });
+      // Omitting major_id keeps whatever is on record. It used to be mandatory,
+      // which forced callers that only wanted to update something else — the
+      // e-signature pad, for one — to invent a value to send.
+      const parsedMajorId =
+        major_id === undefined || major_id === null || major_id === '' ? null : parseInt(major_id, 10);
+
+      if (parsedMajorId !== null && isNaN(parsedMajorId)) {
+        res.status(400).json({ message: 'major_id must be a valid integer.' });
         return;
       }
 
-      const parsedMajorId = parseInt(major_id, 10);
       const cleanBirthDate = birth_date !== undefined && birth_date !== null && birth_date !== '' ? birth_date : null;
 
       const existingProfile = await PersonnelModel.findByPersonnelId(userId);
@@ -392,11 +397,13 @@ export class ProfileController {
         return;
       }
 
-      // Validate major
-      const majorExists = await MasterModel.verifyMajorExists(parsedMajorId);
-      if (!majorExists) {
-        res.status(400).json({ message: 'Invalid major_id. Referenced major does not exist.' });
-        return;
+      // Validate major (only when one was actually supplied)
+      if (parsedMajorId !== null) {
+        const majorExists = await MasterModel.verifyMajorExists(parsedMajorId);
+        if (!majorExists) {
+          res.status(400).json({ message: 'Invalid major_id. Referenced major does not exist.' });
+          return;
+        }
       }
 
       let signatureFile = null;
