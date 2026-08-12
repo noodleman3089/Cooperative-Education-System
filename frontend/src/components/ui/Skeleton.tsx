@@ -12,12 +12,16 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
  *  table  — heading then a table (dean's signing queue, staff sub-tabs)
  *  cards  — heading then a grid of cards (job board, student dashboard)
  *  form   — heading then a two-column form (both profile screens)
+ *  split  — heading then a wide panel beside a narrow one (dean's signature pad)
  */
-export type SkeletonVariant = 'stats' | 'table' | 'cards' | 'form';
+export type SkeletonVariant = 'stats' | 'table' | 'cards' | 'form' | 'split';
 
 const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   profile: 'form',
-  signature: 'form',
+  // The signature screen is a wide drawing pad beside a narrow preview card.
+  // Mapping it to 'form' drew those two the other way round, so finishing the
+  // load swapped the columns over — the exact thing these shapes exist to stop.
+  signature: 'split',
   accommodation_plan: 'form',
   weekly_log: 'form',
   supervision: 'cards',
@@ -102,6 +106,13 @@ export const PageSkeleton: React.FC<{ variant?: SkeletonVariant }> = ({ variant 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <Skeleton className="lg:col-span-4 h-96" />
         <Skeleton className="lg:col-span-8 h-96" />
+      </div>
+    )}
+
+    {variant === 'split' && (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Skeleton className="md:col-span-2 h-80" />
+        <Skeleton className="h-80" />
       </div>
     )}
   </div>

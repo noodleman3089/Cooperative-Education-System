@@ -359,8 +359,11 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">
           {currentTab === 'signature' ? 'ตั้งค่าลายเซ็นอิเล็กทรอนิกส์ (E-Signature Setup)' : 'พิจารณาอนุมัติลงนามกลุ่ม (Dean Document Signing)'}
         </h2>
-        <p className="text-xs text-gray-400 mt-1">
-          {currentTab === 'signature' 
+        {/* gray-600 rather than gray-500: this line sits on the page's grey
+            background, not on a white card, which costs it enough contrast to
+            fall under AA. Same call as the staff screens. */}
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+          {currentTab === 'signature'
             ? 'ลงนามลายเซ็นผ่านระบบวาด หรือสแกนอัปโหลดเพื่อประทับตราอนุมัติเอกสารเด็กอัตโนมัติ' 
             : 'ลงนามจดหมายขอความอนุเคราะห์และส่งตัวนักศึกษาสหกิจศึกษาคราวละหลายรายการ'}
         </p>
@@ -390,7 +393,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
               />
-              <div className="absolute bottom-2 left-2 text-xs text-gray-400 pointer-events-none select-none">
+              <div className="absolute bottom-2 left-2 text-xs text-gray-500 dark:text-gray-400 pointer-events-none select-none">
                 ลงลายมือชื่อภายในกรอบนี้
               </div>
             </div>
@@ -399,9 +402,10 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
               <div className="flex items-center gap-4 text-xs">
                 {/* Size */}
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">ขนาดหัวแปรง:</span>
+                  <span className="text-gray-500 dark:text-gray-400">ขนาดหัวแปรง:</span>
                   <select
                     value={brushSize}
+                    aria-label="ขนาดหัวแปรงสำหรับวาดลายมือชื่อ"
                     onChange={(e) => setBrushSize(Number(e.target.value))}
                     className="p-1 rounded border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   >
@@ -412,17 +416,27 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                 </div>
                 {/* Color */}
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">สีแปรง:</span>
+                  <span className="text-gray-500 dark:text-gray-400">สีแปรง:</span>
                   <div className="flex items-center gap-1.5">
-                    {['#1e3a8a', '#000000', '#0f766e'].map((c) => (
+                    {/* Swatches carry no text, so without a name they are three
+                        unlabelled buttons to anything that is not looking at
+                        the colour. */}
+                    {([
+                      { value: '#1e3a8a', label: 'น้ำเงินเข้ม' },
+                      { value: '#000000', label: 'ดำ' },
+                      { value: '#0f766e', label: 'เขียวเข้ม' },
+                    ] as const).map((c) => (
                       <button
-                        key={c}
+                        key={c.value}
                         type="button"
-                        onClick={() => setBrushColor(c)}
-                        className={`h-5 w-5 rounded-full border-2 transition-all ${
-                          brushColor === c ? 'border-brand-blue scale-110' : 'border-transparent'
+                        onClick={() => setBrushColor(c.value)}
+                        aria-label={`ใช้หมึกสี${c.label}`}
+                        aria-pressed={brushColor === c.value}
+                        title={c.label}
+                        className={`h-5 w-5 rounded-full border-2 transition-all cursor-pointer ${
+                          brushColor === c.value ? 'border-brand-blue scale-110' : 'border-transparent'
                         }`}
-                        style={{ backgroundColor: c }}
+                        style={{ backgroundColor: c.value }}
                       />
                     ))}
                   </div>
@@ -444,7 +458,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
           <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
             <div>
               <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">ลายมือชื่ออิเล็กทรอนิกส์ในระบบ</h3>
-              <p className="text-xs text-gray-400">ภาพจำลองลายเซ็นจริงที่จะนำไปประทับบน PDF จดหมายออกส่งตัวนักศึกษา</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">ภาพจำลองลายเซ็นจริงที่จะนำไปประทับบน PDF จดหมายออกส่งตัวนักศึกษา</p>
               
               <div className="mt-4 border border-gray-100 rounded-xl bg-gray-50/50 p-4 flex items-center justify-center h-[120px] dark:bg-gray-950 dark:border-gray-800">
                 {savedSigPath ? (
@@ -454,12 +468,12 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                     className="max-h-full max-w-full object-contain"
                   />
                 ) : (
-                  <span className="text-xs text-gray-400">ยังไม่มีการบันทึกลายมือชื่อ</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">ยังไม่มีการบันทึกลายมือชื่อ</span>
                 )}
               </div>
             </div>
 
-            <div className="text-xs text-gray-400 mt-4 leading-relaxed">
+            <div className="text-xs text-gray-500 dark:text-gray-400 mt-4 leading-relaxed">
               * ข้อมูลลายมือชื่อจะได้รับความคุ้มครองความปลอดภัยขั้นสูงสุด อนุญาตใช้งานเฉพาะในพิกัดเอกสารราชการที่กำหนดเท่านั้น
             </div>
           </div>
