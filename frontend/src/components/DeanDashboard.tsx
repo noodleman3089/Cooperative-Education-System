@@ -1,5 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import PageSkeleton, { skeletonFor } from './ui/Skeleton';
+import { useDashboardData } from '../hooks/useDashboardData';
+import Button from './ui/Button';
+import { CheckCircle2 } from 'lucide-react';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal from './ui/Modal';
@@ -12,6 +15,8 @@ interface DeanDashboardProps {
 
 interface OfficialDocument {
   doc_id: number;
+  /** The official reference the dean signs under, e.g. "ศธ 0584.09/123". */
+  document_number: string | null;
   type: string;
   student_id: number;
   company_id: number;
@@ -21,8 +26,21 @@ interface OfficialDocument {
   dean_signature_date: string | null;
   student_code: string;
   student_name?: string;
+  first_name?: string;
+  last_name?: string;
   company_name_th: string;
 }
+
+/**
+ * `student_name` is declared on the type but `/api/documents` never sends it —
+ * the query returns `first_name` and `last_name`. The signing queue therefore
+ * showed a bare student code, so the dean signed official letters without ever
+ * seeing whose they were. Fourth screen with this same bug.
+ */
+const docStudentName = (doc: OfficialDocument): string =>
+  [doc.first_name, doc.last_name].filter(Boolean).join(' ').trim()
+  || doc.student_name
+  || doc.student_code;
 
 const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard', defaultTab }) => {
   // Navigation tabs internally if needed, or overridden by activeMenu
@@ -37,7 +55,11 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
   // Selection state
   const [selectedDocIds, setSelectedDocIds] = useState<number[]>([]);
   const [confirmSignOpen, setConfirmSignOpen] = useState(false);
+  const [confirmReplaceSigOpen, setConfirmReplaceSigOpen] = useState(false);
   
+  // Which of the two lists the table is showing.
+  const [docView, setDocView] = useState<'pending' | 'signed'>('pending');
+
   // Preview PDF state
   const [previewDocUrl, setPreviewDocUrl] = useState<string | null>(null);
 
@@ -83,9 +105,13 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
     }
   };
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  /**
+   * This screen's whole job is waiting for staff to push documents into it, and
+   * it was the one dashboard that never refreshed — a bare useEffect([]), so the
+   * dean had to reload the page to find out there was work. Measured: zero
+   * requests in fourteen seconds.
+   */
+  useDashboardData(loadDashboardData);
 
   // Handle individual row selection
   const handleSelectRow = (docId: number) => {
@@ -148,6 +174,10 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       if (urls.length > 0) window.open(urls[0].signing_url, '_blank');
 
       setSelectedDocIds([]);
+      // The bell counts pending documents and only recounts on this event.
+      // Signing from here never fired it, so the badge kept the old number
+      // while the table below it had already emptied.
+      window.dispatchEvent(new CustomEvent('intent-updated'));
       // Background refresh: a foreground one clears `error` and swaps the page
       // for a skeleton, which is what used to eat the message just set above.
       await loadDashboardData(true);
@@ -239,12 +269,15 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
     return new Blob([u8arr], { type: mime });
   };
 
-  // Upload E-Signature to backend
-  const handleSaveSignature = async () => {
+  /**
+   * Checks the pad is not blank before asking anything. Replacing a stored
+   * signature deletes the old image from disk on the server, so an existing one
+   * is confirmed first — this is the image stamped onto every official letter.
+   */
+  const requestSaveSignature = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Check if canvas is blank
     const blank = document.createElement('canvas');
     blank.width = canvas.width;
     blank.height = canvas.height;
@@ -252,6 +285,20 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       setError('กรุณาวาดลายมือชื่อของท่านลงบนกระดานก่อนบันทึก');
       return;
     }
+
+    setError(null);
+    if (savedSigPath) {
+      setConfirmReplaceSigOpen(true);
+    } else {
+      handleSaveSignature();
+    }
+  };
+
+  // Upload E-Signature to backend
+  const handleSaveSignature = async () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    setConfirmReplaceSigOpen(false);
 
     setIsSavingSig(true);
     setError(null);
@@ -290,6 +337,15 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
 
   const pendingDocs = documents.filter(d => d.status === 'pending_sign');
   const signedDocs = documents.filter(d => d.status === 'signed');
+
+  /**
+   * Signed letters used to be a number on a card and nothing else — the table
+   * only ever listed what was still pending, so the moment the dean signed
+   * something it disappeared from the screen for good, with no way to check
+   * what had gone out. The two figures now switch the table between the lists
+   * they count.
+   */
+  const visibleDocs = docView === 'pending' ? pendingDocs : signedDocs;
 
   if (loading) {
     return (
@@ -374,21 +430,12 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
               </div>
 
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={clearCanvas}
-                  className="py-1.5 px-3 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-100 text-xs font-bold transition-all dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-700"
-                >
+                <Button variant="secondary" size="sm" onClick={clearCanvas}>
                   ล้างหน้าจอ
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSaveSignature}
-                  disabled={isSavingSig}
-                  className="py-1.5 px-4 rounded-lg bg-brand-blue text-white hover:bg-blue-600 text-xs font-bold transition-all shadow-sm disabled:opacity-50"
-                >
-                  {isSavingSig ? 'กำลังบันทึก...' : 'บันทึกลายเซ็นลงระบบ'}
-                </button>
+                </Button>
+                <Button size="sm" onClick={requestSaveSignature} loading={isSavingSig} loadingLabel="กำลังบันทึก...">
+                  บันทึกลายเซ็นลงระบบ
+                </Button>
               </div>
             </div>
           </div>
@@ -420,123 +467,143 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       ) : (
         /* Sign Document Table Tab */
         <div className="space-y-6">
-          {/* Stats widgets */}
+          {/* Stats widgets. Real buttons, so the keyboard reaches them and the
+              pressed one says which list is on screen. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-yellow-50 text-yellow-600 dark:bg-yellow-950/20 dark:text-yellow-400 flex items-center justify-center">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-              </div>
-              <div>
-                <span className="block text-xs text-gray-400">เอกสารที่ค้างรอการลงนาม</span>
-                <span className="block text-xl font-bold text-gray-700 dark:text-white mt-0.5">{pendingDocs.length}</span>
-              </div>
-            </div>
-
-            <div className="bg-white p-4 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex items-center gap-4">
-              <div className="h-10 w-10 rounded-xl bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400 flex items-center justify-center">
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <div>
-                <span className="block text-xs text-gray-400">เอกสารที่ลงนามอนุมัติแล้ว</span>
-                <span className="block text-xl font-bold text-gray-700 dark:text-white mt-0.5">{signedDocs.length}</span>
-              </div>
-            </div>
+            {([
+              { view: 'pending', label: 'เอกสารที่ค้างรอการลงนาม', count: pendingDocs.length,
+                tone: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950/20 dark:text-yellow-400',
+                icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
+              { view: 'signed', label: 'เอกสารที่ลงนามอนุมัติแล้ว', count: signedDocs.length,
+                tone: 'bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400',
+                icon: 'M5 13l4 4L19 7' },
+            ] as const).map((card) => (
+              <button
+                key={card.view}
+                type="button"
+                onClick={() => setDocView(card.view)}
+                aria-pressed={docView === card.view}
+                className={`p-4 rounded-2xl border text-left flex items-center gap-4 transition-all cursor-pointer ${
+                  docView === card.view
+                    ? 'bg-white border-brand-blue ring-1 ring-brand-blue dark:bg-gray-900 dark:border-blue-500 dark:ring-blue-500'
+                    : 'bg-white border-gray-200 hover:border-gray-300 dark:bg-gray-900 dark:border-gray-800 dark:hover:border-gray-700'
+                }`}
+              >
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${card.tone}`}>
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
+                  </svg>
+                </div>
+                <div>
+                  <span className="block text-xs text-gray-500 dark:text-gray-400">{card.label}</span>
+                  <span className="block text-xl font-bold text-gray-700 dark:text-white mt-0.5">{card.count}</span>
+                </div>
+              </button>
+            ))}
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                รายการจดหมายขอความอนุเคราะห์/ส่งตัวนักศึกษา ({pendingDocs.length} รอลงนาม)
+                {docView === 'pending'
+                  ? `รายการจดหมายขอความอนุเคราะห์/ส่งตัวนักศึกษา (${pendingDocs.length} รอลงนาม)`
+                  : `เอกสารที่ลงนามไปแล้ว (${signedDocs.length} ฉบับ)`}
               </span>
 
-              {pendingDocs.length > 0 && (
-                <button
-                  type="button"
+              {docView === 'pending' && pendingDocs.length > 0 && (
+                <Button
+                  size="sm"
+                  icon={<CheckCircle2 className="h-4 w-4" />}
                   onClick={() => setConfirmSignOpen(true)}
-                  disabled={selectedDocIds.length === 0 || signingInProgress}
-                  className={`py-1.5 px-4 rounded-xl text-white font-bold text-xs transition-all flex items-center gap-1.5 ${
-                    selectedDocIds.length > 0 && !signingInProgress
-                      ? 'bg-brand-blue hover:bg-blue-600 shadow-sm shadow-blue-500/10'
-                      : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800'
-                  }`}
+                  disabled={selectedDocIds.length === 0}
+                  loading={signingInProgress}
+                  loadingLabel="กำลังลงนาม..."
                 >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {signingInProgress ? 'กำลังลงนาม...' : `ลงนามแบบกลุ่มที่เลือก (${selectedDocIds.length})`}
-                </button>
+                  {`ลงนามแบบกลุ่มที่เลือก (${selectedDocIds.length})`}
+                </Button>
               )}
             </div>
 
-            {pendingDocs.length > 0 ? (
+            {visibleDocs.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-left text-xs">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
-                      <th className="p-4 w-12 text-center">
-                        <input
-                          type="checkbox"
-                          onChange={(e) => handleSelectAll(e.target.checked, pendingDocs)}
-                          checked={selectedDocIds.length === pendingDocs.length && pendingDocs.length > 0}
-                          className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:text-blue-400"
-                        />
-                      </th>
-                      <th className="p-4 font-semibold">เลขที่อ้างอิงเอกสาร</th>
+                    <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                      {docView === 'pending' && (
+                        <th className="p-4 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            aria-label="เลือกเอกสารทั้งหมดที่รอลงนาม"
+                            onChange={(e) => handleSelectAll(e.target.checked, pendingDocs)}
+                            checked={selectedDocIds.length === pendingDocs.length && pendingDocs.length > 0}
+                            className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:text-blue-400"
+                          />
+                        </th>
+                      )}
+                      <th className="p-4 font-semibold">เลขที่หนังสือ</th>
                       <th className="p-4 font-semibold">ประเภทจดหมาย</th>
-                      <th className="p-4 font-semibold">รหัสนักศึกษา</th>
+                      <th className="p-4 font-semibold">นักศึกษา</th>
                       <th className="p-4 font-semibold">สถานประกอบการปลายทาง</th>
-                      <th className="p-4 font-semibold text-center">สถานะ</th>
+                      <th className="p-4 font-semibold text-center">{docView === 'pending' ? 'สถานะ' : 'วันที่ลงนาม'}</th>
                       <th className="p-4 font-semibold text-right">เปิดดู</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                    {pendingDocs.map((doc) => {
+                    {visibleDocs.map((doc) => {
                       const isChecked = selectedDocIds.includes(doc.doc_id);
                       return (
                         <tr key={doc.doc_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                          <td className="p-4 text-center">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={() => handleSelectRow(doc.doc_id)}
-                              className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:text-blue-400"
-                            />
-                          </td>
+                          {docView === 'pending' && (
+                            <td className="p-4 text-center">
+                              <input
+                                type="checkbox"
+                                aria-label={`เลือกเอกสารของ ${docStudentName(doc)}`}
+                                checked={isChecked}
+                                onChange={() => handleSelectRow(doc.doc_id)}
+                                className="rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:text-blue-400"
+                              />
+                            </td>
+                          )}
+                          {/* The official number staff typed in, not the row id.
+                              The column has always been labelled as the former
+                              and shown the latter. */}
                           <td className="p-4 font-bold text-gray-800 dark:text-gray-300">
-                            #DOC-{doc.doc_id}
+                            {doc.document_number || `#DOC-${doc.doc_id}`}
                           </td>
                           <td className="p-4 text-gray-600 dark:text-gray-400">
                             {getDocTypeLabel(doc.type)}
                           </td>
-                          <td className="p-4 text-gray-700 dark:text-gray-300 font-medium">
-                            {doc.student_code}
+                          <td className="p-4 text-gray-700 dark:text-gray-300">
+                            <span className="block font-medium">{docStudentName(doc)}</span>
+                            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">รหัส: {doc.student_code}</span>
                           </td>
                           <td className="p-4 text-gray-600 dark:text-gray-400">
                             {doc.company_name_th}
                           </td>
                           <td className="p-4 text-center">
-                            <span className="px-2 py-0.5 rounded-full font-bold text-xs bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400 animate-pulse">
-                              รอคณบดีลงนาม
-                            </span>
+                            {docView === 'pending' ? (
+                              /* Was animate-pulse on every row. A queue of twenty
+                                 blinked twenty times over, forever. */
+                              <span className="px-2 py-0.5 rounded-full font-bold text-xs bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400">
+                                รอคณบดีลงนาม
+                              </span>
+                            ) : (
+                              <span className="text-gray-600 dark:text-gray-400">
+                                {doc.dean_signature_date
+                                  ? new Date(doc.dean_signature_date).toLocaleDateString('th-TH')
+                                  : '-'}
+                              </span>
+                            )}
                           </td>
                           <td className="p-4 text-right">
                             <button
                               type="button"
-                              onClick={() => {
-                                // Set document URL for embedding in an iframe/modal
-                                // Since we don't have a direct route on the backend for document preview,
-                                // we will update index.ts later or call it. We can preview using:
-                                // /api/files/documents/:doc_id (we will map this in backend index.ts shortly!)
-                                setPreviewDocUrl(`${API_BASE_URL}/files/documents/${doc.doc_id}`);
-                              }}
+                              onClick={() => setPreviewDocUrl(`${API_BASE_URL}/files/documents/${doc.doc_id}`)}
                               className="p-1.5 rounded-lg border border-gray-200 hover:border-brand-blue hover:text-brand-blue transition-all dark:border-gray-800 dark:hover:text-blue-400"
-                              title="แสดงหน้าเอกสารชั่วคราว"
+                              aria-label={`เปิดดูเอกสารของ ${docStudentName(doc)}`}
+                              title="เปิดดูไฟล์ PDF ของเอกสารนี้"
                             >
-                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                               </svg>
@@ -549,13 +616,33 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                 </table>
               </div>
             ) : (
-              <div className="text-center py-12 text-gray-400 text-sm">
-                ไม่มีเอกสารราชการที่รอการลงนามพิจารณาในขณะนี้
+              <div className="text-center py-12 px-6">
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  {docView === 'pending'
+                    ? 'ไม่มีเอกสารราชการที่รอการลงนามในขณะนี้'
+                    : 'ยังไม่มีเอกสารที่ท่านลงนามไปแล้ว'}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {docView === 'pending'
+                    ? 'เอกสารจะเข้ามาที่นี่เมื่อเจ้าหน้าที่สหกิจศึกษาออกหนังสือให้นักศึกษาที่ผ่านการอนุมัติจากหัวหน้าสาขาวิชาแล้ว'
+                    : 'เอกสารที่ลงนามแล้วจะย้ายมาอยู่ในรายการนี้ และเปิดดูไฟล์ย้อนหลังได้ตลอด'}
+                </p>
               </div>
             )}
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmReplaceSigOpen}
+        title="แทนที่ลายมือชื่อเดิม"
+        message="ลายมือชื่อที่บันทึกไว้เดิมจะถูกลบออกจากระบบและใช้ลายมือชื่อใหม่แทนในการประทับเอกสารราชการทุกฉบับนับจากนี้ ยืนยันหรือไม่?"
+        confirmLabel="แทนที่ลายมือชื่อ"
+        destructive
+        busy={isSavingSig}
+        onConfirm={handleSaveSignature}
+        onCancel={() => setConfirmReplaceSigOpen(false)}
+      />
 
       <ConfirmDialog
         open={confirmSignOpen}
