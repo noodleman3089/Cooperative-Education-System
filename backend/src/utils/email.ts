@@ -446,7 +446,8 @@ export const notifyStudentStatusChange = async (
     } else if (status === 'company_rejected') {
       statusLabel = 'สถานประกอบการปฏิเสธคำขอ';
       detailsHtml = `
-        <p>ใบสมัครฝึกงานที่ <b>${safeCompanyName}</b> ของคุณได้รับการ<b>ปฏิเสธ</b>จากทางสถานประกอบการ หรือข้อมูลสัมภาษณ์ไม่ผ่านเกณฑ์</p>
+        <p>ใบสมัครฝึกงานที่ <b>${safeCompanyName}</b> ของคุณได้รับการ<b>ปฏิเสธ</b>จากทางสถานประกอบการ</p>
+        ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลที่สถานประกอบการแจ้ง: ${safeReason}</p>` : ''}
         <p>ระบบได้ดำเนินการ<b>ปลดล็อกสิทธิ์</b>เรียบร้อยแล้ว คุณสามารถเข้าสู่ระบบเพื่อเลือกและยื่นความจำนงสมัครงานที่บริษัทอื่นใหม่ได้ทันที</p>
       `;
     } else if (status === 'pending_officer_approval') {

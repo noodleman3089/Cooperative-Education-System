@@ -487,7 +487,7 @@ export class IntentFormModel {
   /**
    * Company Reject logic.
    */
-  static async rejectByCompany(intentId: number, companyUserId: number): Promise<boolean> {
+  static async rejectByCompany(intentId: number, companyUserId: number, reason: string): Promise<boolean> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -515,8 +515,8 @@ export class IntentFormModel {
       await releaseJobSeat(client, intent.job_id);
 
       const updateRes = await client.query(
-        `UPDATE intent_forms SET status = 'company_rejected' WHERE form_id = $1`,
-        [intentId]
+        `UPDATE intent_forms SET status = 'company_rejected', reject_reason = $2 WHERE form_id = $1`,
+        [intentId, reason]
       );
 
       await client.query('COMMIT');

@@ -1,12 +1,12 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useState } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import PageSkeleton, { skeletonFor } from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import OnboardMentorModal from './OnboardMentorModal';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
-import ConfirmDialog from './ui/ConfirmDialog';
 import Button from './ui/Button';
+import { useDashboardData } from '../hooks/useDashboardData';
 import StatusBadge from './ui/StatusBadge';
 
 interface CompanyDashboardProps {
@@ -33,12 +33,35 @@ interface ApplicantIntent {
   form_id: number;
   student_id: number;
   student_code: string;
-  cumulative_gpa: number;
+  /** Declared here for years but never sent by the list query until now. */
+  cumulative_gpa: number | string | null;
   major_name_th: string;
+  first_name: string | null;
+  last_name: string | null;
   job_title?: string;
   status: string;
   resume_file: string | null;
+  /** Present once the company has turned the applicant down. */
+  reject_reason?: string | null;
 }
+
+/**
+ * Grounded in what a company actually knows at this point. The other three
+ * rejection paths have been made to state a reason (advisor round 12, department
+ * head round 13, staff round 17); this was the last one that could refuse a
+ * student in silence.
+ */
+/** Name if the registry has one, student code if it does not. */
+const applicantName = (app: { first_name: string | null; last_name: string | null; student_code: string }): string =>
+  `${app.first_name ?? ''} ${app.last_name ?? ''}`.trim() || app.student_code;
+
+const REJECT_REASONS = [
+  'คุณสมบัติหรือทักษะยังไม่ตรงกับตำแหน่งที่เปิดรับ',
+  'ตำแหน่งนี้มีผู้ผ่านการคัดเลือกครบตามจำนวนแล้ว',
+  'ช่วงเวลาปฏิบัติงานไม่ตรงกับที่สถานประกอบการกำหนด',
+  'นักศึกษาไม่มาสัมภาษณ์ หรือติดต่อไม่ได้',
+  'สถานประกอบการงดรับนักศึกษาสหกิจศึกษาในภาคการศึกษานี้',
+];
 
 interface JobPosting {
   job_id: number;
@@ -96,10 +119,16 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
   const [jobExpireDate, setJobExpireDate] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
 
-  // Accept applicant modal state
-  const [acceptingIntentId, setAcceptingIntentId] = useState<number | null>(null);
-  const [rejectingIntentId, setRejectingIntentId] = useState<number | null>(null);
+  // Accept / reject applicant modal state. Both hold the whole applicant, not
+  // just an id: "นักศึกษาท่านนี้" in a confirmation is no help when the table
+  // has ten rows.
+  const [acceptingApplicant, setAcceptingApplicant] = useState<ApplicantIntent | null>(null);
+  const [rejectingApplicant, setRejectingApplicant] = useState<ApplicantIntent | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectReasonOther, setRejectReasonOther] = useState('');
   const [rejectBusy, setRejectBusy] = useState(false);
+  /** Kept apart from `error` so it appears inside the dialog, not behind it. */
+  const [rejectError, setRejectError] = useState<string | null>(null);
 
   // Company Profile form state
   const [contactPerson, setContactPerson] = useState('');
@@ -107,10 +136,14 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
   const [contactEmail, setContactEmail] = useState('');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
-  const loadData = async () => {
+  // `isBackground` follows the other dashboards: a poll must not clear the
+  // banner an action just produced, nor flip the screen back to its skeleton.
+  const loadData = async (isBackground = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isBackground) {
+        setLoading(true);
+        setError(null);
+      }
 
       // Everything a mentor cannot ask for is skipped rather than requested and
       // caught. This used to `await api.get('/companies/my-company')` first, so
@@ -139,15 +172,16 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       setOutlines(outlineList);
     } catch (err) {
       console.error('Failed to load Company dashboard data:', err);
-      setError('ไม่สามารถโหลดข้อมูลของบริษัทได้ กรุณาลองใหม่อีกครั้ง');
+      if (!isBackground) setError('ไม่สามารถโหลดข้อมูลของบริษัทได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, [currentTab]);
+  // Both screens here wait on somebody else — a student uploading an outline, a
+  // student applying — so they were the wrong two to leave on a bare
+  // useEffect([]) that never looked again.
+  useDashboardData(loadData, [currentTab]);
 
   const handleReviewOutline = async (status: 'pending_advisor' | 'rejected') => {
     if (!reviewingOutline) return;
@@ -223,22 +257,30 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
 
   // Reject applicant
   const handleRejectApplicant = async () => {
-    if (rejectingIntentId === null) return;
+    if (!rejectingApplicant) return;
+
+    const reason = rejectReason === 'other' ? rejectReasonOther.trim() : rejectReason;
+    if (!reason) {
+      setRejectError('กรุณาเลือกหรือระบุเหตุผลที่ไม่รับนักศึกษาเข้าปฏิบัติงาน');
+      return;
+    }
+
+    setRejectError(null);
     setError(null);
     setSuccess(null);
     setRejectBusy(true);
 
     try {
-      await api.patch(`/acceptances/company/${rejectingIntentId}/status`, {
-        status: 'rejected'
+      await api.patch(`/acceptances/company/${rejectingApplicant.form_id}/status`, {
+        status: 'rejected',
+        reason
       });
-      setRejectingIntentId(null);
-      setSuccess('ปฏิเสธการรับเข้างานของนักศึกษาแล้ว นักศึกษาจะถูกปลดล็อกให้สมัครงานที่อื่นได้');
+      setRejectingApplicant(null);
+      setSuccess('ปฏิเสธการรับเข้างานของนักศึกษาแล้ว ระบบได้แจ้งเหตุผลให้นักศึกษาทราบทางอีเมล และปลดล็อกให้สมัครงานที่อื่นได้');
       await loadData();
     } catch (err: any) {
       console.error('Reject applicant error:', err);
-      setRejectingIntentId(null);
-      setError(err.response?.data?.message || 'การปฏิเสธใบสมัครงานล้มเหลว');
+      setRejectError(err.response?.data?.message || 'การปฏิเสธใบสมัครงานล้มเหลว');
     } finally {
       setRejectBusy(false);
     }
@@ -614,6 +656,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">ผู้สมัคร</th>
                     <th className="p-4 font-semibold">สาขาวิชา</th>
+                    <th className="p-4 font-semibold text-center">เกรดเฉลี่ยสะสม</th>
                     <th className="p-4 font-semibold">ตำแหน่งงานยื่นสมัคร</th>
                     <th className="p-4 font-semibold text-center">สถานะความคืบหน้า</th>
                     <th className="p-4 font-semibold text-right">เรซูเม่ & คัดเลือก</th>
@@ -622,13 +665,29 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {applicants.map((app) => (
                     <tr key={app.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                      <td className="p-4 font-bold text-gray-800 dark:text-gray-300">
-                        รหัส: {app.student_code}
+                      {/* The name has always been in the response; the table
+                          just never read it, so applicants were shortlisted by
+                          student number alone. */}
+                      <td className="p-4">
+                        <div className="font-bold text-gray-800 dark:text-gray-200">
+                          {applicantName(app)}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">{app.student_code}</div>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400">{app.major_name_th}</td>
+                      <td className="p-4 text-center text-gray-700 dark:text-gray-300">
+                        {app.cumulative_gpa !== null && app.cumulative_gpa !== undefined
+                          ? Number(app.cumulative_gpa).toFixed(2)
+                          : '-'}
+                      </td>
                       <td className="p-4 text-gray-700 dark:text-gray-300">{app.job_title || 'ฝึกงานทั่วไป'}</td>
                       <td className="p-4 text-center">
                         <StatusBadge status={app.status} />
+                        {app.status === 'company_rejected' && app.reject_reason && (
+                          <div className="mt-1 text-xs text-gray-500 dark:text-gray-400 max-w-48 mx-auto">
+                            เหตุผล: {app.reject_reason}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 text-right flex items-center justify-end gap-2">
                         {app.resume_file ? (
@@ -652,14 +711,18 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                           <>
                             <button
                               type="button"
-                              onClick={() => setRejectingIntentId(app.form_id)}
+                              onClick={() => {
+                                setRejectingApplicant(app);
+                                setRejectReason('');
+                                setRejectReasonOther('');
+                              }}
                               className="py-1 px-2.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 font-bold transition-all"
                             >
                               ปฏิเสธ
                             </button>
                             <button
                               type="button"
-                              onClick={() => setAcceptingIntentId(app.form_id)}
+                              onClick={() => setAcceptingApplicant(app)}
                               className="py-1 px-2.5 rounded-lg bg-brand-blue text-white hover:bg-blue-600 font-bold transition-all shadow-sm"
                             >
                               ตอบรับเข้างาน
@@ -753,26 +816,92 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       )}
 
       <OnboardMentorModal
-        isOpen={acceptingIntentId !== null}
-        intentId={acceptingIntentId}
-        onClose={() => setAcceptingIntentId(null)}
+        isOpen={acceptingApplicant !== null}
+        intentId={acceptingApplicant?.form_id ?? null}
+        studentLabel={acceptingApplicant ? `${applicantName(acceptingApplicant)} (${acceptingApplicant.student_code})` : null}
+        onClose={() => setAcceptingApplicant(null)}
         onSuccess={async (msg) => {
           setSuccess(msg);
-          setAcceptingIntentId(null);
+          setAcceptingApplicant(null);
           await loadData();
         }}
       />
 
-      <ConfirmDialog
-        open={rejectingIntentId !== null}
-        title="ปฏิเสธผู้สมัคร"
-        message="ยืนยันปฏิเสธคำขอสมัครสหกิจของนักศึกษาท่านนี้? นักศึกษาจะถูกปลดล็อกให้ไปยื่นสมัครที่สถานประกอบการอื่นได้ทันที"
-        confirmLabel="ยืนยันปฏิเสธ"
-        destructive
-        busy={rejectBusy}
-        onConfirm={handleRejectApplicant}
-        onCancel={() => setRejectingIntentId(null)}
-      />
+      {/* Was a bare ConfirmDialog saying "นักศึกษาท่านนี้" and asking for no
+          reason at all — the student was told they had been turned down and
+          never why, which is the one thing they need in order to apply
+          somewhere else. */}
+      {rejectingApplicant && (
+        <Modal
+          onClose={() => setRejectingApplicant(null)}
+          size="md"
+          closeOnBackdrop={false}
+          title="ไม่รับนักศึกษาเข้าปฏิบัติงาน"
+        >
+          <ModalBody className="space-y-4">
+            <AlertBanner variant="error" message={rejectError} />
+
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              นักศึกษา:{' '}
+              <span className="font-bold text-gray-800 dark:text-gray-100">
+                {applicantName(rejectingApplicant)} ({rejectingApplicant.student_code})
+              </span>
+              {rejectingApplicant.job_title ? ` · ตำแหน่ง ${rejectingApplicant.job_title}` : ''}
+            </p>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                เหตุผลที่ไม่รับ (ระบบจะแจ้งข้อความนี้ให้นักศึกษาทราบ)
+              </label>
+              <select
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+              >
+                <option value="">-- เลือกเหตุผล --</option>
+                {REJECT_REASONS.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+                <option value="other">ระบุเหตุผลเอง</option>
+              </select>
+            </div>
+
+            {rejectReason === 'other' && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  ระบุเหตุผล
+                </label>
+                <textarea
+                  rows={3}
+                  value={rejectReasonOther}
+                  onChange={(e) => setRejectReasonOther(e.target.value)}
+                  placeholder="อธิบายเหตุผลที่ไม่รับนักศึกษาคนนี้เข้าปฏิบัติงาน..."
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+                />
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              เมื่อยืนยันแล้ว นักศึกษาจะถูกปลดล็อกให้ไปยื่นสมัครที่สถานประกอบการอื่นได้ทันที
+            </p>
+          </ModalBody>
+
+          <ModalFooter>
+            <Button variant="secondary" size="sm" onClick={() => setRejectingApplicant(null)}>
+              ยกเลิก
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={rejectBusy}
+              loadingLabel="กำลังบันทึก..."
+              onClick={handleRejectApplicant}
+            >
+              ยืนยันไม่รับนักศึกษา
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 };

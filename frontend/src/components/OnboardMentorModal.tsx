@@ -7,6 +7,8 @@ import Button from './ui/Button';
 interface OnboardMentorModalProps {
   isOpen: boolean;
   intentId: number | null;
+  /** Who is being taken on — the dialog never said, and the table has many rows. */
+  studentLabel?: string | null;
   onClose: () => void;
   onSuccess: (message: string) => void;
 }
@@ -14,6 +16,7 @@ interface OnboardMentorModalProps {
 const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
   isOpen,
   intentId,
+  studentLabel,
   onClose,
   onSuccess,
 }) => {
@@ -76,6 +79,13 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
     <Modal onClose={onClose} size="lg" closeOnBackdrop={false} title="ระบุข้อมูลพี่เลี้ยงดูแลรับนักศึกษา (Mentor Details)">
       <ModalBody>
         <AlertBanner variant="error" message={error} className="mb-4" />
+
+        {studentLabel && (
+          <p className="mb-4 text-xs text-gray-600 dark:text-gray-300">
+            กำลังตอบรับนักศึกษา:{' '}
+            <span className="font-bold text-gray-800 dark:text-gray-100">{studentLabel}</span>
+          </p>
+        )}
 
         <form onSubmit={handleAcceptSubmit} className="space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

@@ -338,11 +338,12 @@ export class IntentFormController {
 
       let queryStr = `
         SELECT i.form_id, i.student_id, s.student_code, s.major_id, m.major_name_th,
+               s.cumulative_gpa,
                i.company_id, c.name_th as company_name_th, i.semester_id, i.job_id, j.title as job_title, i.status,
                s.resume_file, i.parental_consent_path, i.acceptance_evidence_path,
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
-               i.start_date
+               i.start_date, i.reject_reason
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id

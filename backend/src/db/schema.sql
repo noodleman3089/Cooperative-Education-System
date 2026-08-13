@@ -224,7 +224,15 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     mentor_id INT REFERENCES mentors(mentor_id) ON DELETE SET NULL,
     start_date DATE,
     acceptance_evidence_path VARCHAR(255),
-    parental_consent_path VARCHAR(255)
+    parental_consent_path VARCHAR(255),
+    -- Why the placement was turned down. Written by the company's rejection for
+    -- now: the advisor and department head already mail their reason and record
+    -- it in audit_log, but the company had nowhere at all to put one, so a
+    -- student was told they were rejected and never why. It lives on the row
+    -- rather than only in audit_log because the person who has to read it is the
+    -- student, and audit_log has no read API by design (SEC-07) — the same
+    -- reasoning as job_posts.reject_reason in round 17.
+    reject_reason TEXT
 );
 
 -- 8. Document Templates Table

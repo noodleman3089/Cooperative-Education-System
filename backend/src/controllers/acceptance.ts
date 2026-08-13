@@ -71,14 +71,24 @@ export class AcceptanceController {
         });
       } else {
         // Status is 'rejected'
-        const success = await IntentFormModel.rejectByCompany(intentId, companyUserId);
+        // A reason is mandatory, as it already is for the advisor and the
+        // department head. A student who is turned down has to re-apply
+        // somewhere else, and cannot do that well without knowing what went
+        // wrong.
+        const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+        if (!reason) {
+          res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษาเข้าปฏิบัติงาน' });
+          return;
+        }
+
+        const success = await IntentFormModel.rejectByCompany(intentId, companyUserId, reason);
         if (!success) {
           res.status(400).json({ message: 'Failed to reject intent form.' });
           return;
         }
 
         // Notify student via email
-        notifyStudentStatusChange(intentId, 'company_rejected').catch(console.error);
+        notifyStudentStatusChange(intentId, 'company_rejected', reason).catch(console.error);
 
         res.status(200).json({
           message: 'Student application rejected by company. Student is unlocked to apply again.',

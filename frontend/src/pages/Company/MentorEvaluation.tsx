@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
+import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
 import { User, ClipboardList, CheckCircle, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -95,23 +96,27 @@ const MentorEvaluation: React.FC = () => {
       : rubrics.performance.some((r) => r.id === rubricId) ? 'performance'
       : 'report';
 
-  const loadStudents = async () => {
+  // `isBackground`: a poll must not wipe the "ยังให้คะแนนไม่ครบ" banner the
+  // mentor is currently reading, nor throw the form back to a skeleton.
+  const loadStudents = async (isBackground = false) => {
     try {
-      setLoading(true);
-      setError(null);
+      if (!isBackground) {
+        setLoading(true);
+        setError(null);
+      }
       const res = await api.get('/final-evaluations/my-students');
       setStudents(res.data || []);
       setCanEvaluate(res.canEvaluate !== false);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อนักศึกษาได้');
+      if (!isBackground) setError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อนักศึกษาได้');
     } finally {
-      setLoading(false);
+      if (!isBackground) setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadStudents();
-  }, []);
+  // A report arriving is the student's action, not this screen's, so it has to
+  // look again rather than wait for a manual reload.
+  useDashboardData(loadStudents, []);
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
