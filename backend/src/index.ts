@@ -360,7 +360,7 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     const isStaff = userRoles.some(r => ['staff', 'dean', 'advisor', 'dept_head'].includes(r));
     
     if (!isStaff) {
-      let isAuthorizedCompany = false;
+      let isAuthorizedPartner = false;
       
       if (userRoles.includes('company') && category === 'resumes' && userId !== undefined) {
         const match = safeName.match(/^resume-user-(\d+)-/);
@@ -377,13 +377,34 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
               [studentUserId, companyId]
             );
             if ((intentCheck.rowCount ?? 0) > 0) {
-              isAuthorizedCompany = true;
+              isAuthorizedPartner = true;
             }
           }
         }
       }
 
-      if (!isAuthorizedCompany) {
+      // A mentor grades the report book, so they have to be able to open it.
+      // Round 11 pointed both the advisor and student screens at this endpoint
+      // and added the `final_reports` category, but the mentor's own screen was
+      // still linking at http://localhost:5000/uploads/… — so nobody noticed
+      // that repointing it alone would only turn a dead link into a 403.
+      if (!isAuthorizedPartner && userRoles.includes('mentor') && category === 'final_reports' && userId !== undefined) {
+        const match = safeName.match(/^finalreport-user-(\d+)-/);
+        const studentUserId = match ? parseInt(match[1], 10) : null;
+        if (studentUserId) {
+          const supervisedCheck = await query(
+            `SELECT 1 FROM intent_forms
+             WHERE student_id = $1 AND mentor_id = $2 AND status = 'accepted'
+             LIMIT 1`,
+            [studentUserId, userId]
+          );
+          if ((supervisedCheck.rowCount ?? 0) > 0) {
+            isAuthorizedPartner = true;
+          }
+        }
+      }
+
+      if (!isAuthorizedPartner) {
         const filePrefix = `resume-user-${userId}-`;
         const evidencePrefix = `evidence-user-${userId}-`;
         const consentPrefix = `consent-user-${userId}-`;

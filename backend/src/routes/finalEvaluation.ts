@@ -12,11 +12,11 @@ router.post(
   FinalEvaluationController.submitEvaluation
 );
 
-// View assigned students (Mentor only)
+// View assigned students (Mentor: scoreable · Company representative: read-only)
 router.get(
   '/my-students',
   authenticateToken,
-  authorizeRoles('mentor'),
+  authorizeRoles('mentor', 'company'),
   FinalEvaluationController.getMyStudents
 );
 

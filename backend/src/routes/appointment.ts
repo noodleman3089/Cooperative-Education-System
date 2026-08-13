@@ -28,6 +28,12 @@ router.put(
   AppointmentController.auditSend
 );
 
+// POST /api/appointments/:id/respond-info (Public route: what the mentor is being asked to confirm)
+router.post(
+  '/:id/respond-info',
+  AppointmentController.respondInfo
+);
+
 // PUT /api/appointments/:id/respond (Public route for Mentor email link to accept/reschedule)
 router.put(
   '/:id/respond',

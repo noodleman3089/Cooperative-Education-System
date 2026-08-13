@@ -41,4 +41,12 @@ router.put(
   ProfileController.updatePersonnelProfile
 );
 
+// Route: PUT /api/profile/mentor (Mentor corrects their own contact details)
+router.put(
+  '/mentor',
+  authenticateToken,
+  authorizeRoles('mentor'),
+  ProfileController.updateMentorProfile
+);
+
 export default router;

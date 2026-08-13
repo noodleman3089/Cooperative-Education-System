@@ -32,6 +32,7 @@ const SupervisionTracking = lazy(() => import('./Advisor/SupervisionTracking'));
 const AppointmentAudit = lazy(() => import('./Staff/AppointmentAudit'));
 const FinalReportSubmission = lazy(() => import('./Student/FinalReportSubmission'));
 const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
+const MentorProfile = lazy(() => import('./Company/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
 
@@ -230,7 +231,9 @@ const Dashboard: React.FC = () => {
       case 'mentor':
         if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        // Not PersonnelProfile: a mentor is not university staff and has no row
+        // in `personnel`, so that screen could only ever show them an error.
+        if (activeMenu === 'profile') return <MentorProfile />;
         return <MentorEvaluation />;
         
       default:

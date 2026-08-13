@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { User, ClipboardList, CheckCircle, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 interface Student {
   student_id: number;
@@ -11,10 +12,27 @@ interface Student {
   last_name: string;
   major_name_th: string;
   company_name: string;
+  mentor_name: string | null;
   mentor_score: number | null;
   final_report_status: string | null;
   final_report_path: string | null;
 }
+
+type RubricGroup = 'behavior' | 'performance' | 'report';
+
+/** Every rubric item starts unset — see the note on `scores` below. */
+const BLANK_SCORES: Record<string, number | ''> = {
+  punctuality: '',
+  responsibility: '',
+  teamwork: '',
+  ethics: '',
+  learning: '',
+  technical: '',
+  quality: '',
+  reportContent: '',
+  reportFormat: '',
+  utility: ''
+};
 
 const MentorEvaluation: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
@@ -23,23 +41,33 @@ const MentorEvaluation: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [confirmingSubmit, setConfirmingSubmit] = useState(false);
 
-  // Form scores state (10 questions, each 1-10 score)
-  const [scores, setScores] = useState<Record<string, number>>({
-    punctuality: 10,
-    responsibility: 10,
-    teamwork: 10,
-    ethics: 10,
-    learning: 10,
-    technical: 10,
-    quality: 10,
-    reportContent: 10,
-    reportFormat: 10,
-    utility: 10
-  });
+  /**
+   * Whether this account may score, or is only watching.
+   *
+   * A company representative and a mentor are two different accounts — SEC-03
+   * refuses to attach the `mentor` role to an existing user — but the company
+   * has its own "ประเมินผลนักศึกษา" menu, which used to answer 403 and show a
+   * red banner forever. A representative now sees every placement at their
+   * company and whether it has been scored; the score itself is the mentor's to
+   * give, which is also who signs สก 13 on paper.
+   */
+  const [canEvaluate, setCanEvaluate] = useState(true);
+
+  /**
+   * Rubric scores, 1–10 each, all unset to begin with.
+   *
+   * The form used to open with all ten pre-filled at 10 and a submit button
+   * reading "ส่งผลประเมิน (คะแนน: 100)" — so opening it and pressing save
+   * awarded a perfect score without a single judgement being made, and nothing
+   * distinguished a deliberate 100 from an untouched form. The same bug was
+   * fixed on the advisor's form in round 12; this one was never touched.
+   */
+  const [scores, setScores] = useState<Record<string, number | ''>>({ ...BLANK_SCORES });
 
   const [comments, setComments] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'behavior' | 'performance' | 'report'>('behavior');
+  const [activeTab, setActiveTab] = useState<RubricGroup>('behavior');
 
   const rubrics = {
     behavior: [
@@ -60,12 +88,20 @@ const MentorEvaluation: React.FC = () => {
     ]
   };
 
+  const allRubrics = [...rubrics.behavior, ...rubrics.performance, ...rubrics.report];
+  const unscoredRubrics = allRubrics.filter((r) => scores[r.id] === '');
+  const tabOf = (rubricId: string): RubricGroup =>
+    rubrics.behavior.some((r) => r.id === rubricId) ? 'behavior'
+      : rubrics.performance.some((r) => r.id === rubricId) ? 'performance'
+      : 'report';
+
   const loadStudents = async () => {
     try {
       setLoading(true);
       setError(null);
       const res = await api.get('/final-evaluations/my-students');
       setStudents(res.data || []);
+      setCanEvaluate(res.canEvaluate !== false);
     } catch (err: any) {
       setError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อนักศึกษาได้');
     } finally {
@@ -82,54 +118,63 @@ const MentorEvaluation: React.FC = () => {
     setSuccess(null);
     setError(null);
     setComments('');
-    setScores({
-      punctuality: 10,
-      responsibility: 10,
-      teamwork: 10,
-      ethics: 10,
-      learning: 10,
-      technical: 10,
-      quality: 10,
-      reportContent: 10,
-      reportFormat: 10,
-      utility: 10
-    });
+    setScores({ ...BLANK_SCORES });
     setActiveTab('behavior');
   };
 
-  const handleScoreChange = (rubricId: string, val: number) => {
+  const handleScoreChange = (rubricId: string, val: number | '') => {
     setScores(prev => ({
       ...prev,
       [rubricId]: val
     }));
   };
 
-  const calculateTotal = () => {
-    return Object.values(scores).reduce((a, b) => a + b, 0);
+  /** Sum of what has been scored so far — not a final score until all ten are in. */
+  const calculateTotal = () =>
+    Object.values(scores).reduce((sum: number, v) => sum + (v === '' ? 0 : v), 0);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent) return;
+
+    // The API totals whatever rubric keys arrive, so a partly filled form would
+    // be stored as a real — and quietly wrong — score out of 100.
+    if (unscoredRubrics.length > 0) {
+      setError(
+        `ยังให้คะแนนไม่ครบ เหลืออีก ${unscoredRubrics.length} ข้อ: ${unscoredRubrics
+          .map((r) => r.label.split('.')[0])
+          .join(', ')}`
+      );
+      setSuccess(null);
+      setActiveTab(tabOf(unscoredRubrics[0].id));
+      return;
+    }
+
+    setError(null);
+    setConfirmingSubmit(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const submitEvaluation = async () => {
     if (!selectedStudent) return;
 
     try {
       setSubmitting(true);
       setError(null);
-      
-      const payload = {
+
+      await api.post('/final-evaluations', {
         studentId: selectedStudent.student_id,
         scoresDetail: {
           ...scores,
           comments
         }
-      };
-
-      await api.post('/final-evaluations', payload);
+      });
 
       setSuccess('ส่งผลการประเมินนักศึกษาเรียบร้อยแล้ว');
+      setConfirmingSubmit(false);
       setSelectedStudent(null);
       await loadStudents();
     } catch (err: any) {
+      setConfirmingSubmit(false);
       setError(err.response?.data?.message || 'ล้มเหลวในการส่งแบบประเมิน');
     } finally {
       setSubmitting(false);
@@ -152,50 +197,77 @@ const MentorEvaluation: React.FC = () => {
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-brand-blue dark:text-blue-400" />
-            รายชื่อประเมินผลนักศึกษาสหกิจศึกษา
+            {canEvaluate ? 'รายชื่อประเมินผลนักศึกษาสหกิจศึกษา' : 'สถานะการประเมินนักศึกษาของสถานประกอบการ'}
           </h1>
           <p className="text-gray-500 dark:text-gray-400 mb-8">
-            เลือกนักศึกษาที่ปฏิบัติงานในความดูแลของท่านเพื่อบันทึกแบบประเมินผลออนไลน์ (คะแนนเต็ม 100 คะแนนดิบ)
+            {canEvaluate
+              ? 'เลือกนักศึกษาที่ปฏิบัติงานในความดูแลของท่านเพื่อบันทึกแบบประเมินผลออนไลน์ (คะแนนเต็ม 100 คะแนนดิบ)'
+              : 'ติดตามว่านักศึกษาแต่ละคนได้รับการประเมินจากพนักงานที่ปรึกษาแล้วหรือยัง — การให้คะแนนเป็นหน้าที่ของพนักงานที่ปรึกษาที่ดูแลนักศึกษาโดยตรง'}
           </p>
 
           {students.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
-              {students.map((std) => (
-                <div
-                  key={std.student_id}
-                  onClick={() => handleSelectStudent(std)}
-                  className="p-5 border border-gray-200 dark:border-gray-700 hover:border-brand-blue rounded-xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all duration-200 dark:bg-gray-800/40"
-                >
-                  <div className="space-y-1.5">
-                    <h3 className="font-bold text-gray-900 dark:text-white">
-                      {std.first_name} {std.last_name}
-                    </h3>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">รหัสประจำตัว: {std.student_code}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">สาขาวิชา: {std.major_name_th}</p>
-                    {std.final_report_status ? (
-                      <span className="inline-flex items-center text-xs font-semibold text-green-700 bg-green-50 dark:bg-green-950/20 dark:text-green-400 px-2 py-0.5 rounded-full">
-                        ส่งเล่มรายงานสมบูรณ์แล้ว
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center text-xs font-semibold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full dark:text-gray-400">
-                        ยังไม่ส่งเล่มรายงาน
-                      </span>
-                    )}
-                  </div>
+              {students.map((std) => {
+                const body = (
+                  <>
+                    <div className="space-y-1.5 text-left">
+                      <h3 className="font-bold text-gray-900 dark:text-white">
+                        {std.first_name} {std.last_name}
+                      </h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">รหัสประจำตัว: {std.student_code}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">สาขาวิชา: {std.major_name_th}</p>
+                      {!canEvaluate && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          พนักงานที่ปรึกษา: {std.mentor_name || 'ยังไม่ระบุ'}
+                        </p>
+                      )}
+                      {std.final_report_status ? (
+                        <span className="inline-flex items-center text-xs font-semibold text-green-700 bg-green-50 dark:bg-green-950/20 dark:text-green-400 px-2 py-0.5 rounded-full">
+                          ส่งเล่มรายงานสมบูรณ์แล้ว
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center text-xs font-semibold text-gray-600 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full dark:text-gray-400">
+                          ยังไม่ส่งเล่มรายงาน
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="flex flex-col items-end gap-2">
-                    {std.mentor_score !== null ? (
-                      <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-lg">
-                        ประเมินแล้ว ({std.mentor_score}/100)
-                      </span>
-                    ) : (
-                      <span className="text-xs font-medium text-brand-blue bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-lg flex items-center dark:text-blue-400">
-                        รอการประเมิน <ChevronRight className="w-4 h-4 ml-1" />
-                      </span>
-                    )}
+                    <div className="flex flex-col items-end gap-2">
+                      {std.mentor_score !== null ? (
+                        <span className="text-xs font-bold text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400 px-3 py-1 rounded-lg">
+                          ประเมินแล้ว ({std.mentor_score}/100)
+                        </span>
+                      ) : canEvaluate ? (
+                        <span className="text-xs font-medium text-brand-blue bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-lg flex items-center dark:text-blue-400">
+                          รอการประเมิน <ChevronRight className="w-4 h-4 ml-1" />
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 px-3 py-1 rounded-lg">
+                          รอพนักงานที่ปรึกษาประเมิน
+                        </span>
+                      )}
+                    </div>
+                  </>
+                );
+
+                const cardClass =
+                  'p-5 border border-gray-200 dark:border-gray-700 rounded-xl w-full flex items-center justify-between transition-all duration-200 dark:bg-gray-800/40';
+
+                return canEvaluate ? (
+                  <button
+                    type="button"
+                    key={std.student_id}
+                    onClick={() => handleSelectStudent(std)}
+                    className={`${cardClass} hover:border-brand-blue cursor-pointer hover:shadow-md text-left`}
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div key={std.student_id} className={cardClass}>
+                    {body}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
@@ -218,44 +290,59 @@ const MentorEvaluation: React.FC = () => {
               </h2>
               <p className="text-xs opacity-80 mt-1">รหัสนักศึกษา: {selectedStudent.student_code} | บริษัท: {selectedStudent.company_name}</p>
             </div>
-            
+
             <div className="bg-white/10 px-4 py-2.5 rounded-xl border border-white/20 text-center">
-              <span className="text-xs uppercase block opacity-80">คะแนนประเมินรวม</span>
+              <span className="text-xs uppercase block opacity-80">คะแนนที่ให้แล้ว</span>
               <span className="text-3xl font-extrabold">{calculateTotal()}</span>
               <span className="text-xs opacity-75"> / 100</span>
+              <span className="block text-xs opacity-90 mt-0.5">
+                {unscoredRubrics.length > 0 ? `ยังเหลืออีก ${unscoredRubrics.length} ข้อ` : 'ให้คะแนนครบทุกข้อแล้ว'}
+              </span>
             </div>
           </div>
 
           {/* Tab Navigation */}
           <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
-            {(['behavior', 'performance', 'report'] as const).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 py-4 text-sm font-semibold transition-all duration-200 border-b-2
-                  ${activeTab === tab
-                    ? 'border-brand-blue text-brand-blue dark:text-blue-400 bg-white dark:bg-gray-800'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100/50 dark:text-gray-400 dark:hover:bg-gray-700/50'}`}
-              >
-                {tab === 'behavior' ? '1. ด้านพฤติกรรม' : tab === 'performance' ? '2. ด้านผลงาน' : '3. เล่มรายงาน'}
-              </button>
-            ))}
+            {(['behavior', 'performance', 'report'] as const).map((tab) => {
+              const remaining = rubrics[tab].filter((r) => scores[r.id] === '').length;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 py-4 text-sm font-semibold transition-all duration-200 border-b-2
+                    ${activeTab === tab
+                      ? 'border-brand-blue text-brand-blue dark:text-blue-400 bg-white dark:bg-gray-800'
+                      : 'border-transparent text-gray-600 hover:text-gray-700 hover:bg-gray-100/50 dark:text-gray-400 dark:hover:bg-gray-700/50'}`}
+                >
+                  {tab === 'behavior' ? '1. ด้านพฤติกรรม' : tab === 'performance' ? '2. ด้านผลงาน' : '3. เล่มรายงาน'}
+                  {remaining > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold dark:bg-amber-950/40 dark:text-amber-300">
+                      {remaining}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Form Content */}
           <div className="p-6 md:p-8 space-y-6">
             {selectedStudent.final_report_path && activeTab === 'report' && (
-              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 flex items-center justify-between">
+              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
                   <FileText className="w-5 h-5 text-blue-500" />
                   <span>นักศึกษาอัปโหลดรายงานเล่มสมบูรณ์เข้าระบบแล้ว</span>
                 </div>
+                {/* Was http://localhost:5000/uploads/… — a hardcoded host with no
+                    express.static behind it, so this link has never opened a
+                    file. Round 11 repointed the advisor's and student's copies
+                    of the same link; this third one was missed. */}
                 <a
-                  href={`http://localhost:5000/uploads/${selectedStudent.final_report_path}`}
+                  href={`${API_BASE_URL}/files/${selectedStudent.final_report_path}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs font-bold text-brand-blue hover:underline dark:text-blue-400"
+                  className="text-xs font-bold text-brand-blue hover:underline dark:text-blue-400 whitespace-nowrap"
                 >
                   เปิดอ่านเล่มรายงาน (PDF)
                 </a>
@@ -270,14 +357,21 @@ const MentorEvaluation: React.FC = () => {
                       <h4 className="font-bold text-gray-900 dark:text-white text-sm">{rub.label}</h4>
                       <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{rub.desc}</p>
                     </div>
-                    
+
                     <div className="flex items-center gap-3">
                       <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">คะแนนที่ได้ (1-10):</label>
                       <select
                         value={scores[rub.id]}
-                        onChange={(e) => handleScoreChange(rub.id, Number(e.target.value))}
-                        className="w-20 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm font-semibold focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                        aria-label={rub.label}
+                        aria-invalid={scores[rub.id] === ''}
+                        onChange={(e) => handleScoreChange(rub.id, e.target.value === '' ? '' : Number(e.target.value))}
+                        className={`w-28 px-3 py-1.5 rounded-lg border bg-white text-sm font-semibold focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:text-white ${
+                          scores[rub.id] === ''
+                            ? 'border-amber-300 dark:border-amber-700'
+                            : 'border-gray-200 dark:border-gray-700'
+                        }`}
                       >
+                        <option value="">ยังไม่ให้</option>
                         {[...Array(10)].map((_, i) => (
                           <option key={i + 1} value={i + 1}>{i + 1}</option>
                         ))}
@@ -323,11 +417,26 @@ const MentorEvaluation: React.FC = () => {
               ) : (
                 <CheckCircle className="w-5 h-5" />
               )}
-              ส่งผลประเมิน (คะแนน: {calculateTotal()})
+              ส่งผลประเมิน
             </button>
           </div>
         </form>
       )}
+
+      {/* The score lands in audit_log and the mentor cannot revise it afterwards. */}
+      <ConfirmDialog
+        open={confirmingSubmit}
+        title="ยืนยันส่งผลการประเมิน"
+        message={
+          selectedStudent
+            ? `ส่งคะแนนประเมิน ${calculateTotal()}/100 ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) ใช่หรือไม่? เมื่อส่งแล้วจะไม่สามารถแก้ไขคะแนนเองได้`
+            : ''
+        }
+        confirmLabel="ยืนยันส่งคะแนน"
+        busy={submitting}
+        onConfirm={submitEvaluation}
+        onCancel={() => setConfirmingSubmit(false)}
+      />
     </div>
   );
 };

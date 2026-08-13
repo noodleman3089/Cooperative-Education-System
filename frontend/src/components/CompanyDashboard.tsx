@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import PageSkeleton, { skeletonFor } from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import OnboardMentorModal from './OnboardMentorModal';
@@ -69,6 +70,12 @@ interface ReportOutlineItem {
 const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashboard', defaultTab }) => {
   const currentTab = defaultTab || (['jobs', 'profile', 'report_outlines'].includes(activeMenu) ? activeMenu : 'dashboard');
 
+  // A mentor is routed here for the outline queue, but is not a company
+  // representative: /companies/my-company, /intents and /jobs are all
+  // company-only. Which of the two is looking decides what may be requested.
+  const auth = useContext(AuthContext);
+  const isCompanyRep = auth?.user?.roles?.includes('company') ?? false;
+
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [applicants, setApplicants] = useState<ApplicantIntent[]>([]);
   const [jobs, setJobs] = useState<JobPosting[]>([]);
@@ -105,22 +112,26 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       setLoading(true);
       setError(null);
 
-      // 1. Fetch company profile
-      const profileRes = await api.get('/companies/my-company');
+      // Everything a mentor cannot ask for is skipped rather than requested and
+      // caught. This used to `await api.get('/companies/my-company')` first, so
+      // a mentor's 403 threw before the Promise.all was ever reached and the
+      // outline queue — the only screen a mentor has — never loaded at all.
+      // The outline request is deliberately NOT swallowed: it is the point of
+      // the page, and an empty table hid every failure it ever had.
+      const [profileRes, applicantsRes, jobsRes, outlinesRes] = await Promise.all([
+        isCompanyRep ? api.get('/companies/my-company') : Promise.resolve(null),
+        isCompanyRep ? api.get('/intents') : Promise.resolve([]),
+        isCompanyRep ? api.get('/jobs') : Promise.resolve([]),
+        api.get('/outlines/company')
+      ]);
+
       setCompanyProfile(profileRes);
-      
+
       if (profileRes) {
         setContactPerson(profileRes.contact_person || '');
         setContactPosition(profileRes.contact_position || '');
         setContactEmail(profileRes.email || '');
       }
-
-      // 2. Fetch applicants, job posts & report outlines in parallel
-      const [applicantsRes, jobsRes, outlinesRes] = await Promise.all([
-        api.get('/intents'),
-        api.get('/jobs'),
-        api.get('/outlines/company').catch(() => ({ data: [] }))
-      ]);
 
       const outlineList = Array.isArray(outlinesRes) ? outlinesRes : (outlinesRes?.data || []);
       setApplicants(applicantsRes || []);

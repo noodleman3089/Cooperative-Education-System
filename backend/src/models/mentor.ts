@@ -17,6 +17,59 @@ export class MentorModel {
   }
 
   /**
+   * The mentor's own profile, as their profile screen needs it: the row they
+   * may edit, plus the company and login email they may only read.
+   *
+   * A mentor has no row in `personnel`, which is why sending them to the
+   * personnel profile screen produced a permanent red banner — and offered them
+   * a university major to pick and a document-approval signature to set.
+   */
+  static async findProfileById(mentorId: number): Promise<{
+    mentor_id: number;
+    company_id: number;
+    name: string;
+    position: string | null;
+    department: string | null;
+    phone: string;
+    company_name_th: string;
+    company_name_en: string | null;
+    email: string;
+  } | null> {
+    const res = await query(
+      `SELECT m.mentor_id, m.company_id, m.name, m.position, m.department, m.phone,
+              c.name_th AS company_name_th, c.name_en AS company_name_en,
+              u.email
+       FROM mentors m
+       JOIN companies c ON m.company_id = c.company_id
+       JOIN users u ON m.mentor_id = u.user_id
+       WHERE m.mentor_id = $1`,
+      [mentorId]
+    );
+    if ((res.rowCount ?? 0) === 0) return null;
+    return res.rows[0];
+  }
+
+  /**
+   * Update the four fields a mentor owns. `company_id` is deliberately absent:
+   * which company a mentor belongs to is set when the placement is accepted and
+   * is not the mentor's to change (SEC-05 applies the same rule to students).
+   */
+  static async updateProfile(
+    mentorId: number,
+    data: { name: string; position: string | null; department: string | null; phone: string }
+  ): Promise<Mentor | null> {
+    const res = await query(
+      `UPDATE mentors
+       SET name = $2, position = $3, department = $4, phone = $5
+       WHERE mentor_id = $1
+       RETURNING mentor_id, company_id, name, position, department, phone`,
+      [mentorId, data.name, data.position, data.department, data.phone]
+    );
+    if ((res.rowCount ?? 0) === 0) return null;
+    return res.rows[0] as Mentor;
+  }
+
+  /**
    * Find user and mentor profile details by email.
    * Useful to check if a user exists in the system and if they have a mentor profile.
    */

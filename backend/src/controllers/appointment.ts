@@ -11,6 +11,36 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
+/**
+ * Verify a mentor's emailed response token against the appointment it claims.
+ * Returns null when it checks out, or the {status, message} to answer with.
+ *
+ * Written once because two endpoints now take this token: the one that reads
+ * the appointment out and the one that records the answer.
+ */
+function verifyResponseToken(token: unknown, appointmentId: number): { status: number; message: string } | null {
+  if (!token || typeof token !== 'string') {
+    return { status: 400, message: 'Missing token.' };
+  }
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    if (decoded.appointment_id !== appointmentId || decoded.role !== 'mentor_response') {
+      return { status: 403, message: 'Invalid token.' };
+    }
+  } catch {
+    return { status: 403, message: 'Token expired or invalid.' };
+  }
+  return null;
+}
+
+/** Today in the server's local timezone as YYYY-MM-DD, for comparing date-only input. */
+function todayIsoDate(): string {
+  const now = new Date();
+  const month = `${now.getMonth() + 1}`.padStart(2, '0');
+  const day = `${now.getDate()}`.padStart(2, '0');
+  return `${now.getFullYear()}-${month}-${day}`;
+}
+
 export class AppointmentController {
   /**
    * Get appointments
@@ -185,6 +215,61 @@ export class AppointmentController {
   }
 
   /**
+   * Read out the appointment a mentor was emailed about.
+   * Route: POST /api/appointments/:id/respond-info
+   * Access: public (with valid token)
+   *
+   * The response page used to ask "confirm or reschedule?" without saying which
+   * student, which date or which time — everything the mentor needs in order to
+   * answer was in the email and nowhere on the page they were sent to.
+   *
+   * POST rather than GET so the link token stays in the request body: a token in
+   * a query string lands in access logs and Referer headers, which is the very
+   * thing SEC-08 removed from the session cookie.
+   */
+  static async respondInfo(req: Request, res: Response): Promise<void> {
+    try {
+      const appointmentId = parseInt(req.params.id, 10);
+      if (isNaN(appointmentId)) {
+        res.status(400).json({ message: 'Invalid appointment ID.' });
+        return;
+      }
+
+      const tokenError = verifyResponseToken(req.body?.token, appointmentId);
+      if (tokenError) {
+        res.status(tokenError.status).json({ message: tokenError.message });
+        return;
+      }
+
+      const result = await query(
+        `SELECT a.appointment_id, a.appointment_date, a.student_time, a.mentor_time,
+                a.tour_requested, a.status,
+                a.proposed_reschedule_date, a.proposed_mentor_time,
+                s.first_name AS student_first_name, s.last_name AS student_last_name,
+                s.student_code,
+                c.name_th AS company_name,
+                p.first_name AS advisor_first_name, p.last_name AS advisor_last_name
+         FROM supervision_appointments a
+         JOIN students s ON a.student_id = s.student_id
+         JOIN companies c ON a.company_id = c.company_id
+         LEFT JOIN personnel p ON a.advisor_id = p.personnel_id
+         WHERE a.appointment_id = $1`,
+        [appointmentId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'Appointment not found.' });
+        return;
+      }
+
+      res.status(200).json({ success: true, data: result.rows[0] });
+    } catch (error) {
+      console.error('Appointment Respond Info Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred.' });
+    }
+  }
+
+  /**
    * Mentor responds to email
    * Route: PUT /api/appointments/:id/respond
    * Access: public (with valid token)
@@ -194,19 +279,9 @@ export class AppointmentController {
       const appointmentId = parseInt(req.params.id, 10);
       const { token, action, new_date, new_time } = req.body; // action: 'accept', 'reschedule'
 
-      if (!token) {
-        res.status(400).json({ message: 'Missing token.' });
-        return;
-      }
-
-      try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        if (decoded.appointment_id !== appointmentId || decoded.role !== 'mentor_response') {
-          res.status(403).json({ message: 'Invalid token.' });
-          return;
-        }
-      } catch (err) {
-        res.status(403).json({ message: 'Token expired or invalid.' });
+      const tokenError = verifyResponseToken(token, appointmentId);
+      if (tokenError) {
+        res.status(tokenError.status).json({ message: tokenError.message });
         return;
       }
 
@@ -218,6 +293,18 @@ export class AppointmentController {
       } else if (action === 'reschedule') {
         if (!new_date || !new_time) {
           res.status(400).json({ message: 'New date and time are required for rescheduling.' });
+          return;
+        }
+        // Nothing stopped a mentor proposing a visit in the past: 1 Jan 2020
+        // was accepted, stored, and mailed to the advisor as a real proposal.
+        // Compared as YYYY-MM-DD strings so the check cannot drift by a day the
+        // way parsing a date-only value into a Date does.
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(new_date))) {
+          res.status(400).json({ message: 'รูปแบบวันที่ไม่ถูกต้อง' });
+          return;
+        }
+        if (String(new_date) < todayIsoDate()) {
+          res.status(400).json({ message: 'ไม่สามารถเสนอวันนัดหมายที่เป็นวันย้อนหลังได้' });
           return;
         }
         await query(

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
+import { MentorModel } from '../models/mentor';
 import { MasterModel } from '../models/master';
 import { UserModel } from '../models/user';
 
@@ -244,6 +245,16 @@ export class ProfileController {
           return;
         }
         res.status(200).json({ roles, profile });
+      } else if (roles.includes('mentor')) {
+        // A mentor's details live in `mentors`, never in `personnel`. Falling
+        // through to the 400 below is what left the mentor profile screen with
+        // nothing to show but an error.
+        const profile = await MentorModel.findProfileById(userId);
+        if (!profile) {
+          res.status(404).json({ message: 'Mentor profile not found.' });
+          return;
+        }
+        res.status(200).json({ roles, profile });
       } else {
         res.status(400).json({ message: `Profile retrieval is not supported for current roles.` });
       }
@@ -435,6 +446,57 @@ export class ProfileController {
     } catch (error) {
       console.error('Update Personnel Profile Error:', error);
       res.status(500).json({ message: 'An internal server error occurred while updating personnel profile.' });
+    }
+  }
+
+  /**
+   * Update the mentor's own contact details.
+   * Route: PUT /api/profile/mentor
+   *
+   * The company registers these four fields on the mentor's behalf when it
+   * accepts a student, and until now nothing in the system could correct them —
+   * not the mentor, not staff. `company_id` is not accepted here on purpose:
+   * it is set by the placement and is server-owned.
+   */
+  static async updateMentorProfile(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const { userId } = req.user;
+      const { name, position, department, phone } = req.body;
+
+      const cleanName = typeof name === 'string' ? name.trim() : '';
+      const cleanPhone = typeof phone === 'string' ? phone.trim() : '';
+
+      // Both columns are NOT NULL in the schema; refuse rather than let the
+      // database raise a 500 the caller cannot act on.
+      if (!cleanName || !cleanPhone) {
+        res.status(400).json({ message: 'กรุณากรอกชื่อ-นามสกุล และเบอร์โทรศัพท์ติดต่อ' });
+        return;
+      }
+
+      const updated = await MentorModel.updateProfile(userId, {
+        name: cleanName,
+        position: typeof position === 'string' && position.trim() ? position.trim() : null,
+        department: typeof department === 'string' && department.trim() ? department.trim() : null,
+        phone: cleanPhone,
+      });
+
+      if (!updated) {
+        res.status(404).json({ message: 'Mentor profile not found.' });
+        return;
+      }
+
+      res.status(200).json({
+        message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว',
+        profile: updated,
+      });
+    } catch (error) {
+      console.error('Update Mentor Profile Error:', error);
+      res.status(500).json({ message: 'An internal server error occurred while updating mentor profile.' });
     }
   }
 }

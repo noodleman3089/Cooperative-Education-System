@@ -183,9 +183,19 @@ export class FinalEvaluationController {
   }
 
   /**
-   * Fetch active students assigned to this mentor
+   * Fetch the students on this evaluation screen.
    * Route: GET /api/final-evaluations/my-students
-   * Access: Mentor only
+   * Access: mentor (their own students, scoreable) · company (the whole
+   *         company's students, read-only)
+   *
+   * The company account has its own "ประเมินผลนักศึกษา" menu, but this endpoint
+   * was mentor-only, so opening that menu answered 403 and the screen showed
+   * nothing but a red banner. A company representative and a mentor are not the
+   * same account — SEC-03 refuses to graft `mentor` onto an existing user — so
+   * the fix is not to let HR in as a mentor but to let them watch: whether each
+   * placement has been scored yet, and by whom. `canEvaluate` says which of the
+   * two is being served; scoring itself stays mentor-only in submitEvaluation,
+   * where the co-op standard puts it (สก 13 is signed by the พนักงานที่ปรึกษา).
    */
   static async getMyStudents(req: Request, res: Response): Promise<void> {
     try {
@@ -194,22 +204,32 @@ export class FinalEvaluationController {
         return;
       }
 
-      const mentorId = req.user.userId;
+      const userId = req.user.userId;
       const { roles } = req.user;
 
-      if (!roles.includes('mentor')) {
-        res.status(403).json({ message: 'Forbidden. Only mentors can access this list.' });
+      const isMentor = roles.includes('mentor');
+      const isCompanyRep = roles.includes('company');
+
+      if (!isMentor && !isCompanyRep) {
+        res.status(403).json({ message: 'Forbidden. Only mentors and company representatives can access this list.' });
         return;
       }
 
+      // A mentor sees the students assigned to them; a representative sees every
+      // placement at the company they registered — and nobody else's.
+      const scopeClause = isMentor
+        ? 'i.mentor_id = $1'
+        : 'i.company_id = (SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1)';
+
       const studentsRes = await query(
-        `SELECT 
+        `SELECT
           s.student_id,
           s.student_code,
           s.first_name,
           s.last_name,
           m.major_name_th,
           c.name_th as company_name,
+          men.name as mentor_name,
           eval.total_score as mentor_score,
           fr.status as final_report_status,
           fr.file_path as final_report_path
@@ -217,16 +237,18 @@ export class FinalEvaluationController {
          JOIN students s ON i.student_id = s.student_id
          JOIN master_major m ON s.major_id = m.major_id
          JOIN companies c ON i.company_id = c.company_id
+         LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
          LEFT JOIN final_reports fr ON s.student_id = fr.student_id AND fr.version = (
              SELECT COALESCE(MAX(version), 1) FROM final_reports WHERE student_id = s.student_id
          )
          LEFT JOIN final_evaluations eval ON s.student_id = eval.student_id AND eval.evaluator_role = 'mentor'
-         WHERE i.mentor_id = $1 AND i.status = 'accepted'`,
-        [mentorId]
+         WHERE ${scopeClause} AND i.status = 'accepted'`,
+        [userId]
       );
 
       res.status(200).json({
         success: true,
+        canEvaluate: isMentor,
         data: studentsRes.rows
       });
     } catch (error: any) {
