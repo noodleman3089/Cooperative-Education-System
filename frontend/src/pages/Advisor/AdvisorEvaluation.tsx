@@ -200,7 +200,7 @@ const AdvisorEvaluation: React.FC = () => {
 
   if (loading) {
     return (
-      <PageSkeleton variant='table' />
+      <PageSkeleton variant='cards' />
     );
   }
 

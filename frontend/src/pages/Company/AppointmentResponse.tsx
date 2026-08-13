@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { Calendar, CheckCircle, Clock, Check, X } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
 
 interface AppointmentInfo {
   appointment_id: number;
@@ -199,27 +200,22 @@ const AppointmentResponse: React.FC = () => {
 
           <div className="space-y-4">
             {action !== 'reschedule' && (
-              <button
+              <Button
+                variant="success"
+                size="lg"
+                icon={<Check className="w-5 h-5" />}
+                loading={loading && action === 'accept'}
+                loadingLabel="กำลังยืนยัน..."
                 onClick={() => handleSubmit('accept')}
-                disabled={loading}
-                className="w-full flex justify-center items-center gap-2 py-3.5 bg-green-500 hover:bg-green-600 text-white rounded-xl font-bold transition-all disabled:opacity-50"
               >
-                {loading && action === 'accept' ? (
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                ) : (
-                  <Check className="w-5 h-5" />
-                )}
                 ยืนยันการนัดหมายตามกำหนดการ
-              </button>
+              </Button>
             )}
 
             {action !== 'reschedule' && (
-              <button
-                onClick={() => setAction('reschedule')}
-                className="w-full py-3.5 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-xl font-medium transition-all dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-400"
-              >
+              <Button variant="secondary" size="lg" onClick={() => setAction('reschedule')}>
                 ขอเลื่อนวัน/เวลานัดหมาย
-              </button>
+              </Button>
             )}
 
             {action === 'reschedule' && (
@@ -250,23 +246,17 @@ const AppointmentResponse: React.FC = () => {
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <button
-                    onClick={() => setAction(null)}
-                    className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-700"
-                  >
+                  <Button variant="secondary" className="flex-1" onClick={() => setAction(null)}>
                     ยกเลิก
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    loading={loading}
+                    loadingLabel="กำลังส่ง..."
                     onClick={() => handleSubmit('reschedule')}
-                    disabled={loading}
-                    className="flex-1 py-2.5 bg-brand-blue text-white rounded-xl font-medium hover:bg-blue-600 flex justify-center items-center"
                   >
-                    {loading ? (
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    ) : (
-                      'ส่งคำขอเลื่อน'
-                    )}
-                  </button>
+                    ส่งคำขอเลื่อน
+                  </Button>
                 </div>
               </div>
             )}

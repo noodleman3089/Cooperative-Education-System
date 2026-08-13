@@ -28,7 +28,10 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   report_outline: 'table',
   report_outlines: 'table',
   final_report: 'table',
-  final_evaluation: 'table',
+  // Both evaluation screens — the mentor's and the advisor's — open on a grid of
+  // student cards. They were mapped to 'table', so the layout changed shape as
+  // the data landed. Neither screen contains a table at all.
+  final_evaluation: 'cards',
   final_progress: 'table',
   dispatch_letters: 'table',
   announcements: 'table',

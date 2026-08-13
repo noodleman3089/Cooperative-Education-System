@@ -4,6 +4,12 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
 
+/** Today as YYYY-MM-DD. */
+const todayIso = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')}`;
+};
+
 interface OnboardMentorModalProps {
   isOpen: boolean;
   intentId: number | null;
@@ -162,9 +168,12 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 วันที่เริ่มฝึกงาน (Start Date)
               </label>
+              {/* The placement has not happened yet, so a start date before
+                  today is a typo rather than a choice. */}
               <input
                 type="date"
                 required
+                min={todayIso()}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"

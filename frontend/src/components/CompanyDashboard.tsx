@@ -45,16 +45,22 @@ interface ApplicantIntent {
   reject_reason?: string | null;
 }
 
+/** Today as YYYY-MM-DD, for date fields that cannot sensibly point backwards. */
+const todayIso = (): string => {
+  const now = new Date();
+  return `${now.getFullYear()}-${`${now.getMonth() + 1}`.padStart(2, '0')}-${`${now.getDate()}`.padStart(2, '0')}`;
+};
+
+/** Name if the registry has one, student code if it does not. */
+const applicantName = (app: { first_name: string | null; last_name: string | null; student_code: string }): string =>
+  `${app.first_name ?? ''} ${app.last_name ?? ''}`.trim() || app.student_code;
+
 /**
  * Grounded in what a company actually knows at this point. The other three
  * rejection paths have been made to state a reason (advisor round 12, department
  * head round 13, staff round 17); this was the last one that could refuse a
  * student in silence.
  */
-/** Name if the registry has one, student code if it does not. */
-const applicantName = (app: { first_name: string | null; last_name: string | null; student_code: string }): string =>
-  `${app.first_name ?? ''} ${app.last_name ?? ''}`.trim() || app.student_code;
-
 const REJECT_REASONS = [
   'คุณสมบัติหรือทักษะยังไม่ตรงกับตำแหน่งที่เปิดรับ',
   'ตำแหน่งนี้มีผู้ผ่านการคัดเลือกครบตามจำนวนแล้ว',
@@ -333,7 +339,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
             <h2 className="text-xl font-bold text-gray-800 dark:text-white mt-1">
               {companyProfile.name_th} {companyProfile.name_en ? `(${companyProfile.name_en})` : ''}
             </h2>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               ที่ตั้ง: {companyProfile.address} {companyProfile.district} {companyProfile.province} {companyProfile.postal_code}
             </p>
           </div>
@@ -403,9 +409,12 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     ปิดรับสมัครเมื่อใด
                   </label>
+                  {/* A closing date in the past would publish a posting that is
+                      already expired. */}
                   <input
                     type="date"
                     required
+                    min={todayIso()}
                     value={jobExpireDate}
                     onChange={(e) => setJobExpireDate(e.target.value)}
                     className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
@@ -413,13 +422,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 </div>
               </div>
 
-              <button
-                type="submit"
-                disabled={isCreatingJob}
-                className="w-full py-2 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs transition-all shadow-md shadow-blue-500/10"
-              >
-                {isCreatingJob ? 'กำลังส่งข้อมูล...' : 'สร้างประกาศรับสมัครงาน'}
-              </button>
+              <Button type="submit" size="lg" loading={isCreatingJob} loadingLabel="กำลังส่งข้อมูล...">
+                สร้างประกาศรับสมัครงาน
+              </Button>
             </form>
           </div>
 
@@ -468,7 +473,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                           </div>
                         )}
                         <p className="text-gray-500 dark:text-gray-400 leading-relaxed whitespace-pre-line">{job.description}</p>
-                        <div className="flex gap-4 text-gray-400 text-xs pt-2">
+                        <div className="flex gap-4 text-gray-500 dark:text-gray-400 text-xs pt-2">
                           <span>จำนวนโควตาที่เปิดรับ: {job.quota} คน</span>
                           <span>วันสิ้นสุด: {new Intl.DateTimeFormat('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(job.expire_date))}</span>
                         </div>
@@ -477,16 +482,48 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-400">ยังไม่ได้ลงข้อมูลประกาศงาน</div>
+                <div className="text-center py-12 text-gray-500 dark:text-gray-400">ยังไม่ได้ลงข้อมูลประกาศงาน</div>
               )}
             </div>
           </div>
         </div>
       ) : currentTab === 'profile' ? (
         /* Company Profile Edit */
-        <div className="max-w-xl bg-white p-8 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
+        <div className="max-w-xl space-y-6">
+        {/* The menu says "ข้อมูลและประวัติบริษัท" but the screen held three
+            contact fields and nothing else — the company could not so much as
+            read the address and phone number the university has on file for it.
+            They are shown read-only: those fields carry `is_verified`, and
+            letting the account rewrite its own verified identity is a different
+            question from letting it correct who answers the phone. */}
+        {companyProfile && (
+          <div className="bg-white p-8 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
+            <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">ข้อมูลสถานประกอบการในทะเบียนของมหาวิทยาลัย</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">
+              หากข้อมูลส่วนนี้ไม่ถูกต้อง กรุณาแจ้งเจ้าหน้าที่งานสหกิจศึกษาเพื่อแก้ไข
+              เนื่องจากเป็นข้อมูลที่ผ่านการตรวจสอบและใช้พิมพ์ลงหนังสือราชการ
+            </p>
+
+            <dl className="space-y-3 text-xs">
+              {[
+                ['ชื่อสถานประกอบการ (ไทย)', companyProfile.name_th],
+                ['ชื่อสถานประกอบการ (อังกฤษ)', companyProfile.name_en || '-'],
+                ['ที่ตั้ง', `${companyProfile.address} ${companyProfile.district} ${companyProfile.province} ${companyProfile.postal_code}`],
+                ['โทรศัพท์', companyProfile.phone || '-'],
+                ['สถานะการตรวจสอบ', companyProfile.is_verified ? 'ผ่านการยืนยันข้อมูลแล้ว' : 'รอเจ้าหน้าที่ตรวจสอบข้อมูล'],
+              ].map(([label, value]) => (
+                <div key={label} className="flex flex-col sm:flex-row sm:gap-4">
+                  <dt className="sm:w-48 shrink-0 font-medium text-gray-500 dark:text-gray-400">{label}</dt>
+                  <dd className="text-gray-800 dark:text-gray-200">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+
+        <div className="bg-white p-8 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
           <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">ตั้งค่าผู้ติดต่อประสานงานหลัก</h3>
-          <p className="text-xs text-gray-400 mb-6">ข้อมูลตรงนี้เจ้าหน้าที่จำเป็นต้องใช้ในการนำฟิลด์ไปกรอกจดหมายราชการส่งตัวคณบดี</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mb-6">ข้อมูลตรงนี้เจ้าหน้าที่จำเป็นต้องใช้ในการนำฟิลด์ไปกรอกจดหมายราชการส่งตัวคณบดี</p>
           
           <form onSubmit={handleUpdateProfile} className="space-y-4">
             <div>
@@ -528,14 +565,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={isUpdatingProfile}
-              className="py-2 px-6 rounded-xl bg-brand-blue hover:bg-blue-600 text-white font-bold text-xs transition-all shadow-md shadow-blue-500/10"
-            >
-              {isUpdatingProfile ? 'กำลังบันทึก...' : 'บันทึกข้อมูลติดต่อหลัก'}
-            </button>
+            <Button type="submit" loading={isUpdatingProfile} loadingLabel="กำลังบันทึก...">
+              บันทึกข้อมูลติดต่อหลัก
+            </Button>
           </form>
+        </div>
         </div>
       ) : currentTab === 'report_outlines' ? (
         /* Report Outline Review Tab (สหกิจ 11) */
@@ -545,7 +579,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               <h3 className="text-sm font-bold text-gray-800 dark:text-white">
                 โครงร่างรายงานการปฏิบัติงานสหกิจศึกษา (สหกิจ 11)
               </h3>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                 ตรวจสอบความถูกต้องของหัวข้อวัตถุประสงค์และแผนการทำรายงานของนักศึกษาฝึกงาน
               </p>
             </div>
@@ -558,7 +592,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">นักศึกษา</th>
                     <th className="p-4 font-semibold">สาขาวิชา</th>
                     <th className="p-4 font-semibold">วันที่อัปโหลดล่าสุด</th>
@@ -573,12 +607,16 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                         <div className="font-bold text-gray-800 dark:text-gray-200">
                           {item.first_name ? `${item.first_name} ${item.last_name}` : `รหัสนักศึกษา: ${item.student_code}`}
                         </div>
-                        <div className="text-xs text-gray-400 font-mono">
+                        <div className="text-xs text-gray-500 dark:text-gray-400 font-mono">
                           {item.student_code}
                         </div>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400">{item.major_name_th}</td>
-                      <td className="p-4 text-gray-500 font-mono text-xs dark:text-gray-400">
+                      {/* No font-mono: Intl.DateTimeFormat('th-TH') returns Thai
+                          month names, and a monospace family has no Thai glyphs,
+                          so the browser silently falls back mid-string and the
+                          typeface changes inside one sentence. */}
+                      <td className="p-4 text-gray-500 text-xs dark:text-gray-400">
                         {item.latest_submitted_at
                           ? new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(item.latest_submitted_at))
                           : '-'}
@@ -618,16 +656,16 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                           </a>
                         )}
 
-                        <button
-                          type="button"
+                        <Button
+                          size="sm"
+                          variant={item.status === 'pending_mentor' ? 'primary' : 'secondary'}
                           onClick={() => {
                             setReviewingOutline(item);
                             setReviewComment(item.latest_rejection_comment || '');
                           }}
-                          className="py-1 px-3 rounded-lg bg-brand-blue text-white hover:bg-blue-600 font-bold text-xs transition-all active:scale-[0.97] shadow-sm shadow-blue-500/10"
                         >
                           {item.status === 'pending_mentor' ? 'ตรวจอนุมัติ' : 'ดูรายละเอียด/ผลตรวจ'}
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -635,7 +673,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-400 text-sm">
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">
               ยังไม่มีนักศึกษายื่นโครงร่างรายงานเข้ามา
             </div>
           )}
@@ -653,7 +691,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">ผู้สมัคร</th>
                     <th className="p-4 font-semibold">สาขาวิชา</th>
                     <th className="p-4 font-semibold text-center">เกรดเฉลี่ยสะสม</th>
@@ -704,29 +742,26 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                             </svg>
                           </a>
                         ) : (
-                          <span className="text-xs text-gray-400 mr-2">ไม่มีไฟล์</span>
+                          <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">ไม่มีไฟล์</span>
                         )}
 
                         {['approved_by_advisor', 'approved_by_dept_head'].includes(app.status) && (
                           <>
-                            <button
-                              type="button"
+                            <Button
+                              size="sm"
+                              variant="danger"
                               onClick={() => {
                                 setRejectingApplicant(app);
                                 setRejectReason('');
                                 setRejectReasonOther('');
+                                setRejectError(null);
                               }}
-                              className="py-1 px-2.5 rounded-lg border border-red-200 hover:bg-red-50 text-red-600 font-bold transition-all"
                             >
                               ปฏิเสธ
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAcceptingApplicant(app)}
-                              className="py-1 px-2.5 rounded-lg bg-brand-blue text-white hover:bg-blue-600 font-bold transition-all shadow-sm"
-                            >
+                            </Button>
+                            <Button size="sm" onClick={() => setAcceptingApplicant(app)}>
                               ตอบรับเข้างาน
-                            </button>
+                            </Button>
                           </>
                         )}
                       </td>
@@ -736,15 +771,18 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-400 text-sm">
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-sm">
               ไม่มีคำขอสมัครงานเข้ามาในขณะนี้
             </div>
           )}
         </div>
       )}
 
-      {/* Review Outline Modal for Mentor */}
-      {reviewingOutline && (
+      {/* Review Outline Modal for Mentor. `pending_mentor` is the only state the
+          mentor may act on — reportOutline.ts:129 answers 400 for anything else. */}
+      {reviewingOutline && (() => {
+        const canReviewOutline = reviewingOutline.status === 'pending_mentor';
+        return (
         <Modal
           onClose={() => setReviewingOutline(null)}
           size="lg"
@@ -777,43 +815,73 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               )}
             </div>
 
+            {/* Past pending_mentor the decision is no longer this reader's to
+                make — the backend refuses it — so the dialog says where the
+                outline has got to instead of offering buttons that would 400. */}
+            {!canReviewOutline && (
+              <AlertBanner
+                variant="info"
+                message={
+                  reviewingOutline.status === 'pending_advisor'
+                    ? 'ท่านได้ให้ความเห็นชอบโครงร่างฉบับนี้แล้ว ขณะนี้อยู่ระหว่างการพิจารณาของอาจารย์ที่ปรึกษา'
+                    : reviewingOutline.status === 'approved'
+                    ? 'โครงร่างฉบับนี้ได้รับการอนุมัติสมบูรณ์จากอาจารย์ที่ปรึกษาแล้ว'
+                    : 'โครงร่างฉบับนี้ถูกตีกลับให้นักศึกษาแก้ไข เมื่อนักศึกษาส่งฉบับใหม่จะกลับเข้ามาให้ท่านพิจารณาอีกครั้ง'
+                }
+              />
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                ความคิดเห็น / ข้อแนะนำการแก้ไข (จำเป็นกรณีตีกลับแก้ไข)
+                {canReviewOutline
+                  ? 'ความคิดเห็น / ข้อแนะนำการแก้ไข (จำเป็นกรณีตีกลับแก้ไข)'
+                  : 'ความคิดเห็นล่าสุดที่บันทึกไว้'}
               </label>
               <textarea
                 rows={4}
+                readOnly={!canReviewOutline}
                 value={reviewComment}
                 onChange={(e) => setReviewComment(e.target.value)}
-                placeholder="กรอกข้อเสนอแนะในการปรับปรุงหัวข้อ วัตถุประสงค์ หรือโครงสร้างรายงาน..."
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+                placeholder={canReviewOutline
+                  ? 'กรอกข้อเสนอแนะในการปรับปรุงหัวข้อ วัตถุประสงค์ หรือโครงสร้างรายงาน...'
+                  : 'ไม่มีความคิดเห็นบันทึกไว้'}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue read-only:opacity-70"
               />
             </div>
 
           </ModalBody>
 
           <ModalFooter>
-            <Button
-              variant="danger"
-              size="sm"
-              loading={isSubmittingReview}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={() => handleReviewOutline('rejected')}
-            >
-              ตีกลับให้นักศึกษาแก้ไข
-            </Button>
-            <Button
-              variant="success"
-              size="sm"
-              loading={isSubmittingReview}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={() => handleReviewOutline('pending_advisor')}
-            >
-              อนุมัติและส่งต่ออาจารย์ที่ปรึกษา
-            </Button>
+            {canReviewOutline ? (
+              <>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  loading={isSubmittingReview}
+                  loadingLabel="กำลังส่งข้อมูล..."
+                  onClick={() => handleReviewOutline('rejected')}
+                >
+                  ตีกลับให้นักศึกษาแก้ไข
+                </Button>
+                <Button
+                  variant="success"
+                  size="sm"
+                  loading={isSubmittingReview}
+                  loadingLabel="กำลังส่งข้อมูล..."
+                  onClick={() => handleReviewOutline('pending_advisor')}
+                >
+                  อนุมัติและส่งต่ออาจารย์ที่ปรึกษา
+                </Button>
+              </>
+            ) : (
+              <Button variant="secondary" size="sm" onClick={() => setReviewingOutline(null)}>
+                ปิดหน้าต่าง
+              </Button>
+            )}
           </ModalFooter>
         </Modal>
-      )}
+        );
+      })()}
 
       <OnboardMentorModal
         isOpen={acceptingApplicant !== null}

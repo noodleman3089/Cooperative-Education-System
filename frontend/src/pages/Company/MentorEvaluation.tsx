@@ -4,6 +4,7 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
 import { User, ClipboardList, CheckCircle, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 
 interface Student {
@@ -187,8 +188,11 @@ const MentorEvaluation: React.FC = () => {
   };
 
   if (loading) {
+    // The screen is a grid of student cards, not a table. Drawing a table meant
+    // the layout changed shape the moment the data arrived — the one thing a
+    // skeleton exists to prevent.
     return (
-      <PageSkeleton variant='table' />
+      <PageSkeleton variant='cards' />
     );
   }
 
@@ -200,10 +204,11 @@ const MentorEvaluation: React.FC = () => {
 
       {!selectedStudent ? (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
+          {/* h2 like every other screen — this was the only h1 in the app. */}
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
             <ClipboardList className="w-6 h-6 text-brand-blue dark:text-blue-400" />
             {canEvaluate ? 'รายชื่อประเมินผลนักศึกษาสหกิจศึกษา' : 'สถานะการประเมินนักศึกษาของสถานประกอบการ'}
-          </h1>
+          </h2>
           <p className="text-gray-500 dark:text-gray-400 mb-8">
             {canEvaluate
               ? 'เลือกนักศึกษาที่ปฏิบัติงานในความดูแลของท่านเพื่อบันทึกแบบประเมินผลออนไลน์ (คะแนนเต็ม 100 คะแนนดิบ)'
@@ -404,26 +409,19 @@ const MentorEvaluation: React.FC = () => {
 
           {/* Actions Footer */}
           <div className="bg-gray-50 dark:bg-gray-900/60 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-4">
-            <button
-              type="button"
-              onClick={() => setSelectedStudent(null)}
-              className="px-5 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-xl font-medium text-sm transition-all dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-700"
-            >
+            <Button variant="secondary" onClick={() => setSelectedStudent(null)}>
               ย้อนกลับ
-            </button>
+            </Button>
 
-            <button
+            <Button
               type="submit"
-              disabled={submitting}
-              className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white font-bold text-sm rounded-xl transition-all shadow-md shadow-green-500/10 flex items-center gap-2"
+              variant="success"
+              icon={<CheckCircle className="w-5 h-5" />}
+              loading={submitting}
+              loadingLabel="กำลังส่ง..."
             >
-              {submitting ? (
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <CheckCircle className="w-5 h-5" />
-              )}
               ส่งผลประเมิน
-            </button>
+            </Button>
           </div>
         </form>
       )}
