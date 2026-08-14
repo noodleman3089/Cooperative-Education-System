@@ -10,7 +10,10 @@ const VARIANTS: Record<ButtonVariant, string> = {
   secondary:
     'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300 dark:bg-gray-900 dark:text-gray-200 dark:border-gray-700 dark:hover:bg-gray-800',
   danger: 'bg-red-600 text-white hover:bg-red-700 shadow-sm shadow-red-500/20',
-  success: 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm shadow-emerald-500/20',
+  // emerald-700, not -600: white on emerald-600 measures 3.65:1, under the 4.5:1
+  // AA needs for normal-size text, and these are live buttons so the disabled
+  // exemption in WCAG 1.4.3 does not apply. -700 gives about 5.2:1.
+  success: 'bg-emerald-700 text-white hover:bg-emerald-800 shadow-sm shadow-emerald-500/20',
   ghost:
     'bg-transparent text-gray-600 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white',
 };

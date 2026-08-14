@@ -82,7 +82,17 @@ const StageLockedScreen: React.FC<{
 const Dashboard: React.FC = () => {
   const auth = useContext(AuthContext);
   
-  const [currentRole, setCurrentRole] = useState<string>('student');
+  /**
+   * Starts at the signed-in user's own role, not at 'student'.
+   *
+   * It used to open on 'student' and correct itself in the effect below, so
+   * every other role watched StudentDashboard flash past on each page load —
+   * and that screen fires /students/dashboard, which answered 403 and logged an
+   * error for a request nobody wanted. `ProtectedRoute` already waits for
+   * `isLoading` before mounting this, so `auth.user` is populated by now and
+   * there is nothing to wait for. The effect stays for the role switcher.
+   */
+  const [currentRole, setCurrentRole] = useState<string>(auth?.user?.roles?.[0] ?? 'student');
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
