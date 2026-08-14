@@ -90,11 +90,15 @@ export const Modal: React.FC<ModalProps> = ({
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
             <h3 className="text-base font-bold text-gray-800 dark:text-white">{title}</h3>
+            {/* gray-500, not -400: the × is a graphic, and WCAG 1.4.11 asks 3:1
+                of a control's icon against its background. gray-400 measured
+                2.6:1 on the modal's white panel — it passed in dark mode only.
+                Dark mode already overrides the colour, so this touches light. */}
             <button
               type="button"
               onClick={onClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors shrink-0"
+              className="p-1 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors shrink-0"
             >
               <X className="h-5 w-5" />
             </button>
