@@ -342,18 +342,12 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     const safeName = path.basename(filename);
     const filePath = path.join(process.cwd(), 'uploads', category, safeName);
 
-    if (!fs.existsSync(filePath)) {
-      if (['resumes', 'parental_consents', 'acceptance_evidence'].includes(category)) {
-        const fallbackPath = path.join(process.cwd(), 'secure_private', 'templates', 'cover_letter_template.pdf');
-        if (fs.existsSync(fallbackPath)) {
-          res.sendFile(fallbackPath);
-          return;
-        }
-      }
-      res.status(404).json({ message: 'File not found.' });
-      return;
-    }
-
+    // Authorization runs first, before the file is even looked for. It used to
+    // run *after*, with a missing-file fallback in between, so asking for a file
+    // that does not exist returned 200 and a blank cover-letter template without
+    // any permission check at all. Nothing leaked — the template is empty — but
+    // it also made every permission test unreliable, because a request that
+    // should have been refused came back with a PDF.
     const userRoles = req.user?.roles || [];
     const userId = req.user?.userId;
 
@@ -418,6 +412,20 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
           return;
         }
       }
+    }
+
+    // Only now, once the caller has been shown to be entitled to this file, does
+    // a missing one fall back to the blank template.
+    if (!fs.existsSync(filePath)) {
+      if (['resumes', 'parental_consents', 'acceptance_evidence'].includes(category)) {
+        const fallbackPath = path.join(process.cwd(), 'secure_private', 'templates', 'cover_letter_template.pdf');
+        if (fs.existsSync(fallbackPath)) {
+          res.sendFile(fallbackPath);
+          return;
+        }
+      }
+      res.status(404).json({ message: 'File not found.' });
+      return;
     }
 
     res.sendFile(filePath);

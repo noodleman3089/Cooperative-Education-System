@@ -138,33 +138,39 @@ export class DocumentController {
       if (templateFilePath.endsWith('.html')) {
         console.log('Rendering HTML template using Handlebars and Puppeteer...');
         
-        // 5.1 Fetch list of all accepted students for this company
+        // 5.1 The students this letter is about.
+        //
+        // This filtered on `status = 'accepted'`, which is backwards for the two
+        // letters that carry a name list. สหกิจ 04 (แบบแจ้งรายชื่อ) is what the
+        // faculty sends *so that* the company can select students — it goes out
+        // before anyone has been accepted, so the old filter produced an empty
+        // list exactly when the document was needed. The same set the SEC-04
+        // guard above already accepts is the right one: cleared the department
+        // head, up to and including a finished placement.
         const studentsQuery = await query(
-          `SELECT s.student_code, 
-                  COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '') as student_name, 
+          `SELECT s.student_code,
+                  COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '') as student_name,
                   m.major_name_th
            FROM intent_forms i
            JOIN students s ON i.student_id = s.student_id
            JOIN master_major m ON s.major_id = m.major_id
-           WHERE i.company_id = $1 AND i.status = 'accepted'`,
-          [parsedCompanyId]
+           WHERE i.company_id = $1 AND i.status = ANY($2::text[])
+           ORDER BY s.student_code ASC`,
+          [parsedCompanyId, DOCUMENT_ELIGIBLE_INTENT_STATUSES]
         );
 
-        let studentList = studentsQuery.rows.map((row, index) => ({
+        // No empty-list fallback: the SEC-04 check above already proved this
+        // student/company pair has an intent in exactly this status set, so the
+        // query cannot come back empty. The fallback that used to sit here
+        // invented a major from the first two digits of the student code
+        // (`startsWith('64') ? 'วิทยาการคอมพิวเตอร์' : 'เทคโนโลยีสารสนเทศ'`) and
+        // printed the guess onto an official letter the dean then signed.
+        const studentList = studentsQuery.rows.map((row, index) => ({
           no: index + 1,
           student_code: row.student_code,
           student_name: row.student_name,
           major_name: row.major_name_th
         }));
-
-        if (studentList.length === 0) {
-          studentList = [{
-            no: 1,
-            student_code: student.student_code,
-            student_name: `${student.first_name || ''} ${student.last_name || ''}`,
-            major_name: student.student_code.startsWith('64') ? 'วิทยาการคอมพิวเตอร์' : 'เทคโนโลยีสารสนเทศ'
-          }];
-        }
 
         // 5.2 Compile HTML using Handlebars
         const htmlSource = fs.readFileSync(templateFilePath, 'utf8');

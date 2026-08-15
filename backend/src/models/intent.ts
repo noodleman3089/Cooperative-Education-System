@@ -13,6 +13,24 @@ import { IntentForm } from '../types';
  * so only the last three are valid starting points for an acceptance.
  */
 export const COMPANY_DECISION_FROM = ['approved_by_dept_head', 'pending_sign', 'signed', 'pending_acceptance'];
+
+/**
+ * Which placements a company is allowed to see at all.
+ *
+ * On paper the faculty compiles สหกิจ 04 (แบบแจ้งรายชื่อนักศึกษา) only *after* it
+ * has run its own selection — which is the department head's approval here — and
+ * only then posts it to the company together with each student's สหกิจ 03.
+ * Anything earlier has not been sent to them, so it must not appear on their
+ * screen either. The three states after the decision are included so a company
+ * can still see the placement it accepted and the reason it gave when it
+ * turned somebody down.
+ */
+export const COMPANY_VISIBLE_STATUSES = [
+  ...COMPANY_DECISION_FROM,
+  'pending_officer_approval',
+  'accepted',
+  'company_rejected',
+];
 export const STUDENT_ACCEPT_FROM = ['approved_by_dept_head', 'pending_sign', 'signed', 'pending_acceptance'];
 /** A student may report a failed interview any time before the placement is final. */
 export const STUDENT_FAIL_FROM = [

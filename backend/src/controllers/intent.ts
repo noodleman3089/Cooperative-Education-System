@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { IntentFormModel } from '../models/intent';
+import { IntentFormModel, COMPANY_VISIBLE_STATUSES } from '../models/intent';
 import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
 import { query } from '../config/database';
@@ -318,7 +318,8 @@ export class IntentFormController {
       let { company_id } = req.query;
 
       // Restrict query for company role
-      if (roles.includes('company')) {
+      const isCompany = roles.includes('company');
+      if (isCompany) {
         const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);
         if ((companyQuery.rowCount ?? 0) === 0) {
           res.status(200).json([]);
@@ -371,9 +372,43 @@ export class IntentFormController {
         queryStr += ` AND i.company_id = $${queryParams.length}`;
       }
 
+      // SEC-10: a company must not see a placement the faculty has not sent it.
+      // On paper nothing reaches the company until the department head has
+      // selected the students and สหกิจ 04 goes out; the screen now starts at the
+      // same point instead of listing applications from the moment they are filed.
+      if (isCompany) {
+        queryParams.push(COMPANY_VISIBLE_STATUSES);
+        queryStr += ` AND i.status = ANY($${queryParams.length}::text[])`;
+      }
+
       queryStr += ` ORDER BY i.form_id DESC`;
 
       const result = await query(queryStr, queryParams);
+
+      // SEC-10: one query serves five roles, so the columns it selects are the
+      // union of what all five need — and an advisor needs the student's home
+      // address and parent contacts. A company does not: its paper equivalent,
+      // สหกิจ 04, carries only the name, student code, major and job title, and
+      // everything personal reaches the company through the student's own
+      // สหกิจ 03 — the resume file they chose to attach, still linked below.
+      // The rest of each row is dropped here rather than by narrowing the query,
+      // because the other four roles genuinely use all of it.
+      if (isCompany) {
+        const visible = result.rows.map((row) => ({
+          form_id: row.form_id,
+          student_code: row.student_code,
+          first_name: row.first_name,
+          last_name: row.last_name,
+          major_name_th: row.major_name_th,
+          job_title: row.job_title,
+          status: row.status,
+          resume_file: row.resume_file,
+          reject_reason: row.reject_reason,
+        }));
+        res.status(200).json(visible);
+        return;
+      }
+
       res.status(200).json(result.rows);
     } catch (error) {
       if (sendAccessError(res, error)) return;

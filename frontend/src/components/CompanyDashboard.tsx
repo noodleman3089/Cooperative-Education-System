@@ -29,21 +29,43 @@ interface CompanyProfile {
   email: string | null;
 }
 
+/**
+ * Exactly what the server sends a company, and no more.
+ *
+ * These are the fields of สหกิจ 04 (แบบแจ้งรายชื่อนักศึกษาสหกิจศึกษา) — the name
+ * list the faculty posts to a company so it can choose — plus what this screen
+ * needs to work. Everything personal about a student reaches the company the
+ * way it does on paper: inside สหกิจ 03, the application the student filled in
+ * and attached, which is the resume file linked from each row.
+ */
 interface ApplicantIntent {
   form_id: number;
-  student_id: number;
   student_code: string;
-  /** Declared here for years but never sent by the list query until now. */
-  cumulative_gpa: number | string | null;
-  major_name_th: string;
   first_name: string | null;
   last_name: string | null;
+  major_name_th: string;
   job_title?: string;
   status: string;
   resume_file: string | null;
   /** Present once the company has turned the applicant down. */
   reject_reason?: string | null;
 }
+
+/**
+ * The statuses at which a company may accept or reject, mirroring
+ * `COMPANY_DECISION_FROM` in `backend/src/models/intent.ts`.
+ *
+ * This list used to start at `approved_by_advisor`, one stage earlier than the
+ * server allows, so the buttons appeared on rows the backend would refuse with
+ * a 400. It matches the paperwork too: nothing reaches the company until the
+ * department head has signed off and สหกิจ 04 goes out.
+ */
+const COMPANY_CAN_DECIDE_ON = [
+  'approved_by_dept_head',
+  'pending_sign',
+  'signed',
+  'pending_acceptance',
+];
 
 /** Today as YYYY-MM-DD, for date fields that cannot sensibly point backwards. */
 const todayIso = (): string => {
@@ -694,7 +716,6 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">ผู้สมัคร</th>
                     <th className="p-4 font-semibold">สาขาวิชา</th>
-                    <th className="p-4 font-semibold text-center">เกรดเฉลี่ยสะสม</th>
                     <th className="p-4 font-semibold">ตำแหน่งงานยื่นสมัคร</th>
                     <th className="p-4 font-semibold text-center">สถานะความคืบหน้า</th>
                     <th className="p-4 font-semibold text-right">เรซูเม่ & คัดเลือก</th>
@@ -713,11 +734,6 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                         <div className="text-xs text-gray-500 dark:text-gray-400">{app.student_code}</div>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400">{app.major_name_th}</td>
-                      <td className="p-4 text-center text-gray-700 dark:text-gray-300">
-                        {app.cumulative_gpa !== null && app.cumulative_gpa !== undefined
-                          ? Number(app.cumulative_gpa).toFixed(2)
-                          : '-'}
-                      </td>
                       <td className="p-4 text-gray-700 dark:text-gray-300">{app.job_title || 'ฝึกงานทั่วไป'}</td>
                       <td className="p-4 text-center">
                         <StatusBadge status={app.status} />
@@ -745,7 +761,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                           <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">ไม่มีไฟล์</span>
                         )}
 
-                        {['approved_by_advisor', 'approved_by_dept_head'].includes(app.status) && (
+                        {COMPANY_CAN_DECIDE_ON.includes(app.status) && (
                           <>
                             <Button
                               size="sm"
