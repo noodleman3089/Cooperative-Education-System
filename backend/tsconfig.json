@@ -17,10 +17,7 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "moduleResolution": "node10",
-    "baseUrl": "./",
-    "paths": {
-      "*": ["node_modules/*", "src/*"]
-    },
+    "ignoreDeprecations": "6.0",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,

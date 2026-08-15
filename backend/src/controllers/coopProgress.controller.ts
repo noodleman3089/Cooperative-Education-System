@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
+import { resolveMajorScope, sendAccessError } from '../utils/access';
 
 export class CoopProgressController {
   /**
@@ -25,12 +26,20 @@ export class CoopProgressController {
         return;
       }
 
-      // Determine major filter based on user profile
-      let userMajorId: number | null = null;
-      const personnelRes = await query('SELECT major_id FROM personnel WHERE personnel_id = $1', [userId]);
-      if ((personnelRes.rowCount ?? 0) > 0) {
-        userMajorId = personnelRes.rows[0].major_id;
-      }
+      // An advisor is scoped by their own assignment list below, so their major
+      // is never needed — and demanding a personnel profile from them here would
+      // lock out an advisor who is correctly scoped already.
+      const advisorOnly = isAdvisor && !isStaff && !isDeptHead;
+
+      // SEC-06: fails closed. This used to be `if (personnelRow) { take major }`
+      // followed by `else if (userMajorId)` below, so a department head with no
+      // personnel row fell past both branches and the query ran with **no filter
+      // at all** — every student in the university, with their placement,
+      // accommodation, report and score data.
+      // `resolveMajorScope` also returns null for staff, which is the intended
+      // institution-wide scope for the co-op office; the old code accidentally
+      // pinned staff to whichever major their own profile happened to carry.
+      const scopedMajorId = advisorOnly ? null : (await resolveMajorScope(userId, roles)).majorId;
 
       // Build Query
       let queryStr = `
@@ -86,14 +95,13 @@ export class CoopProgressController {
 
       const queryParams: any[] = [];
 
-      // Filter: Advisor can only see their assigned students, whereas Staff and Dept Head can see everyone in major.
-      // But if there is a query param major_id, let Staff/Dept Head filter it.
-      if (isAdvisor && !isStaff && !isDeptHead) {
+      // An advisor sees the students assigned to them; a department head sees
+      // their own major; staff see the whole institution.
+      if (advisorOnly) {
         queryParams.push(userId);
         queryStr += ` AND s.advisor_id = $${queryParams.length}`;
-      } else if (userMajorId) {
-        // Default Staff/Dept Head to their major
-        queryParams.push(userMajorId);
+      } else if (scopedMajorId !== null) {
+        queryParams.push(scopedMajorId);
         queryStr += ` AND s.major_id = $${queryParams.length}`;
       }
 
@@ -181,6 +189,7 @@ export class CoopProgressController {
         data: studentsProgress
       });
     } catch (error: any) {
+      if (sendAccessError(res, error)) return;
       console.error('Get Dashboard Progress Error:', error);
       res.status(500).json({ message: 'An internal server error occurred.' });
     }

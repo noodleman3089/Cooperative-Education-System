@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { PersonnelModel } from '../models/personnel';
+import { resolveMajorScope, sendAccessError } from '../utils/access';
 
 export class PersonnelController {
   /**
@@ -18,15 +19,12 @@ export class PersonnelController {
       const { role, major_id } = req.query;
 
       const { roles, userId } = req.user;
-      const isStaffOrDean = roles.some((r: string) => ['staff', 'dean'].includes(r));
-      let userMajorId: number | null = null;
 
-      if (!isStaffOrDean && roles.includes('dept_head')) {
-        const personnelRes = await query('SELECT major_id FROM personnel WHERE personnel_id = $1', [userId]);
-        if ((personnelRes.rowCount ?? 0) > 0) {
-          userMajorId = personnelRes.rows[0].major_id;
-        }
-      }
+      // SEC-06: fails closed. This used to be the forbidden shape —
+      // `if (personnelRow) { applyFilter }` — so a department head whose
+      // personnel row was missing got no filter at all and saw every member of
+      // staff in the university instead of their own department.
+      const userMajorId = (await resolveMajorScope(userId, roles)).majorId;
 
       // first_name/last_name are selected because the screens that consume this
       // list are choosing a person — the department head assigns an advisor to a
@@ -68,6 +66,7 @@ export class PersonnelController {
 
       res.status(200).json(rows);
     } catch (error) {
+      if (sendAccessError(res, error)) return;
       console.error('Get Personnel List Error:', error);
       res.status(500).json({ message: 'An internal server error occurred while retrieving personnel.' });
     }
