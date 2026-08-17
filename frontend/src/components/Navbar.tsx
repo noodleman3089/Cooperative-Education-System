@@ -5,6 +5,7 @@ import api from '../services/api';
 import { Bell, FileText } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
 import DeanSignModal from './DeanSignModal';
+import { Select } from './ui/Input';
 
 /**
  * กระดิ่งแจ้งเตือนใช้ร่วมกันทุกบทบาท แต่แหล่งข้อมูลต่างกัน:
@@ -232,17 +233,17 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           {auth?.user && auth.user.roles.length > 1 && (
             <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
               <span className="text-xs text-gray-500 dark:text-gray-400">บทบาท:</span>
-              <select
+              <Select
                 value={currentRole}
                 onChange={(e) => onRoleChange(e.target.value)}
-                className="text-xs font-semibold bg-transparent text-brand-blue border-none focus:outline-none cursor-pointer dark:text-blue-400"
+                className="font-semibold bg-transparent text-brand-blue cursor-pointer" size="sm"
               >
                 {auth.user.roles.map((r) => (
                   <option key={r} value={r} className="bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200">
                     {getRoleLabel(r)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
         </div>

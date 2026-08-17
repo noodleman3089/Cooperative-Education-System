@@ -4,6 +4,7 @@ import { Download, CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/StatusBadge';
 import { getErrorMessage } from '../utils/errors';
+import { Select, Textarea } from './ui/Input';
 
 interface IntentReviewModalProps {
   intentId: number | null;
@@ -182,26 +183,24 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                 <h5 className="text-xs font-bold text-red-600 dark:text-red-400">ระบุสาเหตุที่ปฏิเสธ/ตีกลับคำร้อง</h5>
                 <div className="space-y-3">
                   <div>
-                    <select
+                    <Select
                       value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)}
-                      className="w-full px-4 py-2 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      onChange={(e) => setRejectReason(e.target.value)} size="sm"
                     >
                       <option value="">-- กรุณาเลือกสาเหตุการปฏิเสธ --</option>
                       <option value="ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน">ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน</option>
                       <option value="สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร">สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร</option>
                       <option value="ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง">ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง</option>
                       <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                    </select>
+                    </Select>
                   </div>
 
                   {rejectReason === 'other' && (
-                    <textarea
+                    <Textarea
                       rows={2}
                       placeholder="กรอกเหตุผลรายละเอียดที่จะตีกลับแจ้งไปยังนักศึกษา"
                       value={customReason}
-                      onChange={(e) => setCustomReason(e.target.value)}
-                      className="w-full px-4 py-2 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                      onChange={(e) => setCustomReason(e.target.value)} size="sm"
                     />
                   )}
 

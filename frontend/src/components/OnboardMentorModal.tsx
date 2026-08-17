@@ -4,6 +4,7 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { Input } from './ui/Input';
 
 /** Today as YYYY-MM-DD. */
 const todayIso = (): string => {
@@ -100,12 +101,11 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อ-นามสกุล พี่เลี้ยงฝึกงาน
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={mentorName}
                 onChange={(e) => setMentorName(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -113,12 +113,11 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 อีเมลพี่เลี้ยง
               </label>
-              <input
+              <Input
                 type="email"
                 required
                 value={mentorEmail}
                 onChange={(e) => setMentorEmail(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -128,12 +127,11 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 เบอร์โทรศัพท์ติดต่อ
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={mentorPhone}
                 onChange={(e) => setMentorPhone(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -141,12 +139,11 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 ตำแหน่งงานพี่เลี้ยง
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={mentorPosition}
                 onChange={(e) => setMentorPosition(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -156,12 +153,11 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               <label className="block font-medium text-gray-500 dark:text-gray-400 mb-1">
                 แผนก/ฝ่ายสังกัด
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={mentorDepartment}
                 onChange={(e) => setMentorDepartment(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -171,13 +167,12 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
               </label>
               {/* The placement has not happened yet, so a start date before
                   today is a typo rather than a choice. */}
-              <input
+              <Input
                 type="date"
                 required
                 min={todayIso()}
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>

@@ -9,6 +9,7 @@ import Button from './ui/Button';
 import { useDashboardData } from '../hooks/useDashboardData';
 import StatusBadge from './ui/StatusBadge';
 import { getErrorMessage } from '../utils/errors';
+import { Input, Select, Textarea } from './ui/Input';
 
 interface CompanyDashboardProps {
   activeMenu?: string;
@@ -391,12 +392,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   ชื่อตำแหน่งงาน (เช่น Full-Stack Web Developer)
                 </label>
-                <input
+                <Input
                   type="text"
                   required
                   value={jobTitle}
                   onChange={(e) => setJobTitle(e.target.value)}
-                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
               </div>
 
@@ -404,12 +404,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   รายละเอียดหน้าที่งาน & สวัสดิการ
                 </label>
-                <textarea
+                <Textarea
                   rows={4}
                   required
                   value={jobDescription}
                   onChange={(e) => setJobDescription(e.target.value)}
-                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
               </div>
 
@@ -418,13 +417,12 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     จำนวนรับ (โควตาคน)
                   </label>
-                  <input
+                  <Input
                     type="number"
                     min={1}
                     required
                     value={jobQuota}
                     onChange={(e) => setJobQuota(e.target.value !== '' ? Number(e.target.value) : '')}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
 
@@ -434,13 +432,12 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   </label>
                   {/* A closing date in the past would publish a posting that is
                       already expired. */}
-                  <input
+                  <Input
                     type="date"
                     required
                     min={todayIso()}
                     value={jobExpireDate}
                     onChange={(e) => setJobExpireDate(e.target.value)}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
               </div>
@@ -553,12 +550,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อ-นามสกุล ผู้ประสานงานหลักฝ่าย HR
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={contactPerson}
                 onChange={(e) => setContactPerson(e.target.value)}
-                className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -566,12 +562,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                 ตำแหน่งงาน
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 value={contactPosition}
                 onChange={(e) => setContactPosition(e.target.value)}
-                className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -579,12 +574,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                 อีเมลผู้ติดต่อประสานงาน (รับเอกสารตอบรับส่งตัว)
               </label>
-              <input
+              <Input
                 type="email"
                 required
                 value={contactEmail}
                 onChange={(e) => setContactEmail(e.target.value)}
-                className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -854,7 +848,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                   ? 'ความคิดเห็น / ข้อแนะนำการแก้ไข (จำเป็นกรณีตีกลับแก้ไข)'
                   : 'ความคิดเห็นล่าสุดที่บันทึกไว้'}
               </label>
-              <textarea
+              <Textarea
                 rows={4}
                 readOnly={!canReviewOutline}
                 value={reviewComment}
@@ -862,7 +856,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 placeholder={canReviewOutline
                   ? 'กรอกข้อเสนอแนะในการปรับปรุงหัวข้อ วัตถุประสงค์ หรือโครงสร้างรายงาน...'
                   : 'ไม่มีความคิดเห็นบันทึกไว้'}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue read-only:opacity-70"
+                className="read-only:opacity-70" size="sm"
               />
             </div>
 
@@ -938,17 +932,16 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 เหตุผลที่ไม่รับ (ระบบจะแจ้งข้อความนี้ให้นักศึกษาทราบ)
               </label>
-              <select
+              <Select
                 value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+                onChange={(e) => setRejectReason(e.target.value)} size="sm"
               >
                 <option value="">-- เลือกเหตุผล --</option>
                 {REJECT_REASONS.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
                 <option value="other">ระบุเหตุผลเอง</option>
-              </select>
+              </Select>
             </div>
 
             {rejectReason === 'other' && (
@@ -956,12 +949,11 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   ระบุเหตุผล
                 </label>
-                <textarea
+                <Textarea
                   rows={3}
                   value={rejectReasonOther}
                   onChange={(e) => setRejectReasonOther(e.target.value)}
-                  placeholder="อธิบายเหตุผลที่ไม่รับนักศึกษาคนนี้เข้าปฏิบัติงาน..."
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+                  placeholder="อธิบายเหตุผลที่ไม่รับนักศึกษาคนนี้เข้าปฏิบัติงาน..." size="sm"
                 />
               </div>
             )}

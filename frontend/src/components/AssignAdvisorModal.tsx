@@ -4,6 +4,7 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { Select } from './ui/Input';
 
 interface Personnel {
   personnel_id: number;
@@ -102,10 +103,9 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
               อาจารย์ที่ปรึกษาสหกิจ (Advisor) *
             </label>
-            <select
+            <Select
               value={selectedAdvisorId}
               onChange={(e) => setSelectedAdvisorId(e.target.value !== '' ? Number(e.target.value) : '')}
-              className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             >
               <option value="">-- กรุณาเลือกอาจารย์ที่ปรึกษา --</option>
               {advisors.map((adv) => (
@@ -113,17 +113,16 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
                   {advisorLabel(adv)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <div>
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
               อาจารย์นิเทศสหกิจ (Supervisor) *
             </label>
-            <select
+            <Select
               value={selectedSupervisorId}
               onChange={(e) => setSelectedSupervisorId(e.target.value !== '' ? Number(e.target.value) : '')}
-              className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             >
               <option value="">-- กรุณาเลือกอาจารย์นิเทศ --</option>
               {advisors.map((sup) => (
@@ -131,7 +130,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
                   {advisorLabel(sup)}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         </div>
       </ModalBody>

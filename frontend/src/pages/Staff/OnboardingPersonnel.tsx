@@ -4,6 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
+import { Input } from '../../components/ui/Input';
 
 const OnboardingPersonnel: React.FC = () => {
   const [employeeCode, setEmployeeCode] = useState('');
@@ -73,14 +74,13 @@ const OnboardingPersonnel: React.FC = () => {
             <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
               รหัสประจำตัวบุคลากร (Employee ID)
             </label>
-            <input
+            <Input
               type="text"
               required
               disabled={isSubmitting}
               placeholder="กรอกรหัสประจำตัวบุคลากรของคุณ"
               value={employeeCode}
               onChange={(e) => setEmployeeCode(e.target.value)}
-              className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               หากระบบไม่พบรหัสของคุณ กรุณาติดต่อเจ้าหน้าที่สหกิจเพื่ออัปโหลดรายชื่อเข้าสู่ระบบ

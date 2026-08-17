@@ -8,6 +8,7 @@ import { loadThaiAddressData, type ProvinceItem } from '../data/thaiAddress';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { Input, Select, Textarea } from './ui/Input';
 
 interface Major {
   major_id: number;
@@ -712,16 +713,16 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   คำนำหน้า *
                 </label>
-                <select
+                <Select
                   disabled={isSubmitting}
                   value={titleTh}
                   onChange={(e) => setTitleTh(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white font-semibold"
+                  className="font-semibold" size="sm"
                 >
                   <option value="นาย">นาย</option>
                   <option value="นางสาว">นางสาว</option>
                   <option value="นาง">นาง</option>
-                </select>
+                </Select>
               </div>
 
               <div className="sm:col-span-4">
@@ -766,13 +767,12 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   ชื่อเล่น (Nickname)
                 </label>
-                <input
+                <Input
                   type="text"
                   disabled={isSubmitting}
                   placeholder="เช่น สมชาย"
                   value={nickname}
-                  onChange={(e) => setNickname(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  onChange={(e) => setNickname(e.target.value)} size="sm"
                 />
               </div>
             </div>
@@ -825,16 +825,15 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   ชั้นปีที่ (Year Level) *
                 </label>
-                <select
+                <Select
                   disabled={isSubmitting}
                   value={yearLevel}
-                  onChange={(e) => setYearLevel(e.target.value !== '' ? Number(e.target.value) : '')}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  onChange={(e) => setYearLevel(e.target.value !== '' ? Number(e.target.value) : '')} size="sm"
                 >
                   <option value="" disabled hidden>-- เลือกชั้นปี --</option>
                   <option value={3}>ชั้นปีที่ 3</option>
                   <option value={4}>ชั้นปีที่ 4</option>
-                </select>
+                </Select>
               </div>
 
               <div>
@@ -908,12 +907,12 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   วันเกิด (Date of Birth)
                 </label>
-                <input
+                <Input
                   type="date"
                   disabled={isSubmitting}
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                  className="cursor-pointer" size="sm"
                 />
               </div>
             </div>
@@ -935,7 +934,7 @@ const StudentProfile: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                     จังหวัด
                   </label>
-                  <select
+                  <Select
                     disabled={isSubmitting || thaiAddress.length === 0}
                     value={selectedProv}
                     onChange={(e) => {
@@ -944,7 +943,7 @@ const StudentProfile: React.FC = () => {
                       setSelectedSubdist('');
                       setZipcode('');
                     }}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800/50"
+                    className="disabled:bg-gray-100 dark:disabled:bg-gray-800/50" size="sm"
                   >
                     <option value="">
                       {thaiAddress.length === 0 ? 'กำลังโหลดข้อมูลจังหวัด...' : '-- เลือกจังหวัด --'}
@@ -954,14 +953,14 @@ const StudentProfile: React.FC = () => {
                         {p.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                     เขต / อำเภอ
                   </label>
-                  <select
+                  <Select
                     disabled={isSubmitting || !selectedProv}
                     value={selectedDist}
                     onChange={(e) => {
@@ -969,7 +968,7 @@ const StudentProfile: React.FC = () => {
                       setSelectedSubdist('');
                       setZipcode('');
                     }}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800/50"
+                    className="disabled:bg-gray-100 dark:disabled:bg-gray-800/50" size="sm"
                   >
                     <option value="">-- เลือกเขต/อำเภอ --</option>
                     {availableDistricts.map((d) => (
@@ -977,14 +976,14 @@ const StudentProfile: React.FC = () => {
                         {d.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                     แขวง / ตำบล
                   </label>
-                  <select
+                  <Select
                     disabled={isSubmitting || !selectedDist}
                     value={selectedSubdist}
                     onChange={(e) => {
@@ -993,7 +992,7 @@ const StudentProfile: React.FC = () => {
                       const found = availableSubdistricts.find((s) => s.name === sub);
                       if (found) setZipcode(found.zipcode);
                     }}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white disabled:bg-gray-100 dark:disabled:bg-gray-800/50"
+                    className="disabled:bg-gray-100 dark:disabled:bg-gray-800/50" size="sm"
                   >
                     <option value="">-- เลือกแขวง/ตำบล --</option>
                     {availableSubdistricts.map((s) => (
@@ -1001,7 +1000,7 @@ const StudentProfile: React.FC = () => {
                         {s.name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -1010,13 +1009,12 @@ const StudentProfile: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                     รายละเอียดที่อยู่ (บ้านเลขที่, ซอย, ถนน, หมู่บ้าน/อาคาร)
                   </label>
-                  <input
+                  <Input
                     type="text"
                     disabled={isSubmitting}
                     placeholder="เช่น 123/45 ซ.สุขุมวิท 55 ถ.สุขุมวิท"
                     value={addrHouseNo}
-                    onChange={(e) => setAddrHouseNo(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    onChange={(e) => setAddrHouseNo(e.target.value)} size="sm"
                   />
                 </div>
 
@@ -1024,13 +1022,12 @@ const StudentProfile: React.FC = () => {
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                     รหัสไปรษณีย์
                   </label>
-                  <input
+                  <Input
                     type="text"
                     disabled={isSubmitting}
                     placeholder="เช่น 10110"
                     value={zipcode}
-                    onChange={(e) => setZipcode(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                    onChange={(e) => setZipcode(e.target.value)} size="sm"
                   />
                 </div>
               </div>
@@ -1056,13 +1053,12 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   ชื่อ-นามสกุล ผู้ปกครอง / ผู้ติดต่อฉุกเฉิน
                 </label>
-                <input
+                <Input
                   type="text"
                   disabled={isSubmitting}
                   placeholder="ชื่อ-นามสกุล ผู้ปกครอง"
                   value={parentName}
-                  onChange={(e) => setParentName(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  onChange={(e) => setParentName(e.target.value)} size="sm"
                 />
               </div>
 
@@ -1070,13 +1066,12 @@ const StudentProfile: React.FC = () => {
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                   เบอร์โทรศัพท์ผู้ปกครองที่ติดต่อได้
                 </label>
-                <input
+                <Input
                   type="tel"
                   disabled={isSubmitting}
                   placeholder="08X-XXX-XXXX"
                   value={parentPhone}
-                  onChange={(e) => setParentPhone(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  onChange={(e) => setParentPhone(e.target.value)} size="sm"
                 />
               </div>
             </div>
@@ -1101,11 +1096,10 @@ const StudentProfile: React.FC = () => {
               <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1.5">
                 ภูมิภาคที่สนใจไปปฏิบัติงาน
               </label>
-              <select
+              <Select
                 disabled={isSubmitting}
                 value={preferredRegion}
-                onChange={(e) => setPreferredRegion(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                onChange={(e) => setPreferredRegion(e.target.value)} size="sm"
               >
                 <option value="" disabled hidden>-- เลือกภูมิภาคที่สนใจ --</option>
                 {regionOptions.map((reg) => (
@@ -1113,7 +1107,7 @@ const StudentProfile: React.FC = () => {
                     {reg}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             {/* Job Type Checkboxes */}
@@ -1152,13 +1146,13 @@ const StudentProfile: React.FC = () => {
               <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">
                 ทักษะความสามารถพิเศษ หรือ ผลงานกิจกรรมที่เคยทำ
               </label>
-              <textarea
+              <Textarea
                 rows={3}
                 disabled={isSubmitting}
                 placeholder="เช่น ความสามารถทางภาษา ทักษะการใช้ซอฟต์แวร์/โปรแกรมมิ่ง หรือรางวัลและกิจกรรมที่เคยเข้าร่วม"
                 value={skillsAndActivities}
                 onChange={(e) => setSkillsAndActivities(e.target.value)}
-                className="w-full px-3.5 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white resize-none"
+                className="resize-none" size="sm"
               />
             </div>
 

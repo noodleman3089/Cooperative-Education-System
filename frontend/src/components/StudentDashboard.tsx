@@ -11,6 +11,7 @@ import StatusBadge from './ui/StatusBadge';
 import Button from './ui/Button';
 import { Pin, UserPen } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
+import { Input } from './ui/Input';
 
 /** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนสุดของแดชบอร์ด */
 interface Announcement {
@@ -596,27 +597,25 @@ const StudentDashboard: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">ชื่อ-นามสกุล พี่เลี้ยง *</label>
-                        <input
+                        <Input
                           type="text"
                           required
                           disabled={submittingProof || reportingFail}
                           value={mentorName}
                           onChange={(e) => setMentorName(e.target.value)}
-                          placeholder="เช่น นายสมชาย ดีใจ"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          placeholder="เช่น นายสมชาย ดีใจ" size="sm"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">อีเมล พี่เลี้ยง *</label>
-                        <input
+                        <Input
                           type="email"
                           required
                           disabled={submittingProof || reportingFail}
                           value={mentorEmail}
                           onChange={(e) => setMentorEmail(e.target.value)}
-                          placeholder="mentor@company.com"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          placeholder="mentor@company.com" size="sm"
                         />
                       </div>
                     </div>
@@ -624,26 +623,24 @@ const StudentDashboard: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">เบอร์โทรศัพท์ พี่เลี้ยง *</label>
-                        <input
+                        <Input
                           type="tel"
                           required
                           disabled={submittingProof || reportingFail}
                           value={mentorPhone}
                           onChange={(e) => setMentorPhone(e.target.value)}
-                          placeholder="เช่น 0812345678"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          placeholder="เช่น 0812345678" size="sm"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
-                        <input
+                        <Input
                           type="date"
                           required
                           disabled={submittingProof || reportingFail}
                           value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)}
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          onChange={(e) => setStartDate(e.target.value)} size="sm"
                         />
                       </div>
                     </div>
@@ -651,25 +648,23 @@ const StudentDashboard: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">ตำแหน่งงาน พี่เลี้ยง (ไม่บังคับ)</label>
-                        <input
+                        <Input
                           type="text"
                           disabled={submittingProof || reportingFail}
                           value={mentorPosition}
                           onChange={(e) => setMentorPosition(e.target.value)}
-                          placeholder="เช่น Supervisor / HR Specialist"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          placeholder="เช่น Supervisor / HR Specialist" size="sm"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs text-gray-400 mb-1">ฝ่าย / แผนก (ไม่บังคับ)</label>
-                        <input
+                        <Input
                           type="text"
                           disabled={submittingProof || reportingFail}
                           value={mentorDept}
                           onChange={(e) => setMentorDept(e.target.value)}
-                          placeholder="เช่น Engineering / Human Resources"
-                          className="w-full px-3 py-1.5 text-xs rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                          placeholder="เช่น Engineering / Human Resources" size="sm"
                         />
                       </div>
                     </div>

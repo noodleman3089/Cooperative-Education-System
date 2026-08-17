@@ -4,6 +4,7 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { Input, Select } from './ui/Input';
 
 import {
   googleMaps,
@@ -288,25 +289,23 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อสถานประกอบการ (ภาษาไทย) <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 placeholder="เช่น บริษัท ตัวอย่าง จำกัด"
                 value={selfFoundForm.company_name_th}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_name_th: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อสถานประกอบการ (ภาษาอังกฤษ)
               </label>
-              <input
+              <Input
                 type="text"
                 placeholder="เช่น Example Company Co., Ltd."
                 value={selfFoundForm.company_name_en}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_name_en: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -315,13 +314,12 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
               ที่ตั้ง / ที่อยู่สถานประกอบการ <span className="text-red-500">*</span>
             </label>
-            <input
+            <Input
               type="text"
               required
               placeholder="เลขที่ ถนน หมู่ ซอย ตำบล"
               value={selfFoundForm.company_address}
               onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_address: e.target.value })}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
           </div>
 
@@ -330,11 +328,11 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 จังหวัด <span className="text-red-500">*</span>
               </label>
-              <select
+              <Select
                 required
                 value={selfFoundForm.company_province}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_province: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white appearance-none"
+                className="appearance-none"
               >
                 <option value="">-- เลือกจังหวัด --</option>
                 {provinceList.map((p) => (
@@ -342,33 +340,31 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                     {p.province_name_th}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 อำเภอ / เขต <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 placeholder="เช่น เมือง"
                 value={selfFoundForm.company_district}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_district: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 รหัสไปรษณีย์ <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 pattern="[0-9]{5}"
                 placeholder="เช่น 10000"
                 value={selfFoundForm.company_postal_code}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_postal_code: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -378,25 +374,23 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 เบอร์โทรศัพท์สถานประกอบการ <span className="text-red-500">*</span>
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 placeholder="เช่น 021234567"
                 value={selfFoundForm.company_phone}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, company_phone: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อผู้ติดต่อประสานงานหลัก
               </label>
-              <input
+              <Input
                 type="text"
                 placeholder="เช่น นายสมศักดิ์ รักเรียน"
                 value={selfFoundForm.contact_person}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_person: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -406,24 +400,22 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 ตำแหน่งผู้ติดต่อประสานงาน
               </label>
-              <input
+              <Input
                 type="text"
                 placeholder="เช่น เจ้าหน้าที่ฝ่ายบุคคล HR"
                 value={selfFoundForm.contact_position}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_position: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 อีเมลติดต่อประสานงานหลัก
               </label>
-              <input
+              <Input
                 type="email"
                 placeholder="เช่น hr@example.com"
                 value={selfFoundForm.contact_email}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_email: e.target.value })}
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>

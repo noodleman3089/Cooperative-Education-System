@@ -11,6 +11,7 @@ import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
 import type { ReportOutlineRow, StudentRow } from '../types/api';
+import { Select, Textarea } from './ui/Input';
 
 interface AdvisorDashboardProps {
   activeMenu: string;
@@ -243,12 +244,11 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 ความคิดเห็น / ข้อแนะนำ (จำเป็นกรณีตีกลับแก้ไข)
               </label>
-              <textarea
+              <Textarea
                 rows={4}
                 value={outlineComment}
                 onChange={(e) => setOutlineComment(e.target.value)}
-                placeholder="กรอกคำแนะนำของอาจารย์ที่ปรึกษาเพิ่มเติม..."
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-white focus:outline-none focus:border-brand-blue"
+                placeholder="กรอกคำแนะนำของอาจารย์ที่ปรึกษาเพิ่มเติม..." size="sm"
               />
             </div>
 
@@ -359,27 +359,26 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             {/* Eligibility filter */}
             <div className="flex items-center gap-1.5 flex-1 md:flex-initial">
               <Filter className="h-3.5 w-3.5 text-gray-400" />
-              <select
+              <Select
                 value={eligibilityFilter}
-                onChange={(e) => setEligibilityFilter(e.target.value)}
-                className="px-3 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                onChange={(e) => setEligibilityFilter(e.target.value)} size="sm"
               >
                 <option value="all">เกณฑ์สมัคร: ทั้งหมด</option>
                 <option value="eligible">ผ่านเกณฑ์สะสม</option>
                 <option value="ineligible">ไม่ผ่านเกณฑ์</option>
-              </select>
+              </Select>
             </div>
 
             {/* Orientation Filter */}
-            <select
+            <Select
               value={orientationFilter}
               onChange={(e) => setOrientationFilter(e.target.value)}
-              className="px-3 py-2 text-xs rounded-xl border border-gray-200 bg-white focus:outline-none dark:bg-gray-800 dark:border-gray-700 dark:text-white flex-1 md:flex-initial"
+              className="flex-1 md:flex-initial" size="sm"
             >
               <option value="all">ปฐมนิเทศ: ทั้งหมด</option>
               <option value="passed">ผ่านปฐมนิเทศ</option>
               <option value="failed">ยังไม่ผ่าน</option>
-            </select>
+            </Select>
           </div>
         </div>
 
@@ -777,17 +776,16 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   สาเหตุการตีกลับหลัก
                 </label>
-                <select
+                <Select
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 >
                   <option value="">-- กรุณาเลือกสาเหตุการปฏิเสธ --</option>
                   <option value="ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน">ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน</option>
                   <option value="สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร">สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร</option>
                   <option value="ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง">ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง</option>
                   <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                </select>
+                </Select>
               </div>
 
               {rejectReason === 'other' && (
@@ -795,12 +793,11 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     ระบุเหตุผลเพิ่มเติม (ภาษาไทย)
                   </label>
-                  <textarea
+                  <Textarea
                     rows={3}
                     placeholder="กรอกเหตุผลรายละเอียดที่จะตีกลับแจ้งไปยังนักศึกษา"
                     value={customReason}
                     onChange={(e) => setCustomReason(e.target.value)}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
               )}

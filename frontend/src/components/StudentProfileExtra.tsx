@@ -3,6 +3,7 @@ import api from '../services/api';
 import type { StudentProfile } from '../types/api';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage } from '../utils/errors';
+import { Select, Textarea } from './ui/Input';
 
 interface StudentProfileExtraProps {
   profile: StudentProfile;
@@ -108,13 +109,13 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
             ความสามารถพิเศษ / กิจกรรมที่เคยทำ
           </label>
-          <textarea
+          <Textarea
             rows={3}
             disabled={isSubmitting}
             placeholder="เช่น ทักษะการเขียนโปรแกรมเฉพาะทาง, การเป็นผู้นำค่าย, การเล่นดนตรี, รางวัลที่เคยได้รับ"
             value={skillsAndActivities}
             onChange={(e) => setSkillsAndActivities(e.target.value)}
-            className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white resize-none"
+            className="resize-none"
           />
         </div>
 
@@ -134,16 +135,16 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
                   onChange={(e) => handleLanguageChange(index, 'language', e.target.value)}
                   className="flex-1 px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
-                <select
+                <Select
                   value={lang.level}
                   onChange={(e) => handleLanguageChange(index, 'level', e.target.value)}
-                  className="w-full sm:w-40 px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+                  className="sm:w-40"
                 >
                   <option value="ดีมาก">ดีมาก (Excellent)</option>
                   <option value="ดี">ดี (Good)</option>
                   <option value="พอใช้">พอใช้ (Fair)</option>
                   <option value="พื้นฐาน">พื้นฐาน (Basic)</option>
-                </select>
+                </Select>
                 <button
                   type="button"
                   onClick={() => handleRemoveLanguage(index)}
@@ -169,17 +170,17 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-2">
             ภูมิภาคที่สนใจไปปฏิบัติงานสหกิจศึกษา
           </label>
-          <select
+          <Select
             disabled={isSubmitting}
             value={preferredRegion}
             onChange={(e) => setPreferredRegion(e.target.value)}
-            className="w-full sm:w-1/2 px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            className="sm:w-1/2"
           >
             <option value="">-- ไม่ระบุ --</option>
             {regionOptions.map((region) => (
               <option key={region} value={region}>{region}</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* ลักษณะงานที่สนใจ */}

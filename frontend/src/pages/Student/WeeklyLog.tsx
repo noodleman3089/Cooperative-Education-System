@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { Calendar, CheckCircle, Save, RefreshCw } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
+import { Select, Textarea } from '../../components/ui/Input';
 
 interface WeeklyLog {
   weekly_log_id: number;
@@ -107,37 +108,36 @@ const WeeklyLog: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">สัปดาห์ที่</label>
-                <select
+                <Select
                   value={selectedWeek}
                   onChange={(e) => setSelectedWeek(Number(e.target.value))}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
                 >
                   {Array.from({ length: 16 }, (_, i) => i + 1).map(week => (
                     <option key={week} value={week}>สัปดาห์ที่ {week}</option>
                   ))}
-                </select>
+                </Select>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ผลการปฏิบัติงาน (Achievements) <span className="text-red-500">*</span></label>
-                <textarea
+                <Textarea
                   value={achievements}
                   onChange={(e) => setAchievements(e.target.value)}
                   rows={5}
                   placeholder="อธิบายงานที่ได้รับมอบหมายและผลลัพธ์ที่ได้..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all resize-none"
+                  className="resize-none"
                   required
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ปัญหาและอุปสรรค (Problems/Issues)</label>
-                <textarea
+                <Textarea
                   value={problems}
                   onChange={(e) => setProblems(e.target.value)}
                   rows={3}
                   placeholder="อธิบายปัญหาที่พบและวิธีการแก้ไข (ถ้ามี)..."
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all resize-none"
+                  className="resize-none"
                 />
               </div>
 

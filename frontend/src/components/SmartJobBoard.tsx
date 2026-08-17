@@ -7,6 +7,7 @@ import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import StatusBadge from './ui/StatusBadge';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
+import { Select } from './ui/Input';
 import {
   googleMaps,
   type GeocoderResult,
@@ -446,10 +447,9 @@ const SmartJobBoard: React.FC = () => {
           onChange={(e) => setSearchQuery(e.target.value)}
           className="flex-1 px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
         />
-        <select
+        <Select
           value={selectedProvince}
           onChange={(e) => setSelectedProvince(e.target.value)}
-          className="px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
         >
           <option value="">กรองตามจังหวัดทั้งหมด</option>
           {provinces.map((prov) => (
@@ -457,7 +457,7 @@ const SmartJobBoard: React.FC = () => {
               {prov}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
 
       {/* Dynamic Google Maps Panel */}

@@ -3,6 +3,7 @@ import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage } from '../utils/errors';
+import { Input, Select } from './ui/Input';
 
 interface Major {
   major_id: number;
@@ -272,13 +273,12 @@ const PersonnelProfile: React.FC = () => {
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                 ชื่อจริง
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 disabled={isSubmitting}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
 
@@ -286,13 +286,12 @@ const PersonnelProfile: React.FC = () => {
               <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                 นามสกุล
               </label>
-              <input
+              <Input
                 type="text"
                 required
                 disabled={isSubmitting}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                className="w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
           </div>
@@ -303,12 +302,11 @@ const PersonnelProfile: React.FC = () => {
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
             สาขาวิชาที่สังกัด / ดูแล
           </label>
-          <select
+          <Select
             required
             disabled={isSubmitting}
             value={selectedMajorId}
             onChange={(e) => setSelectedMajorId(Number(e.target.value))}
-            className="w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
           >
             <option value="">-- เลือกสาขาวิชา --</option>
             {majors.map((m) => (
@@ -316,7 +314,7 @@ const PersonnelProfile: React.FC = () => {
                 [{m.major_code}] {m.major_name_th}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* วันเดือนปีเกิด (Birth Date) */}
@@ -324,13 +322,13 @@ const PersonnelProfile: React.FC = () => {
           <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
             วันเดือนปีเกิด (Birth Date) *
           </label>
-          <input
+          <Input
             type="date"
             required
             disabled={isSubmitting}
             value={birthDate}
             onChange={(e) => setBirthDate(e.target.value)}
-            className="w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+            className="cursor-pointer"
           />
         </div>
 
@@ -403,15 +401,14 @@ const PersonnelProfile: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span>ขนาด:</span>
-                      <select
+                      <Select
                         value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))}
-                        className="bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-xs"
+                        onChange={(e) => setBrushSize(Number(e.target.value))} size="sm"
                       >
                         <option value="2">บาง (2px)</option>
                         <option value="3">ปกติ (3px)</option>
                         <option value="5">หนา (5px)</option>
-                      </select>
+                      </Select>
                     </div>
                   </div>
                   <button

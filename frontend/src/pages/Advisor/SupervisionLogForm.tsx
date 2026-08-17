@@ -6,6 +6,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import { getErrorMessage } from '../../utils/errors';
+import { Textarea } from '../../components/ui/Input';
 
 interface SupervisionLogFormProps {
   appointmentId: number;
@@ -110,12 +111,12 @@ const SupervisionLogForm: React.FC<SupervisionLogFormProps> = ({ appointmentId, 
 
           <div>
             <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">บันทึกพฤติกรรมนักศึกษา / ปัญหาที่พบ</label>
-            <textarea 
+            <Textarea 
               rows={4}
               value={formData.behaviorNotes}
               onChange={e => setFormData({ ...formData, behaviorNotes: e.target.value })}
               placeholder="ระบุพฤติกรรมการทำงาน ความตรงต่อเวลา ปัญหาที่พี่เลี้ยงฝากแจ้ง..."
-              className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-brand-blue focus:ring-2 focus:ring-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white outline-none resize-none"
+              className="resize-none"
             />
           </div>
 

@@ -6,6 +6,7 @@ import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy } from 'lucide-r
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
 import type { WeeklyPlan } from '../../types/api';
+import { Textarea } from '../../components/ui/Input';
 
 interface Accommodation {
   address: string;
@@ -339,12 +340,11 @@ const AccommodationWorkPlan: React.FC = () => {
                   <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     ที่อยู่ครบถ้วน (บ้านเลขที่, ซอย, ถนน, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์) *
                   </label>
-                  <textarea
+                  <Textarea
                     rows={3}
                     value={accommodation.address}
                     onChange={e => setAccommodation({...accommodation, address: e.target.value})}
                     placeholder="กรอกที่อยู่ปัจจุบันให้ชัดเจน เพื่อประโยชน์ในการติดต่อ..."
-                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
                   />
                 </div>
                 <div>
@@ -562,12 +562,12 @@ const AccommodationWorkPlan: React.FC = () => {
                               </button>
                             )}
                           </div>
-                          <textarea
+                          <Textarea
                             rows={3}
                             value={plan.tasks}
                             onChange={e => updatePlan(plan.week_number, 'tasks', e.target.value)}
                             placeholder="อธิบายลักษณะงานที่จะทำในสัปดาห์นี้..."
-                            className="w-full px-3 py-2 text-xs border border-gray-300 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-brand-blue resize-none"
+                            className="resize-none" size="sm"
                           />
                         </div>
 

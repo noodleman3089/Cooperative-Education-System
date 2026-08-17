@@ -10,6 +10,7 @@ import Button from './ui/Button';
 import ConfirmDialog from './ui/ConfirmDialog';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import { getErrorMessage } from '../utils/errors';
+import { Select, Textarea } from './ui/Input';
 
 interface Personnel {
   personnel_id: number;
@@ -329,27 +330,27 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           </div>
 
           <div className="flex w-full shrink-0 gap-3 md:w-auto">
-            <select
+            <Select
               value={eligibilityFilter}
               onChange={(e) => setEligibilityFilter(e.target.value)}
-              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none md:flex-initial dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              className="flex-1 md:flex-initial" size="sm"
             >
               <option value="all">สิทธิ์สะสม: ทั้งหมด</option>
               <option value="eligible">ผ่านเกณฑ์</option>
               <option value="ineligible">ไม่ผ่านเกณฑ์</option>
-            </select>
+            </Select>
 
             {/* "Who still has nobody" is the question this screen exists to
                 answer, so it is a filter rather than something to eyeball. */}
-            <select
+            <Select
               value={advisorFilter}
               onChange={(e) => setAdvisorFilter(e.target.value)}
-              className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs focus:outline-none md:flex-initial dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+              className="flex-1 md:flex-initial" size="sm"
             >
               <option value="all">ที่ปรึกษา: ทั้งหมด</option>
               <option value="unassigned">ยังไม่ได้จัดสรร</option>
               <option value="assigned">จัดสรรแล้ว</option>
-            </select>
+            </Select>
           </div>
 
           <span className="shrink-0 text-xs text-gray-500 dark:text-gray-400">
@@ -779,13 +780,12 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                   เหตุผลเชิงระเบียบ / การบริหารจัดการของสาขาวิชา
                 </label>
-                <select
+                <Select
                   value={rejectReason}
                   onChange={(e) => {
                     setRejectReason(e.target.value);
                     setRejectError(null);
                   }}
-                  className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 >
                   <option value="">-- กรุณาเลือกเหตุผล --</option>
                   {DEPT_HEAD_REJECT_REASONS.map((reason) => (
@@ -794,7 +794,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                     </option>
                   ))}
                   <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                </select>
+                </Select>
               </div>
 
               {rejectReason === 'other' && (
@@ -802,7 +802,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     ระบุเหตุผลเพิ่มเติม (ข้อความนี้จะไปถึงนักศึกษาโดยตรง)
                   </label>
-                  <textarea
+                  <Textarea
                     rows={3}
                     placeholder="เช่น ตำแหน่งงานนี้สาขาวิชาจัดสรรให้นักศึกษาชั้นปีที่ 4 ก่อนเป็นลำดับแรก"
                     value={customReason}
@@ -810,7 +810,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                       setCustomReason(e.target.value);
                       setRejectError(null);
                     }}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
               )}

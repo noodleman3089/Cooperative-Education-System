@@ -8,6 +8,7 @@ import AlertBanner from './ui/AlertBanner';
 import Modal from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { getErrorMessage } from '../utils/errors';
+import { Select } from './ui/Input';
 
 interface DeanDashboardProps {
   activeMenu?: string;
@@ -404,16 +405,15 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                 {/* Size */}
                 <div className="flex items-center gap-2">
                   <span className="text-gray-500 dark:text-gray-400">ขนาดหัวแปรง:</span>
-                  <select
+                  <Select
                     value={brushSize}
                     aria-label="ขนาดหัวแปรงสำหรับวาดลายมือชื่อ"
                     onChange={(e) => setBrushSize(Number(e.target.value))}
-                    className="p-1 rounded border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   >
                     <option value={2}>บาง (2px)</option>
                     <option value={3}>ปกติ (3px)</option>
                     <option value={5}>หนา (5px)</option>
-                  </select>
+                  </Select>
                 </div>
                 {/* Color */}
                 <div className="flex items-center gap-2">

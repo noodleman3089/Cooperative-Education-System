@@ -8,6 +8,7 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { Input, Select, Textarea } from './ui/Input';
 import type {
   Announcement,
   ImportSummary,
@@ -1142,34 +1143,33 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     รหัสนักศึกษา (Student Code) *
                   </label>
-                  <input
+                  <Input
                     type="text"
                     required
                     disabled={isAddingStudent}
                     placeholder="ตัวอย่าง 123456789012-3"
                     value={manualStudentCode}
                     onChange={(e) => setManualStudentCode(e.target.value)}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     สิทธิ์การสมัครเข้าร่วมโครงการสหกิจศึกษา *
                   </label>
-                  <select
+                  <Select
                     value={manualStudentEligible ? 'true' : 'false'}
                     onChange={(e) => setManualStudentEligible(e.target.value === 'true')}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                    className="cursor-pointer"
                   >
                     <option value="true">ผ่านเกณฑ์ (Eligible)</option>
                     <option value="false">ไม่ผ่านเกณฑ์ (Ineligible)</option>
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     เกรดเฉลี่ยสะสม (GPAX)
                   </label>
-                  <input
+                  <Input
                     type="number"
                     step="0.01"
                     min="0"
@@ -1178,7 +1178,6 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     placeholder="เว้นว่างไว้เพื่อคงค่าเดิม"
                     value={manualStudentGpa}
                     onChange={(e) => setManualStudentGpa(e.target.value)}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     เกรดเฉลี่ยแก้ไขได้จากที่นี่เท่านั้น นักศึกษาไม่สามารถกรอกเองได้
@@ -1188,13 +1187,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                     อีเมลสำหรับเข้าใช้งาน (SSO)
                   </label>
-                  <input
+                  <Input
                     type="email"
                     disabled={isAddingStudent}
                     placeholder="s123456789012@rmutto.ac.th"
                     value={manualStudentEmail}
                     onChange={(e) => setManualStudentEmail(e.target.value)}
-                    className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                     ระบุเพื่อผูกรหัสนักศึกษากับบัญชีเดียว ป้องกันการสวมรหัสของผู้อื่น
@@ -1349,39 +1347,37 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     <form onSubmit={handleAddUserSubmit} className="space-y-4">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">อีเมลผู้ใช้งาน (Email)</label>
-                        <input
+                        <Input
                           type="email"
                           required
                           placeholder="เช่น user@test.com"
                           value={userEmail}
                           onChange={(e) => setUserEmail(e.target.value)}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">รหัสผ่านสำหรับเข้าระบบ (Password)</label>
-                        <input
+                        <Input
                           type="password"
                           required
                           placeholder="กำหนดรหัสผ่านอย่างน้อย 6 หลัก"
                           value={userPassword}
                           onChange={(e) => setUserPassword(e.target.value)}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">สิทธิ์เข้าใช้งานหลัก (Role)</label>
-                        <select
+                        <Select
                           value={userRoles[0] || 'student'}
                           onChange={(e) => setUserRoles([e.target.value])}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                          className="cursor-pointer"
                         >
                           <option value="student">นักศึกษา (Student)</option>
                           <option value="advisor">อาจารย์ที่ปรึกษา (Advisor)</option>
                           <option value="dept_head">หัวหน้าสาขาวิชา (Department Head)</option>
                           <option value="staff">เจ้าหน้าที่สหกิจศึกษา (Staff)</option>
                           <option value="dean">คณบดี (Dean)</option>
-                        </select>
+                        </Select>
                       </div>
                       <div className="flex flex-wrap justify-end gap-2 pt-4">
                         <Button variant="secondary" size="sm" onClick={() => setIsAddUserModalOpen(false)}>
@@ -1411,24 +1407,23 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     <form onSubmit={handleEditUserSubmit} className="space-y-4">
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">อีเมลผู้ใช้งาน (Email)</label>
-                        <input
+                        <Input
                           type="email"
                           required
                           value={userEmail}
                           onChange={(e) => setUserEmail(e.target.value)}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                         />
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">สถานะบัญชี</label>
-                        <select
+                        <Select
                           value={userIsActive ? 'true' : 'false'}
                           onChange={(e) => setUserIsActive(e.target.value === 'true')}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                          className="cursor-pointer"
                         >
                           <option value="true">เปิดใช้งาน (Active)</option>
                           <option value="false">ระงับการใช้งาน (Inactive)</option>
-                        </select>
+                        </Select>
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">สิทธิ์เข้าใช้งานระบบ (Roles)</label>
@@ -1556,62 +1551,58 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">รหัสประจำตัวบุคลากร (Employee Code) *</label>
-                      <input
+                      <Input
                         type="text"
                         required
                         placeholder="เช่น EMP9901"
                         value={preseedEmployeeCode}
                         onChange={(e) => setPreseedEmployeeCode(e.target.value)}
-                        className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">บทบาทสิทธิ์ในระบบ *</label>
-                      <select
+                      <Select
                         value={preseedRoleName}
                         onChange={(e) => {
                           setPreseedRoleName(e.target.value);
                           if (!['advisor', 'dept_head'].includes(e.target.value)) setPreseedMajorId('');
                         }}
-                        className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                        className="cursor-pointer"
                       >
                         <option value="advisor">อาจารย์ที่ปรึกษา (Advisor)</option>
                         <option value="dept_head">หัวหน้าสาขาวิชา (Department Head)</option>
                         <option value="staff">เจ้าหน้าที่สหกิจศึกษา (Staff)</option>
                         <option value="dean">คณบดี (Dean)</option>
-                      </select>
+                      </Select>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">ชื่อจริง (ภาษาไทย) *</label>
-                      <input
+                      <Input
                         type="text"
                         required
                         value={preseedFirstName}
                         onChange={(e) => setPreseedFirstName(e.target.value)}
-                        className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">นามสกุล (ภาษาไทย) *</label>
-                      <input
+                      <Input
                         type="text"
                         required
                         value={preseedLastName}
                         onChange={(e) => setPreseedLastName(e.target.value)}
-                        className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                       />
                     </div>
                     <div className="md:col-span-2">
                       <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                         อีเมลสำหรับเข้าใช้งาน (SSO) *
                       </label>
-                      <input
+                      <Input
                         type="email"
                         required
                         value={preseedEmail}
                         onChange={(e) => setPreseedEmail(e.target.value)}
                         placeholder="somchai.k@rmutto.ac.th"
-                        className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                       />
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         รหัสบุคลากรจะยืนยันสิทธิ์ได้เฉพาะบัญชีที่ใช้อีเมลนี้เท่านั้น
@@ -1620,17 +1611,17 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     {['advisor', 'dept_head'].includes(preseedRoleName) && (
                       <div className="md:col-span-2">
                         <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">สาขาวิชาสังกัด *</label>
-                        <select
+                        <Select
                           required
                           value={preseedMajorId}
                           onChange={(e) => setPreseedMajorId(Number(e.target.value))}
-                          className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                          className="cursor-pointer"
                         >
                           <option value="">-- เลือกสาขาวิชา --</option>
                           {majors.map((m) => (
                             <option key={m.major_id} value={m.major_id}>{m.major_name_th}</option>
                           ))}
-                        </select>
+                        </Select>
                       </div>
                     )}
                   </div>
@@ -1707,18 +1698,18 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
                   รออนุมัติ: {allJobs.filter(j => j.status === 'pending_approval').length} รายการ
                 </span>
-                <select
+                <Select
                   value={jobStatusFilter}
                   onChange={(e) => setJobStatusFilter(e.target.value as typeof jobStatusFilter)}
                   aria-label="กรองตามสถานะประกาศ"
-                  className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                  className="cursor-pointer" size="sm"
                 >
                   <option value="all">ทุกสถานะ ({allJobs.length})</option>
                   <option value="pending_approval">รอตรวจอนุมัติ ({allJobs.filter(j => j.status === 'pending_approval').length})</option>
                   <option value="published">เผยแพร่แล้ว ({allJobs.filter(j => j.status === 'published').length})</option>
                   <option value="rejected">ไม่อนุมัติ ({allJobs.filter(j => j.status === 'rejected').length})</option>
                   <option value="closed">ปิดรับสมัคร ({allJobs.filter(j => j.status === 'closed').length})</option>
-                </select>
+                </Select>
               </div>
             </div>
 
@@ -1836,10 +1827,10 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                       เหตุผลที่ไม่อนุมัติ * (สถานประกอบการจะเห็นข้อความนี้)
                     </label>
-                    <select
+                    <Select
                       value={jobRejectReason}
                       onChange={(e) => setJobRejectReason(e.target.value)}
-                      className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white cursor-pointer"
+                      className="cursor-pointer"
                     >
                       <option value="">-- เลือกเหตุผล --</option>
                       <option value="รายละเอียดงานไม่ครบถ้วน นักศึกษาใช้ตัดสินใจไม่ได้">รายละเอียดงานไม่ครบถ้วน นักศึกษาใช้ตัดสินใจไม่ได้</option>
@@ -1848,16 +1839,15 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                       <option value="จำนวนที่รับหรือวันปิดรับสมัครไม่สอดคล้องกับปฏิทินสหกิจศึกษา">จำนวนที่รับหรือวันปิดรับสมัครไม่สอดคล้องกับปฏิทินสหกิจศึกษา</option>
                       <option value="ประกาศซ้ำกับตำแหน่งที่เผยแพร่อยู่แล้ว">ประกาศซ้ำกับตำแหน่งที่เผยแพร่อยู่แล้ว</option>
                       <option value="custom">ระบุเหตุผลเอง</option>
-                    </select>
+                    </Select>
                   </div>
 
                   {jobRejectReason === 'custom' && (
-                    <textarea
+                    <Textarea
                       rows={3}
                       value={jobRejectCustom}
                       onChange={(e) => setJobRejectCustom(e.target.value)}
                       placeholder="ระบุสิ่งที่สถานประกอบการต้องแก้ไขก่อนส่งประกาศเข้ามาใหม่"
-                      className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                     />
                   )}
 
@@ -1892,37 +1882,34 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             <form onSubmit={handleCreateAnnouncement} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">หัวข้อประกาศข่าวสาร *</label>
-                <input
+                <Input
                   type="text"
                   required
                   value={annTitle}
                   onChange={(e) => setAnnTitle(e.target.value)}
                   placeholder="เช่น กำหนดการยื่นแบบสมัครสหกิจศึกษา ภาคการศึกษา 1/2026"
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">รายละเอียดและเนื้อหาประกาศ *</label>
-                <textarea
+                <Textarea
                   required
                   rows={4}
                   value={annContent}
                   onChange={(e) => setAnnContent(e.target.value)}
                   placeholder="กรอกรายละเอียดข่าว กำหนดการ สถานที่ หรือสิ่งที่นักศึกษาต้องเตรียมตัว..."
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 dark:text-gray-300 mb-1">รูปภาพประกอบ (URL ถ้ามี)</label>
-                  <input
+                  <Input
                     type="url"
                     value={annImage}
                     onChange={(e) => setAnnImage(e.target.value)}
                     placeholder="https://example.com/banner.jpg"
-                    className="w-full px-4 py-2.5 text-sm rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                   />
                 </div>
 
@@ -2146,11 +2133,10 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
                       เลือกแม่แบบฟอร์มเอกสาร (Template)
                     </label>
-                    <select
+                    <Select
                       required
                       value={selectedTemplateId}
                       onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
-                      className="w-full px-4 py-2 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                     >
                       <option value="">-- กรุณาเลือกแม่แบบเอกสาร --</option>
                       {templates.map((t) => (
@@ -2158,7 +2144,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                           {t.name} (ประเภท: {t.type === 'cover_letter' ? 'ขอความอนุเคราะห์' : 'ส่งตัวนักศึกษา'})
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
 
                   <div className="flex flex-wrap justify-end gap-2 pt-4">
