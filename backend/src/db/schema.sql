@@ -189,7 +189,12 @@ CREATE TABLE IF NOT EXISTS coop_applications (
     -- ข้อมูลจากนักศึกษา
     expected_region VARCHAR(255),
     special_skills TEXT,
-    
+
+    -- เกรดที่นักศึกษา *แจ้ง* เอง ตามที่กรอกใน สหกิจ 01 — ยังไม่ใช่เกรดทางการ
+    -- SEC-05: students.cumulative_gpa ยังเป็นของเซิร์ฟเวอร์เหมือนเดิม ค่านี้จะถูก
+    -- คัดลอกไปที่นั่นก็ต่อเมื่อหัวหน้าสาขาอนุมัติใบสมัคร (มีคนรับผิดชอบใน audit_log)
+    claimed_gpa NUMERIC(3, 2),
+
     -- สถานะปัจจุบัน (pending_advisor, pending_dept_head, approved, waitlisted, other)
     status VARCHAR(50) NOT NULL DEFAULT 'pending_advisor',
     

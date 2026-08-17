@@ -28,6 +28,8 @@ export const AuditAction = {
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',
+  APPLICATION_EVALUATED: 'application.evaluated_by_advisor',
+  APPLICATION_DECIDED: 'application.decided_by_dept_head',
   ELIGIBILITY_CHANGED: 'student.eligibility_changed',
   REGISTRY_CHANGED: 'student.registry_changed',
   JOB_POST_PUBLISHED: 'job_post.published',

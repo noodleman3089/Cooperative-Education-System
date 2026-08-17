@@ -140,23 +140,21 @@ export class StaffImportController {
               [studentCode, gpa, isEligible, row.email]
             );
 
-            // 2. Sync to students table if the profile already exists
+            // 2. ตรวจว่านักศึกษาคนนี้ลงทะเบียนในระบบแล้วหรือยัง — ใช้รายงานผลเท่านั้น
+            //
+            //    การนำเข้าไฟล์ *ไม่* เขียนทับ students.is_eligible / cumulative_gpa อีกต่อไป
+            //    เดิมมันทับ ทำให้สิทธิ์ที่หัวหน้าสาขาอนุมัติไว้หายไปเงียบๆ เมื่อมีการอัปไฟล์รอบใหม่
+            //    และไม่มีใครรู้ว่าถูกทับ · ตอนนี้แหล่งความจริงแยกชัด:
+            //      - ไฟล์รายชื่อ  → eligible_students_list (ใครเป็นนักศึกษาที่มีสิทธิ์ *สมัคร*)
+            //      - สหกิจ 01     → students.is_eligible   (ใครผ่านการ *คัดกรอง* แล้ว)
+            //    เจ้าหน้าที่ที่ต้องแก้สิทธิ์ของคนที่ลงทะเบียนแล้วใช้เมนู "ตรวจสอบคุณสมบัตินักศึกษา"
+            //    (PUT /students/:id/verify-eligibility) ซึ่งบันทึกลง audit_log เสมอ
             const profileCheck = await client.query(
               'SELECT student_id FROM students WHERE student_code = $1 LIMIT 1',
               [studentCode]
             );
 
-            let wasAlreadyRegistered = false;
-
-            if ((profileCheck.rowCount ?? 0) > 0) {
-              wasAlreadyRegistered = true;
-              await client.query(
-                `UPDATE students
-                 SET cumulative_gpa = COALESCE($2, cumulative_gpa), is_eligible = COALESCE($3, is_eligible)
-                 WHERE student_code = $1`,
-                [studentCode, gpa, isEligible]
-              );
-            }
+            const wasAlreadyRegistered = (profileCheck.rowCount ?? 0) > 0;
 
             await client.query('COMMIT');
 

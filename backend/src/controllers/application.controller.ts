@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { ApplicationModel } from '../models/application';
-import { StudentModel } from '../models/student';
-import { PersonnelModel } from '../models/personnel';
+import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
+import { AuditAction, writeAudit } from '../utils/audit';
 
 export class ApplicationController {
   /**
@@ -17,10 +17,10 @@ export class ApplicationController {
       }
 
       const studentId = req.user.userId;
-      const { semester_id, expected_region, special_skills } = req.body;
+      const { semester_id, expected_region, special_skills, claimed_gpa } = req.body;
 
       if (!semester_id) {
-        res.status(400).json({ message: 'Required field: semester_id.' });
+        res.status(400).json({ message: 'กรุณาระบุภาคการศึกษาที่ต้องการสมัคร' });
         return;
       }
 
@@ -30,11 +30,24 @@ export class ApplicationController {
         return;
       }
 
+      // เกรดเป็นค่าที่นักศึกษาแจ้งเอง จึงบังคับให้กรอกและอยู่ในช่วงที่เป็นไปได้
+      // ตัวเลขนี้ยังไม่แตะ students.cumulative_gpa จนกว่าหัวหน้าสาขาจะอนุมัติ (SEC-05)
+      const parsedGpa = parseFloat(claimed_gpa as any);
+      if (claimed_gpa === undefined || claimed_gpa === null || claimed_gpa === '' || isNaN(parsedGpa)) {
+        res.status(400).json({ message: 'กรุณากรอกเกรดเฉลี่ยสะสมตามที่ปรากฏในใบแสดงผลการเรียน' });
+        return;
+      }
+      if (parsedGpa < 0 || parsedGpa > 4) {
+        res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องอยู่ระหว่าง 0.00 ถึง 4.00' });
+        return;
+      }
+
       const application = await ApplicationModel.submit(
         studentId,
         parsedSemesterId,
         expected_region || null,
-        special_skills || null
+        special_skills || null,
+        parsedGpa
       );
 
       res.status(201).json({
@@ -94,41 +107,24 @@ export class ApplicationController {
       const { roles, userId } = req.user;
       const { status } = req.query;
 
-      const isStaffOrDean = roles.some((r: string) => ['staff', 'dean'].includes(r));
-      let majorId: number | null = null;
+      // SEC-06: อาจารย์/หัวหน้าสาขาที่ไม่มีโปรไฟล์บุคลากรจะถูกปฏิเสธ ไม่ใช่เห็นทั้งมหาวิทยาลัย
+      const scope = await resolveMajorScope(userId, roles);
 
-      // If advisor or dept_head, restrict to their major
-      if (!isStaffOrDean && roles.some((r: string) => ['advisor', 'dept_head'].includes(r))) {
-        const personnelProfile = await PersonnelModel.findByPersonnelId(userId);
-        if (personnelProfile) {
-          majorId = personnelProfile.major_id;
-        } else {
-          res.status(403).json({ message: 'Personnel profile not found.' });
-          return;
-        }
+      // เจ้าหน้าที่และคณบดีเห็นทั้งคณะ และเลือกกรองเฉพาะสาขาได้ผ่าน query param
+      let majorId = scope.majorId;
+      if (!scope.isScoped && req.query.major_id) {
+        const requestedMajor = parseInt(req.query.major_id as string, 10);
+        if (!isNaN(requestedMajor)) majorId = requestedMajor;
       }
 
-      if (majorId === null) {
-        // Fallback for staff/dean if they want to filter by major (optional query param)
-        if (req.query.major_id) {
-          majorId = parseInt(req.query.major_id as string, 10);
-        }
-      }
-
-      if (majorId === null) {
-        // If still null, return empty or implement a global fetch method.
-        // For System 1, it's safer to require major_id context.
-        res.status(400).json({ message: 'major_id is required to fetch applications.' });
-        return;
-      }
-
-      const applications = await ApplicationModel.getByMajor(majorId, status as string);
+      const applications = await ApplicationModel.list(majorId, status as string);
 
       res.status(200).json({
         success: true,
         data: applications,
       });
     } catch (error: any) {
+      if (sendAccessError(res, error)) return;
       console.error('Get Applications Error:', error);
       res.status(500).json({
         success: false,
@@ -169,27 +165,35 @@ export class ApplicationController {
       }
       
       const validOptions = ['appropriate', 'inappropriate'];
-      if (!validOptions.includes(academic_evaluation) || 
-          !validOptions.includes(behavior_evaluation) || 
+      if (!validOptions.includes(academic_evaluation) ||
+          !validOptions.includes(behavior_evaluation) ||
           !validOptions.includes(maturity_evaluation)) {
         res.status(400).json({ message: 'Evaluation values must be appropriate or inappropriate.' });
         return;
       }
 
-      // IDOR Major Guard
+      // การประเมินว่า "ไม่เหมาะสม" ต้องมีเหตุผลเสมอ เพราะปลายทางคือนักศึกษาที่ต้องรู้ว่าติดตรงไหน
+      const missingRemark = [
+        { value: academic_evaluation, remark: academic_remark, label: 'ด้านวิชาการ' },
+        { value: behavior_evaluation, remark: behavior_remark, label: 'ด้านความประพฤติ' },
+        { value: maturity_evaluation, remark: maturity_remark, label: 'ด้านวุฒิภาวะ' },
+      ].find((aspect) => aspect.value === 'inappropriate' && !String(aspect.remark || '').trim());
+
+      if (missingRemark) {
+        res.status(400).json({
+          message: `กรุณาระบุเหตุผลของการประเมิน "ไม่เหมาะสม" ใน${missingRemark.label}`,
+        });
+        return;
+      }
+
       const app = await ApplicationModel.findById(applicationId);
       if (!app) {
         res.status(404).json({ message: 'Application not found.' });
         return;
       }
 
-      const studentProfile = await StudentModel.findByStudentId(app.student_id);
-      const advisorProfile = await PersonnelModel.findByPersonnelId(advisorId);
-
-      if (!studentProfile || !advisorProfile || studentProfile.major_id !== advisorProfile.major_id) {
-        res.status(403).json({ message: 'Forbidden. Major ID mismatch.' });
-        return;
-      }
+      // SEC-06: อาจารย์ประเมินได้เฉพาะนักศึกษาในสาขาตัวเอง (Phase 1 ยังไม่มีการจับคู่ที่ปรึกษา)
+      await assertCanAccessStudent(advisorId, req.user.roles, app.student_id);
 
       const success = await ApplicationModel.evaluateByAdvisor(applicationId, advisorId, {
         academic_evaluation,
@@ -201,15 +205,27 @@ export class ApplicationController {
       });
 
       if (!success) {
-        res.status(400).json({ message: 'Failed to evaluate. Ensure application is in pending_advisor status.' });
+        res.status(400).json({ message: 'ใบสมัครนี้ถูกพิจารณาไปแล้ว หรือไม่ได้อยู่ในขั้นรออาจารย์ที่ปรึกษา' });
         return;
       }
 
+      void writeAudit(
+        {
+          action: AuditAction.APPLICATION_EVALUATED,
+          entityType: 'coop_application',
+          entityId: applicationId,
+          subjectId: app.student_id,
+          detail: { academic_evaluation, behavior_evaluation, maturity_evaluation },
+        },
+        req
+      );
+
       res.status(200).json({
         success: true,
-        message: 'Evaluation saved successfully.',
+        message: 'บันทึกผลการประเมินเรียบร้อยแล้ว',
       });
     } catch (error: any) {
+      if (sendAccessError(res, error)) return;
       console.error('Evaluate By Advisor Error:', error);
       res.status(500).json({
         success: false,
@@ -244,28 +260,54 @@ export class ApplicationController {
         return;
       }
 
-      // IDOR Major Guard
+      // ผลที่ไม่ใช่ "อนุมัติ" ต้องมีเหตุผล — นักศึกษาต้องรู้ว่าทำไมยังไปต่อไม่ได้
+      if (conclusion !== 'approved' && !String(remark || '').trim()) {
+        res.status(400).json({ message: 'กรุณาระบุเหตุผลของผลการพิจารณา' });
+        return;
+      }
+
       const app = await ApplicationModel.findById(applicationId);
       if (!app) {
         res.status(404).json({ message: 'Application not found.' });
         return;
       }
 
-      const studentProfile = await StudentModel.findByStudentId(app.student_id);
-      const deptHeadProfile = await PersonnelModel.findByPersonnelId(deptHeadId);
+      // SEC-06: หัวหน้าสาขาอนุมัติได้เฉพาะนักศึกษาในสาขาตัวเอง
+      await assertCanAccessStudent(deptHeadId, req.user.roles, app.student_id);
 
-      if (!studentProfile || !deptHeadProfile || studentProfile.major_id !== deptHeadProfile.major_id) {
-        res.status(403).json({ message: 'Forbidden. Major ID mismatch.' });
-        return;
-      }
+      const result = await ApplicationModel.approveByDeptHeadWithTransaction(
+        applicationId,
+        deptHeadId,
+        conclusion,
+        remark
+      );
 
-      await ApplicationModel.approveByDeptHeadWithTransaction(applicationId, deptHeadId, conclusion, remark);
+      // SEC-07: การอนุมัติตรงนี้ให้สิทธิ์สหกิจและเขียนเกรดทางการ — ต้องมีร่องรอยว่าใครทำ
+      void writeAudit(
+        {
+          action: AuditAction.APPLICATION_DECIDED,
+          entityType: 'coop_application',
+          entityId: applicationId,
+          subjectId: result.studentId,
+          detail: {
+            conclusion,
+            remark: remark || null,
+            is_eligible_set: conclusion === 'approved',
+            cumulative_gpa_applied: result.gpaApplied,
+          },
+        },
+        req
+      );
 
       res.status(200).json({
         success: true,
-        message: `Application ${conclusion} successfully.`,
+        message:
+          conclusion === 'approved'
+            ? 'อนุมัติใบสมัครเรียบร้อยแล้ว นักศึกษาได้รับสิทธิ์เข้าร่วมสหกิจศึกษา'
+            : 'บันทึกผลการพิจารณาเรียบร้อยแล้ว',
       });
     } catch (error: any) {
+      if (sendAccessError(res, error)) return;
       console.error('Approve By Dept Head Error:', error);
       res.status(400).json({
         success: false,

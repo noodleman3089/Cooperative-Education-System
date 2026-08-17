@@ -35,6 +35,8 @@ const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
 const MentorProfile = lazy(() => import('./Company/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
+const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
+const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 
 /**
  * The four student screens that belong to the co-op itself rather than to
@@ -196,6 +198,7 @@ const Dashboard: React.FC = () => {
             />
           );
         }
+        if (activeMenu === 'application') return <CoopApplicationForm />;
         if (activeMenu === 'jobs') return <SmartJobBoard />;
         if (activeMenu === 'profile') return <StudentProfile />;
         if (activeMenu === 'accommodation_plan') return <AccommodationWorkPlan />;
@@ -205,12 +208,14 @@ const Dashboard: React.FC = () => {
         return <StudentDashboard />;
         
       case 'advisor':
+        if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
         return <AdvisorDashboard activeMenu={activeMenu} />;
         
       case 'dept_head':
+        if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         return <DeptHeadDashboard activeMenu={activeMenu} />;

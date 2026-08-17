@@ -6,6 +6,8 @@ export interface CoopApplication {
   semester_id: number;
   expected_region: string;
   special_skills: string;
+  /** เกรดที่นักศึกษาแจ้งเองในใบสมัคร ยังไม่ใช่เกรดทางการจนกว่าหัวหน้าสาขาจะอนุมัติ */
+  claimed_gpa: string | number | null;
   status: string;
   academic_evaluation?: string;
   academic_remark?: string;
@@ -30,7 +32,8 @@ export class ApplicationModel {
     studentId: number,
     semesterId: number,
     expectedRegion: string | null,
-    specialSkills: string | null
+    specialSkills: string | null,
+    claimedGpa: number
   ): Promise<CoopApplication> {
     const client = await pool.connect();
     try {
@@ -42,14 +45,14 @@ export class ApplicationModel {
         [studentId, semesterId]
       );
       if ((duplicateCheck.rowCount ?? 0) > 0) {
-        throw new Error('You have already submitted an application for this semester.');
+        throw new Error('คุณยื่นใบสมัครของภาคการศึกษานี้ไปแล้ว');
       }
 
       const insertRes = await client.query(
-        `INSERT INTO coop_applications (student_id, semester_id, expected_region, special_skills, status)
-         VALUES ($1, $2, $3, $4, 'pending_advisor')
+        `INSERT INTO coop_applications (student_id, semester_id, expected_region, special_skills, claimed_gpa, status)
+         VALUES ($1, $2, $3, $4, $5, 'pending_advisor')
          RETURNING *`,
-        [studentId, semesterId, expectedRegion, specialSkills]
+        [studentId, semesterId, expectedRegion, specialSkills, claimedGpa]
       );
       
       await client.query('COMMIT');
@@ -75,24 +78,39 @@ export class ApplicationModel {
   }
 
   /**
-   * Get all applications for a specific major
+   * List applications for reviewers.
+   *
+   * SEC-06: `majorId === null` means the caller is staff or a dean — a scope the
+   * *caller* proved through resolveMajorScope, never a filter that quietly went
+   * missing. Advisors and department heads always arrive here with a major.
    */
-  static async getByMajor(majorId: number, status?: string): Promise<any[]> {
+  static async list(majorId: number | null, status?: string): Promise<any[]> {
     let queryStr = `
-      SELECT a.*, s.student_code, s.first_name, s.last_name, s.cumulative_gpa
+      SELECT a.*, s.student_code, s.first_name, s.last_name, s.cumulative_gpa,
+             sem.semester, sem.academic_year
       FROM coop_applications a
       JOIN students s ON a.student_id = s.student_id
-      WHERE s.major_id = $1
+      JOIN coop_semesters sem ON a.semester_id = sem.semester_id
     `;
-    const params: any[] = [majorId];
-    
+    const params: any[] = [];
+    const conditions: string[] = [];
+
+    if (majorId !== null) {
+      params.push(majorId);
+      conditions.push(`s.major_id = $${params.length}`);
+    }
+
     if (status) {
       params.push(status);
-      queryStr += ` AND a.status = $2`;
+      conditions.push(`a.status = $${params.length}`);
     }
-    
+
+    if (conditions.length > 0) {
+      queryStr += ` WHERE ${conditions.join(' AND ')}`;
+    }
+
     queryStr += ` ORDER BY a.created_at DESC`;
-    
+
     const res = await query(queryStr, params);
     return res.rows;
   }
@@ -153,14 +171,14 @@ export class ApplicationModel {
     deptHeadId: number,
     conclusion: string, // 'approved', 'waitlisted', 'other'
     remark?: string
-  ): Promise<boolean> {
+  ): Promise<{ studentId: number; gpaApplied: number | null }> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       // 1. Lock the application
       const appRes = await client.query(
-        `SELECT student_id, status FROM coop_applications WHERE application_id = $1 FOR UPDATE`,
+        `SELECT student_id, status, claimed_gpa FROM coop_applications WHERE application_id = $1 FOR UPDATE`,
         [applicationId]
       );
 
@@ -182,16 +200,24 @@ export class ApplicationModel {
         [conclusion, conclusion, remark || null, deptHeadId, applicationId]
       );
 
-      // 3. If approved, update student eligibility (Logic Lens constraint)
+      // 3. การอนุมัติของหัวหน้าสาขาคือ *ทางเดียว* ที่ students.is_eligible ถูกตั้งเป็น TRUE
+      //    การนำเข้า CSV เขียนได้แค่ eligible_students_list เท่านั้น จึงไม่มีสองแหล่ง
+      //    ที่เขียนทับกันเงียบๆ อีก · เกรดที่นักศึกษาแจ้งจะกลายเป็นเกรดทางการตรงนี้
+      //    เพราะตรงนี้คือจุดที่มีมนุษย์รับผิดชอบและถูกบันทึกลง audit_log
+      let gpaApplied: number | null = null;
       if (conclusion === 'approved') {
+        gpaApplied = app.claimed_gpa !== null ? Number(app.claimed_gpa) : null;
         await client.query(
-          `UPDATE students SET is_eligible = TRUE WHERE student_id = $1`,
-          [app.student_id]
+          `UPDATE students
+           SET is_eligible = TRUE,
+               cumulative_gpa = COALESCE($2, cumulative_gpa)
+           WHERE student_id = $1`,
+          [app.student_id, gpaApplied]
         );
       }
 
       await client.query('COMMIT');
-      return true;
+      return { studentId: app.student_id as number, gpaApplied };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

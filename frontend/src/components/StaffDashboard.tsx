@@ -1003,7 +1003,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <span className="text-lg font-bold mt-1 block">{importSummary.importedCount} ราย</span>
                 </div>
                 <div className="p-3 bg-blue-50 dark:bg-blue-950/15 rounded-lg text-brand-blue dark:text-blue-400">
-                  <span className="text-gray-500 dark:text-gray-400 block font-medium">อัปเดตสิทธิ์ใหม่</span>
+                  <span className="text-gray-500 dark:text-gray-400 block font-medium">มีบัญชีในระบบแล้ว</span>
                   <span className="text-lg font-bold mt-1 block">{importSummary.updatedCount} ราย</span>
                 </div>
                 <div className="p-3 bg-yellow-50 dark:bg-yellow-950/15 rounded-lg text-yellow-700 dark:text-yellow-400">
@@ -1011,6 +1011,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <span className="text-lg font-bold mt-1 block">{importSummary.unchangedCount} ราย</span>
                 </div>
               </div>
+
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                ไฟล์รายชื่อใช้กำหนดว่า <span className="font-medium">ใครมีสิทธิ์ยื่นใบสมัคร</span> เท่านั้น
+                · สิทธิ์เข้าร่วมสหกิจศึกษาของนักศึกษาที่ลงทะเบียนแล้วจะไม่ถูกไฟล์นี้เขียนทับ
+                ให้แก้ที่เมนู “ตรวจสอบคุณสมบัตินักศึกษา” หรือผ่านการอนุมัติใบสมัคร (สหกิจ 01)
+              </p>
 
               {/* The importer has always returned these; nothing ever rendered
                   them, so a row the server refused vanished without a word. */}

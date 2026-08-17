@@ -21,8 +21,6 @@ const OnboardingPersonnel = lazy(() => import('../pages/Staff/OnboardingPersonne
 const SetPassword = lazy(() => import('../pages/SetPassword'));
 const AppointmentResponse = lazy(() => import('../pages/Company/AppointmentResponse'));
 const DispatchLetterCreator = lazy(() => import('../pages/Staff/DispatchLetterCreator'));
-const CoopApplicationForm = lazy(() => import('../pages/Student/CoopApplicationForm'));
-const ApplicationReview = lazy(() => import('../pages/Advisor/ApplicationReview'));
 const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
 const MentorEvaluation = lazy(() => import('../pages/Company/MentorEvaluation'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
@@ -148,23 +146,9 @@ const AppRoutes: React.FC = () => {
         } 
       />
 
-      {/* System 1: Program Enrollment */}
-      <Route 
-        path="/student/application" 
-        element={
-          <ProtectedRoute requiredRoles={['student']}>
-            <CoopApplicationForm />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/advisor/applications" 
-        element={
-          <ProtectedRoute requiredRoles={['advisor']}>
-            <ApplicationReview />
-          </ProtectedRoute>
-        } 
-      />
+      {/* สหกิจ 01 (Program Enrollment) เข้าผ่านเมนูใน Dashboard เท่านั้น —
+          สองหน้านี้ถูกเขียนให้อยู่ในเลย์เอาต์ของ Dashboard (มี Sidebar/Navbar อยู่แล้ว)
+          route แยกจึงถูกถอดออก ไม่งั้นจะได้หน้าเปล่าที่ไม่มีทางกลับ */}
 
       {/* Phase 4 Routes */}
       <Route 

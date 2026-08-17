@@ -150,7 +150,13 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
       </svg>
     ),
-    // 20. Logout Action
+    // 20. Co-op 01 Application (เข้าร่วมโครงการ)
+    application: (
+      <svg className="h-4 w-4 shrink-0 text-rose-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+    ),
+    // 21. Logout Action
     logout: (
       <svg className="h-4 w-4 shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -161,6 +167,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   const menuConfig: Record<string, MenuItem[]> = {
     student: [
       { id: 'dashboard', label: 'หน้าแรก / แดชบอร์ด', icon: icons.dashboard },
+      { id: 'application', label: 'สมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'jobs', label: 'ตำแหน่งงาน / สมัครงาน', icon: icons.jobs },
       { id: 'accommodation_plan', label: 'รายละเอียดที่พัก & แผนงาน', icon: icons.accommodation },
       { id: 'report_outline', label: 'โครงร่างรายงานปฏิบัติงาน', icon: icons.report_outline },
@@ -170,6 +177,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     advisor: [
       { id: 'dashboard', label: 'แดชบอร์ดที่ปรึกษา', icon: icons.dashboard },
+      { id: 'applications', label: 'ตรวจใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'students', label: 'รายชื่อนักศึกษาในที่ปรึกษา', icon: icons.students },
       { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
       { id: 'supervision', label: 'บันทึกการนิเทศงาน', icon: icons.supervision },
@@ -178,6 +186,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     dept_head: [
       { id: 'dashboard', label: 'ภาพรวมสาขาวิชา', icon: icons.dashboard },
+      { id: 'applications', label: 'อนุมัติใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'approval', label: 'ตรวจสอบ/อนุมัติคำร้อง', icon: icons.approval },
       { id: 'assignment', label: 'จัดสรรอาจารย์ที่ปรึกษา', icon: icons.assignment },
       { id: 'students', label: 'ตรวจสอบคุณสมบัตินักศึกษา', icon: icons.students },
