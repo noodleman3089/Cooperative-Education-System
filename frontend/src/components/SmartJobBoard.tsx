@@ -6,16 +6,33 @@ import SelfFoundJobModal from './SelfFoundJobModal';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import StatusBadge from './ui/StatusBadge';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, getErrorStatus } from '../utils/errors';
+import {
+  googleMaps,
+  type GeocoderResult,
+  type GoogleMap,
+  type MapMarker,
+} from '../types/googleMaps';
 
-declare const google: any;
+/**
+ * ทางเข้า Google Maps ที่ TypeScript ตรวจได้ แทน `declare const google: any` เดิม
+ * โค้ดด้านล่างเรียก `google.maps.X` อยู่ 8 จุด ซึ่งทุกจุดอยู่หลังการตรวจ
+ * `mapsLoaded` แล้ว การ throw ตรงนี้จึงเป็นตาข่ายกันพลาด ไม่ใช่เส้นทางปกติ
+ */
+const google = {
+  get maps() {
+    const maps = googleMaps();
+    if (!maps) throw new Error('Google Maps API is not loaded');
+    return maps;
+  },
+};
 
 const loadGoogleMapsScript = (apiKey: string, onLoad: () => void, onError: () => void) => {
   if (!apiKey) {
     onError();
     return;
   }
-  if ((window as any).google && (window as any).google.maps) {
+  if (googleMaps()) {
     onLoad();
     return;
   }
@@ -92,8 +109,8 @@ const SmartJobBoard: React.FC = () => {
   const [mapsLoadError, setMapsLoadError] = useState<boolean>(false);
   
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const googleMapRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
+  const googleMapRef = useRef<GoogleMap | null>(null);
+  const markersRef = useRef<MapMarker[]>([]);
 
   // Get unique provinces from companies list for filtering dropdown
   const provinces = Array.from(new Set(companies.map(c => c.province))).filter(Boolean);
@@ -132,7 +149,7 @@ const SmartJobBoard: React.FC = () => {
       if (meResult.ok) {
         setHasProfile(true);
         setCurrentIntent(meResult.d?.activeIntent ?? null);
-      } else if ((meResult.e as any)?.response?.status === 404) {
+      } else if (getErrorStatus(meResult.e) === 404) {
         setHasProfile(false);
         setCurrentIntent(null);
       }
@@ -196,7 +213,7 @@ const SmartJobBoard: React.FC = () => {
       if (!company) return;
       const searchAddress = `${company.name_th}, ${company.district}, ${company.province}, ประเทศไทย`;
 
-      geocoder.geocode({ address: searchAddress }, (results: any, status: any) => {
+      geocoder.geocode({ address: searchAddress }, (results: GeocoderResult[] | null, status: string) => {
         if (status === 'OK' && results && results[0]) {
           const location = results[0].geometry.location;
           
@@ -239,7 +256,7 @@ const SmartJobBoard: React.FC = () => {
           }
         } else {
           const generalAddress = `${company.district}, ${company.province}, ประเทศไทย`;
-          geocoder.geocode({ address: generalAddress }, (generalResults: any, generalStatus: any) => {
+          geocoder.geocode({ address: generalAddress }, (generalResults: GeocoderResult[] | null, generalStatus: string) => {
             if (generalStatus === 'OK' && generalResults && generalResults[0]) {
               const location = generalResults[0].geometry.location;
               const marker = new google.maps.Marker({

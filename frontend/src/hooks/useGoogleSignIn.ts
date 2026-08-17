@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+// ชนิดของ window.google ประกาศไว้ที่ types/googleMaps.ts
 
 /**
  * Renders the Google Identity Services button into `containerId`.
@@ -21,9 +22,9 @@ export const useGoogleSignIn = (
 
   useEffect(() => {
     const initialize = () => {
-      const google = (window as any).google;
+      const google = window.google;
       const container = document.getElementById(containerId);
-      if (!google || !container) return;
+      if (!google?.accounts || !container) return;
 
       google.accounts.id.initialize({
         client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID || '',

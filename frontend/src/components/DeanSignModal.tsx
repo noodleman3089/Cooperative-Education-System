@@ -6,9 +6,19 @@ import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
 
+/** เอกสารที่คณบดีกำลังเปิดดูก่อนลงนาม (แถวจาก /documents) */
+export interface SignableDocument {
+  doc_id?: number;
+  type?: string;
+  student_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name_th?: string | null;
+}
+
 interface DeanSignModalProps {
   docId: number | null;
-  docDetail: any;
+  docDetail: SignableDocument | null;
   onClose: () => void;
   onSuccess: () => void;
 }

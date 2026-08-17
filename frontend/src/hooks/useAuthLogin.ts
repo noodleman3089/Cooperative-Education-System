@@ -2,6 +2,7 @@ import { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
+import { getErrorMessage } from '../utils/errors';
 
 /**
  * The two ways into the system, shared by every login page.
@@ -18,9 +19,6 @@ export const useAuthLogin = (onboardingType?: OnboardingType) => {
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
 
-  const messageFrom = (err: any, fallback: string) =>
-    err?.response?.data?.message || fallback;
-
   const loginWithPassword = async (email: string, password: string) => {
     if (!email || !password) {
       setError('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วน');
@@ -36,7 +34,7 @@ export const useAuthLogin = (onboardingType?: OnboardingType) => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(messageFrom(err, 'การเข้าสู่ระบบล้มเหลว กรุณาตรวจสอบข้อมูล'));
+      setError(getErrorMessage(err, 'การเข้าสู่ระบบล้มเหลว กรุณาตรวจสอบข้อมูล'));
     } finally {
       setIsSubmitting(false);
     }
@@ -60,7 +58,7 @@ export const useAuthLogin = (onboardingType?: OnboardingType) => {
         navigate('/dashboard');
       }
     } catch (err) {
-      setError(messageFrom(err, 'Google SSO ล้มเหลว กรุณาตรวจสอบการตั้งค่าบัญชี'));
+      setError(getErrorMessage(err, 'Google SSO ล้มเหลว กรุณาตรวจสอบการตั้งค่าบัญชี'));
     } finally {
       setIsSubmitting(false);
     }

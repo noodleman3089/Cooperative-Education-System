@@ -5,7 +5,12 @@ import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
 
-declare const google: any;
+import {
+  googleMaps,
+  type AddressComponent,
+  type PlaceResult,
+  type PlacesAutocomplete,
+} from '../types/googleMaps';
 
 interface Province {
   province_id: number;
@@ -28,7 +33,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   mapsLoaded,
 }) => {
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
-  const autocompleteRef = useRef<any>(null);
+  const autocompleteRef = useRef<PlacesAutocomplete | null>(null);
 
   const [selfFoundForm, setSelfFoundForm] = useState({
     company_name_th: '',
@@ -49,20 +54,20 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handlePlaceSelected = async (place: any) => {
+  const handlePlaceSelected = async (place: PlaceResult) => {
     if (!place || !place.place_id) return;
 
     setPlaceCheckMessage(null);
     setExistingCompanyId(null);
     setSelectedPlaceId(place.place_id);
 
-    let address = place.formatted_address || '';
+    const address = place.formatted_address || '';
     let province = '';
     let district = '';
     let postalCode = '';
 
     if (place.address_components) {
-      const provComp = place.address_components.find((c: any) => c.types.includes('administrative_area_level_1'));
+      const provComp = place.address_components.find((c: AddressComponent) => c.types.includes('administrative_area_level_1'));
       if (provComp) {
         province = provComp.long_name;
         if (province.startsWith('จังหวัด')) {
@@ -70,7 +75,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
         }
       }
 
-      const districtComp = place.address_components.find((c: any) => 
+      const districtComp = place.address_components.find((c: AddressComponent) => 
         c.types.includes('administrative_area_level_2') || 
         c.types.includes('sublocality_level_1') ||
         c.types.includes('locality')
@@ -84,7 +89,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
         }
       }
 
-      const zipComp = place.address_components.find((c: any) => c.types.includes('postal_code'));
+      const zipComp = place.address_components.find((c: AddressComponent) => c.types.includes('postal_code'));
       if (zipComp) {
         postalCode = zipComp.long_name;
       }
@@ -130,12 +135,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   useEffect(() => {
     if (!isOpen || !mapsLoaded || !autocompleteInputRef.current) return;
 
-    if (!(window as any).google || !(window as any).google.maps || !(window as any).google.maps.places) {
+    const maps = googleMaps();
+    if (!maps?.places) {
       console.warn('Google Maps Places API is not available. Falling back to manual entry.');
       return;
     }
 
-    autocompleteRef.current = new (window as any).google.maps.places.Autocomplete(autocompleteInputRef.current, {
+    autocompleteRef.current = new maps.places.Autocomplete(autocompleteInputRef.current, {
       types: ['establishment'],
       componentRestrictions: { country: 'th' },
       fields: ['place_id', 'name', 'formatted_address', 'address_components', 'formatted_phone_number']

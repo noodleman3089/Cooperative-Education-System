@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
+import type { WeeklyPlan } from '../../types/api';
 
 interface Accommodation {
   address: string;
@@ -166,7 +167,7 @@ const AccommodationWorkPlan: React.FC = () => {
       }
 
       if (res.weekly_plans && res.weekly_plans.length > 0) {
-        setWeeklyPlans(res.weekly_plans.map((p: any) => ({
+        setWeeklyPlans(res.weekly_plans.map((p: WeeklyPlan) => ({
           plan_id: p.plan_id,
           week_number: p.week_number,
           start_date: p.start_date ? new Date(p.start_date).toISOString().split('T')[0] : '',

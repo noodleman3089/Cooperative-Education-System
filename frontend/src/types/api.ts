@@ -4,6 +4,103 @@ export interface User {
   roles: string[];
 }
 
+/** ความสามารถทางภาษาหนึ่งรายการ ตามที่นักศึกษากรอกในหน้าประวัติ */
+export interface LanguageProficiency {
+  language: string;
+  level: string;
+}
+
+/** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนแดชบอร์ดนักศึกษา */
+export interface Announcement {
+  announcement_id: number;
+  title: string;
+  content: string;
+  created_at: string;
+  is_pinned: boolean;
+  author_name?: string | null;
+}
+
+/** แถวในคิวอนุมัติประกาศงานของเจ้าหน้าที่ */
+export interface JobPostRow {
+  job_id: number;
+  title: string;
+  description?: string | null;
+  company_name_th?: string | null;
+  quota: number;
+  applied_count: number;
+  status: string;
+  expire_date?: string | null;
+  reject_reason?: string | null;
+}
+
+/** แถวในหน้าจัดการบัญชีผู้ใช้ */
+export interface UserRow {
+  user_id: number;
+  email: string;
+  is_active: boolean;
+  roles: string[];
+}
+
+/** สาขาวิชาใน master data */
+export interface MajorOption {
+  major_id: number;
+  major_name_th: string;
+}
+
+/** แถวรายชื่อบุคลากรที่นำเข้าไว้ล่วงหน้า รอการ claim */
+export interface PreseedPersonnelRow {
+  employee_code: string;
+  first_name: string;
+  last_name: string;
+  role_name: string;
+  major_name_th?: string | null;
+  is_claimed: boolean;
+}
+
+/** แถวนักศึกษาในรายชื่อของอาจารย์/หัวหน้าสาขา (มาจาก `GET /students`) */
+export interface StudentRow {
+  student_id: number;
+  student_code: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  nickname?: string | null;
+  major_name_th?: string | null;
+  cumulative_gpa?: number | string | null;
+  is_eligible: boolean;
+  is_orientation_passed: boolean;
+}
+
+/** โครงร่างรายงาน (สหกิจ 11) หนึ่งฉบับ ในคิวตรวจของพี่เลี้ยง/อาจารย์ */
+export interface ReportOutlineRow {
+  outline_id: number;
+  student_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  major_name_th?: string | null;
+  company_name_th?: string | null;
+  latest_file_path?: string | null;
+  status?: string;
+}
+
+/** แผนปฏิบัติงานหนึ่งสัปดาห์ในแผน 16 สัปดาห์ */
+export interface WeeklyPlan {
+  plan_id?: number;
+  week_number: number;
+  start_date: string;
+  end_date: string;
+  tasks: string;
+}
+
+/** สรุปผลการนำเข้าไฟล์รายชื่อ — ใช้ทั้งฝั่งนักศึกษาและบุคลากร */
+export interface ImportSummary {
+  totalProcessed: number;
+  importedCount: number;
+  updatedCount: number;
+  unchangedCount?: number;
+  invalidRows?: string[];
+  skippedCodes?: string[];
+}
+
 export interface StudentProfile {
   student_id: number;
   student_code: string;
@@ -35,9 +132,11 @@ export interface StudentProfile {
   company_name?: string | null;
   company_province?: string | null;
   skills_and_activities?: string | null;
-  language_proficiency?: any | null;
+  /** JSONB — เก็บเป็น [{ language, level }] · ดู `StudentProfileExtra.tsx` */
+  language_proficiency?: LanguageProficiency[] | null;
   preferred_work_region?: string | null;
-  interested_job_types?: any | null;
+  /** JSONB — รายชื่อประเภทงานที่สนใจ */
+  interested_job_types?: string[] | null;
 }
 
 export interface PersonnelProfile {

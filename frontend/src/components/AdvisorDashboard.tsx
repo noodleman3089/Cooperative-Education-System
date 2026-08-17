@@ -10,6 +10,7 @@ import StatusBadge from './ui/StatusBadge';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import type { ReportOutlineRow, StudentRow } from '../types/api';
 
 interface AdvisorDashboardProps {
   activeMenu: string;
@@ -54,8 +55,8 @@ const intentStudentName = (intent?: IntentForm | null): string =>
 
 const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [intents, setIntents] = useState<IntentForm[]>([]);
-  const [students, setStudents] = useState<any[]>([]);
-  const [reportOutlines, setReportOutlines] = useState<any[]>([]);
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [reportOutlines, setReportOutlines] = useState<ReportOutlineRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -69,7 +70,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   } | null>(null);
 
   // Report Outline review modal state for Advisor
-  const [reviewingOutline, setReviewingOutline] = useState<any | null>(null);
+  const [reviewingOutline, setReviewingOutline] = useState<ReportOutlineRow | null>(null);
   const [outlineComment, setOutlineComment] = useState('');
   const [isSubmittingOutlineReview, setIsSubmittingOutlineReview] = useState(false);
   

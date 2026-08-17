@@ -8,6 +8,14 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import type {
+  Announcement,
+  ImportSummary,
+  JobPostRow,
+  MajorOption,
+  PreseedPersonnelRow,
+  UserRow,
+} from '../types/api';
 
 interface StaffDashboardProps {
   activeMenu?: string;
@@ -133,18 +141,18 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [success, setSuccess] = useState<string | null>(null);
 
   // Job Approval Queue state
-  const [allJobs, setAllJobs] = useState<any[]>([]);
+  const [allJobs, setAllJobs] = useState<JobPostRow[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [publishingJobId, setPublishingJobId] = useState<number | null>(null);
   const [jobStatusFilter, setJobStatusFilter] = useState<'all' | 'pending_approval' | 'published' | 'rejected' | 'closed'>('all');
-  const [rejectingJob, setRejectingJob] = useState<any | null>(null);
+  const [rejectingJob, setRejectingJob] = useState<JobPostRow | null>(null);
   const [jobRejectReason, setJobRejectReason] = useState('');
   const [jobRejectCustom, setJobRejectCustom] = useState('');
   const [jobRejectError, setJobRejectError] = useState<string | null>(null);
   const [isRejectingJob, setIsRejectingJob] = useState(false);
 
   // PR Announcements state
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false);
   const [annTitle, setAnnTitle] = useState('');
   const [annContent, setAnnContent] = useState('');
@@ -159,7 +167,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [eligibleColumnPresent, setEligibleColumnPresent] = useState(false);
   /** Rows the file gave up on, named individually rather than as one failure. */
   const [rejectedRows, setRejectedRows] = useState<string[]>([]);
-  const [importSummary, setImportSummary] = useState<any | null>(null);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [isImporting, setIsImporting] = useState(false);
 
   // Student sub-tab states
@@ -176,14 +184,14 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
 
   // User list states (for user mgmt tab)
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersSubTab, setUsersSubTab] = useState<'active' | 'preseed'>('active');
 
   // Pre-seed personnel states
-  const [preseededPersonnel, setPreseededPersonnel] = useState<any[]>([]);
+  const [preseededPersonnel, setPreseededPersonnel] = useState<PreseedPersonnelRow[]>([]);
   const [loadingPreseed, setLoadingPreseed] = useState(false);
-  const [majors, setMajors] = useState<any[]>([]);
+  const [majors, setMajors] = useState<MajorOption[]>([]);
   const [preseedEmployeeCode, setPreseedEmployeeCode] = useState('');
   const [preseedRoleName, setPreseedRoleName] = useState('advisor');
   const [preseedMajorId, setPreseedMajorId] = useState<number | ''>('');
@@ -193,12 +201,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [preseedActiveTab, setPreseedActiveTab] = useState<'csv' | 'manual'>('csv');
   const [preseedDragOver, setPreseedDragOver] = useState(false);
   const [isUploadingPreseed, setIsUploadingPreseed] = useState(false);
-  const [preseedImportResult, setPreseedImportResult] = useState<any | null>(null);
+  const [preseedImportResult, setPreseedImportResult] = useState<{ summary: ImportSummary } | null>(null);
 
   // Active User modals & editing
   const [isAddUserModalOpen, setIsAddUserModalOpen] = useState(false);
   const [isEditUserModalOpen, setIsEditUserModalOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<any | null>(null);
+  const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
   const [userEmail, setUserEmail] = useState('');
   const [userPassword, setUserPassword] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
@@ -476,12 +484,12 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
         // empty cells, so a row object alone cannot tell "the file has no
         // eligibility column" apart from "this row left it blank" — and those
         // two now mean different things.
-        const headerRow: string[] = (XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 })[0] || [])
-          .map((h: any) => String(h ?? '').trim());
+        const headerRow: string[] = (XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1 })[0] || [])
+          .map((h) => String(h ?? '').trim());
         const hasEligibleColumn = headerRow.some(h => ELIGIBLE_HEADERS.includes(h));
 
         // defval keeps blank cells present as '' so a cleared cell is visible.
-        const rawRows = XLSX.utils.sheet_to_json<any>(worksheet, { defval: '' });
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: '' });
 
         // One bad row used to throw out of the whole .map(), so a single wrong
         // grade in a file of 300 meant nothing was imported and only that row

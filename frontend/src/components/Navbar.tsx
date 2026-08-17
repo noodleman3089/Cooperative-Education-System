@@ -6,6 +6,31 @@ import { Bell, FileText } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
 import DeanSignModal from './DeanSignModal';
 
+/**
+ * กระดิ่งแจ้งเตือนใช้ร่วมกันทุกบทบาท แต่แหล่งข้อมูลต่างกัน:
+ * นักศึกษาได้รายการที่ประกอบขึ้นเองในไฟล์นี้ · อีก 4 บทบาทได้แถวดิบจาก
+ * `/intents` หรือ `/documents` ตรงๆ · ฟิลด์จึงเป็น optional เกือบทั้งหมด
+ * ตามความจริงของข้อมูล ไม่ใช่เพราะไม่รู้ว่ามีอะไร
+ */
+interface NotificationItem {
+  // แบบที่ประกอบขึ้นสำหรับนักศึกษา
+  id?: string;
+  title?: string;
+  description?: string;
+  isWarning?: boolean;
+  isSuccess?: boolean;
+  isRead?: boolean;
+  // แถวดิบของใบความจำนง (อาจารย์ / หัวหน้าสาขา / เจ้าหน้าที่)
+  form_id?: number;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name_th?: string | null;
+  // แถวดิบของเอกสารราชการ (คณบดี)
+  doc_id?: number;
+  type?: string;
+  status?: string;
+}
+
 interface NavbarProps {
   currentRole: string;
   onRoleChange: (role: string) => void;
@@ -22,7 +47,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const navigate = useNavigate();
 
   // Notification and Modal states
-  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
@@ -69,11 +94,11 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         setNotifications(res || []);
       } else if (currentRole === 'dean') {
         const res = await api.get('/documents');
-        const pendingDocs = (res || []).filter((d: any) => d.status === 'pending_sign');
+        const pendingDocs = ((res || []) as NotificationItem[]).filter((d) => d.status === 'pending_sign');
         setNotifications(pendingDocs);
       } else if (currentRole === 'student') {
         const dashboardData = await api.get('/students/dashboard');
-        const studentNotifs: any[] = [];
+        const studentNotifs: NotificationItem[] = [];
         if (dashboardData) {
           const { activeIntent, documents } = dashboardData;
           if (activeIntent) {
@@ -139,7 +164,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
 
           // 4. Documents
           if (documents && documents.length > 0) {
-            documents.forEach((doc: any) => {
+            documents.forEach((doc: { doc_id: number; type: string; status: string }) => {
               const docTypeLabel = doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
               const docStatusLabel = doc.status === 'signed' ? 'ลงนามเสร็จสิ้นแล้ว' : 'รอลงนาม';
               studentNotifs.push({

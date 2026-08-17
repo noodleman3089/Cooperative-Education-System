@@ -9,15 +9,44 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Button from '../../components/ui/Button';
 import { getErrorMessage } from '../../utils/errors';
+import type { WeeklyPlan } from '../../types/api';
 
 interface SupervisionTrackingProps {
   // Can pass props if needed, but we'll fetch data here
 }
 
+/** นักศึกษาในความดูแล พร้อมข้อมูลที่พักและแผนงาน สำหรับวางแผนนิเทศ */
+interface SupervisedStudent {
+  student_id: number;
+  student_code: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  phone?: string | null;
+  advisor_id?: number | null;
+  supervisor_id?: number | null;
+  company_name?: string | null;
+  company_province?: string | null;
+  mentor_name?: string | null;
+  mentor_phone?: string | null;
+  accommodation_address?: string | null;
+  accommodation_phone?: string | null;
+  emergency_contact?: string | null;
+  emergency_phone?: string | null;
+  weekly_plans?: WeeklyPlan[];
+}
+
+/** นัดหมายนิเทศหนึ่งครั้ง เท่าที่หน้าจอนี้อ่าน */
+interface SupervisionAppointment {
+  student_id: number;
+  student_time?: string | null;
+  mentor_time?: string | null;
+  tour_requested?: boolean;
+}
+
 const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
   const auth = useContext(AuthContext);
-  const [students, setStudents] = useState<any[]>([]);
-  const [appointments, setAppointments] = useState<any[]>([]);
+  const [students, setStudents] = useState<SupervisedStudent[]>([]);
+  const [appointments, setAppointments] = useState<SupervisionAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -265,7 +294,7 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                     <div className="mt-4 space-y-2">
                       <div className="text-xs font-bold text-gray-700 dark:text-gray-300">แผนปฏิบัติงานรายสัปดาห์:</div>
                       <div className="max-h-[150px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 bg-gray-50/30 dark:bg-gray-900/30">
-                        {student.weekly_plans.map((p: any) => (
+                        {student.weekly_plans.map((p: WeeklyPlan) => (
                           <div key={p.plan_id} className="p-3 text-xs flex justify-between gap-4">
                             <div>
                               <span className="font-bold block text-gray-600 dark:text-gray-400">สัปดาห์ที่ {p.week_number}</span>

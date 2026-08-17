@@ -11,7 +11,7 @@ interface Major {
 }
 
 const PersonnelProfile: React.FC = () => {
-  const [profile, setProfile] = useState<any | null>(null);
+  const [profile, setProfile] = useState<{ status?: string; e_signature_file?: string | null } | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
   const [majors, setMajors] = useState<Major[]>([]);
   

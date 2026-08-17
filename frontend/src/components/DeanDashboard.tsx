@@ -168,7 +168,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       if (failed.length > 0) {
         setError(
           `ลงนามไม่สำเร็จ ${failed.length} รายการ: ` +
-          failed.map((f: any) => `#DOC-${f.doc_id} (${f.error})`).join(' · ')
+          failed.map((f: { doc_id: number; error: string }) => `#DOC-${f.doc_id} (${f.error})`).join(' · ')
         );
       }
 

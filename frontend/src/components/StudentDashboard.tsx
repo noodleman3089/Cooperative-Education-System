@@ -10,7 +10,16 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import StatusBadge from './ui/StatusBadge';
 import Button from './ui/Button';
 import { Pin, UserPen } from 'lucide-react';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, getErrorStatus } from '../utils/errors';
+
+/** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนสุดของแดชบอร์ด */
+interface Announcement {
+  announcement_id: number;
+  title: string;
+  content: string;
+  created_at: string;
+  is_pinned: boolean;
+}
 
 const StudentDashboard: React.FC = () => {
   const [data, setData] = useState<{
@@ -37,8 +46,8 @@ const StudentDashboard: React.FC = () => {
   const [needsProfile, setNeedsProfile] = useState(false);
 
   // PR Announcements states
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [selectedAnnouncement, setSelectedAnnouncement] = useState<any | null>(null);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
   const loadDashboardData = async (isBackground = false) => {
     try {
@@ -73,7 +82,7 @@ const StudentDashboard: React.FC = () => {
           // says so ("Student profile not found. Please setup profile first.")
           // and this used to throw that away and tell them to try again, which
           // could never work however many times they did it.
-          const notOnboarded = (dashResult.reason as any)?.response?.status === 404;
+          const notOnboarded = getErrorStatus(dashResult.reason) === 404;
           setNeedsProfile(notOnboarded);
           setError(notOnboarded ? null : 'ไม่สามารถเรียกข้อมูลแดชบอร์ดได้ กรุณาลองใหม่อีกครั้ง');
         }
@@ -181,7 +190,7 @@ const StudentDashboard: React.FC = () => {
   // onboarding still needs to read the co-op office's notices.
   const announcementBanner = announcements.length > 0 && (
     <div className="space-y-3">
-      {announcements.filter((a: any) => a.is_pinned).map((pinned: any) => (
+      {announcements.filter((a) => a.is_pinned).map((pinned) => (
         <div key={pinned.announcement_id} className="p-5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-indigo-700 text-white shadow-md flex justify-between items-center gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">

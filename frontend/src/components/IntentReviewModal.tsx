@@ -12,6 +12,32 @@ interface IntentReviewModalProps {
   onSuccess: () => void;
 }
 
+/**
+ * รายละเอียดใบความจำนงหนึ่งใบ ตามที่ `GET /intents/:id` ส่งกลับมา
+ * (endpoint นี้จงใจไม่ส่งข้อมูลส่วนตัวให้ role ที่ไม่ควรเห็น — ดู SEC-10)
+ */
+interface IntentDetail {
+  form_id?: number;
+  student_id?: number;
+  student_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  nickname?: string | null;
+  year_level?: number | null;
+  cumulative_gpa?: number | string | null;
+  student_phone?: string | null;
+  alt_email?: string | null;
+  current_address?: string | null;
+  parent_name?: string | null;
+  parent_phone?: string | null;
+  company_name_th?: string | null;
+  company_contact_person?: string | null;
+  company_phone?: string | null;
+  job_title?: string | null;
+  start_date?: string | null;
+  status?: string;
+}
+
 const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
   intentId,
   onClose,
@@ -19,7 +45,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
   onSuccess,
 }) => {
   const [modalLoading, setModalLoading] = useState(false);
-  const [intentDetail, setIntentDetail] = useState<any>(null);
+  const [intentDetail, setIntentDetail] = useState<IntentDetail | null>(null);
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [customReason, setCustomReason] = useState('');
