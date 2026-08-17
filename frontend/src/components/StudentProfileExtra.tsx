@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import api from '../services/api';
 import type { StudentProfile } from '../types/api';
 import AlertBanner from './ui/AlertBanner';
+import { getErrorMessage } from '../utils/errors';
 
 interface StudentProfileExtraProps {
   profile: StudentProfile;
@@ -75,9 +76,9 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
       });
       setSuccessMessage('บันทึกข้อมูลส่วนเสริมเรียบร้อยแล้ว');
       onProfileUpdated();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Update extra profile error:', err);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'));
     } finally {
       setIsSubmitting(false);
     }

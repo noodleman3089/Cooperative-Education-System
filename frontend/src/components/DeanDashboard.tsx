@@ -7,6 +7,7 @@ import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
+import { getErrorMessage } from '../utils/errors';
 
 interface DeanDashboardProps {
   activeMenu?: string;
@@ -181,9 +182,9 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       // Background refresh: a foreground one clears `error` and swaps the page
       // for a skeleton, which is what used to eat the message just set above.
       await loadDashboardData(true);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Batch sign error:', err);
-      setError(err.response?.data?.message || 'การลงนามแบบกลุ่มล้มเหลว กรุณาลองใหม่อีกครั้ง');
+      setError(getErrorMessage(err, 'การลงนามแบบกลุ่มล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSigningInProgress(false);
     }
@@ -321,9 +322,9 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       if (res.profile?.e_signature_file) {
         setSavedSigPath(res.profile.e_signature_file);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to save signature:', err);
-      setError(err.response?.data?.message || 'การบันทึกลายเซ็นล้มเหลว กรุณาลองใหม่อีกครั้ง');
+      setError(getErrorMessage(err, 'การบันทึกลายเซ็นล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSavingSig(false);
     }

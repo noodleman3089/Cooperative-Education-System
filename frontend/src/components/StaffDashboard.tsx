@@ -7,6 +7,7 @@ import Modal, { ModalBody } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 interface StaffDashboardProps {
   activeMenu?: string;
@@ -268,9 +269,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       await api.put(`/jobs/${jobId}/publish`);
       setSuccess('อนุมัติเผยแพร่ตำแหน่งงานเรียบร้อยแล้ว');
       await loadAllJobs();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Publish job error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถอนุมัติตำแหน่งงานได้');
+      setError(getErrorMessage(err, 'ไม่สามารถอนุมัติตำแหน่งงานได้'));
     } finally {
       setPublishingJobId(null);
     }
@@ -298,9 +299,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setJobRejectReason('');
       setJobRejectCustom('');
       await loadAllJobs();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Reject job error:', err);
-      setJobRejectError(err.response?.data?.message || 'ไม่สามารถบันทึกการไม่อนุมัติได้');
+      setJobRejectError(getErrorMessage(err, 'ไม่สามารถบันทึกการไม่อนุมัติได้'));
     } finally {
       setIsRejectingJob(false);
     }
@@ -337,9 +338,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setAnnImage('');
       setAnnPinned(false);
       await loadAnnouncements();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Create announcement error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถสร้างข่าวประชาสัมพันธ์ได้');
+      setError(getErrorMessage(err, 'ไม่สามารถสร้างข่าวประชาสัมพันธ์ได้'));
     } finally {
       setIsSubmittingAnn(false);
     }
@@ -567,9 +568,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             ? `อ่านไฟล์สำเร็จ นำเข้าได้ ${formatted.length} รายการ ข้าม ${rejected.length} แถว (ดูรายการด้านล่าง)`
             : `อ่านไฟล์สำเร็จ พบข้อมูลนักศึกษา ${formatted.length} รายการ (กรุณาตรวจสอบข้อมูลและกดปุ่มยืนยัน)`
         );
-      } catch (err: any) {
+      } catch (err) {
         console.error('File parsing error:', err);
-        setError(`ไม่สามารถอ่านไฟล์ได้: ${err.message || 'โครงสร้างไฟล์ไม่ถูกต้อง'}`);
+        setError(`ไม่สามารถอ่านไฟล์ได้: ${getErrorMessage(err, 'โครงสร้างไฟล์ไม่ถูกต้อง')}`);
         setParsedStudents([]);
         setRejectedRows([]);
         setEligibleColumnPresent(false);
@@ -606,9 +607,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setSuccess('นำเข้าและซิงโครไนซ์ข้อมูลรายชื่อนักศึกษากับระบบฐานข้อมูลสำเร็จแล้ว');
       setParsedStudents([]);
       setRejectedRows([]);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Import sync error:', err);
-      setError(err.response?.data?.message || 'การเชื่อมต่อส่งไฟล์เพื่อซิงค์ข้อมูลกับฐานข้อมูลล้มเหลว');
+      setError(getErrorMessage(err, 'การเชื่อมต่อส่งไฟล์เพื่อซิงค์ข้อมูลกับฐานข้อมูลล้มเหลว'));
     } finally {
       setIsImporting(false);
     }
@@ -637,9 +638,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setManualStudentCode('');
       setManualStudentGpa('');
       setManualStudentEmail('');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Manual student add error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถบันทึกข้อมูลนักศึกษาได้');
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลนักศึกษาได้'));
     } finally {
       setIsAddingStudent(false);
     }
@@ -678,9 +679,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setPreseedEmail('');
       setPreseedMajorId('');
       await loadPreseedAndMajors();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Manual preseed error:', err);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูลบุคลากรล่วงหน้า');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูลบุคลากรล่วงหน้า'));
     } finally {
       setIsUploadingPreseed(false);
     }
@@ -702,9 +703,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setPreseedImportResult(response);
       setSuccess('นำเข้าข้อมูลบุคลากรผ่านไฟล์ CSV สำเร็จ');
       await loadPreseedAndMajors();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Preseed CSV upload error:', err);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการนำเข้าไฟล์ CSV');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการนำเข้าไฟล์ CSV'));
     } finally {
       setIsUploadingPreseed(false);
     }
@@ -718,9 +719,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       await api.delete(`/personnel/preseed/${employeeCode}`);
       setSuccess('ลบรายชื่อบุคลากรล่วงหน้าสำเร็จ');
       await loadPreseedAndMajors();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Delete preseed error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถลบข้อมูลบุคลากรล่วงหน้าได้');
+      setError(getErrorMessage(err, 'ไม่สามารถลบข้อมูลบุคลากรล่วงหน้าได้'));
     }
   };
 
@@ -748,9 +749,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setUserPassword('');
       setUserRoles([]);
       await loadUsers();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Create user error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถสร้างบัญชีผู้ใช้ได้');
+      setError(getErrorMessage(err, 'ไม่สามารถสร้างบัญชีผู้ใช้ได้'));
     } finally {
       setIsSubmittingUser(false);
     }
@@ -778,9 +779,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setIsEditUserModalOpen(false);
       setSelectedUser(null);
       await loadUsers();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Update user error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถบันทึกข้อมูลผู้ใช้ได้');
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลผู้ใช้ได้'));
     } finally {
       setIsSubmittingUser(false);
     }
@@ -794,9 +795,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       await api.delete(`/users/${userId}`);
       setSuccess('ลบบัญชีผู้ใช้สำเร็จ');
       await loadUsers();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Delete user error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถลบบัญชีผู้ใช้ได้');
+      setError(getErrorMessage(err, 'ไม่สามารถลบบัญชีผู้ใช้ได้'));
     }
   };
 
@@ -813,9 +814,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
     try {
       const res = await api.post(`/users/${userId}/resend-invite`);
       setSuccess(res.message || `ส่งลิงก์เชิญไปที่ ${email} เรียบร้อยแล้ว`);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Resend invite error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถส่งลิงก์เชิญได้');
+      setError(getErrorMessage(err, 'ไม่สามารถส่งลิงก์เชิญได้'));
     } finally {
       setResendingInvite(null);
     }
@@ -841,9 +842,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setSelectedIntent(null);
       setSelectedTemplateId('');
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Document generation error:', err);
-      setError(err.response?.data?.message || 'การสร้างเอกสารล้มเหลว ตรวจสอบข้อมูลติดต่อ HR บริษัทปลายทาง');
+      setError(getErrorMessage(err, 'การสร้างเอกสารล้มเหลว ตรวจสอบข้อมูลติดต่อ HR บริษัทปลายทาง'));
     } finally {
       setIsGeneratingDoc(false);
     }

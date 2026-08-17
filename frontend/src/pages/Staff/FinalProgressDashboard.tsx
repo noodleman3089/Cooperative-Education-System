@@ -5,6 +5,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
+import { getErrorMessage } from '../../utils/errors';
 
 interface StudentProgress {
   studentId: number;
@@ -48,8 +49,8 @@ const FinalProgressDashboard: React.FC = () => {
       setError(null);
       const res = await api.get('/coop-progress/dashboard');
       setStudents(res.data || []);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลความคืบหน้าได้');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลความคืบหน้าได้'));
     } finally {
       setLoading(false);
     }
@@ -79,9 +80,9 @@ const FinalProgressDashboard: React.FC = () => {
       // Reload page data
       const res = await api.get('/coop-progress/dashboard');
       setStudents(res.data || []);
-    } catch (err: any) {
+    } catch (err) {
       setNotifyTarget(null);
-      setError(err.response?.data?.message || 'ล้มเหลวในการส่งแจ้งเตือนเนื่องจากเงื่อนไข Cooldown');
+      setError(getErrorMessage(err, 'ล้มเหลวในการส่งแจ้งเตือนเนื่องจากเงื่อนไข Cooldown'));
     } finally {
       setNotifyingMap(prev => ({ ...prev, [student.studentId]: false }));
     }

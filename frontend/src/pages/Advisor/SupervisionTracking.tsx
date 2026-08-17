@@ -8,6 +8,7 @@ import SupervisionLogForm from './SupervisionLogForm';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Button from '../../components/ui/Button';
+import { getErrorMessage } from '../../utils/errors';
 
 interface SupervisionTrackingProps {
   // Can pass props if needed, but we'll fetch data here
@@ -73,8 +74,8 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
       setShowDraftForm(null);
       setDraftData({ appointment_date: '', student_time: '', mentor_time: '', tour_requested: false });
       fetchData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาด'));
     }
   };
 
@@ -88,9 +89,9 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
       setBypassingId(null);
       setSuccess('บันทึกสถานะตกลงนอกรอบสำเร็จ');
       fetchData();
-    } catch (err: any) {
+    } catch (err) {
       setBypassingId(null);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setConfirmBusy(false);
     }
@@ -108,9 +109,9 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
       setAcceptingRescheduleId(null);
       setSuccess('ยอมรับการเลื่อนนัดหมายสำเร็จ วันและเวลานัดหมายถูกเปลี่ยนตามที่พี่เลี้ยงเสนอแล้ว');
       fetchData();
-    } catch (err: any) {
+    } catch (err) {
       setAcceptingRescheduleId(null);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาด'));
     } finally {
       setConfirmBusy(false);
     }

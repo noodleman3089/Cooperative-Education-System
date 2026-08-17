@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import { statusText } from '../components/ui/StatusBadge';
 import api from '../services/api';
 import { Lock } from 'lucide-react';
+import { getErrorStatus } from '../utils/errors';
 
 /**
  * Every screen in the application hangs off this one switch, so this is also
@@ -121,11 +122,11 @@ const Dashboard: React.FC = () => {
         if (!cancelled) {
           setStage({ hasProfile: true, intentStatus: data?.activeIntent?.status ?? null });
         }
-      } catch (err: any) {
+      } catch (err) {
         // 404 is the student who has not filled the profile in yet. Anything
         // else is the server having a bad day, and a bad day must not invent a
         // padlock — leave the menus as they were.
-        if (!cancelled && err?.response?.status === 404) {
+        if (!cancelled && getErrorStatus(err) === 404) {
           setStage({ hasProfile: false, intentStatus: null });
         }
       }

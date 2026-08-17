@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { Calendar, CheckCircle, Clock, Check, X } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
+import { getErrorMessage } from '../../utils/errors';
 
 interface AppointmentInfo {
   appointment_id: number;
@@ -65,8 +66,8 @@ const AppointmentResponse: React.FC = () => {
         const payload = JSON.parse(atob(token.split('.')[1]));
         const res = await api.post(`/appointments/${payload.appointment_id}/respond-info`, { token });
         setInfo(res.data || null);
-      } catch (err: any) {
-        setInfoError(err.response?.data?.message
+      } catch (err) {
+        setInfoError(getErrorMessage(err)
           ? 'ลิงก์นี้หมดอายุหรือไม่ถูกต้อง กรุณาติดต่อเจ้าหน้าที่สหกิจศึกษา'
           : 'ไม่สามารถโหลดรายละเอียดการนัดหมายได้ กรุณาลองใหม่อีกครั้ง');
       } finally {
@@ -119,8 +120,8 @@ const AppointmentResponse: React.FC = () => {
       });
 
       setSuccess(selectedAction === 'accept' ? 'ยืนยันการนัดหมายเรียบร้อยแล้ว' : 'ส่งคำขอเลื่อนนัดหมายเรียบร้อยแล้ว');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'ลิงก์หมดอายุ หรือเกิดข้อผิดพลาด');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ลิงก์หมดอายุ หรือเกิดข้อผิดพลาด'));
     } finally {
       setLoading(false);
     }

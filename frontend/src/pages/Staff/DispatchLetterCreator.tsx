@@ -5,6 +5,7 @@ import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { getErrorMessage } from '../../utils/errors';
 
 interface DispatchEligibleStudent {
   form_id: number;
@@ -34,9 +35,9 @@ const DispatchLetterCreator: React.FC = () => {
       setError(null);
       const data = await api.get('/documents/dispatch-eligible');
       setStudents(data || []);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch eligible students:', err);
-      if (!isBackground) setError(err.message || 'ไม่สามารถดึงข้อมูลนักศึกษาได้');
+      if (!isBackground) setError(getErrorMessage(err, 'ไม่สามารถดึงข้อมูลนักศึกษาได้'));
     } finally {
       if (!isBackground) setLoading(false);
     }
@@ -98,9 +99,9 @@ const DispatchLetterCreator: React.FC = () => {
       setDocumentNumber('');
       setSelectedStudentIds([]);
       await fetchEligibleStudents(); // Refresh the list
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to generate dispatch letters:', err);
-      setError(err.message || 'เกิดข้อผิดพลาดในการสร้างหนังสือส่งตัว');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการสร้างหนังสือส่งตัว'));
     } finally {
       setIsGenerating(false);
     }

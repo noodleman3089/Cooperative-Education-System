@@ -6,6 +6,7 @@ import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
 import PageSkeleton from '../../components/ui/Skeleton';
+import { getErrorMessage } from '../../utils/errors';
 
 /**
  * สหกิจ 01 — หน้าตรวจใบสมัครของอาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชา
@@ -81,8 +82,8 @@ const ApplicationReview: React.FC = () => {
       const data = await api.get('/applications');
       setApplications((data.data as Application[]) || []);
       setError('');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -151,9 +152,9 @@ const ApplicationReview: React.FC = () => {
 
       setSelectedApp(null);
       await fetchApplications();
-    } catch (err: any) {
+    } catch (err) {
       // แถบ error ของโมดัลต้องอยู่ในโมดัล ไม่ใช่ข้างหลังกล่อง
-      setModalError(err.message);
+      setModalError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }

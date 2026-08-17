@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 const OnboardingPersonnel: React.FC = () => {
   const [employeeCode, setEmployeeCode] = useState('');
@@ -46,8 +47,8 @@ const OnboardingPersonnel: React.FC = () => {
         localStorage.removeItem('onboarding_type');
         navigate('/dashboard');
       }
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การยืนยันตัวตนล้มเหลว กรุณาตรวจสอบรหัสบุคลากร');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การยืนยันตัวตนล้มเหลว กรุณาตรวจสอบรหัสบุคลากร'));
     } finally {
       setIsSubmitting(false);
     }

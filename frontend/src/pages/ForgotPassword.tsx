@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Mail, ArrowLeft, KeyRound } from 'lucide-react';
 import AlertBanner from '../components/ui/AlertBanner';
+import { getErrorMessage } from '../utils/errors';
 
 const ForgotPassword: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -25,8 +26,8 @@ const ForgotPassword: React.FC = () => {
     try {
       const res = await api.post('/auth/forgot-password', { email: email.trim() });
       setSuccess(res.message || 'ระบบส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของท่านแล้ว');
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
     }

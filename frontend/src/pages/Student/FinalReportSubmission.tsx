@@ -3,6 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api, { API_BASE_URL } from '../../services/api';
 import { FileUp, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Version {
   report_id: number;
@@ -38,8 +39,8 @@ const FinalReportSubmission: React.FC = () => {
         // 2. Fetch final report submission history
         const reportResult = await api.get('/final-reports/my-report');
         setVersions(reportResult.data || []);
-      } catch (err: any) {
-        setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
+      } catch (err) {
+        setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
       } finally {
         setLoading(false);
       }
@@ -75,8 +76,8 @@ const FinalReportSubmission: React.FC = () => {
       setVersions(reportResult.data || []);
       
       if (fileInputRef.current) fileInputRef.current.value = '';
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์'));
     } finally {
       setUploading(false);
     }

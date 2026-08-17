@@ -9,6 +9,7 @@ import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import ConfirmDialog from './ui/ConfirmDialog';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
+import { getErrorMessage } from '../utils/errors';
 
 interface Personnel {
   personnel_id: number;
@@ -122,9 +123,9 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       );
       await loadData();
       window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err: any) {
+    } catch (err) {
       setApprovingIntentId(null);
-      setError(err.response?.data?.message || 'การอนุมัติคำร้องล้มเหลว');
+      setError(getErrorMessage(err, 'การอนุมัติคำร้องล้มเหลว'));
     } finally {
       setSubmittingAction(null);
     }
@@ -166,8 +167,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       );
       await loadData();
       window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err: any) {
-      setRejectError(err.response?.data?.message || 'การปฏิเสธคำร้องล้มเหลว');
+    } catch (err) {
+      setRejectError(getErrorMessage(err, 'การปฏิเสธคำร้องล้มเหลว'));
     } finally {
       setSubmittingAction(null);
     }

@@ -7,6 +7,7 @@ import ResumePdfModal from './ResumePdfModal';
 import { loadThaiAddressData, type ProvinceItem } from '../data/thaiAddress';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 interface Major {
   major_id: number;
@@ -422,8 +423,8 @@ const StudentProfile: React.FC = () => {
       setSuccess('บันทึกการแก้ไขข้อมูลโปรไฟล์และเรซูเม่สำเร็จเรียบร้อย');
       setResumeFile(null);
       await loadProfile();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'ไม่สามารถแก้ไขข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถแก้ไขข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setIsSubmitting(false);

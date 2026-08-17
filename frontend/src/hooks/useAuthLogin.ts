@@ -35,7 +35,7 @@ export const useAuthLogin = (onboardingType?: OnboardingType) => {
         auth.login(response.user);
         navigate('/dashboard');
       }
-    } catch (err: any) {
+    } catch (err) {
       setError(messageFrom(err, 'การเข้าสู่ระบบล้มเหลว กรุณาตรวจสอบข้อมูล'));
     } finally {
       setIsSubmitting(false);
@@ -59,7 +59,7 @@ export const useAuthLogin = (onboardingType?: OnboardingType) => {
       } else {
         navigate('/dashboard');
       }
-    } catch (err: any) {
+    } catch (err) {
       setError(messageFrom(err, 'Google SSO ล้มเหลว กรุณาตรวจสอบการตั้งค่าบัญชี'));
     } finally {
       setIsSubmitting(false);

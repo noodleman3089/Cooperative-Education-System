@@ -6,6 +6,7 @@ import { User, ClipboardList, CheckCircle, FileText, ChevronRight } from 'lucide
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Student {
   student_id: number;
@@ -108,8 +109,8 @@ const MentorEvaluation: React.FC = () => {
       const res = await api.get('/final-evaluations/my-students');
       setStudents(res.data || []);
       setCanEvaluate(res.canEvaluate !== false);
-    } catch (err: any) {
-      if (!isBackground) setError(err.response?.data?.message || 'ไม่สามารถโหลดรายชื่อนักศึกษาได้');
+    } catch (err) {
+      if (!isBackground) setError(getErrorMessage(err, 'ไม่สามารถโหลดรายชื่อนักศึกษาได้'));
     } finally {
       if (!isBackground) setLoading(false);
     }
@@ -179,9 +180,9 @@ const MentorEvaluation: React.FC = () => {
       setConfirmingSubmit(false);
       setSelectedStudent(null);
       await loadStudents();
-    } catch (err: any) {
+    } catch (err) {
       setConfirmingSubmit(false);
-      setError(err.response?.data?.message || 'ล้มเหลวในการส่งแบบประเมิน');
+      setError(getErrorMessage(err, 'ล้มเหลวในการส่งแบบประเมิน'));
     } finally {
       setSubmitting(false);
     }

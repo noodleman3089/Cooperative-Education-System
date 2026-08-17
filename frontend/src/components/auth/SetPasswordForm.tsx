@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 interface SetPasswordFormProps {
   token: string;
@@ -56,8 +57,8 @@ export const SetPasswordForm: React.FC<SetPasswordFormProps> = ({
     try {
       await api.post('/auth/reset-password', { token, password, confirmPassword });
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน'));
     } finally {
       setIsSubmitting(false);
     }

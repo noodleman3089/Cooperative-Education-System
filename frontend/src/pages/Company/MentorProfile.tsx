@@ -3,6 +3,7 @@ import api from '../../services/api';
 import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
+import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 
 /**
  * The mentor's own profile.
@@ -59,10 +60,10 @@ const MentorProfile: React.FC = () => {
         setDepartment(prof.department || '');
         setPhone(prof.phone || '');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load mentor profile:', err);
       setError(
-        err.response?.status === 404
+        getErrorStatus(err) === 404
           ? 'ยังไม่พบข้อมูลพี่เลี้ยงของบัญชีนี้ในระบบ กรุณาติดต่อผู้ประสานงานของสถานประกอบการ'
           : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
       );
@@ -97,9 +98,9 @@ const MentorProfile: React.FC = () => {
       if (res.profile && profile) {
         setProfile({ ...profile, ...res.profile });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to update mentor profile:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง');
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
     }

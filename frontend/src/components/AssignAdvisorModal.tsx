@@ -3,6 +3,7 @@ import api from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 interface Personnel {
   personnel_id: number;
@@ -74,8 +75,8 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
       });
 
       onSuccess(`กำหนดอาจารย์สำหรับนักศึกษาจำนวน ${selectedStudentIds.length} คนสำเร็จแล้ว`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การกำหนดอาจารย์ที่ปรึกษาและนิเทศล้มเหลว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การกำหนดอาจารย์ที่ปรึกษาและนิเทศล้มเหลว'));
     } finally {
       setIsSubmitting(false);
     }

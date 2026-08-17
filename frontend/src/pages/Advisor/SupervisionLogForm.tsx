@@ -5,6 +5,7 @@ import { useAutoSave } from '../../hooks/useAutoSave';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
+import { getErrorMessage } from '../../utils/errors';
 
 interface SupervisionLogFormProps {
   appointmentId: number;
@@ -83,8 +84,8 @@ const SupervisionLogForm: React.FC<SupervisionLogFormProps> = ({ appointmentId, 
       clearDraft();
       
       onSuccess();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'));
     } finally {
       setSaving(false);
       setSubmitting(false);

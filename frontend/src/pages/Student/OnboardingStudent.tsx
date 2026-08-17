@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Major {
   major_id: number;
@@ -122,8 +123,8 @@ const OnboardingStudent: React.FC = () => {
         localStorage.removeItem('onboarding_type');
         navigate('/dashboard');
       }
-    } catch (err: any) {
-      setGlobalError(err.response?.data?.message || 'การบันทึกข้อมูลล้มเหลว กรุณาติดต่อผู้ดูแลระบบ');
+    } catch (err) {
+      setGlobalError(getErrorMessage(err, 'การบันทึกข้อมูลล้มเหลว กรุณาติดต่อผู้ดูแลระบบ'));
     } finally {
       setIsSubmitting(false);
     }

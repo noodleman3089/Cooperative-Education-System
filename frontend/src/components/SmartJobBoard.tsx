@@ -6,6 +6,7 @@ import SelfFoundJobModal from './SelfFoundJobModal';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import StatusBadge from './ui/StatusBadge';
+import { getErrorMessage } from '../utils/errors';
 
 declare const google: any;
 
@@ -304,8 +305,8 @@ const SmartJobBoard: React.FC = () => {
       await api.post('/intents', payload);
       setSubmitSuccess(`ส่งใบสมัครไปยัง ${job.company_name_th} เรียบร้อยแล้ว (รอการยืนยันจากอาจารย์)`);
       await loadData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การยื่นความจำนงสมัครงานล้มเหลว กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การยื่นความจำนงสมัครงานล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSubmittingIntent(null);
       // Whichever way it went, put the answer where the eye is. Without this a

@@ -9,6 +9,7 @@ import AlertBanner from './ui/AlertBanner';
 import StatusBadge from './ui/StatusBadge';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 interface AdvisorDashboardProps {
   activeMenu: string;
@@ -135,9 +136,9 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       setReviewingOutline(null);
       setOutlineComment('');
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Advisor review outline error:', err);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการอนุมัติโครงร่างรายงาน');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการอนุมัติโครงร่างรายงาน'));
     } finally {
       setIsSubmittingOutlineReview(false);
     }
@@ -160,8 +161,8 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       );
       // Dispatch update event to sync bell notification and reload list
       window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การอนุมัติใบความจำนงล้มเหลว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การอนุมัติใบความจำนงล้มเหลว'));
     } finally {
       setSubmittingAction(null);
     }
@@ -193,8 +194,8 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       );
       // Dispatch update event to sync bell notification and reload list
       window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err: any) {
-      setRejectError(err.response?.data?.message || 'การปฏิเสธใบความจำนงล้มเหลว');
+    } catch (err) {
+      setRejectError(getErrorMessage(err, 'การปฏิเสธใบความจำนงล้มเหลว'));
     } finally {
       setSubmittingAction(null);
     }

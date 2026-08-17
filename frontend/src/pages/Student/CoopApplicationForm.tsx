@@ -4,6 +4,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
 import PageSkeleton from '../../components/ui/Skeleton';
+import { getErrorMessage } from '../../utils/errors';
 
 /**
  * สหกิจ 01 — แบบสมัครเข้าร่วมโครงการสหกิจศึกษา
@@ -114,8 +115,8 @@ const CoopApplicationForm: React.FC = () => {
       setSuccessMsg('ยื่นใบสมัครเรียบร้อยแล้ว รออาจารย์ที่ปรึกษาพิจารณา');
       setFormData({ claimed_gpa: '', expected_region: '', special_skills: '' });
       await load();
-    } catch (err: any) {
-      setErrorMsg(err.message);
+    } catch (err) {
+      setErrorMsg(getErrorMessage(err));
     } finally {
       setIsSubmitting(false);
     }

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
+import { getErrorMessage } from '../utils/errors';
 
 interface Major {
   major_id: number;
@@ -58,7 +59,7 @@ const PersonnelProfile: React.FC = () => {
         setLastName(prof.last_name || '');
         setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load personnel profile:', err);
       setError('ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
     } finally {
@@ -201,9 +202,9 @@ const PersonnelProfile: React.FC = () => {
       clearCanvas();
       setSignatureFile(null);
       
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to update personnel profile:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
     }

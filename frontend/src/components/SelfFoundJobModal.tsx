@@ -3,6 +3,7 @@ import api from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 declare const google: any;
 
@@ -121,7 +122,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
         setExistingCompanyId(res.company_id);
         setPlaceCheckMessage('พบสถานประกอบการนี้ในสารบบเรียบร้อยแล้ว ระบบจะยื่นใบสมัครไปยังที่ตั้งที่มีอยู่นี้');
       }
-    } catch (err: any) {
+    } catch (err) {
       console.log('Place checks out: New company profile registration required.');
     }
   };
@@ -191,8 +192,8 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             phone: company_phone
           });
           targetCompanyId = createCompanyRes.company_id;
-        } catch (createErr: any) {
-          throw new Error(createErr.response?.data?.message || 'ไม่สามารถลงทะเบียนที่อยู่จาก Google Maps เข้าระบบได้');
+        } catch (createErr) {
+          throw new Error(getErrorMessage(createErr, 'ไม่สามารถลงทะเบียนที่อยู่จาก Google Maps เข้าระบบได้'));
         }
       }
 
@@ -223,8 +224,8 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
       }
 
       onSuccess(`ลงทะเบียนและส่งใบสมัครไปยัง ${company_name_th} เรียบร้อยแล้ว (รอการยืนยันจากอาจารย์)`);
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'การส่งข้อมูลสถานที่ฝึกงานล้มเหลว กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การส่งข้อมูลสถานที่ฝึกงานล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
     }

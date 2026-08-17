@@ -3,6 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import { Calendar, CheckCircle, Save, RefreshCw } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLog {
   weekly_log_id: number;
@@ -39,9 +40,9 @@ const WeeklyLog: React.FC = () => {
       if (maxWeek < 16) {
         setSelectedWeek(maxWeek + 1);
       }
-    } catch (err: any) {
+    } catch (err) {
       if (err.name === 'AbortError') return;
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
     } finally {
       setLoading(false);
     }
@@ -83,8 +84,8 @@ const WeeklyLog: React.FC = () => {
       
       setSuccess('บันทึกข้อมูลสำเร็จ');
       await fetchLogs(); // Refresh list
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'));
     } finally {
       setSubmitting(false);
     }

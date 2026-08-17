@@ -56,7 +56,7 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
       } else {
         setActiveTabWeek(1);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to fetch student weekly logs:', err);
       setError('ไม่สามารถโหลดข้อมูลบันทึกรายสัปดาห์ของนักศึกษาได้');
     } finally {

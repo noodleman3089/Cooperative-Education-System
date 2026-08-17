@@ -5,6 +5,7 @@ import { Calendar, Send } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Button from '../../components/ui/Button';
+import { getErrorMessage } from '../../utils/errors';
 
 interface AppointmentDraft {
   appointment_id: number;
@@ -39,8 +40,8 @@ const AppointmentAudit: React.FC = () => {
       setError(null);
       const res = await api.get('/appointments');
       setDrafts(res.data || []);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
     } finally {
       setLoading(false);
     }
@@ -61,9 +62,9 @@ const AppointmentAudit: React.FC = () => {
       setConfirmingDraft(null);
       setSuccess(`ส่งอีเมลนัดหมายของ ${draft.first_name} ${draft.last_name} ไปยังพี่เลี้ยงเรียบร้อยแล้ว`);
       fetchDrafts();
-    } catch (err: any) {
+    } catch (err) {
       setConfirmingDraft(null);
-      setError(err.response?.data?.message || 'ไม่สามารถส่งอีเมลได้ กรุณาตรวจสอบว่ามีอีเมลพี่เลี้ยงหรือไม่');
+      setError(getErrorMessage(err, 'ไม่สามารถส่งอีเมลได้ กรุณาตรวจสอบว่ามีอีเมลพี่เลี้ยงหรือไม่'));
     } finally {
       setSendingId(null);
     }

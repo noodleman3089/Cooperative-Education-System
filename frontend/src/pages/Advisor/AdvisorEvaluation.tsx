@@ -5,6 +5,7 @@ import { User, ClipboardList, CheckCircle, XCircle, FileText, ChevronRight } fro
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { getErrorMessage } from '../../utils/errors';
 
 interface StudentProgress {
   studentId: number;
@@ -75,8 +76,8 @@ const AdvisorEvaluation: React.FC = () => {
       // Fetch progress from backend (filters for current advisor automatically)
       const res = await api.get('/coop-progress/dashboard');
       setStudents(res.data || []);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'ไม่สามารถโหลดข้อมูลความคืบหน้าได้');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลความคืบหน้าได้'));
     } finally {
       setLoading(false);
     }
@@ -140,8 +141,8 @@ const AdvisorEvaluation: React.FC = () => {
       setSuccess(status === 'approved' ? 'อนุมัติเล่มรายงานเรียบร้อยแล้ว' : 'ส่งรายงานกลับไปให้นักศึกษาแก้ไขแล้ว');
       setSelectedStudent(null);
       await loadData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การเปลี่ยนสถานะเล่มรายงานล้มเหลว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การเปลี่ยนสถานะเล่มรายงานล้มเหลว'));
     } finally {
       setActionLoading(false);
     }
@@ -190,9 +191,9 @@ const AdvisorEvaluation: React.FC = () => {
       setConfirmingSubmit(false);
       setSelectedStudent(null);
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       setConfirmingSubmit(false);
-      setError(err.response?.data?.message || 'ส่งคะแนนประเมินล้มเหลว');
+      setError(getErrorMessage(err, 'ส่งคะแนนประเมินล้มเหลว'));
     } finally {
       setActionLoading(false);
     }

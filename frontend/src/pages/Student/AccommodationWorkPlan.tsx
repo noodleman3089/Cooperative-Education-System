@@ -4,6 +4,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Accommodation {
   address: string;
@@ -175,7 +176,7 @@ const AccommodationWorkPlan: React.FC = () => {
       } else {
         setWeeklyPlans(blankWeeks());
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to load accommodation and plan:', err);
       // Just show default form if no data found
       setWeeklyPlans(blankWeeks());
@@ -256,8 +257,8 @@ const AccommodationWorkPlan: React.FC = () => {
       setRestoredDraft(false);
       // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
     }

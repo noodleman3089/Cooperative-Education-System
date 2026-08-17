@@ -8,6 +8,7 @@ import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { useDashboardData } from '../hooks/useDashboardData';
 import StatusBadge from './ui/StatusBadge';
+import { getErrorMessage } from '../utils/errors';
 
 interface CompanyDashboardProps {
   activeMenu?: string;
@@ -234,9 +235,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       setReviewingOutline(null);
       setReviewComment('');
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Review outline error:', err);
-      setError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการตรวจอนุมัติโครงร่าง');
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการตรวจอนุมัติโครงร่าง'));
     } finally {
       setIsSubmittingReview(false);
     }
@@ -275,9 +276,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       // Reload jobs
       const jobsRes = await api.get('/jobs');
       setJobs(jobsRes || []);
-    } catch (err: any) {
+    } catch (err) {
       console.error('Create job error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถลงประกาศรับสมัครงานได้');
+      setError(getErrorMessage(err, 'ไม่สามารถลงประกาศรับสมัครงานได้'));
     } finally {
       setIsCreatingJob(false);
     }
@@ -306,9 +307,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       setRejectingApplicant(null);
       setSuccess('ปฏิเสธการรับเข้างานของนักศึกษาแล้ว ระบบได้แจ้งเหตุผลให้นักศึกษาทราบทางอีเมล และปลดล็อกให้สมัครงานที่อื่นได้');
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Reject applicant error:', err);
-      setRejectError(err.response?.data?.message || 'การปฏิเสธใบสมัครงานล้มเหลว');
+      setRejectError(getErrorMessage(err, 'การปฏิเสธใบสมัครงานล้มเหลว'));
     } finally {
       setRejectBusy(false);
     }
@@ -337,9 +338,9 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
 
       setSuccess('บันทึกปรับปรุงข้อมูลการติดต่อประสานงานบริษัทสำเร็จเรียบร้อย');
       await loadData();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Update company profile error:', err);
-      setError(err.response?.data?.message || 'ไม่สามารถแก้ไขข้อมูลผู้ติดต่อได้');
+      setError(getErrorMessage(err, 'ไม่สามารถแก้ไขข้อมูลผู้ติดต่อได้'));
     } finally {
       setIsUpdatingProfile(false);
     }

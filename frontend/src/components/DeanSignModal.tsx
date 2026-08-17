@@ -4,6 +4,7 @@ import { UserCheck } from 'lucide-react';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 interface DeanSignModalProps {
   docId: number | null;
@@ -32,8 +33,8 @@ const DeanSignModal: React.FC<DeanSignModalProps> = ({
         window.open(res.signing_urls[0].signing_url, '_blank');
       }
       onSuccess();
-    } catch (err: any) {
-      setModalError(err.response?.data?.message || 'การลงนามเอกสารล้มเหลว');
+    } catch (err) {
+      setModalError(getErrorMessage(err, 'การลงนามเอกสารล้มเหลว'));
     } finally {
       setActionLoading(false);
     }

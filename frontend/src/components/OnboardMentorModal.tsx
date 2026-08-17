@@ -3,6 +3,7 @@ import api from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
+import { getErrorMessage } from '../utils/errors';
 
 /** Today as YYYY-MM-DD. */
 const todayIso = (): string => {
@@ -70,9 +71,9 @@ const OnboardMentorModal: React.FC<OnboardMentorModalProps> = ({
         start_date: startDate
       });
       onSuccess('ยืนยันตอบรับนักศึกษาเข้าฝึกปฏิบัติงานสหกิจเรียบร้อยแล้ว');
-    } catch (err: any) {
+    } catch (err) {
       console.error('Accept applicant error:', err);
-      setError(err.response?.data?.message || 'การตอบรับใบสมัครงานล้มเหลว');
+      setError(getErrorMessage(err, 'การตอบรับใบสมัครงานล้มเหลว'));
     } finally {
       setIsSubmitting(false);
     }

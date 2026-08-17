@@ -10,6 +10,7 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import StatusBadge from './ui/StatusBadge';
 import Button from './ui/Button';
 import { Pin, UserPen } from 'lucide-react';
+import { getErrorMessage } from '../utils/errors';
 
 const StudentDashboard: React.FC = () => {
   const [data, setData] = useState<{
@@ -100,8 +101,8 @@ const StudentDashboard: React.FC = () => {
     try {
       await api.put(`/intents/${formId}/parental-consent`, formData);
       await loadDashboardData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การอัปโหลดใบยินยอมล้มเหลว กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การอัปโหลดใบยินยอมล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setUploadingConsent(false);
     }
@@ -146,8 +147,8 @@ const StudentDashboard: React.FC = () => {
       setStartDate('');
       setEvidenceFile(null);
       await loadDashboardData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSubmittingProof(false);
     }
@@ -162,8 +163,8 @@ const StudentDashboard: React.FC = () => {
       await api.post(`/acceptances/student/${activeIntent.form_id}/fail`);
       setConfirmingFailure(false);
       await loadDashboardData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'การรายงานผลสัมภาษณ์ล้มเหลวล้มเหลว กรุณาลองใหม่อีกครั้ง');
+    } catch (err) {
+      setError(getErrorMessage(err, 'การรายงานผลสัมภาษณ์ล้มเหลวล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setReportingFail(false);
     }

@@ -4,6 +4,7 @@ import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
 import { Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import AlertBanner from '../components/ui/AlertBanner';
+import { getErrorMessage } from '../utils/errors';
 
 const SetPassword: React.FC = () => {
   const [password, setPassword] = useState('');
@@ -64,8 +65,8 @@ const SetPassword: React.FC = () => {
       }
 
       navigate('/dashboard');
-    } catch (err: any) {
-      setGlobalError(err.response?.data?.message || 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน');
+    } catch (err) {
+      setGlobalError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน'));
     } finally {
       setIsSubmitting(false);
     }

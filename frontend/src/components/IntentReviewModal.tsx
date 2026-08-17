@@ -3,6 +3,7 @@ import api, { API_BASE_URL } from '../services/api';
 import { Download, CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/StatusBadge';
+import { getErrorMessage } from '../utils/errors';
 
 interface IntentReviewModalProps {
   intentId: number | null;
@@ -41,7 +42,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
       try {
         const res = await api.get(`/intents/${intentId}`);
         setIntentDetail(res);
-      } catch (err: any) {
+      } catch (err) {
         console.error('Failed to load intent detail:', err);
         setModalError('ไม่สามารถโหลดรายละเอียดใบความจำนงได้');
       } finally {
@@ -70,8 +71,8 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
         });
       }
       onSuccess();
-    } catch (err: any) {
-      setModalError(err.response?.data?.message || 'การบันทึกสถานะล้มเหลว');
+    } catch (err) {
+      setModalError(getErrorMessage(err, 'การบันทึกสถานะล้มเหลว'));
     } finally {
       setActionLoading(false);
     }
