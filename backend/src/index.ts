@@ -454,8 +454,38 @@ app.use((req: Request, res: Response) => {
   res.status(404).json({ message: `Route '${req.originalUrl}' not found.` });
 });
 
-// Centralized error handling middleware
+/**
+ * Centralized error handling middleware
+ *
+ * เดิมตอบ 500 กับทุกอย่างที่หลุดมาถึงตรงนี้ ซึ่งผิดสำหรับ error ที่ *เกิดจากคำขอ*
+ * ไม่ใช่จากเซิร์ฟเวอร์ — และการยิง fuzz ทำให้เห็นสองกรณีที่เจอได้จากการใช้งานปกติ:
+ * ส่ง JSON ใหญ่เกิน 100KB (ค่า default ของ body-parser) และกรอกข้อความยาวเกิน
+ * ความกว้างคอลัมน์ ทั้งคู่เคยได้ 500 + "เกิดข้อผิดพลาดของระบบ" ซึ่งบอกผู้ใช้ไม่ได้
+ * ว่าต้องแก้อะไร และกลบ error จริงใน log ด้วยคำว่า "Unhandled"
+ *
+ * 5xx จึงเหลือไว้สำหรับความผิดพลาดของเราจริงๆ เท่านั้น
+ */
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+  const type = (err as { type?: string }).type;
+  const pgCode = (err as { code?: string }).code;
+
+  if (type === 'entity.too.large') {
+    res.status(413).json({ message: 'ข้อมูลที่ส่งมามีขนาดใหญ่เกินกำหนด กรุณาลดขนาดแล้วลองใหม่' });
+    return;
+  }
+
+  if (type === 'entity.parse.failed') {
+    res.status(400).json({ message: 'รูปแบบข้อมูลที่ส่งมาไม่ถูกต้อง' });
+    return;
+  }
+
+  // 22001 = value too long for type · 22P02 = invalid text representation
+  // (เช่นส่งตัวอักษรให้คอลัมน์ตัวเลข) — ทั้งคู่คือคำขอที่ผิด ไม่ใช่เซิร์ฟเวอร์พัง
+  if (pgCode === '22001' || pgCode === '22P02') {
+    res.status(400).json({ message: 'ข้อมูลที่กรอกยาวเกินกำหนดหรือมีรูปแบบไม่ถูกต้อง' });
+    return;
+  }
+
   console.error('Unhandled server error:', err);
   res.status(500).json({
     message: 'An unexpected error occurred on the server.',

@@ -8,6 +8,7 @@ import { MasterModel } from '../models/master';
 import { UserModel } from '../models/user';
 
 import { hashPassword } from '../utils/password';
+import { sendUnexpectedError } from '../utils/httpError';
 import { StudentProfileSetupBody, PersonnelProfileSetupBody } from '../types';
 
 export class ProfileController {
@@ -213,8 +214,12 @@ export class ProfileController {
         return;
       }
     } catch (error) {
-      console.error('Profile Setup Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ระหว่างการตั้งค่าโปรไฟล์' });
+      sendUnexpectedError(
+        res,
+        error,
+        'Profile Setup Error',
+        'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์ระหว่างการตั้งค่าโปรไฟล์'
+      );
     }
   }
 
@@ -370,8 +375,12 @@ export class ProfileController {
         profile: updated,
       });
     } catch (error) {
-      console.error('Update Student Profile Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating student profile.' });
+      sendUnexpectedError(
+        res,
+        error,
+        'Update Student Profile Error',
+        'เกิดข้อผิดพลาดระหว่างบันทึกข้อมูลนักศึกษา'
+      );
     }
   }
 
@@ -444,8 +453,12 @@ export class ProfileController {
         profile: updated,
       });
     } catch (error) {
-      console.error('Update Personnel Profile Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating personnel profile.' });
+      sendUnexpectedError(
+        res,
+        error,
+        'Update Personnel Profile Error',
+        'เกิดข้อผิดพลาดระหว่างบันทึกข้อมูลบุคลากร'
+      );
     }
   }
 
@@ -495,8 +508,12 @@ export class ProfileController {
         profile: updated,
       });
     } catch (error) {
-      console.error('Update Mentor Profile Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating mentor profile.' });
+      sendUnexpectedError(
+        res,
+        error,
+        'Update Mentor Profile Error',
+        'เกิดข้อผิดพลาดระหว่างบันทึกข้อมูลพนักงานที่ปรึกษา'
+      );
     }
   }
 }
