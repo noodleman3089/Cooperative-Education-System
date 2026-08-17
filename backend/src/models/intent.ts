@@ -1,5 +1,7 @@
 import pool, { query } from '../config/database';
 import { IntentForm } from '../types';
+import { createInviteLink } from '../utils/invite';
+import { sendMentorInviteEmail } from '../utils/email';
 
 /**
  * SEC-04: explicit allow-lists for every state transition an external party can
@@ -487,8 +489,6 @@ export class IntentFormModel {
       // Issued after COMMIT so a rolled-back acceptance never leaves a live invite.
       if (mentorEmailToSend) {
         (async () => {
-          const { createInviteLink } = await import('../utils/invite');
-          const { sendMentorInviteEmail } = await import('../utils/email');
           await sendMentorInviteEmail(mentorEmailToSend, await createInviteLink(mentorUserId));
         })().catch(console.error);
       }

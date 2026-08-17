@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { PoolClient } from 'pg';
+import { query } from '../config/database';
 
 /**
  * Companies and mentors never register themselves — every account is opened for
@@ -39,7 +40,6 @@ export const createInviteLink = async (userId: number, client?: PoolClient): Pro
   if (client) {
     await client.query(sql, [token, expiresAt, userId]);
   } else {
-    const { query } = await import('../config/database');
     await query(sql, [token, expiresAt, userId]);
   }
 

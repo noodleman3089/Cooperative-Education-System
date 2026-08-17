@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { IntentFormModel } from '../models/intent';
 import { CompanyAcceptPayload, StudentAcceptPayload } from '../types';
-import { notifyStudentStatusChange } from '../utils/email';
+import { notifyStudentStatusChange, sendMentorInviteEmail } from '../utils/email';
+import { createInviteLink } from '../utils/invite';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 
@@ -310,8 +311,6 @@ export class AcceptanceController {
                 [intent.mentor_id]
               );
 
-              const { createInviteLink } = await import('../utils/invite');
-              const { sendMentorInviteEmail } = await import('../utils/email');
               const inviteLink = await createInviteLink(intent.mentor_id, client);
               await sendMentorInviteEmail(mentorUser.email, inviteLink);
               console.log(`Activated mentor account ${mentorUser.email} and sent an invitation.`);

@@ -10,6 +10,7 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { sendPersonnelAssignmentEmail } from '../utils/email';
 
 export class StudentController {
   /**
@@ -620,13 +621,9 @@ export class StudentController {
       }
 
       // Notify only after the transaction is durable.
-      import('../utils/email')
-        .then(({ sendPersonnelAssignmentEmail }) => {
-          for (const studentId of targetIds) {
-            sendPersonnelAssignmentEmail(studentId, advisor_id, supervisor_id).catch(console.error);
-          }
-        })
-        .catch(console.error);
+      for (const studentId of targetIds) {
+        sendPersonnelAssignmentEmail(studentId, advisor_id, supervisor_id).catch(console.error);
+      }
 
       res.status(200).json({
         message: `มอบหมายอาจารย์ที่ปรึกษาและอาจารย์นิเทศสำเร็จจำนวน ${targetIds.length} คน`,

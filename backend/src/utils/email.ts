@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { escapeHtml as esc } from '../middlewares/validation';
 import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
+import { query } from '../config/database';
 
 /**
  * These emails are assembled as HTML strings, and several of the values that go
@@ -306,7 +307,6 @@ export const sendStudentStatusUpdateEmail = async (
   detailsHtml: string
 ): Promise<void> => {
   try {
-    const { query } = await import('../config/database');
     const studentQuery = await query(
       `SELECT u.email as primary_email, s.alt_email
        FROM students s
@@ -375,7 +375,6 @@ export const notifyStudentStatusChange = async (
   reason?: string
 ): Promise<void> => {
   try {
-    const { query } = await import('../config/database');
     const intentQuery = await query(
       `SELECT 
         i.student_id,
@@ -482,7 +481,6 @@ export const notifyStudentStatusChangeByDocId = async (
   status: string
 ): Promise<void> => {
   try {
-    const { query } = await import('../config/database');
     const docQuery = await query(
       `SELECT 
         d.student_id,
@@ -537,7 +535,6 @@ export const sendPersonnelAssignmentEmail = async (
   supervisorId: number
 ): Promise<void> => {
   try {
-    const { query } = await import('../config/database');
     const dataQuery = await query(
       `SELECT 
         s.first_name as student_fname, s.last_name as student_lname, u_s.email as student_email,

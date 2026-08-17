@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "commonjs",
+    // node16 = ปล่อย CommonJS ตามที่ package.json บอก (ไม่มี "type": "module")
+    // แต่ตรวจการ import ตามกฎจริงของ Node — ซึ่งจับได้ว่า puppeteer เป็น ESM ล้วน
+    // และ dynamic import ที่เป็น relative path ต้องมีนามสกุล .js
+    "module": "node16",
     "lib": ["ES2022"],
     "allowJs": true,
     "outDir": "./dist",
@@ -16,8 +19,7 @@
     "noUnusedParameters": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "moduleResolution": "node10",
-    "ignoreDeprecations": "6.0",
+    "moduleResolution": "node16",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,

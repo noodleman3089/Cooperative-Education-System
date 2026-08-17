@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import Handlebars from 'handlebars';
-import puppeteer from 'puppeteer';
 import { StudentModel } from '../models/student';
 import { CompanyModel } from '../models/company';
 import { PersonnelModel } from '../models/personnel';
@@ -15,8 +14,23 @@ import { UserModel } from '../models/user';
 import { query } from '../config/database';
 import { DocuSignService } from '../utils/docusign';
 import { GenerateDocumentBody, BatchSignDocumentsBody } from '../types';
-import { notifyStudentStatusChangeByDocId } from '../utils/email';
+import {
+  notifyStudentStatusChangeByDocId,
+  sendCompanyInviteEmail,
+  sendSignedDocumentEmail,
+} from '../utils/email';
+import { createInviteLink } from '../utils/invite';
 import { AuditAction, writeAudit } from '../utils/audit';
+
+/**
+ * puppeteer เป็น ESM ล้วนแล้ว (`"type": "module"` ใน package ของมัน) จึงถูก
+ * `require` ตรงๆ จากไฟล์ CommonJS ไม่ได้ภายใต้ `moduleResolution: node16`
+ * — ต้องโหลดแบบ dynamic import
+ *
+ * ผลพลอยได้: มันไม่ถูกโหลดตอนสตาร์ทเซิร์ฟเวอร์อีกต่อไป แต่โหลดตอนออกเอกสารจริง
+ * เท่านั้น ซึ่งเป็นงานที่นานๆ ครั้งและกินหน่วยความจำมาก
+ */
+const loadPuppeteer = async () => (await import('puppeteer')).default;
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -211,7 +225,7 @@ export class DocumentController {
         });
 
         // 5.3 Convert rendered HTML to PDF Buffer via Puppeteer
-        const browser = await puppeteer.launch({ 
+        const browser = await (await loadPuppeteer()).launch({ 
           headless: true,
           args: ['--no-sandbox', '--disable-setuid-sandbox']
         });
@@ -671,7 +685,6 @@ export class DocumentController {
         // Opened with no password — the representative sets their own through
         // the invitation link, so no credential is ever mailed.
         user = await UserModel.createUser(companyEmail, null, 'company');
-        const { createInviteLink } = await import('../utils/invite');
         inviteLink = await createInviteLink(user.user_id);
         console.log(`Created new company user account: ${companyEmail}`);
       } else if (!user.roles.includes('company')) {
@@ -709,8 +722,6 @@ export class DocumentController {
       if (docId) {
         doc = await OfficialDocumentModel.findById(docId);
       }
-
-      const { sendSignedDocumentEmail, sendCompanyInviteEmail } = await import('../utils/email');
 
       if (doc && doc.generated_file_path) {
         // Always send the signed PDF to the company. A brand new account also
@@ -780,7 +791,7 @@ export class DocumentController {
 
       const generatedDocs = [];
 
-      const browser = await puppeteer.launch({ 
+      const browser = await (await loadPuppeteer()).launch({ 
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox']
       });

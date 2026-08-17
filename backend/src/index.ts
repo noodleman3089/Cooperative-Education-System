@@ -10,7 +10,6 @@ import jwt from 'jsonwebtoken';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import Handlebars from 'handlebars';
-import puppeteer from 'puppeteer';
 import { xssSanitizer } from './middlewares/validation';
 import { authenticateToken } from './middlewares/auth';
 import { AUTH_COOKIE } from './utils/authCookie';
@@ -252,7 +251,9 @@ app.get('/api/files/download/travel-request-template', authenticateToken, async 
       applicant_name: 'อาจารย์ผู้นิเทศก์การปฏิบัติงานสหกิจศึกษา'
     });
 
-    const browser = await puppeteer.launch({ 
+    // puppeteer เป็น ESM ล้วน จึง require จากไฟล์ CommonJS ไม่ได้ (ดู document.ts)
+    const puppeteer = (await import('puppeteer')).default;
+    const browser = await puppeteer.launch({
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
@@ -266,7 +267,10 @@ app.get('/api/files/download/travel-request-template', authenticateToken, async 
 
     res.contentType('application/pdf');
     res.setHeader('Content-Disposition', 'inline; filename="travel_request.pdf"');
-    res.send(pdfBuffer);
+    // ต้องห่อเป็น Buffer ก่อนเสมอ — `page.pdf()` ของ puppeteer คืน Uint8Array
+    // ตั้งแต่ v23 และ Express จะ serialize Uint8Array เป็น JSON ({"0":37,"1":80,...})
+    // แทนที่จะส่งไบต์ดิบ ผู้ใช้จึงได้ไฟล์ขยะแทน PDF โดยที่ status ยังเป็น 200
+    res.send(Buffer.from(pdfBuffer));
   } catch (error) {
     next(error);
   }
