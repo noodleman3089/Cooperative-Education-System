@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { hashPassword } from '../utils/password';
 import { PDFDocument } from 'pdf-lib';
+import { stampAllMigrations } from './migrate';
 
 
 /**
@@ -72,6 +73,12 @@ export async function setupDatabase(quiet = false) {
     await client.query('ALTER TABLE personnel_preseed_list ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMP;');
     await client.query('CREATE UNIQUE INDEX IF NOT EXISTS uq_personnel_preseed_email ON personnel_preseed_list (email) WHERE email IS NOT NULL;');
     await client.query('ALTER TABLE eligible_students_list ADD COLUMN IF NOT EXISTS email VARCHAR(255);');
+
+    // ฐานที่เพิ่งสร้างจาก schema.sql มีทุกอย่างที่ migration ทั้งหมดจะทำอยู่แล้ว
+    // ประทับตราไว้ ไม่งั้น `db:migrate` ครั้งถัดไปจะพยายามรันซ้ำตั้งแต่ baseline
+    // ซึ่งมี DROP TABLE อยู่ข้างใน
+    await stampAllMigrations(client);
+    log('Migration history stamped to match schema.sql.');
 
     // Read seeds.sql
     const seedsPath = path.join(__dirname, 'seeds.sql');
