@@ -16,16 +16,15 @@ import { authenticateToken } from './middlewares/auth';
 import { AUTH_COOKIE } from './utils/authCookie';
 import apiRouter from './routes';
 import { query } from './config/database';
+import { assertEnvironment } from './config/validateEnv';
 import { initDeactivationScheduler } from './utils/deactivationScheduler';
 
 // Load environment variables
 dotenv.config();
 
-// Enforce JWT_SECRET configuration (CRIT-01)
-if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not configured.');
-  process.exit(1);
-}
+// ตรวจค่า env ก่อนทุกอย่าง — รวม JWT_SECRET (CRIT-01) และค่าที่ห้ามติดไปกับ
+// production เช่น ALLOW_SIMULATED_SSO ซึ่งเปิดไว้แปลว่าใครก็ล็อกอินเป็นใครก็ได้
+assertEnvironment();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
