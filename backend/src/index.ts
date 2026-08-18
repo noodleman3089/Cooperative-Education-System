@@ -7,6 +7,7 @@ import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import type { JwtPayload } from 'jsonwebtoken';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import Handlebars from 'handlebars';
@@ -90,13 +91,13 @@ app.use(cookieParser());
 app.use(xssSanitizer);
 
 // Helper to authenticate the session from the httpOnly cookie.
-const verifyTokenHelper = (req: Request): any => {
+const verifyTokenHelper = (req: Request): JwtPayload | null => {
   const token = req.cookies?.[AUTH_COOKIE];
   if (!token) return null;
   try {
     // Fix Task 1.1: Enforce JWT_SECRET and remove fallback secret to prevent JWT forgery
-    return jwt.verify(token, process.env.JWT_SECRET!);
-  } catch (err) {
+    return jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+  } catch {
     return null;
   }
 };

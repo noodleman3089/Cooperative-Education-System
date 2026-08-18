@@ -31,7 +31,7 @@ const CREATE_TRACKING_TABLE = `
 `;
 
 type Client = {
-  query: (text: string, params?: unknown[]) => Promise<any>;
+  query: (text: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
 };
 
 /** ไฟล์ migration ทั้งหมด เรียงตามชื่อ (จึงต้องตั้งชื่อขึ้นต้นด้วยเลข) */

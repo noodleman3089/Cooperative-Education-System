@@ -111,7 +111,7 @@ export class CoopProgressController {
       const dbRes = await query(queryStr, queryParams);
 
       // Process Progress Calculations on the backend
-      const studentsProgress = dbRes.rows.map((row: any) => {
+      const studentsProgress = dbRes.rows.map((row) => {
         let progress = 0;
         const details = {
           intentApproved: false,

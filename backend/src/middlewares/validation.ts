@@ -46,24 +46,23 @@ export const escapeHtml = (text: string): string => {
  * Recursively trims strings in an object. Values are stored verbatim — see
  * `escapeHtml` above for why encoding no longer happens here.
  */
-export const sanitizeObject = (obj: any): any => {
+export const sanitizeObject = <T>(obj: T): T => {
   if (obj === null || obj === undefined) {
     return obj;
   }
   if (typeof obj === 'string') {
-    return obj.trim();
+    return obj.trim() as T;
   }
   if (Array.isArray(obj)) {
-    return obj.map((item) => sanitizeObject(item));
+    return obj.map((item) => sanitizeObject(item)) as T;
   }
   if (typeof obj === 'object') {
-    const sanitized: any = {};
-    for (const key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        sanitized[key] = sanitizeObject(obj[key]);
-      }
+    const source = obj as Record<string, unknown>;
+    const sanitized: Record<string, unknown> = {};
+    for (const key of Object.keys(source)) {
+      sanitized[key] = sanitizeObject(source[key]);
     }
-    return sanitized;
+    return sanitized as T;
   }
   return obj;
 };

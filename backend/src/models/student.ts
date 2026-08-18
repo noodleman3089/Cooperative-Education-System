@@ -169,9 +169,9 @@ export class StudentModel {
   static async updateOptionalProfile(
     studentId: number,
     skillsAndActivities: string | null,
-    languageProficiency: any | null,
+    languageProficiency: unknown,
     preferredWorkRegion: string | null,
-    interestedJobTypes: any | null
+    interestedJobTypes: unknown
   ): Promise<Student | null> {
     const res = await query(
       `UPDATE students 

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import type { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
 import { UserModel } from '../models/user';
 import { StudentModel } from '../models/student';
@@ -36,7 +37,7 @@ export class AuthController {
    * Receives Google ID Token, verifies email domain, auto-creates user if first-time, and issues JWT.
    * Route: POST /api/auth/google
    */
-  static async googleSSO(req: Request<{}, {}, GoogleLoginRequestBody & { email?: string }>, res: Response): Promise<void> {
+  static async googleSSO(req: Request<Record<string, string>, unknown, GoogleLoginRequestBody & { email?: string }>, res: Response): Promise<void> {
     try {
       const { token } = req.body;
       let email: string | undefined;
@@ -131,7 +132,7 @@ export class AuthController {
       };
 
       const systemToken = jwt.sign(tokenPayload, JWT_SECRET, {
-        expiresIn: JWT_EXPIRES_IN as any,
+        expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'],
       });
 
       setAuthCookie(res, systemToken);
@@ -186,7 +187,7 @@ export class AuthController {
    * Standard Username/Password login endpoint (primarily for companies and administrators).
    * Route: POST /api/auth/login
    */
-  static async login(req: Request<{}, {}, LoginRequestBody>, res: Response): Promise<void> {
+  static async login(req: Request<Record<string, string>, unknown, LoginRequestBody>, res: Response): Promise<void> {
     try {
       const { email, password } = req.body;
 
@@ -262,7 +263,7 @@ export class AuthController {
       };
 
       const token = jwt.sign(tokenPayload, JWT_SECRET, {
-        expiresIn: JWT_EXPIRES_IN as any,
+        expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'],
       });
 
       setAuthCookie(res, token);
@@ -599,7 +600,7 @@ export class AuthController {
 
       // The claim granted a new role, so the session must be re-issued with it.
       const newToken = jwt.sign(tokenPayload, JWT_SECRET, {
-        expiresIn: JWT_EXPIRES_IN as any,
+        expiresIn: JWT_EXPIRES_IN as SignOptions['expiresIn'],
       });
 
       setAuthCookie(res, newToken);

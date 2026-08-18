@@ -59,7 +59,7 @@ export class PersonnelController {
 
       // If filtering by role, filter based on roles JSON array
       if (role) {
-        rows = rows.filter((p: any) => {
+        rows = rows.filter((p) => {
           const rolesList = typeof p.roles === 'string' ? JSON.parse(p.roles) : p.roles;
           return rolesList.includes(role);
         });
@@ -96,7 +96,7 @@ export class PersonnelController {
         return;
       }
 
-      const updated = await PersonnelModel.updateStatus(personnelId, status as any);
+      const updated = await PersonnelModel.updateStatus(personnelId, status as 'approved' | 'rejected' | 'pending_approval');
       if (!updated) {
         res.status(404).json({ message: 'Personnel profile not found.' });
         return;

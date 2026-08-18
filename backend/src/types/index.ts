@@ -45,9 +45,9 @@ export interface Student {
   parent_phone: string | null;
   enrollment_year: number | null;
   skills_and_activities?: string | null;
-  language_proficiency?: any | null;
+  language_proficiency?: unknown;
   preferred_work_region?: string | null;
-  interested_job_types?: any | null;
+  interested_job_types?: unknown;
 }
 
 // Personnel Profile Entity
@@ -91,9 +91,9 @@ export interface StudentProfileSetupBody {
 
 export interface OptionalStudentProfileBody {
   skills_and_activities?: string;
-  language_proficiency?: any;
+  language_proficiency?: unknown;
   preferred_work_region?: string;
-  interested_job_types?: any;
+  interested_job_types?: unknown;
 }
 
 export interface PersonnelProfileSetupBody {

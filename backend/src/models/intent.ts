@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import pool, { query } from '../config/database';
 import { IntentForm } from '../types';
 import { createInviteLink } from '../utils/invite';
@@ -57,7 +58,7 @@ export function assertAllowedTransition(action: string, currentStatus: string, a
  * path so a seat is never leaked (or double-returned) depending on who rejected.
  * The post only reopens when it is genuinely under quota again.
  */
-async function releaseJobSeat(client: any, jobId: number | null): Promise<void> {
+async function releaseJobSeat(client: PoolClient, jobId: number | null): Promise<void> {
   if (jobId === null || jobId === undefined) return;
 
   const jobRes = await client.query(

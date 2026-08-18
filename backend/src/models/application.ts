@@ -84,7 +84,7 @@ export class ApplicationModel {
    * *caller* proved through resolveMajorScope, never a filter that quietly went
    * missing. Advisors and department heads always arrive here with a major.
    */
-  static async list(majorId: number | null, status?: string): Promise<any[]> {
+  static async list(majorId: number | null, status?: string): Promise<Record<string, unknown>[]> {
     let queryStr = `
       SELECT a.*, s.student_code, s.first_name, s.last_name, s.cumulative_gpa,
              sem.semester, sem.academic_year
@@ -118,7 +118,7 @@ export class ApplicationModel {
   /**
    * Get applications for a specific student
    */
-  static async getByStudent(studentId: number): Promise<any[]> {
+  static async getByStudent(studentId: number): Promise<Record<string, unknown>[]> {
     const res = await query(
       `SELECT a.*, sem.semester, sem.academic_year 
        FROM coop_applications a

@@ -11,6 +11,17 @@ import {
 } from 'docusign-esign';
 import fs from 'fs';
 import path from 'path';
+import { getErrorMessage } from './httpError';
+
+/**
+ * DocuSign SDK ไม่โยน Error ธรรมดา — รายละเอียดที่บอกว่าอะไรผิดจริงอยู่ที่ .response.body
+ * ส่วน .message เป็นแค่ "Bad Request" เปล่าๆ · แยกสองอย่างนี้ให้ผู้เรียกทั้ง 4 จุดใช้เหมือนกัน
+ */
+function docusignError(err: unknown): { detail: unknown; message: string } {
+  const message = getErrorMessage(err, 'unknown DocuSign error');
+  const body = (err as { response?: { body?: unknown } } | undefined)?.response?.body;
+  return { detail: body ?? message, message };
+}
 
 export class DocuSignService {
   private static dsApiClient = new ApiClient();
@@ -65,9 +76,10 @@ export class DocuSignService {
       this.dsApiClient.addDefaultHeader('Authorization', `Bearer ${this.accessToken}`);
       console.log('DocuSign JWT Authentication successful.');
       return this.accessToken;
-    } catch (err: any) {
-      console.error('DocuSign JWT Authentication failed:', err.response?.body || err.message);
-      throw new Error(`DocuSign auth failed: ${err.message}`);
+    } catch (err) {
+      const { detail, message } = docusignError(err);
+      console.error('DocuSign JWT Authentication failed:', detail);
+      throw new Error(`DocuSign auth failed: ${message}`, { cause: err });
     }
   }
 
@@ -141,9 +153,10 @@ export class DocuSignService {
       const results = await envelopesApi.createEnvelope(accountId, { envelopeDefinition: envDef });
       console.log(`Envelope created on DocuSign. ID: ${results.envelopeId}`);
       return results.envelopeId!;
-    } catch (err: any) {
-      console.error('Create Envelope Failed:', err.response?.body || err.message);
-      throw new Error(`DocuSign create envelope failed: ${err.message}`);
+    } catch (err) {
+      const { detail, message } = docusignError(err);
+      console.error('Create Envelope Failed:', detail);
+      throw new Error(`DocuSign create envelope failed: ${message}`, { cause: err });
     }
   }
 
@@ -176,9 +189,10 @@ export class DocuSignService {
         recipientViewRequest: viewRequest,
       });
       return results.url!;
-    } catch (err: any) {
-      console.error('Create Recipient View Failed:', err.response?.body || err.message);
-      throw new Error(`DocuSign generate signing URL failed: ${err.message}`);
+    } catch (err) {
+      const { detail, message } = docusignError(err);
+      console.error('Create Recipient View Failed:', detail);
+      throw new Error(`DocuSign generate signing URL failed: ${message}`, { cause: err });
     }
   }
 
@@ -199,9 +213,10 @@ export class DocuSignService {
       // Save binary file
       fs.writeFileSync(absoluteDest, Buffer.from(results, 'binary'));
       console.log(`Completed PDF downloaded from DocuSign and saved to: ${destPath}`);
-    } catch (err: any) {
-      console.error('Download Signed Document Failed:', err.response?.body || err.message);
-      throw new Error(`DocuSign download PDF failed: ${err.message}`);
+    } catch (err) {
+      const { detail, message } = docusignError(err);
+      console.error('Download Signed Document Failed:', detail);
+      throw new Error(`DocuSign download PDF failed: ${message}`, { cause: err });
     }
   }
 }

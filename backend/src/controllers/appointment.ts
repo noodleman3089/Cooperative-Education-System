@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { sendSupervisionAppointmentEmail } from '../utils/email';
 import jwt from 'jsonwebtoken';
+import type { JwtPayload } from 'jsonwebtoken';
 import { sendUnexpectedError } from '../utils/httpError';
 
 // No fallback secret: a guessable default would let anyone forge the mentor
@@ -24,7 +25,7 @@ function verifyResponseToken(token: unknown, appointmentId: number): { status: n
     return { status: 400, message: 'Missing token.' };
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
     if (decoded.appointment_id !== appointmentId || decoded.role !== 'mentor_response') {
       return { status: 403, message: 'Invalid token.' };
     }
