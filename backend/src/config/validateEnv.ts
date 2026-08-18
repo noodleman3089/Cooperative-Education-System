@@ -66,6 +66,14 @@ export function checkEnvironment(env: Env = process.env): EnvCheckResult {
     if (!env.GOOGLE_CLIENT_ID) {
       warnings.push('GOOGLE_CLIENT_ID ยังไม่ได้ตั้งค่า — นักศึกษาและบุคลากรจะเข้าระบบไม่ได้');
     }
+
+    // เตือนไม่ใช่ error ต่างจาก ALLOW_SIMULATED_SSO เพราะบางสภาพแวดล้อมจำเป็นต้องใช้จริง
+    if (env.PUPPETEER_NO_SANDBOX === 'true') {
+      warnings.push(
+        'PUPPETEER_NO_SANDBOX=true — Chrome ที่สร้าง PDF จะรันโดยไม่มี sandbox ' +
+          'ตั้งค่านี้เฉพาะเมื่อรันใน container ที่เปิด sandbox ไม่ได้จริงๆ'
+      );
+    }
   } else {
     // เตือนไว้ให้เห็นตอน dev ว่ากำลังรันด้วยค่าที่ห้ามเอาขึ้น production
     if (env.ALLOW_SIMULATED_SSO === 'true') {

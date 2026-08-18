@@ -7,6 +7,7 @@ import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
+import { launchPdfBrowser } from './utils/browser';
 import type { JwtPayload } from 'jsonwebtoken';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
@@ -252,12 +253,7 @@ app.get('/api/files/download/travel-request-template', authenticateToken, async 
       applicant_name: 'อาจารย์ผู้นิเทศก์การปฏิบัติงานสหกิจศึกษา'
     });
 
-    // puppeteer เป็น ESM ล้วน จึง require จากไฟล์ CommonJS ไม่ได้ (ดู document.ts)
-    const puppeteer = (await import('puppeteer')).default;
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    const browser = await launchPdfBrowser();
     const page = await browser.newPage();
     await page.setContent(renderedHtml, { waitUntil: 'load' });
     const pdfBuffer = await page.pdf({ 

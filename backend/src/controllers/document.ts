@@ -23,16 +23,7 @@ import {
 import { createInviteLink } from '../utils/invite';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
-
-/**
- * puppeteer เป็น ESM ล้วนแล้ว (`"type": "module"` ใน package ของมัน) จึงถูก
- * `require` ตรงๆ จากไฟล์ CommonJS ไม่ได้ภายใต้ `moduleResolution: node16`
- * — ต้องโหลดแบบ dynamic import
- *
- * ผลพลอยได้: มันไม่ถูกโหลดตอนสตาร์ทเซิร์ฟเวอร์อีกต่อไป แต่โหลดตอนออกเอกสารจริง
- * เท่านั้น ซึ่งเป็นงานที่นานๆ ครั้งและกินหน่วยความจำมาก
- */
-const loadPuppeteer = async () => (await import('puppeteer')).default;
+import { launchPdfBrowser } from '../utils/browser';
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -227,10 +218,7 @@ export class DocumentController {
         });
 
         // 5.3 Convert rendered HTML to PDF Buffer via Puppeteer
-        const browser = await (await loadPuppeteer()).launch({ 
-          headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
-        });
+        const browser = await launchPdfBrowser();
         const page = await browser.newPage();
         await page.setContent(renderedHtml, { waitUntil: 'load' });
         const pdfBuffer = await page.pdf({ 
@@ -790,10 +778,7 @@ export class DocumentController {
 
       const generatedDocs = [];
 
-      const browser = await (await loadPuppeteer()).launch({ 
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-      });
+      const browser = await launchPdfBrowser();
 
       try {
         for (const studentId of studentIds) {
