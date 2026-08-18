@@ -12,6 +12,7 @@ import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
 import type { ReportOutlineRow, StudentRow } from '../types/api';
 import { Select, Textarea } from './ui/Input';
+import ReportOutlineReviewModal from './ReportOutlineReviewModal';
 
 interface AdvisorDashboardProps {
   activeMenu: string;
@@ -205,77 +206,17 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
   const advisorModals = (
     <>
-      {/* Report Outline Review Modal for Advisor */}
-      {reviewingOutline && (
-        <Modal
-          onClose={() => setReviewingOutline(null)}
-          size="lg"
-          closeOnBackdrop={false}
-          title="พิจารณาอนุมัติโครงร่างรายงาน (สหกิจ 11)"
-        >
-          <ModalBody className="space-y-4">
-            <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300">
-              <p>
-                <span className="font-semibold text-gray-500 dark:text-gray-400">นักศึกษา:</span>{' '}
-                {reviewingOutline.first_name ? `${reviewingOutline.first_name} ${reviewingOutline.last_name}` : reviewingOutline.student_code} ({reviewingOutline.student_code})
-              </p>
-              <p>
-                <span className="font-semibold text-gray-500 dark:text-gray-400">สาขาวิชา:</span> {reviewingOutline.major_name_th}
-              </p>
-              <p>
-                <span className="font-semibold text-gray-500 dark:text-gray-400">สถานประกอบการ:</span> {reviewingOutline.company_name_th}
-              </p>
-              {reviewingOutline.latest_file_path && (
-                <div className="pt-2">
-                  <a
-                    href={`${API_BASE_URL}/files/${reviewingOutline.latest_file_path}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-blue text-brand-blue hover:bg-blue-50 dark:hover:bg-blue-950/30 font-bold transition-all"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    คลิกเพื่อเปิดอ่านไฟล์ PDF โครงร่างรายงาน
-                  </a>
-                </div>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                ความคิดเห็น / ข้อแนะนำ (จำเป็นกรณีตีกลับแก้ไข)
-              </label>
-              <Textarea
-                rows={4}
-                value={outlineComment}
-                onChange={(e) => setOutlineComment(e.target.value)}
-                placeholder="กรอกคำแนะนำของอาจารย์ที่ปรึกษาเพิ่มเติม..." size="sm"
-              />
-            </div>
-
-          </ModalBody>
-
-          <ModalFooter>
-            <Button
-              variant="danger"
-              size="sm"
-              loading={isSubmittingOutlineReview}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={() => handleReviewAdvisorOutline('rejected')}
-            >
-              ตีกลับให้นักศึกษาแก้ไข
-            </Button>
-            <Button
-              variant="success"
-              size="sm"
-              loading={isSubmittingOutlineReview}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={() => handleReviewAdvisorOutline('approved')}
-            >
-              อนุมัติโครงร่างรายงาน
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
+      <ReportOutlineReviewModal
+        outline={reviewingOutline}
+        reviewer="advisor"
+        comment={outlineComment}
+        onCommentChange={setOutlineComment}
+        onClose={() => setReviewingOutline(null)}
+        onDecision={(decision) =>
+          handleReviewAdvisorOutline(decision === 'approve' ? 'approved' : 'rejected')
+        }
+        submitting={isSubmittingOutlineReview}
+      />
 
       {/* Weekly Log Viewer Modal */}
       <WeeklyLogViewModal

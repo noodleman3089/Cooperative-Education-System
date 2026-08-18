@@ -10,6 +10,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import StatusBadge from './ui/StatusBadge';
 import { getErrorMessage } from '../utils/errors';
 import { Input, Select, Textarea } from './ui/Input';
+import ReportOutlineReviewModal from './ReportOutlineReviewModal';
 
 interface CompanyDashboardProps {
   activeMenu?: string;
@@ -789,110 +790,17 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
         </div>
       )}
 
-      {/* Review Outline Modal for Mentor. `pending_mentor` is the only state the
-          mentor may act on — reportOutline.ts:129 answers 400 for anything else. */}
-      {reviewingOutline && (() => {
-        const canReviewOutline = reviewingOutline.status === 'pending_mentor';
-        return (
-        <Modal
-          onClose={() => setReviewingOutline(null)}
-          size="lg"
-          closeOnBackdrop={false}
-          title="พิจารณาโครงร่างรายงาน (สหกิจ 11)"
-        >
-          <ModalBody className="space-y-4">
-            <div className="space-y-2 text-xs text-gray-600 dark:text-gray-300">
-              <p>
-                <span className="font-semibold text-gray-500 dark:text-gray-400">นักศึกษา:</span>{' '}
-                {reviewingOutline.first_name ? `${reviewingOutline.first_name} ${reviewingOutline.last_name}` : reviewingOutline.student_code} ({reviewingOutline.student_code})
-              </p>
-              <p>
-                <span className="font-semibold text-gray-500 dark:text-gray-400">สาขาวิชา:</span> {reviewingOutline.major_name_th}
-              </p>
-              {reviewingOutline.latest_file_path && (
-                <div className="pt-2">
-                  <a
-                    href={`${API_BASE_URL}/files/${reviewingOutline.latest_file_path}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-blue text-brand-blue hover:bg-blue-50 dark:hover:bg-blue-950/30 font-bold transition-all"
-                  >
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    คลิกเพื่อเปิดอ่านไฟล์ PDF โครงร่างรายงาน
-                  </a>
-                </div>
-              )}
-            </div>
-
-            {/* Past pending_mentor the decision is no longer this reader's to
-                make — the backend refuses it — so the dialog says where the
-                outline has got to instead of offering buttons that would 400. */}
-            {!canReviewOutline && (
-              <AlertBanner
-                variant="info"
-                message={
-                  reviewingOutline.status === 'pending_advisor'
-                    ? 'ท่านได้ให้ความเห็นชอบโครงร่างฉบับนี้แล้ว ขณะนี้อยู่ระหว่างการพิจารณาของอาจารย์ที่ปรึกษา'
-                    : reviewingOutline.status === 'approved'
-                    ? 'โครงร่างฉบับนี้ได้รับการอนุมัติสมบูรณ์จากอาจารย์ที่ปรึกษาแล้ว'
-                    : 'โครงร่างฉบับนี้ถูกตีกลับให้นักศึกษาแก้ไข เมื่อนักศึกษาส่งฉบับใหม่จะกลับเข้ามาให้ท่านพิจารณาอีกครั้ง'
-                }
-              />
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                {canReviewOutline
-                  ? 'ความคิดเห็น / ข้อแนะนำการแก้ไข (จำเป็นกรณีตีกลับแก้ไข)'
-                  : 'ความคิดเห็นล่าสุดที่บันทึกไว้'}
-              </label>
-              <Textarea
-                rows={4}
-                readOnly={!canReviewOutline}
-                value={reviewComment}
-                onChange={(e) => setReviewComment(e.target.value)}
-                placeholder={canReviewOutline
-                  ? 'กรอกข้อเสนอแนะในการปรับปรุงหัวข้อ วัตถุประสงค์ หรือโครงสร้างรายงาน...'
-                  : 'ไม่มีความคิดเห็นบันทึกไว้'}
-                className="read-only:opacity-70" size="sm"
-              />
-            </div>
-
-          </ModalBody>
-
-          <ModalFooter>
-            {canReviewOutline ? (
-              <>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  loading={isSubmittingReview}
-                  loadingLabel="กำลังส่งข้อมูล..."
-                  onClick={() => handleReviewOutline('rejected')}
-                >
-                  ตีกลับให้นักศึกษาแก้ไข
-                </Button>
-                <Button
-                  variant="success"
-                  size="sm"
-                  loading={isSubmittingReview}
-                  loadingLabel="กำลังส่งข้อมูล..."
-                  onClick={() => handleReviewOutline('pending_advisor')}
-                >
-                  อนุมัติและส่งต่ออาจารย์ที่ปรึกษา
-                </Button>
-              </>
-            ) : (
-              <Button variant="secondary" size="sm" onClick={() => setReviewingOutline(null)}>
-                ปิดหน้าต่าง
-              </Button>
-            )}
-          </ModalFooter>
-        </Modal>
-        );
-      })()}
+      <ReportOutlineReviewModal
+        outline={reviewingOutline}
+        reviewer="mentor"
+        comment={reviewComment}
+        onCommentChange={setReviewComment}
+        onClose={() => setReviewingOutline(null)}
+        onDecision={(decision) =>
+          handleReviewOutline(decision === 'approve' ? 'pending_advisor' : 'rejected')
+        }
+        submitting={isSubmittingReview}
+      />
 
       <OnboardMentorModal
         isOpen={acceptingApplicant !== null}
