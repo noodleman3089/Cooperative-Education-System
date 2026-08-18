@@ -615,7 +615,7 @@ export class DocumentController {
       `);
     } catch (error) {
       // ไม่ใช้ sendUnexpectedError ที่นี่ — ปลายทางคือเบราว์เซอร์ของผู้เซ็นซึ่งรอ HTML
-      // ไม่ใช่ JSON · เป็น status(500) ดิบจุดเดียวที่เหลือในโปรเจคโดยตั้งใจ
+      // ไม่ใช่ JSON · เป็นหนึ่งใน status(500) ดิบ 2 จุดที่เหลือโดยตั้งใจ
       console.error('DocuSign Callback Error:', error);
       // The message is not reflected back: it can carry database text (company
       // names, document titles) that a student supplied, and this response is
