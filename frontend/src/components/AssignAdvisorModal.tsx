@@ -92,7 +92,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
       title={isSingleEdit ? 'สลับปรับเปลี่ยนผู้รับผิดชอบรายบุคคล' : 'กำหนดอาจารย์ผู้รับผิดชอบแบบกลุ่ม'}
     >
       <ModalBody>
-        <p className="text-xs text-gray-400 mb-4">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
           ดำเนินการกำหนดอาจารย์ที่ปรึกษาสหกิจ และอาจารย์ผู้นิเทศตรวจงาน ให้กับนักศึกษาที่เลือก (จำนวน {selectedStudentIds.length} คน)
         </p>
 

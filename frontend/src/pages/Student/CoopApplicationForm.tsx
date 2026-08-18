@@ -236,7 +236,7 @@ const CoopApplicationForm: React.FC = () => {
                 htmlFor="claimed_gpa"
                 className="block text-sm font-medium text-gray-800 dark:text-gray-300"
               >
-                เกรดเฉลี่ยสะสม (GPAX) <span className="text-red-500">*</span>
+                เกรดเฉลี่ยสะสม (GPAX) <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <input
                 type="number"

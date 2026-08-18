@@ -83,7 +83,7 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
       }
     >
       <ModalBody className="flex-1 flex flex-col gap-5 min-h-0">
-        <p className="text-xs text-gray-400 shrink-0">
+        <p className="text-xs text-gray-600 dark:text-gray-400 shrink-0">
           นักศึกษา: <span className="font-bold text-gray-700 dark:text-gray-200">{studentName || 'ไม่ระบุชื่อ'}</span> (รหัส: <span className="font-mono">{studentCode || 'N/A'}</span>)
         </p>
 
@@ -108,7 +108,7 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
         <AlertBanner variant="error" message={error} />
 
         {loading ? (
-          <div className="py-12 text-center text-xs text-gray-400 animate-pulse">
+          <div className="py-12 text-center text-xs text-gray-600 dark:text-gray-400 animate-pulse">
             กำลังโหลดข้อมูลไดอารี่ประจำสัปดาห์...
           </div>
         ) : (
@@ -130,12 +130,12 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
                         ? 'bg-brand-blue text-white shadow-md shadow-blue-500/10'
                         : isSubmitted
                         ? 'bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-950/30 dark:text-green-400 dark:hover:bg-green-900/40'
-                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-500'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-400'
                     }`}
                   >
                     <span>สัปดาห์ที่ {weekNum}</span>
                     {isSubmitted ? (
-                      <CheckCircle2 className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-green-600 dark:text-green-400'}`} />
+                      <CheckCircle2 className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-green-700 dark:text-green-400'}`} />
                     ) : (
                       <span className="text-xs opacity-60">ยังไม่ส่ง</span>
                     )}
@@ -153,7 +153,7 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
                       <span className="px-2.5 py-1 bg-brand-blue text-white rounded-lg text-xs font-bold">
                         สัปดาห์ที่ {activeLog.week_number}
                       </span>
-                      <span className="text-xs text-gray-400 flex items-center gap-1 font-mono">
+                      <span className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1 font-mono">
                         <Calendar className="h-3.5 w-3.5" />
                         ยื่นส่งเมื่อ: {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(activeLog.submitted_at))}
                       </span>
@@ -183,7 +183,7 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-16 text-xs text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
+                <div className="text-center py-16 text-xs text-gray-600 dark:text-gray-400 border border-dashed border-gray-200 dark:border-gray-800 rounded-2xl">
                   นักศึกษายังไม่ได้บันทึกข้อมูลผลงานสำหรับ สัปดาห์ที่ {activeTabWeek}
                 </div>
               )}

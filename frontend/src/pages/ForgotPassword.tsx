@@ -79,7 +79,7 @@ const ForgotPassword: React.FC = () => {
                 อีเมล
               </label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 dark:text-gray-400" />
                 <input
                   type="email"
                   required

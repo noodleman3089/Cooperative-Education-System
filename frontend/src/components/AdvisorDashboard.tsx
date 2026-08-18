@@ -274,7 +274,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       <div className="space-y-6 page-enter">
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">รายชื่อนักศึกษาในสาขาวิชา</h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             ตรวจสอบรายชื่อ ประวัติการสหกิจศึกษา และคุณสมบัติพื้นฐานของนักศึกษาในสาขาที่ท่านดูแล
           </p>
         </div>
@@ -286,7 +286,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 flex flex-col md:flex-row gap-4 items-center">
           {/* Search box */}
           <div className="relative flex-1 w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 dark:text-gray-400" />
             <input
               type="text"
               placeholder="ค้นหาด้วยรหัสนักศึกษา หรือ ชื่อ-นามสกุล..."
@@ -299,7 +299,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
           <div className="flex gap-3 w-full md:w-auto shrink-0">
             {/* Eligibility filter */}
             <div className="flex items-center gap-1.5 flex-1 md:flex-initial">
-              <Filter className="h-3.5 w-3.5 text-gray-400" />
+              <Filter className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
               <Select
                 value={eligibilityFilter}
                 onChange={(e) => setEligibilityFilter(e.target.value)} size="sm"
@@ -329,7 +329,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">นักศึกษา</th>
                     <th className="p-4 font-semibold">สาขาวิชา / เกรดเฉลี่ย</th>
                     <th className="p-4 font-semibold text-center">สิทธิ์สมัคร</th>
@@ -347,28 +347,28 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           <span className="block font-bold">
                             {student.first_name ? `${student.first_name} ${student.last_name}` : 'ไม่ระบุชื่อ'}
                           </span>
-                          <span className="block text-xs text-gray-400 mt-0.5">
+                          <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                             รหัส: {student.student_code}
                           </span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
                           <span className="block font-medium">{student.major_name_th}</span>
-                          <span className="block text-xs text-gray-400 mt-0.5">GPA: {student.cumulative_gpa ? Number(student.cumulative_gpa).toFixed(2) : 'N/A'}</span>
+                          <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">GPA: {student.cumulative_gpa ? Number(student.cumulative_gpa).toFixed(2) : 'N/A'}</span>
                         </td>
                         <td className="p-4 text-center">
                           {student.is_eligible ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
                               ผ่านเกณฑ์
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-900/50">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-900/50">
                               ไม่ผ่าน
                             </span>
                           )}
                         </td>
                         <td className="p-4 text-center">
                           {student.is_orientation_passed ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
+                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
                               ผ่านแล้ว
                             </span>
                           ) : (
@@ -381,7 +381,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           {studentIntent ? (
                             <div className="flex flex-col gap-1 items-start">
                               <StatusBadge status={studentIntent.status} />
-                              <span className="text-xs text-gray-400 font-medium truncate max-w-[150px]">
+                              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate max-w-[150px]">
                                 {studentIntent.company_name_th}
                               </span>
                               <button
@@ -394,18 +394,18 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                               <button
                                 type="button"
                                 onClick={() => setSelectedStudentForWeeklyLog(student)}
-                                className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-0.5 mt-0.5"
+                                className="text-xs text-emerald-700 dark:text-emerald-400 font-bold hover:underline flex items-center gap-0.5 mt-0.5"
                               >
                                 ดูบันทึกรายสัปดาห์ (Weekly Log) <Calendar className="h-2.5 w-2.5" />
                               </button>
                             </div>
                           ) : (
                             <div className="flex flex-col gap-1 items-start">
-                              <span className="text-gray-400 text-xs">ยังไม่ส่งคำร้องขอสหกิจ</span>
+                              <span className="text-gray-600 dark:text-gray-400 text-xs">ยังไม่ส่งคำร้องขอสหกิจ</span>
                               <button
                                 type="button"
                                 onClick={() => setSelectedStudentForWeeklyLog(student)}
-                                className="text-xs text-emerald-600 dark:text-emerald-400 font-bold hover:underline flex items-center gap-0.5"
+                                className="text-xs text-emerald-700 dark:text-emerald-400 font-bold hover:underline flex items-center gap-0.5"
                               >
                                 ดูบันทึกรายสัปดาห์ (Weekly Log) <Calendar className="h-2.5 w-2.5" />
                               </button>
@@ -419,7 +419,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-400 text-sm">
+            <div className="text-center py-12 text-gray-600 dark:text-gray-400 text-sm">
               ไม่พบข้อมูลนักศึกษาที่ตรงตามเงื่อนไขค้นหา
             </div>
           )}
@@ -440,11 +440,11 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <h2 className="text-xl font-bold text-gray-800 dark:text-white">
               อนุมัติโครงร่างรายงานการปฏิบัติงาน (สหกิจ 11)
             </h2>
-            <p className="text-xs text-gray-400 mt-1">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
               พิจารณาอนุมัติขั้นสุดท้ายสำหรับโครงร่างรายงานที่ผ่านการคัดกรองจากพี่เลี้ยงสถานประกอบการแล้ว
             </p>
           </div>
-          <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-brand-blue/10 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
+          <span className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-brand-blue/10 text-brand-navy dark:bg-blue-950/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800 self-start sm:self-auto">
             {pendingAdvisorCount} รายการรอที่ปรึกษาอนุมัติ
           </span>
         </div>
@@ -458,7 +458,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-left text-xs">
                 <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                  <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">นักศึกษาในที่ปรึกษา</th>
                     <th className="p-4 font-semibold">สถานประกอบการ</th>
                     <th className="p-4 font-semibold">อัปโหลดล่าสุด</th>
@@ -473,7 +473,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                         <div className="font-bold text-gray-800 dark:text-gray-200">
                           {item.first_name ? `${item.first_name} ${item.last_name}` : `รหัส: ${item.student_code}`}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
                           รหัส: <span className="font-mono">{item.student_code}</span> ({item.major_name_th})
                         </div>
                       </td>
@@ -535,7 +535,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
               </table>
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-400 text-sm">
+            <div className="text-center py-12 text-gray-600 dark:text-gray-400 text-sm">
               ไม่พบข้อมูลโครงร่างรายงาน (สหกิจ 11) ของนักศึกษาในที่ปรึกษา
             </div>
           )}
@@ -561,7 +561,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       <div>
         {/* heading kept exactly as expected by E2E tests: ระบบตรวจสอบใบความจำนง (อาจารย์ที่ปรึกษา) */}
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">ระบบตรวจสอบใบความจำนง (อาจารย์ที่ปรึกษา)</h2>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
           พิจารณาอนุมัติคำขอฝึกงานของนักศึกษาในสาขาวิชาที่ดูแล พร้อมสถิติสรุปภาพรวมข้อมูล
         </p>
       </div>
@@ -577,7 +577,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <Users className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-400 font-medium">นักศึกษาในสาขาทั้งหมด</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">นักศึกษาในสาขาทั้งหมด</span>
             <h3 className="text-xl font-bold text-gray-800 dark:text-white mt-1">
               {students.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">คน</span>
             </h3>
@@ -590,7 +590,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <FileText className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-400 font-medium">คำร้องที่รอพิจารณาอนุมัติ</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คำร้องที่รอพิจารณาอนุมัติ</span>
             <h3 className="text-xl font-bold text-gray-800 dark:text-white mt-1">
               {pendingIntents.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">คน</span>
             </h3>
@@ -599,11 +599,11 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
         {/* Card 3: Approved Placements */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-5 rounded-2xl shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-          <div className="p-3 bg-green-50 dark:bg-green-950/20 text-green-600 dark:text-green-400 rounded-2xl">
+          <div className="p-3 bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 rounded-2xl">
             <CheckCircle className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-400 font-medium">อนุมัติแล้ว/กำลังดำเนินการ</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">อนุมัติแล้ว/กำลังดำเนินการ</span>
             <h3 className="text-xl font-bold text-gray-800 dark:text-white mt-1">
               {approvedIntents.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">คน</span>
             </h3>
@@ -623,7 +623,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-400 dark:bg-gray-800 dark:border-gray-800">
+                <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                   <th className="p-4 font-semibold">นักศึกษา</th>
                   <th className="p-4 font-semibold">สถานประกอบการ</th>
                   <th className="p-4 font-semibold">ตำแหน่งงาน</th>
@@ -638,7 +638,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                     <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                         <span className="block font-bold">{intentStudentName(intent)}</span>
-                        <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
+                        <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
                         {intent.company_name_th}
@@ -664,7 +664,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           type="button"
                           onClick={() => setRejectingIntentId(intent.form_id)}
                           disabled={isPendingAction}
-                          className="py-1.5 px-2.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 font-bold transition-all disabled:opacity-50 text-xs"
+                          className="py-1.5 px-2.5 rounded-lg border border-red-200 text-red-700 dark:text-red-400 hover:bg-red-50 hover:border-red-300 font-bold transition-all disabled:opacity-50 text-xs"
                         >
                           ตีกลับ
                         </button>
@@ -677,7 +677,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           className={`py-1.5 px-2.5 rounded-lg text-white font-bold transition-all text-xs ${
                             !isPendingAction
                               ? 'bg-brand-blue hover:bg-blue-600 shadow-sm'
-                              : 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-800'
+                              : 'bg-gray-100 text-gray-600 dark:text-gray-400 cursor-not-allowed dark:bg-gray-800'
                           }`}
                         >
                           {isPendingAction ? 'รอ...' : 'อนุมัติ'}
@@ -691,7 +691,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             </table>
           </div>
         ) : (
-          <div className="text-center py-12 text-gray-400 text-sm">
+          <div className="text-center py-12 text-gray-600 dark:text-gray-400 text-sm">
             ไม่มีรายการใบความจำนงคำขอรอตรวจสอบในขณะนี้
           </div>
         )}

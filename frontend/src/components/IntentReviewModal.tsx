@@ -122,10 +122,10 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
         {modalLoading ? (
           <div className="py-12 flex flex-col items-center justify-center gap-2">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-blue border-t-transparent"></div>
-            <span className="text-xs text-gray-400">กำลังโหลดรายละเอียด...</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">กำลังโหลดรายละเอียด...</span>
           </div>
         ) : modalError ? (
-          <div className="p-4 bg-red-50 text-red-600 rounded-xl text-xs dark:bg-red-950/20 dark:text-red-400">
+          <div className="p-4 bg-red-50 text-red-700 rounded-xl text-xs dark:bg-red-950/20 dark:text-red-400">
             {modalError}
           </div>
         ) : intentDetail ? (
@@ -137,14 +137,14 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                   ข้อมูลประวัตินักศึกษา
                 </h4>
                 <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300">
-                  <p><span className="text-gray-400 font-medium">ชื่อ-นามสกุล:</span> {intentDetail.first_name || ''} {intentDetail.last_name || ''} ({intentDetail.nickname || 'ไม่มีชื่อเล่น'})</p>
-                  <p><span className="text-gray-400 font-medium">รหัสนักศึกษา:</span> {intentDetail.student_code}</p>
-                  <p><span className="text-gray-400 font-medium">ระดับชั้นปี:</span> ปีที่ {intentDetail.year_level || '-'}</p>
-                  <p><span className="text-gray-400 font-medium">เกรดเฉลี่ยสะสม (GPA):</span> <span className="font-bold text-brand-blue dark:text-blue-400">{intentDetail.cumulative_gpa ? Number(intentDetail.cumulative_gpa).toFixed(2) : '-'}</span></p>
-                  <p><span className="text-gray-400 font-medium">เบอร์โทรศัพท์:</span> {intentDetail.student_phone || '-'}</p>
-                  <p><span className="text-gray-400 font-medium">อีเมลติดต่อสำรอง:</span> {intentDetail.alt_email || '-'}</p>
-                  <p><span className="text-gray-400 font-medium">ที่อยู่ติดต่อ:</span> {intentDetail.current_address || '-'}</p>
-                  <p><span className="text-gray-400 font-medium">ผู้ปกครอง:</span> {intentDetail.parent_name || '-'} (เบอร์โทร: {intentDetail.parent_phone || '-'})</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">ชื่อ-นามสกุล:</span> {intentDetail.first_name || ''} {intentDetail.last_name || ''} ({intentDetail.nickname || 'ไม่มีชื่อเล่น'})</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">รหัสนักศึกษา:</span> {intentDetail.student_code}</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">ระดับชั้นปี:</span> ปีที่ {intentDetail.year_level || '-'}</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">เกรดเฉลี่ยสะสม (GPA):</span> <span className="font-bold text-brand-blue dark:text-blue-400">{intentDetail.cumulative_gpa ? Number(intentDetail.cumulative_gpa).toFixed(2) : '-'}</span></p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">เบอร์โทรศัพท์:</span> {intentDetail.student_phone || '-'}</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">อีเมลติดต่อสำรอง:</span> {intentDetail.alt_email || '-'}</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">ที่อยู่ติดต่อ:</span> {intentDetail.current_address || '-'}</p>
+                  <p><span className="text-gray-600 dark:text-gray-400 font-medium">ผู้ปกครอง:</span> {intentDetail.parent_name || '-'} (เบอร์โทร: {intentDetail.parent_phone || '-'})</p>
                 </div>
               </div>
 
@@ -155,11 +155,11 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                     รายละเอียดสถานที่ปฏิบัติงาน
                   </h4>
                   <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300">
-                    <p><span className="text-gray-400 font-medium">สถานประกอบการ:</span> {intentDetail.company_name_th}</p>
-                    <p><span className="text-gray-400 font-medium">ตำแหน่งงาน:</span> {intentDetail.job_title || 'ฝึกงานทั่วไป'}</p>
-                    <p><span className="text-gray-400 font-medium">ผู้ประสานงาน HR:</span> {intentDetail.company_contact_person || '-'}</p>
-                    <p><span className="text-gray-400 font-medium">เบอร์ติดต่อบริษัท:</span> {intentDetail.company_phone || '-'}</p>
-                    <p><span className="text-gray-400 font-medium">วันที่เริ่มฝึกงาน:</span> {intentDetail.start_date ? new Date(intentDetail.start_date).toLocaleDateString('th-TH') : '-'}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">สถานประกอบการ:</span> {intentDetail.company_name_th}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">ตำแหน่งงาน:</span> {intentDetail.job_title || 'ฝึกงานทั่วไป'}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">ผู้ประสานงาน HR:</span> {intentDetail.company_contact_person || '-'}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">เบอร์ติดต่อบริษัท:</span> {intentDetail.company_phone || '-'}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">วันที่เริ่มฝึกงาน:</span> {intentDetail.start_date ? new Date(intentDetail.start_date).toLocaleDateString('th-TH') : '-'}</p>
                   </div>
                 </div>
                 
@@ -180,7 +180,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
             {/* Rejection Input Section */}
             {isRejecting ? (
               <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-xl space-y-4">
-                <h5 className="text-xs font-bold text-red-600 dark:text-red-400">ระบุสาเหตุที่ปฏิเสธ/ตีกลับคำร้อง</h5>
+                <h5 className="text-xs font-bold text-red-700 dark:text-red-400">ระบุสาเหตุที่ปฏิเสธ/ตีกลับคำร้อง</h5>
                 <div className="space-y-3">
                   <div>
                     <Select
@@ -228,7 +228,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
               <div className="flex justify-between items-center border-t pt-4 dark:border-gray-800 text-xs">
                 <div>
                   {intentDetail.status !== 'pending_advisor' && intentDetail.status !== 'approved_by_advisor' && (
-                    <span className="text-gray-400">สถานะปัจจุบัน: {statusText(intentDetail.status)} (ผ่านกระบวนการแล้ว)</span>
+                    <span className="text-gray-600 dark:text-gray-400">สถานะปัจจุบัน: {statusText(intentDetail.status)} (ผ่านกระบวนการแล้ว)</span>
                   )}
                 </div>
                 <div className="flex gap-2">
@@ -247,7 +247,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                         type="button"
                         onClick={() => setIsRejecting(true)}
                         disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-100"
+                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:text-red-400 font-bold border border-red-100"
                       >
                         ตีกลับคำขอ
                       </button>
@@ -268,7 +268,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                         type="button"
                         onClick={() => setIsRejecting(true)}
                         disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 font-bold border border-red-100"
+                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:text-red-400 font-bold border border-red-100"
                       >
                         ตีกลับคำขอ (หัวหน้าภาค)
                       </button>

@@ -119,7 +119,7 @@ const WeeklyLog: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ผลการปฏิบัติงาน (Achievements) <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ผลการปฏิบัติงาน (Achievements) <span className="text-red-600 dark:text-red-400">*</span></label>
                 <Textarea
                   value={achievements}
                   onChange={(e) => setAchievements(e.target.value)}

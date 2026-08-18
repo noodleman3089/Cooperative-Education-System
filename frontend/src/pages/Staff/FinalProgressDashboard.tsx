@@ -179,7 +179,7 @@ const FinalProgressDashboard: React.FC = () => {
         </div>
 
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-xl">
+          <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-xl">
             <CheckCircle className="w-6 h-6" />
           </div>
           <div>
@@ -239,7 +239,7 @@ const FinalProgressDashboard: React.FC = () => {
 
         {/* Filter / Search */}
         <div className="relative mb-6">
-          <Search className="w-4 h-4 absolute left-4 top-3 text-gray-400" />
+          <Search className="w-4 h-4 absolute left-4 top-3 text-gray-600 dark:text-gray-400" />
           <input
             type="text"
             value={search}
@@ -256,7 +256,7 @@ const FinalProgressDashboard: React.FC = () => {
         {loading ? (
           <PageSkeleton variant="table" />
         ) : filteredStudents.length === 0 ? (
-          <div className="py-16 text-center text-gray-400 dark:text-gray-500 text-sm">
+          <div className="py-16 text-center text-gray-600 dark:text-gray-400 text-sm">
             ไม่พบข้อมูลนักศึกษาสหกิจศึกษาตรงตามเกณฑ์
           </div>
         ) : (
@@ -299,10 +299,10 @@ const FinalProgressDashboard: React.FC = () => {
                       </div>
                     </td>
                     <td className="p-4 text-center font-bold text-sm text-gray-800 dark:text-gray-200">
-                      {std.mentorScore !== null ? `${std.mentorScore}` : <span className="text-gray-400 font-medium">-</span>}
+                      {std.mentorScore !== null ? `${std.mentorScore}` : <span className="text-gray-600 dark:text-gray-400 font-medium">-</span>}
                     </td>
                     <td className="p-4 text-center font-bold text-sm text-gray-800 dark:text-gray-200">
-                      {std.advisorScore !== null ? `${std.advisorScore}` : <span className="text-gray-400 font-medium">-</span>}
+                      {std.advisorScore !== null ? `${std.advisorScore}` : <span className="text-gray-600 dark:text-gray-400 font-medium">-</span>}
                     </td>
                     <td className="p-4 text-center font-black text-sm text-brand-blue dark:text-blue-400">
                       {std.totalScore}

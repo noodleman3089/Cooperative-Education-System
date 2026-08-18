@@ -50,7 +50,7 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           {identifierLabel}
         </label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 dark:text-gray-400" />
           <input
             type={identifierType}
             required
@@ -68,7 +68,7 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           รหัสผ่าน
         </label>
         <div className="relative">
-          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-600 dark:text-gray-400" />
           <input
             type={showPassword ? 'text' : 'password'}
             required
@@ -81,7 +81,7 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>

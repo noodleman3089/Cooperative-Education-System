@@ -94,7 +94,7 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
           </svg>
           ข้อมูลส่วนเสริม (Optional)
         </h2>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
           ข้อมูลในส่วนนี้ไม่บังคับ แต่จะเป็นประโยชน์อย่างมากในการใช้พิจารณาหาตำแหน่งงานและสถานประกอบการที่เหมาะสมกับคุณ
         </p>
       </div>

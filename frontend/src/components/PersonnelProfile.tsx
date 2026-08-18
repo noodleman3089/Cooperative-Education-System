@@ -231,7 +231,7 @@ const PersonnelProfile: React.FC = () => {
     <div className="max-w-2xl bg-white p-8 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 page-enter">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">การตั้งค่าโปรไฟล์บุคลากร</h2>
-        <p className="text-xs text-gray-400 mt-1">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
           จัดการข้อมูลสาขาวิชาที่สังกัด และตั้งค่าลายมือชื่อดิจิทัลสำหรับประทับตราอนุมัติเอกสาร
         </p>
       </div>
@@ -339,7 +339,7 @@ const PersonnelProfile: React.FC = () => {
               <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
                 ลายมือชื่ออิเล็กทรอนิกส์ (Digital Signature)
               </h3>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                 ลายเซ็นนี้จะใช้สำหรับนำไปวางประทับตราบนเอกสารใบคำร้องต่างๆ ของนักศึกษาโดยอัตโนมัติ
               </p>
             </div>
@@ -347,7 +347,7 @@ const PersonnelProfile: React.FC = () => {
             {/* แสดงลายเซ็นปัจจุบัน */}
             {savedSigPath && (
               <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800/80 inline-block">
-                <span className="block text-xs text-gray-400 mb-1">ลายเซ็นปัจจุบันในระบบ:</span>
+                <span className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ลายเซ็นปัจจุบันในระบบ:</span>
                 <img
                   src={`${API_BASE_URL}/files/signatures/${savedSigPath.split('/').pop()}`}
                   alt="Digital Signature"
@@ -451,7 +451,7 @@ const PersonnelProfile: React.FC = () => {
                       setSignatureFile(e.target.files[0]);
                     }
                   }}
-                  className="w-full text-xs text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-600 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
+                  className="w-full text-xs text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-600 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
                 />
               </div>
             )}

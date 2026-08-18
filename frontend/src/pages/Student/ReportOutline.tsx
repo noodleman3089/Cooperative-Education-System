@@ -120,7 +120,7 @@ const ReportOutline: React.FC = () => {
               disabled={uploading || data?.status === 'approved'}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200 shadow-sm
                 ${uploading || data?.status === 'approved' 
-                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500' 
+                  ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400' 
                   : 'bg-brand-blue hover:bg-blue-600 text-white hover:shadow-md hover:shadow-blue-500/20 active:scale-95'}`}
             >
               {uploading ? (
@@ -141,7 +141,7 @@ const ReportOutline: React.FC = () => {
           </div>
         ) : !data ? (
           <div className="py-16 text-center border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
-            <FileUp className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <FileUp className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">ยังไม่มีการส่งโครงร่างรายงาน</h3>
             <p className="text-gray-500 dark:text-gray-400 text-sm">อัปโหลดไฟล์ PDF หรือ Word เพื่อเริ่มต้น</p>
           </div>
@@ -190,7 +190,7 @@ const ReportOutline: React.FC = () => {
                       {version.rejection_comment && (
                         <div className="mt-3 p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
                           <p className="text-sm text-red-800 dark:text-red-300 font-medium mb-1">ความคิดเห็น/ข้อเสนอแนะ:</p>
-                          <p className="text-sm text-red-600 dark:text-red-400 whitespace-pre-wrap">{version.rejection_comment}</p>
+                          <p className="text-sm text-red-700 dark:text-red-400 whitespace-pre-wrap">{version.rejection_comment}</p>
                         </div>
                       )}
                     </div>

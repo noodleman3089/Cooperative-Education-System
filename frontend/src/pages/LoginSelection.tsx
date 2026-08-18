@@ -37,7 +37,7 @@ const LoginSelection: React.FC = () => {
             <h3 className="text-lg font-bold text-gray-800 dark:text-white group-hover:text-brand-blue transition-colors">
               นักศึกษา
             </h3>
-            <p className="text-xs text-gray-400 mt-2 line-clamp-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 line-clamp-3">
               เข้าสู่ระบบด้วยอีเมลมหาวิทยาลัยสำหรับนักศึกษาเพื่อกรอกประวัติและยื่นใบความจำนงสหกิจ
             </p>
           </button>
@@ -54,7 +54,7 @@ const LoginSelection: React.FC = () => {
             <h3 className="text-lg font-bold text-gray-800 dark:text-white group-hover:text-brand-blue transition-colors">
               อาจารย์และบุคลากร
             </h3>
-            <p className="text-xs text-gray-400 mt-2 line-clamp-3">
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-2 line-clamp-3">
               สำหรับอาจารย์ที่ปรึกษา เจ้าหน้าที่สหกิจ และคณบดี เพื่อดูแลคัดกรอง และอนุมัติการฝึกงาน
             </p>
           </button>

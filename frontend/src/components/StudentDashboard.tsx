@@ -222,12 +222,12 @@ const StudentDashboard: React.FC = () => {
       <ModalBody className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           {selectedAnnouncement.is_pinned && (
-            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-full">
+            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 px-2 py-0.5 rounded-full">
               <Pin className="h-3 w-3" />
               ประกาศด่วน
             </span>
           )}
-          <span className="text-xs text-gray-400">
+          <span className="text-xs text-gray-600 dark:text-gray-400">
             ประกาศเมื่อ: {new Date(selectedAnnouncement.created_at).toLocaleString('th-TH')}
           </span>
         </div>
@@ -448,12 +448,12 @@ const StudentDashboard: React.FC = () => {
             </h2>
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">
               <div className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
+                <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
                 {data.student.student_code}
               </div>
               <div className="hidden sm:block w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-700" />
               <div className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
+                <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
                 {data.student.major_name_th || 'ไม่ระบุสาขาวิชา'}
               </div>
             </div>
@@ -464,7 +464,7 @@ const StudentDashboard: React.FC = () => {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-4">
           {/* Status Badge */}
           <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex items-center gap-4 hover:border-brand-blue/30 transition-colors group">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.is_eligible ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.is_eligible ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'}`}>
               {data.student.is_eligible ? (
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
               ) : (
@@ -472,7 +472,7 @@ const StudentDashboard: React.FC = () => {
               )}
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">สิทธิ์สหกิจศึกษา</p>
+              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">สิทธิ์สหกิจศึกษา</p>
               <p className={`text-sm font-bold ${data.student.is_eligible ? 'text-gray-800 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
                 {data.student.is_eligible ? 'ผ่านเกณฑ์' : 'ยังไม่ผ่านเกณฑ์'}
               </p>
@@ -485,7 +485,7 @@ const StudentDashboard: React.FC = () => {
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">เกรดเฉลี่ยสะสม</p>
+              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">เกรดเฉลี่ยสะสม</p>
               <p className="text-sm font-bold text-gray-800 dark:text-white">
                 {data.student.cumulative_gpa ? data.student.cumulative_gpa.toFixed(2) : 'N/A'}
               </p>
@@ -494,12 +494,12 @@ const StudentDashboard: React.FC = () => {
 
           {/* Advisor Badge */}
           <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:col-span-3 lg:col-span-1 hover:border-brand-blue/30 transition-colors group">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.advisor ? 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-gray-50 text-gray-400 dark:bg-gray-800 dark:text-gray-500'}`}>
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.advisor ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-0.5">อาจารย์ที่ปรึกษาสหกิจ</p>
-              <p className={`text-sm font-bold ${data.student.advisor ? 'text-gray-800 dark:text-white' : 'text-gray-400 dark:text-gray-500 italic'}`}>
+              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">อาจารย์ที่ปรึกษาสหกิจ</p>
+              <p className={`text-sm font-bold ${data.student.advisor ? 'text-gray-800 dark:text-white' : 'text-gray-600 dark:text-gray-400 italic'}`}>
                 {data.student.advisor ? (data.student.advisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)') : 'รอการจัดสรร'}
               </p>
             </div>
@@ -520,7 +520,7 @@ const StudentDashboard: React.FC = () => {
           {activeIntent ? (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 dark:bg-gray-800 dark:border-gray-800">
-                <span className="block text-xs text-gray-400">สถานประกอบการ</span>
+                <span className="block text-xs text-gray-600 dark:text-gray-400">สถานประกอบการ</span>
                 <span className="block text-sm font-bold text-gray-800 dark:text-white mt-0.5">
                   {activeIntent.company_name_th}
                 </span>
@@ -545,7 +545,7 @@ const StudentDashboard: React.FC = () => {
                   </span>
 
                   {activeIntent.parental_consent_path ? (
-                    <div className="flex items-center gap-2 text-xs text-green-600 font-semibold">
+                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 font-semibold">
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                       </svg>
@@ -574,7 +574,7 @@ const StudentDashboard: React.FC = () => {
                           className="block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
                         />
                       </label>
-                      {uploadingConsent && <span className="text-xs text-gray-400 block">กำลังดำเนินการอัปโหลดไฟล์...</span>}
+                      {uploadingConsent && <span className="text-xs text-gray-600 dark:text-gray-400 block">กำลังดำเนินการอัปโหลดไฟล์...</span>}
                     </div>
                   )}
                 </div>
@@ -596,7 +596,7 @@ const StudentDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">ชื่อ-นามสกุล พี่เลี้ยง *</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ชื่อ-นามสกุล พี่เลี้ยง *</label>
                         <Input
                           type="text"
                           required
@@ -608,7 +608,7 @@ const StudentDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">อีเมล พี่เลี้ยง *</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">อีเมล พี่เลี้ยง *</label>
                         <Input
                           type="email"
                           required
@@ -622,7 +622,7 @@ const StudentDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">เบอร์โทรศัพท์ พี่เลี้ยง *</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">เบอร์โทรศัพท์ พี่เลี้ยง *</label>
                         <Input
                           type="tel"
                           required
@@ -634,7 +634,7 @@ const StudentDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
                         <Input
                           type="date"
                           required
@@ -647,7 +647,7 @@ const StudentDashboard: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">ตำแหน่งงาน พี่เลี้ยง (ไม่บังคับ)</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ตำแหน่งงาน พี่เลี้ยง (ไม่บังคับ)</label>
                         <Input
                           type="text"
                           disabled={submittingProof || reportingFail}
@@ -658,7 +658,7 @@ const StudentDashboard: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-400 mb-1">ฝ่าย / แผนก (ไม่บังคับ)</label>
+                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ฝ่าย / แผนก (ไม่บังคับ)</label>
                         <Input
                           type="text"
                           disabled={submittingProof || reportingFail}
@@ -670,7 +670,7 @@ const StudentDashboard: React.FC = () => {
                     </div>
 
                     <div className="space-y-1">
-                      <label className="block text-xs text-gray-400 mb-1 font-bold">ไฟล์หลักฐานใบตอบรับจากบริษัท (PDF/PNG/JPG) *</label>
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-bold">ไฟล์หลักฐานใบตอบรับจากบริษัท (PDF/PNG/JPG) *</label>
                       <input
                         type="file"
                         accept=".pdf,.png,.jpg,.jpeg"
@@ -694,7 +694,7 @@ const StudentDashboard: React.FC = () => {
                         type="button"
                         onClick={() => setConfirmingFailure(true)}
                         disabled={submittingProof || reportingFail}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20 text-xs font-bold transition-all disabled:opacity-50"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20 text-xs font-bold transition-all disabled:opacity-50"
                       >
                         {reportingFail ? 'กำลังดำเนินการ...' : 'แจ้งสัมภาษณ์ไม่ผ่าน'}
                       </button>
@@ -704,7 +704,7 @@ const StudentDashboard: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-xs">
+            <div className="text-center py-8 text-gray-600 dark:text-gray-400 text-xs">
               ยังไม่มีคำขอยื่นความจำนง กรุณาไปที่เมนู "ตำแหน่งงาน / สมัครงาน" เพื่อกดยื่นคำขอสมัครสหกิจศึกษา
             </div>
           )}
@@ -722,7 +722,7 @@ const StudentDashboard: React.FC = () => {
                     <span className="block font-bold text-gray-700 dark:text-gray-300">
                       {doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา'}
                     </span>
-                    <span className="block text-xs text-gray-400 mt-0.5">
+                    <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                       สถานะ: {doc.status === 'signed' ? 'คณบดีเซ็นอนุมัติแล้ว' : 'รอการลงนาม'}
                     </span>
                   </div>
@@ -740,7 +740,7 @@ const StudentDashboard: React.FC = () => {
               ))}
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-400 text-xs">
+            <div className="text-center py-8 text-gray-600 dark:text-gray-400 text-xs">
               ยังไม่มีการออกจดหมายส่งตัวอย่างเป็นทางการในระบบ (เมื่อสถานประกอบการตอบรับ เจ้าหน้าที่จะดำเนินการเปิดจดหมายเพื่อส่งต่อให้คณบดีลงนาม)
             </div>
           )}

@@ -490,7 +490,7 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
                 tone: 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950/20 dark:text-yellow-400',
                 icon: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' },
               { view: 'signed', label: 'เอกสารที่ลงนามอนุมัติแล้ว', count: signedDocs.length,
-                tone: 'bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400',
+                tone: 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400',
                 icon: 'M5 13l4 4L19 7' },
             ] as const).map((card) => (
               <button

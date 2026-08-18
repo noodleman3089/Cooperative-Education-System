@@ -262,7 +262,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               >
                 <Bell className="h-5 w-5" />
                 {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 h-4 w-4 bg-red-500 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
+                  <span className="absolute top-1 right-1 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
                     {notifications.length}
                   </span>
                 )}
@@ -294,9 +294,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                                 className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
                               >
                                 <div className={`p-1.5 rounded-lg mt-0.5 ${item.isWarning
-                                  ? 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+                                  ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
                                   : item.isSuccess
-                                    ? 'bg-green-50 text-green-600 dark:bg-green-950/30 dark:text-green-400'
+                                    ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
                                     : 'bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400'
                                   }`}>
                                   <FileText className="h-4 w-4" />
@@ -351,7 +351,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                         })}
                       </div>
                     ) : (
-                      <div className="text-center py-8 text-xs text-gray-400">
+                      <div className="text-center py-8 text-xs text-gray-600 dark:text-gray-400">
                         {currentRole === 'student' ? 'ยังไม่มีความคืบหน้าคำร้องในขณะนี้' : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
                       </div>
                     )}
@@ -385,7 +385,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
               {auth?.user?.email}
             </span>
-            <span className="block text-xs text-gray-400">
+            <span className="block text-xs text-gray-600 dark:text-gray-400">
               {getRoleLabel(currentRole)}
             </span>
           </div>

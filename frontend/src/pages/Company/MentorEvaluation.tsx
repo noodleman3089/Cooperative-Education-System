@@ -282,7 +282,7 @@ const MentorEvaluation: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
-              <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <User className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">ยังไม่มีนักศึกษาปฏิบัติงานในระบบ</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">จะเห็นนักศึกษาก็ต่อเมื่อมีการเพิ่มพี่เลี้ยงและตอบรับเข้างานสำเร็จในเฟสที่ 1</p>
             </div>

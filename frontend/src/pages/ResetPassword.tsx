@@ -17,7 +17,7 @@ const ResetPassword: React.FC = () => {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6] px-4 dark:bg-[#111827]">
         <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl border border-gray-100 dark:bg-[#1F2937] dark:border-gray-800 text-center">
-          <p className="text-sm text-red-600 dark:text-red-400 mb-4">
+          <p className="text-sm text-red-700 dark:text-red-400 mb-4">
             ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง หรือหมดอายุแล้ว
           </p>
           <button

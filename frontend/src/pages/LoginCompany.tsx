@@ -68,7 +68,7 @@ const LoginCompany: React.FC = () => {
         onSubmit={loginWithPassword}
       />
 
-      <p className="mt-5 text-center text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
+      <p className="mt-5 text-center text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
         หากท่านเพิ่งได้รับอีเมลเชิญเข้าใช้งาน กรุณากดลิงก์{' '}
         <span className="font-semibold">ตั้งรหัสผ่านและเข้าใช้งาน</span> ในอีเมลก่อนเข้าสู่ระบบครั้งแรก
       </p>

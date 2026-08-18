@@ -48,8 +48,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <div
             className={`shrink-0 rounded-full p-2 ${
               destructive
-                ? 'bg-red-50 text-red-600 dark:bg-red-950/40 dark:text-red-400'
-                : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400'
+                ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
             }`}
           >
             <AlertTriangle className="h-5 w-5" />

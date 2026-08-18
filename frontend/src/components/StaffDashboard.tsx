@@ -1321,7 +1321,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                                   variant="secondary"
                                   size="sm"
                                   onClick={() => setPendingConfirm({ title: 'ลบบัญชีผู้ใช้', message: `ลบบัญชี ${u.email} และข้อมูลโปรไฟล์ที่เกี่ยวข้องทั้งหมด? การลบนี้ไม่สามารถย้อนคืนได้`, confirmLabel: 'ลบบัญชีถาวร', destructive: true, run: () => handleDeleteUser(u.user_id) })}
-                                  className="border-red-500 text-red-600 dark:text-red-400 dark:border-red-800"
+                                  className="border-red-500 text-red-700 dark:text-red-400 dark:border-red-800"
                                 >
                                   ลบ
                                 </Button>
@@ -1526,7 +1526,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                       }}
                     />
                     <div className="flex flex-col items-center justify-center space-y-2 text-xs">
-                      <svg className="w-10 h-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <svg className="w-10 h-10 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                       </svg>
                       <p className="font-bold text-gray-700 dark:text-gray-300">ลากวางไฟล์ CSV ของบุคลากรที่นี่ หรือคลิกเพื่ออัปโหลด</p>
@@ -1535,10 +1535,10 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
                   {preseedImportResult && preseedImportResult.summary && (
                     <div className="p-4 bg-green-50 dark:bg-green-950/10 border border-green-200 dark:border-green-800/30 rounded-xl text-xs space-y-2">
-                      <p className="font-bold text-green-700">นำเข้าเรียบร้อยแล้ว:</p>
+                      <p className="font-bold text-green-700 dark:text-green-400">นำเข้าเรียบร้อยแล้ว:</p>
                       <div className="grid grid-cols-3 gap-2">
                         <div>ประมวลผล: {preseedImportResult.summary.totalProcessed} รายการ</div>
-                        <div className="text-green-700">เพิ่มใหม่: {preseedImportResult.summary.importedCount} รายการ</div>
+                        <div className="text-green-700 dark:text-green-400">เพิ่มใหม่: {preseedImportResult.summary.importedCount} รายการ</div>
                         <div className="text-brand-blue dark:text-blue-400">อัปเดตใหม่: {preseedImportResult.summary.updatedCount} รายการ</div>
                       </div>
                     </div>
@@ -1672,7 +1672,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                                 onClick={() => setPendingConfirm({ title: 'ลบรหัสบุคลากรล่วงหน้า', message: `ลบรหัสบุคลากรล่วงหน้า ${p.employee_code} ออกจากรายชื่อ? เจ้าของรหัสนี้จะยืนยันตัวตนผ่าน SSO ไม่ได้อีก`, confirmLabel: 'ลบรหัสนี้', destructive: true, run: () => handleDeletePreseed(p.employee_code) })}
                                 disabled={p.is_claimed}
                                 title={p.is_claimed ? 'ยืนยันตัวตนไปแล้ว ลบรหัสนี้ไม่ได้' : undefined}
-                                className={p.is_claimed ? '' : 'border-red-500 text-red-600 dark:text-red-400 dark:border-red-800'}
+                                className={p.is_claimed ? '' : 'border-red-500 text-red-700 dark:text-red-400 dark:border-red-800'}
                               >
                                 ลบ
                               </Button>
@@ -1750,7 +1750,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mt-1">{job.description}</p>
                       {job.status === 'rejected' && job.reject_reason && (
-                        <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                        <p className="text-xs text-red-700 dark:text-red-400 mt-1">
                           เหตุผลที่ไม่อนุมัติ: {job.reject_reason}
                         </p>
                       )}
@@ -1782,7 +1782,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                             setJobRejectCustom('');
                             setJobRejectError(null);
                           }}
-                          className="border-red-500 text-red-600 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30"
+                          className="border-red-500 text-red-700 hover:bg-red-50 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-950/30"
                         >
                           ไม่อนุมัติ
                         </Button>
@@ -1949,7 +1949,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <div key={ann.announcement_id} className="p-6 hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div className="space-y-1 flex-1">
                       <div className="flex items-center gap-2">
-                        {ann.is_pinned && <span className="text-xs font-bold text-red-600 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Pin className="h-3 w-3" /> ปักหมุดด่วน</span>}
+                        {ann.is_pinned && <span className="text-xs font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/30 px-2 py-0.5 rounded-full inline-flex items-center gap-1"><Pin className="h-3 w-3" /> ปักหมุดด่วน</span>}
                         <span className="font-bold text-base text-gray-900 dark:text-white">{ann.title}</span>
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -1971,7 +1971,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                         variant="secondary"
                         size="sm"
                         onClick={() => setPendingConfirm({ title: 'ลบข่าวประชาสัมพันธ์', message: `ลบประกาศ "${ann.title}" ออกจากระบบ?`, confirmLabel: 'ลบประกาศ', destructive: true, run: () => handleDeleteAnnouncement(ann.announcement_id) })}
-                        className="border-red-300 text-red-600 dark:text-red-400 dark:border-red-900"
+                        className="border-red-300 text-red-700 dark:text-red-400 dark:border-red-900"
                       >
                         ลบประกาศ
                       </Button>

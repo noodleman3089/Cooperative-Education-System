@@ -69,7 +69,7 @@ const StageLockedScreen: React.FC<{
   onAction: () => void;
 }> = ({ reason, actionLabel, onAction }) => (
   <div className="page-enter mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
-    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600 dark:bg-amber-950/30 dark:text-amber-400">
+    <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
       <Lock className="h-7 w-7" />
     </div>
     <h3 className="text-lg font-bold text-gray-800 dark:text-white">ยังไม่ถึงขั้นตอนนี้</h3>
@@ -254,12 +254,12 @@ const Dashboard: React.FC = () => {
         
       default:
         if (activeMenu === 'profile') return (
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-400">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400">
             ไม่รองรับบทบาทการแสดงผลนี้ กรุณาเปลี่ยนบทบาทการใช้งานของท่านด้านบน
           </div>
         );
         return (
-          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-400">
+          <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-[#1F2937] dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400">
             ไม่รองรับบทบาทการแสดงผลนี้ กรุณาเปลี่ยนบทบาทการใช้งานของท่านด้านบน
           </div>
         );

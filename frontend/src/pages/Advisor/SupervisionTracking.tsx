@@ -166,7 +166,7 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">นิเทศและติดตามนักศึกษา</h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             จัดการการนัดหมาย บันทึกผลการนิเทศ และติดตามความคืบหน้าของนักศึกษา
           </p>
         </div>
@@ -214,7 +214,7 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                 className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-200"
               >
                 {province}
-                <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-brand-blue dark:bg-blue-900/40 dark:text-blue-300">
+                <span className="rounded-full bg-brand-blue/10 px-2 py-0.5 text-brand-navy dark:bg-blue-900/40 dark:text-blue-300">
                   {count} คน
                 </span>
               </span>
@@ -258,7 +258,7 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                   <h3 className="font-bold text-lg text-gray-900 dark:text-white flex flex-wrap items-center gap-2">
                     <Users className="w-5 h-5 text-brand-blue dark:text-blue-400" />
                     {student.first_name} {student.last_name} ({student.student_code})
-                    <span className="rounded-full border border-blue-200 bg-brand-blue/10 px-2 py-0.5 text-xs font-bold text-brand-blue dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
+                    <span className="rounded-full border border-blue-200 bg-brand-blue/10 px-2 py-0.5 text-xs font-bold text-brand-navy dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                       {roleTag}
                     </span>
                   </h3>
@@ -300,7 +300,7 @@ const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
                               <span className="font-bold block text-gray-600 dark:text-gray-400">สัปดาห์ที่ {p.week_number}</span>
                               <span className="text-gray-500 block mt-0.5 dark:text-gray-400">{p.tasks}</span>
                             </div>
-                            <span className="text-xs text-gray-400 self-start whitespace-nowrap">
+                            <span className="text-xs text-gray-600 dark:text-gray-400 self-start whitespace-nowrap">
                               {new Date(p.start_date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})} - {new Date(p.end_date).toLocaleDateString('th-TH', {day: 'numeric', month: 'short'})}
                             </span>
                           </div>

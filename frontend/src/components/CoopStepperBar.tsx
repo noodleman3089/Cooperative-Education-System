@@ -87,7 +87,7 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
             const isLastPhase = idx === phases.length - 1;
 
             // Node visual states
-            let nodeBg = 'bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 text-gray-400';
+            let nodeBg = 'bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400';
 
             if (isCompleted) {
               nodeBg = 'bg-emerald-500 border-2 border-emerald-500 text-white shadow-xs';
@@ -200,7 +200,7 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
                 const isStepActive = step.status === 'active';
                 const isLastStep = idx === currentSelectedPhase.subSteps.length - 1;
 
-                let subNodeClass = 'bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 text-gray-400';
+                let subNodeClass = 'bg-white dark:bg-gray-900 border-2 border-gray-300 dark:border-gray-700 text-gray-600 dark:text-gray-400';
                 let cardBg = 'bg-white dark:bg-gray-900 border-gray-200/80 dark:border-gray-800/80 opacity-90';
                 let statusTag = null;
 

@@ -7,7 +7,7 @@ export type AlertVariant = 'error' | 'success' | 'info';
 const VARIANTS: Record<AlertVariant, { Icon: typeof AlertCircle; box: string; icon: string }> = {
   error: {
     Icon: AlertCircle,
-    box: 'bg-red-50 border-red-200 text-red-600 dark:bg-red-950/40 dark:border-red-800/50 dark:text-red-400',
+    box: 'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-800/50 dark:text-red-400',
     icon: 'text-red-500',
   },
   success: {

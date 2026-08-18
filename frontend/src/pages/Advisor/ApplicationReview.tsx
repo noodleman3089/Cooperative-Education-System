@@ -331,7 +331,7 @@ const ApplicationReview: React.FC = () => {
 
                   <div>
                     <label htmlFor="conclusion_remark" className="block text-sm font-medium text-gray-800 dark:text-gray-300">
-                      ความเห็น {form.conclusion && form.conclusion !== 'approved' && <span className="text-red-500">*</span>}
+                      ความเห็น {form.conclusion && form.conclusion !== 'approved' && <span className="text-red-600 dark:text-red-400">*</span>}
                     </label>
                     <textarea
                       id="conclusion_remark"

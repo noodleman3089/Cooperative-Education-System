@@ -248,7 +248,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
       title="ระบุรายละเอียดสถานที่ฝึกงานด้วยตนเอง"
     >
       <ModalBody>
-        <p className="text-xs text-gray-400 mb-5">
+        <p className="text-xs text-gray-600 dark:text-gray-400 mb-5">
           กรอกข้อมูลสถานประกอบการที่คุณติดต่อและได้รับการตอบรับเข้าฝึกงานเพื่อบันทึกประวัติ
         </p>
 
@@ -274,11 +274,11 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               {/* A field-level confirmation, not page feedback — AlertBanner's
                   page-sized padding would swamp this helper box. */}
               {placeCheckMessage && (
-                <p className="text-xs font-semibold text-green-600 dark:text-green-400">
+                <p className="text-xs font-semibold text-green-700 dark:text-green-400">
                   {placeCheckMessage}
                 </p>
               )}
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-gray-600 dark:text-gray-400">
                 * เมื่อเลือกสถานที่จากรายการแนะนำ ระบบจะกรอกฟอร์มที่อยู่ เบอร์โทรศัพท์ และพิกัดด้านล่างให้โดยอัตโนมัติ
               </p>
             </div>
@@ -287,7 +287,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                ชื่อสถานประกอบการ (ภาษาไทย) <span className="text-red-500">*</span>
+                ชื่อสถานประกอบการ (ภาษาไทย) <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <Input
                 type="text"
@@ -312,7 +312,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
 
           <div>
             <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-              ที่ตั้ง / ที่อยู่สถานประกอบการ <span className="text-red-500">*</span>
+              ที่ตั้ง / ที่อยู่สถานประกอบการ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               type="text"
@@ -326,7 +326,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                จังหวัด <span className="text-red-500">*</span>
+                จังหวัด <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <Select
                 required
@@ -344,7 +344,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                อำเภอ / เขต <span className="text-red-500">*</span>
+                อำเภอ / เขต <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <Input
                 type="text"
@@ -356,7 +356,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                รหัสไปรษณีย์ <span className="text-red-500">*</span>
+                รหัสไปรษณีย์ <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <Input
                 type="text"
@@ -372,7 +372,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                เบอร์โทรศัพท์สถานประกอบการ <span className="text-red-500">*</span>
+                เบอร์โทรศัพท์สถานประกอบการ <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <Input
                 type="text"

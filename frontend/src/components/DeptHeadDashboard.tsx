@@ -283,7 +283,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
             {activeMenu === 'assignment' && 'จัดสรรอาจารย์ที่ปรึกษาสหกิจศึกษา'}
             {activeMenu === 'students' && 'ตรวจสอบสถานะคุณสมบัติและสิทธิ์นักศึกษา'}
           </h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {activeMenu === 'dashboard' && 'สถิติการดำเนินการสหกิจศึกษาและข่าวสารภาพรวมภายในภาควิชา'}
             {activeMenu === 'approval' && 'พิจารณาอนุมัติคำขอฝึกงานที่ผ่านการตรวจสอบจากอาจารย์ที่ปรึกษาแล้ว'}
             {activeMenu === 'assignment' && 'กำหนดอาจารย์ที่ปรึกษาและอาจารย์นิเทศหลักรายกลุ่มและบุคคล'}
@@ -319,7 +319,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       {(activeMenu === 'assignment' || activeMenu === 'students') && (
         <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 md:flex-row md:items-center dark:border-gray-800 dark:bg-gray-900">
           <div className="relative w-full flex-1">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-600 dark:text-gray-400" />
             <input
               type="text"
               value={searchText}
@@ -374,34 +374,34 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           {/* Bento Stats Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              <span className="text-xs font-medium text-gray-400">นักศึกษาในภาควิชาทั้งหมด</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">นักศึกษาในภาควิชาทั้งหมด</span>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-3xl font-extrabold text-gray-800 dark:text-white">{totalStudents}</span>
-                <span className="text-xs text-gray-400 font-medium">คน</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คน</span>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              <span className="text-xs font-medium text-gray-400">จัดสรรอาจารย์ที่ปรึกษาแล้ว</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">จัดสรรอาจารย์ที่ปรึกษาแล้ว</span>
               <div className="flex items-baseline gap-2 mt-2">
-                <span className="text-3xl font-extrabold text-green-600 dark:text-green-400">{assignedAdvisorCount}</span>
-                <span className="text-xs text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((assignedAdvisorCount / totalStudents) * 100) : 0}%)</span>
+                <span className="text-3xl font-extrabold text-green-700 dark:text-green-400">{assignedAdvisorCount}</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((assignedAdvisorCount / totalStudents) * 100) : 0}%)</span>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              <span className="text-xs font-medium text-gray-400">ยังไม่ได้รับการจัดสรร</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">ยังไม่ได้รับการจัดสรร</span>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-3xl font-extrabold text-yellow-600 dark:text-yellow-400">{unassignedAdvisorCount}</span>
-                <span className="text-xs text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((unassignedAdvisorCount / totalStudents) * 100) : 0}%)</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((unassignedAdvisorCount / totalStudents) * 100) : 0}%)</span>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              <span className="text-xs font-medium text-gray-400">จัดสรรอาจารย์นิเทศแล้ว</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">จัดสรรอาจารย์นิเทศแล้ว</span>
               <div className="flex items-baseline gap-2 mt-2">
                 <span className="text-3xl font-extrabold text-brand-blue dark:text-blue-400">{assignedSupervisorCount}</span>
-                <span className="text-xs text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((assignedSupervisorCount / totalStudents) * 100) : 0}%)</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คน ({totalStudents > 0 ? Math.round((assignedSupervisorCount / totalStudents) * 100) : 0}%)</span>
               </div>
             </div>
           </div>
@@ -447,7 +447,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                       <tr key={student.student_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/10">
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                           <span className="block font-bold">{studentDisplayName(student)}</span>
-                          <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
+                          <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                         </td>
                         <td className="p-4">
                           <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -459,10 +459,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                           </span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
-                          {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่ระบุ</span>}
+                          {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่ระบุ</span>}
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
-                          {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-400">ยังไม่ระบุ</span>}
+                          {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่ระบุ</span>}
                         </td>
                       </tr>
                     );
@@ -516,10 +516,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                       </td>
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                         <span className="block font-bold">{studentDisplayName(student)}</span>
-                        <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
+                        <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                       </td>
                       <td className="p-4 text-gray-800 dark:text-gray-200">
-                        <span className="block text-xs font-semibold">{student.company_name || <span className="text-gray-400 font-normal">ยังไม่มีสถานประกอบการ</span>}</span>
+                        <span className="block text-xs font-semibold">{student.company_name || <span className="text-gray-600 dark:text-gray-400 font-normal">ยังไม่มีสถานประกอบการ</span>}</span>
                         <span className="block text-xs text-gray-500 mt-0.5 dark:text-gray-400">{student.company_province || ''}</span>
                       </td>
                       <td className="p-4">
@@ -532,10 +532,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         </span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่กำหนด</span>}
+                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่กำหนด</span>}
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-400">ยังไม่กำหนด</span>}
+                        {supervisor ? personnelDisplayName(supervisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่กำหนด</span>}
                       </td>
                       <td className="p-4 text-right">
                         <button
@@ -558,7 +558,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           </div>
           {filteredStudents.length === 0 && (
             <div className="px-6 py-12 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:text-gray-400 dark:bg-gray-800">
                 <Users className="h-6 w-6" />
               </div>
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -594,7 +594,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                     <tr key={student.student_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                         <span className="block font-bold">{studentDisplayName(student)}</span>
-                        <span className="block text-xs text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
+                        <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
                       </td>
                       <td className="p-4">
                         <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
@@ -615,7 +615,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         </span>
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-400">ยังไม่ระบุอาจารย์ที่ปรึกษา</span>}
+                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่ระบุอาจารย์ที่ปรึกษา</span>}
                       </td>
                     </tr>
                   );
@@ -625,7 +625,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           </div>
           {filteredStudents.length === 0 && (
             <div className="px-6 py-12 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 dark:bg-gray-800">
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:text-gray-400 dark:bg-gray-800">
                 <Users className="h-6 w-6" />
               </div>
               <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -670,7 +670,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                       <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                           <span className="block font-bold">{studentDisplayName(intent)}</span>
-                          <span className="block text-xs text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
+                          <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {intent.student_code}</span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
                           {intent.company_name_th}
@@ -702,7 +702,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                               variant="secondary"
                               size="sm"
                               disabled={isPendingAction}
-                              className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/30"
+                              className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/30"
                               onClick={() => setRejectingIntentId(intent.form_id)}
                             >
                               ตีกลับ
@@ -734,7 +734,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   <span>→</span>
                   <span className="font-semibold text-blue-600 dark:text-blue-400">อาจารย์อนุมัติ</span>
                   <span>→</span>
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">รอหัวหน้าสาขาวิชา</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">รอหัวหน้าสาขาวิชา</span>
                 </div>
               </div>
             </div>

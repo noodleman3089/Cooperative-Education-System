@@ -24,7 +24,7 @@ const ResumePdfModal: React.FC<ResumePdfModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/50 rounded-t-2xl shrink-0">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+            <div className="w-10 h-10 rounded-xl bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 flex items-center justify-center shrink-0">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
               </svg>
@@ -33,7 +33,7 @@ const ResumePdfModal: React.FC<ResumePdfModalProps> = ({
               <h3 className="text-base font-bold text-gray-800 dark:text-white truncate">
                 {fileName}
               </h3>
-              <p className="text-xs text-gray-400">ตัวอย่างเอกสารเรซูเม่ (PDF Preview)</p>
+              <p className="text-xs text-gray-600 dark:text-gray-400">ตัวอย่างเอกสารเรซูเม่ (PDF Preview)</p>
             </div>
           </div>
 
@@ -51,7 +51,7 @@ const ResumePdfModal: React.FC<ResumePdfModalProps> = ({
             </a>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               aria-label="Close modal"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

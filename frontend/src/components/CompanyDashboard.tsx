@@ -488,7 +488,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                         {job.status === 'rejected' && job.reject_reason && (
                           <div className="rounded-lg border border-red-100 bg-red-50 p-3 text-xs text-red-700 dark:border-red-950/40 dark:bg-red-950/20 dark:text-red-300">
                             <span className="font-bold">เหตุผลที่ไม่อนุมัติ:</span> {job.reject_reason}
-                            <div className="mt-1 text-red-600/80 dark:text-red-400/80">
+                            <div className="mt-1 text-red-700/80 dark:text-red-400/80">
                               แก้ไขตามนี้แล้วสร้างประกาศใหม่ได้ทันที
                             </div>
                           </div>
@@ -601,7 +601,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
                 ตรวจสอบความถูกต้องของหัวข้อวัตถุประสงค์และแผนการทำรายงานของนักศึกษาฝึกงาน
               </p>
             </div>
-            <span className="px-3 py-1 bg-brand-blue/10 text-brand-blue rounded-full text-xs font-bold dark:text-blue-400">
+            <span className="px-3 py-1 bg-brand-blue/10 text-brand-navy rounded-full text-xs font-bold dark:text-blue-400">
               {outlines.filter(o => o.status === 'pending_mentor').length} รายการรอพี่เลี้ยงตรวจ
             </span>
           </div>

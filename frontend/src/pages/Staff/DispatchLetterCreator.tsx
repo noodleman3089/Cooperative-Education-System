@@ -125,7 +125,7 @@ const DispatchLetterCreator: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
           <div className="w-full md:w-1/3">
             <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-              เลขที่หนังสือส่งออก <span className="text-red-600 dark:text-red-400">*</span>
+              เลขที่หนังสือส่งออก <span className="text-red-700 dark:text-red-400">*</span>
             </label>
             <input
               type="text"
@@ -174,7 +174,7 @@ const DispatchLetterCreator: React.FC = () => {
                 <tr>
                   <td colSpan={5} className="py-12 px-6">
                     <div className="max-w-md mx-auto text-center">
-                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center text-amber-600 dark:text-amber-400">
+                      <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-amber-100 dark:bg-amber-950/50 flex items-center justify-center text-amber-700 dark:text-amber-400">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>

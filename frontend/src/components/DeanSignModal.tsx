@@ -68,15 +68,15 @@ const DeanSignModal: React.FC<DeanSignModalProps> = ({
 
         {docDetail ? (
           <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-xl border border-gray-100 dark:border-gray-800 text-xs space-y-2">
-            <p><span className="text-gray-400 font-medium">รหัสนักศึกษา:</span> {docDetail.student_code}</p>
-            <p><span className="text-gray-400 font-medium">ชื่อ-นามสกุล:</span> {docDetail.first_name || ''} {docDetail.last_name || ''}</p>
-            <p><span className="text-gray-400 font-medium">สถานประกอบการ:</span> {docDetail.company_name_th}</p>
-            <p><span className="text-gray-400 font-medium">ประเภทเอกสาร:</span> {docDetail.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์รับนักศึกษา' : 'หนังสือส่งตัวนักศึกษา'}</p>
-            <p><span className="text-gray-400 font-medium">สถานะ:</span> <span className="font-bold text-yellow-600 dark:text-yellow-400">รอการลงนาม (Dean Signature Pending)</span></p>
+            <p><span className="text-gray-600 dark:text-gray-400 font-medium">รหัสนักศึกษา:</span> {docDetail.student_code}</p>
+            <p><span className="text-gray-600 dark:text-gray-400 font-medium">ชื่อ-นามสกุล:</span> {docDetail.first_name || ''} {docDetail.last_name || ''}</p>
+            <p><span className="text-gray-600 dark:text-gray-400 font-medium">สถานประกอบการ:</span> {docDetail.company_name_th}</p>
+            <p><span className="text-gray-600 dark:text-gray-400 font-medium">ประเภทเอกสาร:</span> {docDetail.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์รับนักศึกษา' : 'หนังสือส่งตัวนักศึกษา'}</p>
+            <p><span className="text-gray-600 dark:text-gray-400 font-medium">สถานะ:</span> <span className="font-bold text-yellow-600 dark:text-yellow-400">รอการลงนาม (Dean Signature Pending)</span></p>
           </div>
         ) : (
           <div className="py-12 flex justify-center">
-            <span className="text-xs text-gray-400">ไม่พบรายละเอียดเอกสาร</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">ไม่พบรายละเอียดเอกสาร</span>
           </div>
         )}
       </ModalBody>

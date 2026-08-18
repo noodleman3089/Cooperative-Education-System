@@ -444,7 +444,7 @@ const StudentProfile: React.FC = () => {
 
   const FieldError: React.FC<{ name: string }> = ({ name }) =>
     fieldErrors[name] ? (
-      <p className="mt-1 text-xs font-semibold text-red-600 dark:text-red-400">{fieldErrors[name]}</p>
+      <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-400">{fieldErrors[name]}</p>
     ) : null;
 
   if (loading) {
@@ -530,7 +530,7 @@ const StudentProfile: React.FC = () => {
 
             <div>
               <h2 className="text-lg font-extrabold text-gray-800 dark:text-white">
-                {fullNameStr} {nickname && <span className="text-gray-400 font-normal">({nickname})</span>}
+                {fullNameStr} {nickname && <span className="text-gray-600 dark:text-gray-400 font-normal">({nickname})</span>}
               </h2>
               <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">
                 รหัสนักศึกษา: {studentCode || 'ยังไม่ได้ระบุ'}
@@ -578,7 +578,7 @@ const StudentProfile: React.FC = () => {
             {profile?.resume_file && (
               <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 space-y-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-950/50 text-red-600 dark:text-red-400 flex items-center justify-center shrink-0">
+                  <div className="w-9 h-9 rounded-lg bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400 flex items-center justify-center shrink-0">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
@@ -587,7 +587,7 @@ const StudentProfile: React.FC = () => {
                     <p className="text-xs font-bold text-gray-800 dark:text-white truncate">
                       {resumeFileName}
                     </p>
-                    <p className="text-xs text-gray-400">ไฟล์เรซูไม่ออนไลน์ปัจจุบัน</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">ไฟล์เรซูไม่ออนไลน์ปัจจุบัน</p>
                   </div>
                 </div>
 
@@ -595,7 +595,7 @@ const StudentProfile: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsPdfPreviewOpen(true)}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-blue dark:text-blue-400 text-xs font-bold transition-colors cursor-pointer"
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-brand-blue/10 hover:bg-brand-blue/20 text-brand-navy dark:text-blue-400 text-xs font-bold transition-colors cursor-pointer"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -632,13 +632,13 @@ const StudentProfile: React.FC = () => {
                   onChange={handleFileChange}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                 />
-                <svg className="w-8 h-8 mx-auto text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-8 h-8 mx-auto text-gray-600 dark:text-gray-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
                 </svg>
                 <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">
                   {resumeFile ? resumeFile.name : 'คลิกเลือกไฟล์ หรือลากวางไฟล์ PDF'}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">เฉพาะไฟล์ .PDF ขนาดไม่เกิน 5 MB</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">เฉพาะไฟล์ .PDF ขนาดไม่เกิน 5 MB</p>
               </div>
 
               {fileError && (
@@ -681,7 +681,7 @@ const StudentProfile: React.FC = () => {
                   {errs > 0 && (
                     <span
                       className={`flex h-4 w-4 items-center justify-center rounded-full text-[10px] ${
-                        isActive ? 'bg-white text-red-600' : 'bg-red-500 text-white'
+                        isActive ? 'bg-white text-red-700' : 'bg-red-500 text-white'
                       }`}
                       title={`ยังมี ${errs} ช่องที่ต้องแก้ในหมวดนี้`}
                     >
@@ -704,7 +704,7 @@ const StudentProfile: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">1. ข้อมูลส่วนตัวและการศึกษา (Co-op 01)</h3>
-                <p className="text-xs text-gray-400">ชื่อ-นามสกุล รหัสนักศึกษา เกรดสะสม และสถานะทางการศึกษา</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">ชื่อ-นามสกุล รหัสนักศึกษา เกรดสะสม และสถานะทางการศึกษา</p>
               </div>
             </div>
 
@@ -860,7 +860,7 @@ const StudentProfile: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">2. ข้อมูลการติดต่อและที่อยู่ปัจจุบัน</h3>
-                <p className="text-xs text-gray-400">เบอร์โทรศัพท์ อีเมลสำรอง วันเกิด และที่อยู่จัดส่งเอกสาร</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">เบอร์โทรศัพท์ อีเมลสำรอง วันเกิด และที่อยู่จัดส่งเอกสาร</p>
               </div>
             </div>
 
@@ -1037,14 +1037,14 @@ const StudentProfile: React.FC = () => {
           {/* Card 3: ข้อมูลผู้ปกครอง / บุคคลติดต่อฉุกเฉิน (Guardian & Emergency Contact) */}
           <div className={`bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs space-y-4 ${activeTab === 'guardian' ? '' : 'hidden'}`}>
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-400 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5 5 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">3. ข้อมูลผู้ปกครอง / บุคคลติดต่อฉุกเฉิน</h3>
-                <p className="text-xs text-gray-400">ผู้ปกครองหรือบุคคลเร่งด่วนที่สามารถติดต่อได้ในระหว่างการปฏิบัติงานสหกิจ</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">ผู้ปกครองหรือบุคคลเร่งด่วนที่สามารถติดต่อได้ในระหว่างการปฏิบัติงานสหกิจ</p>
               </div>
             </div>
 
@@ -1080,14 +1080,14 @@ const StudentProfile: React.FC = () => {
           {/* Card 4: สายงานและพื้นที่ปฏิบัติงานที่สนใจ (Career Preferences - Optional) */}
           <div className={`bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs space-y-4 ${activeTab === 'career' ? '' : 'hidden'}`}>
             <div className="flex items-center gap-2 pb-3 border-b border-gray-100 dark:border-gray-800">
-              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 flex items-center justify-center shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
               <div>
                 <h3 className="text-sm font-bold text-gray-800 dark:text-white">4. สายงานและพื้นที่ปฏิบัติงานที่สนใจ (Optional)</h3>
-                <p className="text-xs text-gray-400">ข้อมูลประกอบการพิจารณาจัดคู่ตำแหน่งงานและสถานประกอบการที่เหมาะสม</p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">ข้อมูลประกอบการพิจารณาจัดคู่ตำแหน่งงานและสถานประกอบการที่เหมาะสม</p>
               </div>
             </div>
 

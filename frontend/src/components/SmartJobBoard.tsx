@@ -347,7 +347,7 @@ const SmartJobBoard: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">บอร์ดหาตำแหน่งงานสหกิจศึกษา</h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             ค้นหา ตรวจสอบพิกัดบริษัท และกดยื่นใบความจำนงออนไลน์
           </p>
         </div>
@@ -355,7 +355,7 @@ const SmartJobBoard: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowSelfFoundModal(true)}
-            className="flex items-center gap-1.5 py-2 px-4 rounded-xl border border-brand-blue text-brand-blue hover:bg-blue-50 dark:hover:bg-blue-950/20 text-xs font-bold transition-all"
+            className="flex items-center gap-1.5 py-2 px-4 rounded-xl border border-brand-blue text-brand-navy dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 text-xs font-bold transition-all"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -476,7 +476,7 @@ const SmartJobBoard: React.FC = () => {
             {mapsLoadError && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4">
                 <span className="text-xs text-red-500 font-semibold mb-1">ไม่สามารถโหลดแผนที่ได้</span>
-                <span className="text-xs text-gray-400">กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือความถูกต้องของ API Key</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือความถูกต้องของ API Key</span>
               </div>
             )}
           </div>
@@ -505,7 +505,7 @@ const SmartJobBoard: React.FC = () => {
               <div key={job.job_id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden flex flex-col justify-between hover:shadow-lg transition-all dark:bg-gray-900 dark:border-gray-800">
                 <div className="p-6 space-y-4">
                   <div>
-                    <span className="text-xs font-bold text-gray-400 uppercase tracking-wider block">
+                    <span className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider block">
                       {company?.name_th}
                     </span>
                     <h3 className="text-base font-bold text-gray-800 dark:text-white mt-1">
@@ -528,7 +528,7 @@ const SmartJobBoard: React.FC = () => {
                 </div>
 
                 <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between dark:bg-gray-900/40 dark:border-gray-800">
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
                     หมดเขต: {new Date(job.expire_date).toLocaleDateString('th-TH')}
                   </span>
                   
@@ -570,7 +570,7 @@ const SmartJobBoard: React.FC = () => {
           })}
         </div>
       ) : (
-        <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 text-gray-400 text-sm dark:bg-gray-900 dark:border-gray-800">
+        <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 text-gray-600 dark:text-gray-400 text-sm dark:bg-gray-900 dark:border-gray-800">
           ไม่พบข้อมูลตำแหน่งงานที่สอดคล้องกับการคัดกรองในขณะนี้
         </div>
       )}

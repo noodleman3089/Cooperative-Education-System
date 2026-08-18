@@ -253,7 +253,7 @@ const AdvisorEvaluation: React.FC = () => {
                           ส่งกลับแก้ไข
                         </span>
                       ) : (
-                        <span className="text-xs font-semibold text-gray-500 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full dark:text-gray-400">
+                        <span className="text-xs font-semibold text-gray-600 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full dark:text-gray-400">
                           ยังไม่ส่งเล่มรายงาน
                         </span>
                       )}
@@ -262,7 +262,7 @@ const AdvisorEvaluation: React.FC = () => {
 
                   <div className="flex flex-col items-end gap-1.5">
                     {std.advisorScore !== null ? (
-                      <span className="text-xs font-bold text-green-600 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-lg">
+                      <span className="text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/30 px-3 py-1 rounded-lg">
                         อาจารย์ประเมินแล้ว ({std.advisorScore}/100)
                       </span>
                     ) : (
@@ -276,7 +276,7 @@ const AdvisorEvaluation: React.FC = () => {
                         คะแนนพี่เลี้ยง: {std.mentorScore}/100
                       </span>
                     ) : (
-                      <span className="text-xs text-gray-400">พี่เลี้ยงยังไม่ประเมิน</span>
+                      <span className="text-xs text-gray-600 dark:text-gray-400">พี่เลี้ยงยังไม่ประเมิน</span>
                     )}
                   </div>
                 </button>
@@ -284,7 +284,7 @@ const AdvisorEvaluation: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
-              <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <User className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 dark:text-white">ไม่มีนักศึกษาในที่ปรึกษาสหกิจของคุณ</h3>
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">รายชื่อจะปรากฏก็ต่อเมื่อคุณได้รับการมอบหมายบทบาทและจัดสรรนักศึกษาในเฟสที่ 1</p>
             </div>
