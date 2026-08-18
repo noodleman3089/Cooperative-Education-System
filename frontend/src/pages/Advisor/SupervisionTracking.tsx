@@ -33,10 +33,16 @@ interface SupervisedStudent {
 
 /** นัดหมายนิเทศหนึ่งครั้ง เท่าที่หน้าจอนี้อ่าน */
 interface SupervisionAppointment {
+  appointment_id: number;
   student_id: number;
+  appointment_date?: string | null;
   student_time?: string | null;
   mentor_time?: string | null;
   tour_requested?: boolean;
+  /** 'draft' | 'pending_company' | 'accepted' | 'rescheduled' | 'offline_agreed' */
+  status: string;
+  proposed_reschedule_date?: string | null;
+  proposed_mentor_time?: string | null;
 }
 
 const SupervisionTracking: React.FC = () => {
@@ -342,7 +348,7 @@ const SupervisionTracking: React.FC = () => {
                     <div>
                       <h4 className="font-semibold text-sm text-gray-900 dark:text-white mb-3">รายละเอียดการนัดหมาย</h4>
                       <div className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                        <p><strong>วันที่:</strong> {new Date(appointment.appointment_date).toLocaleDateString('th-TH')}</p>
+                        <p><strong>วันที่:</strong> {appointment.appointment_date ? new Date(appointment.appointment_date).toLocaleDateString('th-TH') : 'ยังไม่กำหนด'}</p>
                         <p><strong>เวลานิเทศนักศึกษา:</strong> {appointment.student_time}</p>
                         <p><strong>เวลาพบพี่เลี้ยง:</strong> {appointment.mentor_time}</p>
                         <p><strong>รูปแบบ:</strong> {appointment.tour_requested ? 'ขอเยี่ยมชมสถานประกอบการด้วย' : 'พบปะพูดคุยปกติ'}</p>

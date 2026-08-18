@@ -18,5 +18,13 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // ขีดล่างนำหน้า = 'ตั้งใจไม่ใช้' — ตรงกับ backend/eslint.config.mjs
+      // ใช้ตอน destructure เพื่อ 'ตัดฟิลด์นี้ออก' เช่น const { body: _rawBody, ...rest }
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+    },
   },
 ])

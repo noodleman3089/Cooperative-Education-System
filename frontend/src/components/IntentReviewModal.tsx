@@ -36,7 +36,7 @@ interface IntentDetail {
   company_phone?: string | null;
   job_title?: string | null;
   start_date?: string | null;
-  status?: string;
+  status: string;
 }
 
 const IntentReviewModal: React.FC<IntentReviewModalProps> = ({

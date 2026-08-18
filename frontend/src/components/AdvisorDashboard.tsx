@@ -64,12 +64,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Weekly Log viewer modal state
-  const [selectedStudentForWeeklyLog, setSelectedStudentForWeeklyLog] = useState<{
-    student_id: number;
-    first_name?: string;
-    last_name?: string;
-    student_code?: string;
-  } | null>(null);
+  const [selectedStudentForWeeklyLog, setSelectedStudentForWeeklyLog] = useState<StudentRow | null>(null);
 
   // Report Outline review modal state for Advisor
   const [reviewingOutline, setReviewingOutline] = useState<ReportOutlineRow | null>(null);

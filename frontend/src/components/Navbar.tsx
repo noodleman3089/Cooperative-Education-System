@@ -29,6 +29,7 @@ interface NotificationItem {
   // แถวดิบของเอกสารราชการ (คณบดี)
   doc_id?: number;
   type?: string;
+  student_code?: string | null;
   status?: string;
 }
 
@@ -320,6 +321,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                               key={index}
                               onClick={() => {
                                 setShowNotifDropdown(false);
+                                if (itemId === undefined) return;
                                 if (isDoc) {
                                   setSelectedDocId(itemId);
                                 } else {
@@ -404,7 +406,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
 
       <DeanSignModal
         docId={selectedDocId}
-        docDetail={docDetail}
+        docDetail={docDetail ?? null}
         onClose={() => setSelectedDocId(null)}
         onSuccess={() => {
           window.dispatchEvent(new CustomEvent('intent-updated'));

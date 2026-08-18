@@ -3,7 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import { FileUp, CheckCircle, XCircle, Clock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, getErrorName } from '../../utils/errors';
 
 interface Version {
   version_id: number;
@@ -41,7 +41,7 @@ const ReportOutline: React.FC = () => {
         const result = await api.get(`/outlines/student/${auth.user.userId}`, { signal: controller.signal });
         setData(result.data);
       } catch (err) {
-        if (err.name === 'AbortError') return;
+        if (getErrorName(err) === 'AbortError') return;
         setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
       } finally {
         setLoading(false);

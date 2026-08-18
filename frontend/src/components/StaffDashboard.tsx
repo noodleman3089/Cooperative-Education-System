@@ -298,6 +298,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setJobRejectError('กรุณาเลือกหรือระบุเหตุผลที่ไม่อนุมัติ');
       return;
     }
+    if (!rejectingJob) return;
 
     try {
       setIsRejectingJob(true);
@@ -1030,7 +1031,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
               {/* The importer has always returned these; nothing ever rendered
                   them, so a row the server refused vanished without a word. */}
-              {(importSummary.invalidRows?.length > 0 || importSummary.skippedCodes?.length > 0) && (
+              {((importSummary.invalidRows?.length ?? 0) > 0 || (importSummary.skippedCodes?.length ?? 0) > 0) && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs dark:border-amber-900/40 dark:bg-amber-950/20">
                   <p className="font-bold text-amber-800 dark:text-amber-300 mb-1">
                     แถวที่ฐานข้อมูลไม่รับ ({(importSummary.invalidRows?.length || 0) + (importSummary.skippedCodes?.length || 0)} รายการ)
@@ -1746,7 +1747,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                       <div className="text-xs text-gray-500 dark:text-gray-400">
                         สถานประกอบการ: <span className="font-semibold text-gray-700 dark:text-gray-300">{job.company_name_th || 'บริษัท'}</span> | 
                         โควตารับสมัคร: <span className="font-semibold text-gray-700 dark:text-gray-300">{job.applied_count} / {job.quota} คน</span> | 
-                        วันปิดรับสมัคร: <span className="font-semibold text-gray-700 dark:text-gray-300">{new Date(job.expire_date).toLocaleDateString('th-TH')}</span>
+                        วันปิดรับสมัคร: <span className="font-semibold text-gray-700 dark:text-gray-300">{job.expire_date ? new Date(job.expire_date).toLocaleDateString('th-TH') : 'ไม่ระบุ'}</span>
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 mt-1">{job.description}</p>
                       {job.status === 'rejected' && job.reject_reason && (

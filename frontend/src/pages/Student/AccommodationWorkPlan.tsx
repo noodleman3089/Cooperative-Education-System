@@ -16,14 +16,6 @@ interface Accommodation {
   emergency_phone: string;
 }
 
-interface WeeklyPlan {
-  plan_id?: number;
-  week_number: number;
-  start_date: string;
-  end_date: string;
-  tasks: string;
-}
-
 const AccommodationWorkPlan: React.FC = () => {
   const auth = useContext(AuthContext);
   const [step, setStep] = useState<number>(1);

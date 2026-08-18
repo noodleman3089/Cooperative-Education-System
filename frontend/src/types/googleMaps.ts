@@ -44,11 +44,14 @@ export interface GeocoderResult {
 export interface PlaceResult extends GeocoderResult {
   name?: string;
   place_id?: string;
+  formatted_phone_number?: string;
 }
 
 export interface GoogleMap {
   setCenter(position: LatLngLiteral | GoogleLatLng): void;
   setZoom(zoom: number): void;
+  /** undefined ได้จริงเมื่อแผนที่ยังไม่ถูก render — ต้องเช็คก่อนใช้ */
+  getZoom(): number | undefined;
   fitBounds(bounds: LatLngBounds): void;
 }
 

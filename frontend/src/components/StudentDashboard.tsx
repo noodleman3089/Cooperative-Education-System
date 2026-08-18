@@ -20,6 +20,7 @@ interface Announcement {
   content: string;
   created_at: string;
   is_pinned: boolean;
+  image_url?: string | null;
 }
 
 const StudentDashboard: React.FC = () => {

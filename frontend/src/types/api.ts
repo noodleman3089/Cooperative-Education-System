@@ -17,6 +17,7 @@ export interface Announcement {
   content: string;
   created_at: string;
   is_pinned: boolean;
+  image_url?: string | null;
   author_name?: string | null;
 }
 
@@ -79,7 +80,9 @@ export interface ReportOutlineRow {
   major_name_th?: string | null;
   company_name_th?: string | null;
   latest_file_path?: string | null;
-  status?: string;
+  latest_submitted_at?: string | null;
+  latest_rejection_comment?: string | null;
+  status: string;
 }
 
 /** แผนปฏิบัติงานหนึ่งสัปดาห์ในแผน 16 สัปดาห์ */

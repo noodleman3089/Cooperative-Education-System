@@ -29,8 +29,9 @@ class ApiClient {
 
     // The session is an httpOnly cookie the browser attaches on its own; there
     // is no token for JS to read or forward.
+    const { body: _rawBody, ...fetchOptions } = options;
     const config: RequestInit = {
-      ...options,
+      ...fetchOptions,
       headers,
       credentials: 'include',
     };

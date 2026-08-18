@@ -3,7 +3,7 @@ import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
 import { Calendar, CheckCircle, Save, RefreshCw } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorMessage, getErrorName } from '../../utils/errors';
 import { Select, Textarea } from '../../components/ui/Input';
 
 interface WeeklyLog {
@@ -42,7 +42,7 @@ const WeeklyLog: React.FC = () => {
         setSelectedWeek(maxWeek + 1);
       }
     } catch (err) {
-      if (err.name === 'AbortError') return;
+      if (getErrorName(err) === 'AbortError') return;
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
     } finally {
       setLoading(false);

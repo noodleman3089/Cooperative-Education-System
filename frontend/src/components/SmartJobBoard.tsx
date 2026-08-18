@@ -216,7 +216,8 @@ const SmartJobBoard: React.FC = () => {
 
       geocoder.geocode({ address: searchAddress }, (results: GeocoderResult[] | null, status: string) => {
         if (status === 'OK' && results && results[0]) {
-          const location = results[0].geometry.location;
+          const location = results[0].geometry?.location;
+          if (!location) return;
           
           const marker = new google.maps.Marker({
             position: location,
@@ -251,7 +252,7 @@ const SmartJobBoard: React.FC = () => {
 
           if (activeMarkersCount === uniqueCompanies.length) {
             map.fitBounds(bounds);
-            if (map.getZoom()! > 15) {
+            if ((map.getZoom() ?? 0) > 15) {
               map.setZoom(15);
             }
           }
@@ -259,7 +260,8 @@ const SmartJobBoard: React.FC = () => {
           const generalAddress = `${company.district}, ${company.province}, ประเทศไทย`;
           geocoder.geocode({ address: generalAddress }, (generalResults: GeocoderResult[] | null, generalStatus: string) => {
             if (generalStatus === 'OK' && generalResults && generalResults[0]) {
-              const location = generalResults[0].geometry.location;
+              const location = generalResults[0].geometry?.location;
+              if (!location) return;
               const marker = new google.maps.Marker({
                 position: location,
                 map: map,
@@ -293,7 +295,7 @@ const SmartJobBoard: React.FC = () => {
 
               if (activeMarkersCount === uniqueCompanies.length) {
                 map.fitBounds(bounds);
-                if (map.getZoom()! > 15) {
+                if ((map.getZoom() ?? 0) > 15) {
                   map.setZoom(15);
                 }
               }

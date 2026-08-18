@@ -157,7 +157,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
 
     return () => {
       if (listener) {
-        google.maps.event.removeListener(listener);
+        googleMaps()?.event.removeListener(listener);
       }
     };
   }, [isOpen, mapsLoaded]);
