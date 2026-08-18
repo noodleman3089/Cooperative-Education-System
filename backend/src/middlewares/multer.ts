@@ -1,6 +1,14 @@
 import multer from 'multer';
+import type { NextFunction, Request, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+
+/**
+ * ลายเซ็นของ fileFilter ตามที่ multer ประกาศไว้เอง — ใช้ซ้ำทั้ง 5 ตัวกรอง
+ * ประกาศแบบนี้แล้ว _req กับ file ถูก contextual-type ให้อัตโนมัติ ไม่ต้อง import อะไรเพิ่ม
+ * และ `as any` ตอนส่งเข้า multer() ก็ไม่จำเป็นอีก
+ */
+type FileFilter = NonNullable<multer.Options['fileFilter']>;
 
 // Base upload directories
 const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
@@ -40,7 +48,7 @@ const resumeStorage = multer.diskStorage({
   },
 });
 
-const resumeFileFilter = (_req: any, file: any, cb: any) => {
+const resumeFileFilter: FileFilter = (_req, file, cb) => {
   const allowedExtensions = ['.pdf', '.doc', '.docx'];
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedExtensions.includes(ext)) {
@@ -52,7 +60,7 @@ const resumeFileFilter = (_req: any, file: any, cb: any) => {
 
 export const uploadResume = multer({
   storage: resumeStorage,
-  fileFilter: resumeFileFilter as any,
+  fileFilter: resumeFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -71,7 +79,7 @@ const signatureStorage = multer.diskStorage({
   },
 });
 
-const signatureFileFilter = (_req: any, file: any, cb: any) => {
+const signatureFileFilter: FileFilter = (_req, file, cb) => {
   const allowedExtensions = ['.png', '.jpg', '.jpeg'];
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedExtensions.includes(ext)) {
@@ -83,7 +91,7 @@ const signatureFileFilter = (_req: any, file: any, cb: any) => {
 
 export const uploadSignature = multer({
   storage: signatureStorage,
-  fileFilter: signatureFileFilter as any,
+  fileFilter: signatureFileFilter,
   limits: {
     fileSize: 2 * 1024 * 1024, // 2MB limit
   },
@@ -102,7 +110,7 @@ const evidenceStorage = multer.diskStorage({
   },
 });
 
-const evidenceFileFilter = (_req: any, file: any, cb: any) => {
+const evidenceFileFilter: FileFilter = (_req, file, cb) => {
   const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg'];
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedExtensions.includes(ext)) {
@@ -114,7 +122,7 @@ const evidenceFileFilter = (_req: any, file: any, cb: any) => {
 
 export const uploadEvidence = multer({
   storage: evidenceStorage,
-  fileFilter: evidenceFileFilter as any,
+  fileFilter: evidenceFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -135,14 +143,14 @@ const consentStorage = multer.diskStorage({
 
 export const uploadParentalConsent = multer({
   storage: consentStorage,
-  fileFilter: evidenceFileFilter as any,
+  fileFilter: evidenceFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
 });
 
 export const validateUploadedFile = (allowedTypes: ('pdf' | 'doc' | 'docx' | 'png' | 'jpg')[]) => {
-  return async (req: any, res: any, next: any) => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.file) {
       return next();
     }
@@ -189,7 +197,7 @@ export const validateUploadedFile = (allowedTypes: ('pdf' | 'doc' | 'docx' | 'pn
       }
 
       next();
-    } catch (err) {
+    } catch {
       if (req.file && fs.existsSync(req.file.path)) {
         fs.unlinkSync(req.file.path);
       }
@@ -217,7 +225,7 @@ const outlineStorage = multer.diskStorage({
 });
 export const uploadReportOutline = multer({
   storage: outlineStorage,
-  fileFilter: resumeFileFilter as any,
+  fileFilter: resumeFileFilter,
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
@@ -241,7 +249,7 @@ const supervisionPhotoStorage = multer.diskStorage({
 });
 export const uploadSupervisionPhoto = multer({
   storage: supervisionPhotoStorage,
-  fileFilter: signatureFileFilter as any,
+  fileFilter: signatureFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
   },
@@ -265,16 +273,18 @@ const finalReportStorage = multer.diskStorage({
   },
 });
 
+const finalReportFileFilter: FileFilter = (_req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (ext === '.pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF documents (.pdf) are allowed.'));
+  }
+};
+
 export const uploadFinalReport = multer({
   storage: finalReportStorage,
-  fileFilter: (_req: any, file: any, cb: any) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.pdf') {
-      cb(null, true);
-    } else {
-      cb(new Error('Invalid file type. Only PDF documents (.pdf) are allowed.'));
-    }
-  },
+  fileFilter: finalReportFileFilter,
   limits: {
     fileSize: 20 * 1024 * 1024, // 20MB limit
   },
