@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class WeeklyLogController {
   /**
@@ -66,9 +67,8 @@ export class WeeklyLogController {
         message: 'Weekly log submitted successfully.',
         data: { weekly_log_id: logId }
       });
-    } catch (error: any) {
-      console.error('Submit Weekly Log Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Submit Weekly Log Error', 'An internal server error occurred.');
     }
   }
 
@@ -129,10 +129,9 @@ export class WeeklyLogController {
         success: true,
         data: logsRes.rows
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Weekly Logs Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Get Weekly Logs Error', 'An internal server error occurred.');
     }
   }
 }

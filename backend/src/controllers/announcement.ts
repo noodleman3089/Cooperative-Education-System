@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AnnouncementModel } from '../models/announcement';
 import { query } from '../config/database';
+import { sendUnexpectedError } from '../utils/httpError';
 
 /** The co-op office administers all announcements; everyone else only their own. */
 const canManageAnnouncement = (
@@ -18,9 +19,8 @@ export class AnnouncementController {
     try {
       const announcements = await AnnouncementModel.getAll();
       res.status(200).json({ success: true, data: announcements });
-    } catch (err: any) {
-      console.error('getAnnouncements error:', err);
-      res.status(500).json({ message: 'Internal server error while fetching announcements.' });
+    } catch (err) {
+      sendUnexpectedError(res, err, 'getAnnouncements error', 'Internal server error while fetching announcements.');
     }
   }
 
@@ -54,9 +54,8 @@ export class AnnouncementController {
         message: 'PR Announcement created successfully.',
         announcement: newAnnouncement
       });
-    } catch (err: any) {
-      console.error('createAnnouncement error:', err);
-      res.status(500).json({ message: 'Internal server error while creating announcement.' });
+    } catch (err) {
+      sendUnexpectedError(res, err, 'createAnnouncement error', 'Internal server error while creating announcement.');
     }
   }
 
@@ -97,9 +96,8 @@ export class AnnouncementController {
       }
 
       res.status(200).json({ message: 'Announcement deleted successfully.' });
-    } catch (err: any) {
-      console.error('deleteAnnouncement error:', err);
-      res.status(500).json({ message: 'Internal server error while deleting announcement.' });
+    } catch (err) {
+      sendUnexpectedError(res, err, 'deleteAnnouncement error', 'Internal server error while deleting announcement.');
     }
   }
 
@@ -141,9 +139,8 @@ export class AnnouncementController {
         message: `Announcement ${updated.is_pinned ? 'pinned' : 'unpinned'} successfully.`,
         announcement: updated
       });
-    } catch (err: any) {
-      console.error('togglePin error:', err);
-      res.status(500).json({ message: 'Internal server error while updating announcement pin.' });
+    } catch (err) {
+      sendUnexpectedError(res, err, 'togglePin error', 'Internal server error while updating announcement pin.');
     }
   }
 }

@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { sendSupervisionAppointmentEmail } from '../utils/email';
 import jwt from 'jsonwebtoken';
+import { sendUnexpectedError } from '../utils/httpError';
 
 // No fallback secret: a guessable default would let anyone forge the mentor
 // response tokens minted below (and every other JWT in the system).
@@ -77,8 +78,7 @@ export class AppointmentController {
       const result = await query(queryStr, params);
       res.status(200).json({ success: true, data: result.rows });
     } catch (error) {
-      console.error('Get Appointments Error:', error);
-      res.status(500).json({ message: 'Server error' });
+      sendUnexpectedError(res, error, 'Get Appointments Error', 'Server error');
     }
   }
 
@@ -127,9 +127,8 @@ export class AppointmentController {
         message: 'Draft appointment created.',
         data: { appointment_id: insertRes.rows[0].appointment_id }
       });
-    } catch (error: any) {
-      console.error('Create Draft Appointment Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Create Draft Appointment Error', 'An internal server error occurred.');
     }
   }
 
@@ -208,9 +207,8 @@ export class AppointmentController {
       );
 
       res.status(200).json({ success: true, message: 'Email sent and status updated.' });
-    } catch (error: any) {
-      console.error('Audit Send Appointment Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Audit Send Appointment Error', 'An internal server error occurred.');
     }
   }
 
@@ -264,8 +262,7 @@ export class AppointmentController {
 
       res.status(200).json({ success: true, data: result.rows[0] });
     } catch (error) {
-      console.error('Appointment Respond Info Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Appointment Respond Info Error', 'An internal server error occurred.');
     }
   }
 
@@ -319,9 +316,8 @@ export class AppointmentController {
       }
 
       res.status(200).json({ success: true, message: 'Response recorded successfully.' });
-    } catch (error: any) {
-      console.error('Respond Appointment Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Respond Appointment Error', 'An internal server error occurred.');
     }
   }
 
@@ -352,9 +348,8 @@ export class AppointmentController {
       );
 
       res.status(200).json({ success: true, message: 'Appointment marked as offline agreed.' });
-    } catch (error: any) {
-      console.error('Bypass Appointment Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Bypass Appointment Error', 'An internal server error occurred.');
     }
   }
 
@@ -408,9 +403,8 @@ export class AppointmentController {
       );
 
       res.status(200).json({ success: true, message: 'Reschedule accepted successfully.' });
-    } catch (error: any) {
-      console.error('Accept Reschedule Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Accept Reschedule Error', 'An internal server error occurred.');
     }
   }
 }

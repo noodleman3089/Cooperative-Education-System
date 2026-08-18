@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class SupervisionLogController {
   /**
@@ -77,9 +78,8 @@ export class SupervisionLogController {
         message: status === 'submitted' ? 'Log submitted successfully.' : 'Draft saved successfully.',
         data: { log_id: logId }
       });
-    } catch (error: any) {
-      console.error('Save Supervision Log Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Save Supervision Log Error', 'An internal server error occurred.');
     }
   }
 
@@ -108,9 +108,8 @@ export class SupervisionLogController {
         message: 'Evidence photos uploaded successfully.',
         data: { file_paths: filePaths }
       });
-    } catch (error: any) {
-      console.error('Upload Evidence Photos Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Upload Evidence Photos Error', 'An internal server error occurred.');
     }
   }
 }
