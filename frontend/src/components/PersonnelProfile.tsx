@@ -79,8 +79,8 @@ const PersonnelProfile: React.FC = () => {
     
     setIsDrawing(true);
     const rect = canvas.getBoundingClientRect();
-    let x = 0;
-    let y = 0;
+    let x: number;
+    let y: number;
 
     if ('touches' in e) {
       x = e.touches[0].clientX - rect.left;
@@ -101,8 +101,8 @@ const PersonnelProfile: React.FC = () => {
     if (!canvas || !ctx) return;
 
     const rect = canvas.getBoundingClientRect();
-    let x = 0;
-    let y = 0;
+    let x: number;
+    let y: number;
 
     if ('touches' in e) {
       x = e.touches[0].clientX - rect.left;

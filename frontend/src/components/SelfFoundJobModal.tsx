@@ -128,7 +128,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
         setExistingCompanyId(res.company_id);
         setPlaceCheckMessage('พบสถานประกอบการนี้ในสารบบเรียบร้อยแล้ว ระบบจะยื่นใบสมัครไปยังที่ตั้งที่มีอยู่นี้');
       }
-    } catch (err) {
+    } catch {
       console.log('Place checks out: New company profile registration required.');
     }
   };
@@ -200,7 +200,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           });
           targetCompanyId = createCompanyRes.company_id;
         } catch (createErr) {
-          throw new Error(getErrorMessage(createErr, 'ไม่สามารถลงทะเบียนที่อยู่จาก Google Maps เข้าระบบได้'));
+          throw new Error(getErrorMessage(createErr, 'ไม่สามารถลงทะเบียนที่อยู่จาก Google Maps เข้าระบบได้'), { cause: createErr });
         }
       }
 

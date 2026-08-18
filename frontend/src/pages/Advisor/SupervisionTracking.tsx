@@ -11,10 +11,6 @@ import Button from '../../components/ui/Button';
 import { getErrorMessage } from '../../utils/errors';
 import type { WeeklyPlan } from '../../types/api';
 
-interface SupervisionTrackingProps {
-  // Can pass props if needed, but we'll fetch data here
-}
-
 /** นักศึกษาในความดูแล พร้อมข้อมูลที่พักและแผนงาน สำหรับวางแผนนิเทศ */
 interface SupervisedStudent {
   student_id: number;
@@ -43,7 +39,7 @@ interface SupervisionAppointment {
   tour_requested?: boolean;
 }
 
-const SupervisionTracking: React.FC<SupervisionTrackingProps> = () => {
+const SupervisionTracking: React.FC = () => {
   const auth = useContext(AuthContext);
   const [students, setStudents] = useState<SupervisedStudent[]>([]);
   const [appointments, setAppointments] = useState<SupervisionAppointment[]>([]);

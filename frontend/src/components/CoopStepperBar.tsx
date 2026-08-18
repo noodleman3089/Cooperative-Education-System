@@ -23,7 +23,7 @@ interface CoopStepperBarProps {
 }
 
 // Utility to remove leading numbers (e.g. "1. ", "1.1 ") from titles
-const cleanTitle = (text: string): string => text.replace(/^[\d\.]+\s*/, '').trim();
+const cleanTitle = (text: string): string => text.replace(/^[\d.]+\s*/, '').trim();
 
 const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }) => {
   // State for user manually selecting/inspecting a phase (defaults to current activePhaseId)
