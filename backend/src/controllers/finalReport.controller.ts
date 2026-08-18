@@ -3,6 +3,7 @@ import { query } from '../config/database';
 import { sendFinalReportNotificationEmail } from '../utils/email';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class FinalReportController {
   /**
@@ -59,9 +60,8 @@ export class FinalReportController {
         message: 'อัปโหลดเล่มรายงานฉบับสมบูรณ์สำเร็จแล้ว ระบบได้ส่งการแจ้งเตือนไปยังพี่เลี้ยงเรียบร้อย',
         data: { file_path: filePath, version: nextVer }
       });
-    } catch (error: any) {
-      console.error('Submit Final Report Error:', error);
-      res.status(500).json({ message: error.message || 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Submit Final Report Error', 'An internal server error occurred.');
     }
   }
 
@@ -91,9 +91,8 @@ export class FinalReportController {
         success: true,
         data: reportRes.rows
       });
-    } catch (error: any) {
-      console.error('Get My Report Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get My Report Error', 'An internal server error occurred.');
     }
   }
 
@@ -129,10 +128,9 @@ export class FinalReportController {
         success: true,
         data: reportRes.rows
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Student Reports Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Get Student Reports Error', 'An internal server error occurred.');
     }
   }
 
@@ -186,10 +184,9 @@ export class FinalReportController {
         success: true,
         message: `บันทึกผลการตรวจสอบเป็น ${status === 'approved' ? 'อนุมัติ' : 'ตีกลับแก้ไข'} เรียบร้อยแล้ว`
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Review Report Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Review Report Error', 'An internal server error occurred.');
     }
   }
 
@@ -224,10 +221,9 @@ export class FinalReportController {
           message: 'ไม่สามารถส่งอีเมลแจ้งเตือนได้เนื่องจากยังอยู่ในช่วงเวลา Cooldown (ส่งได้วันละ 1 ครั้ง)'
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Notify Mentor Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Notify Mentor Error', 'An internal server error occurred.');
     }
   }
 

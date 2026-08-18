@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { sendUnexpectedError } from '../utils/httpError';
 
 /** Rubric bounds — total_score is NUMERIC(5,2) so the sum must stay under 1000. */
 const MAX_ITEM_SCORE = 100;
@@ -129,9 +130,8 @@ export class FinalEvaluationController {
         message: 'บันทึกคะแนนดิบและส่งผลการประเมินสำเร็จ',
         data: { total_score: calculatedTotal }
       });
-    } catch (error: any) {
-      console.error('Submit Evaluation Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Submit Evaluation Error', 'An internal server error occurred.');
     }
   }
 
@@ -175,10 +175,9 @@ export class FinalEvaluationController {
         success: true,
         data: evalRes.rows
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Student Evaluation Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Get Student Evaluation Error', 'An internal server error occurred.');
     }
   }
 
@@ -251,9 +250,8 @@ export class FinalEvaluationController {
         canEvaluate: isMentor,
         data: studentsRes.rows
       });
-    } catch (error: any) {
-      console.error('Get Mentor Students Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get Mentor Students Error', 'An internal server error occurred.');
     }
   }
 }

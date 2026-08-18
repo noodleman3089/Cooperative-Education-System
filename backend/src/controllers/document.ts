@@ -22,6 +22,7 @@ import {
 } from '../utils/email';
 import { createInviteLink } from '../utils/invite';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { sendUnexpectedError } from '../utils/httpError';
 
 /**
  * puppeteer เป็น ESM ล้วนแล้ว (`"type": "module"` ใน package ของมัน) จึงถูก
@@ -332,8 +333,7 @@ export class DocumentController {
         document: officialDoc,
       });
     } catch (error) {
-      console.error('Generate Document Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during document generation.' });
+      sendUnexpectedError(res, error, 'Generate Document Error', 'An internal server error occurred during document generation.');
     }
   }
 
@@ -522,8 +522,7 @@ export class DocumentController {
         failed_documents: failedDocs,
       });
     } catch (error) {
-      console.error('Batch Sign Documents Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during batch signature.' });
+      sendUnexpectedError(res, error, 'Batch Sign Documents Error', 'An internal server error occurred during batch signature.');
     }
   }
 
@@ -626,7 +625,9 @@ export class DocumentController {
         </div>
         <script>setTimeout(() => window.close(), 3000)</script>
       `);
-    } catch (error: any) {
+    } catch (error) {
+      // ไม่ใช้ sendUnexpectedError ที่นี่ — ปลายทางคือเบราว์เซอร์ของผู้เซ็นซึ่งรอ HTML
+      // ไม่ใช่ JSON · เป็น status(500) ดิบจุดเดียวที่เหลือในโปรเจคโดยตั้งใจ
       console.error('DocuSign Callback Error:', error);
       // The message is not reflected back: it can carry database text (company
       // names, document titles) that a student supplied, and this response is
@@ -644,8 +645,7 @@ export class DocumentController {
       const documents = await OfficialDocumentModel.listAll();
       res.status(200).json(documents);
     } catch (error) {
-      console.error('List Documents Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving documents.' });
+      sendUnexpectedError(res, error, 'List Documents Error', 'An internal server error occurred while retrieving documents.');
     }
   }
 
@@ -659,8 +659,7 @@ export class DocumentController {
       const templates = await DocumentTemplateModel.findAll();
       res.status(200).json(templates);
     } catch (error) {
-      console.error('List Templates Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving templates.' });
+      sendUnexpectedError(res, error, 'List Templates Error', 'An internal server error occurred while retrieving templates.');
     }
   }
 
@@ -769,8 +768,7 @@ export class DocumentController {
       `);
       res.status(200).json(eligibleQuery.rows);
     } catch (error) {
-      console.error('getDispatchEligibleStudents error:', error);
-      res.status(500).json({ message: 'Error retrieving dispatch eligible students' });
+      sendUnexpectedError(res, error, 'getDispatchEligibleStudents error', 'Error retrieving dispatch eligible students');
     }
   }
 
@@ -894,8 +892,7 @@ export class DocumentController {
       res.status(201).json({ message: 'Dispatch letters generated successfully', documents: generatedDocs });
 
     } catch (error) {
-      console.error('generateDispatchLetter error:', error);
-      res.status(500).json({ message: 'Error generating dispatch letter' });
+      sendUnexpectedError(res, error, 'generateDispatchLetter error', 'Error generating dispatch letter');
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { sendUnexpectedError } from '../utils/httpError';
 
 const PERSONNEL_REVIEW_ROLES = ['advisor', 'dept_head', 'staff', 'dean'];
 
@@ -72,9 +73,8 @@ export class ReportOutlineController {
         message: 'Report outline uploaded successfully.',
         data: { outline_id: outlineId, file_path: filePath }
       });
-    } catch (error: any) {
-      console.error('Upload Outline Error:', error);
-      res.status(500).json({ message: error.message || 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Upload Outline Error', 'An internal server error occurred.');
     }
   }
 
@@ -233,9 +233,8 @@ export class ReportOutlineController {
         success: true,
         message: 'Status updated successfully.',
       });
-    } catch (error: any) {
-      console.error('Update Outline Status Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Update Outline Status Error', 'An internal server error occurred.');
     }
   }
 
@@ -306,10 +305,9 @@ export class ReportOutlineController {
           versions: versionsRes.rows
         }
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Versions Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Get Versions Error', 'An internal server error occurred.');
     }
   }
 
@@ -376,9 +374,8 @@ export class ReportOutlineController {
         success: true,
         data: result.rows
       });
-    } catch (error: any) {
-      console.error('Get Company Outlines Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get Company Outlines Error', 'An internal server error occurred.');
     }
   }
 
@@ -431,9 +428,8 @@ export class ReportOutlineController {
         success: true,
         data: result.rows
       });
-    } catch (error: any) {
-      console.error('Get Advisor Outlines Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get Advisor Outlines Error', 'An internal server error occurred.');
     }
   }
 }
