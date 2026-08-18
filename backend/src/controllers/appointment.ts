@@ -63,7 +63,7 @@ export class AppointmentController {
         JOIN companies c ON a.company_id = c.company_id
         WHERE 1=1
       `;
-      const params: any[] = [];
+      const params: unknown[] = [];
       
       if (roles.includes('advisor')) {
         params.push(userId);

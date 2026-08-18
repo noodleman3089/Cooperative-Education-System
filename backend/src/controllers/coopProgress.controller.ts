@@ -94,7 +94,7 @@ export class CoopProgressController {
         WHERE 1=1
       `;
 
-      const queryParams: any[] = [];
+      const queryParams: unknown[] = [];
 
       // An advisor sees the students assigned to them; a department head sees
       // their own major; staff see the whole institution.

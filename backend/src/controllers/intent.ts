@@ -30,7 +30,7 @@ export class IntentFormController {
         res.status(400).json({ message: 'Required field: semester_id.' });
         return;
       }
-      const parsedSemesterId = parseInt(semester_id as any, 10);
+      const parsedSemesterId = parseInt(String(semester_id), 10);
       if (isNaN(parsedSemesterId)) {
         res.status(400).json({ message: 'semester_id must be a valid integer.' });
         return;
@@ -76,8 +76,8 @@ export class IntentFormController {
           return;
         }
 
-        const parsedCompanyId = parseInt(company_id as any, 10);
-        const parsedJobId = job_id !== undefined && job_id !== null ? parseInt(job_id as any, 10) : null;
+        const parsedCompanyId = parseInt(String(company_id), 10);
+        const parsedJobId = job_id !== undefined && job_id !== null ? parseInt(String(job_id), 10) : null;
 
         if (isNaN(parsedCompanyId)) {
           res.status(400).json({ message: 'company_id must be a valid integer.' });
@@ -351,7 +351,7 @@ export class IntentFormController {
         LEFT JOIN job_posts j ON i.job_id = j.job_id
         WHERE 1=1
       `;
-      const queryParams: any[] = [];
+      const queryParams: unknown[] = [];
 
       if (status) {
         queryParams.push(status);

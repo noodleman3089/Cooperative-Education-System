@@ -71,9 +71,9 @@ export class DocumentController {
         return;
       }
 
-      const parsedStudentId = parseInt(student_id as any, 10);
-      const parsedCompanyId = parseInt(company_id as any, 10);
-      const parsedTemplateId = parseInt(template_id as any, 10);
+      const parsedStudentId = parseInt(String(student_id), 10);
+      const parsedCompanyId = parseInt(String(company_id), 10);
+      const parsedTemplateId = parseInt(String(template_id), 10);
 
       if (isNaN(parsedStudentId) || isNaN(parsedCompanyId) || isNaN(parsedTemplateId)) {
         res.status(400).json({ message: 'student_id, company_id, and template_id must be valid integers.' });
@@ -401,7 +401,7 @@ export class DocumentController {
 
       for (const docId of doc_ids) {
         try {
-          const parsedDocId = parseInt(docId as any, 10);
+          const parsedDocId = parseInt(String(docId), 10);
           if (isNaN(parsedDocId)) {
             failedDocs.push({ doc_id: docId, error: 'Invalid document ID format.' });
             continue;
@@ -798,7 +798,7 @@ export class DocumentController {
       try {
         for (const studentId of studentIds) {
           // Mock generation - 1 student per document
-          const parsedStudentId = parseInt(studentId as any, 10);
+          const parsedStudentId = parseInt(String(studentId), 10);
           if (isNaN(parsedStudentId)) continue;
           
           // Check if student exists and has an accepted intent form

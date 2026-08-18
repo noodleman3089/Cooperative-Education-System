@@ -408,7 +408,7 @@ export class StudentController {
         LEFT JOIN companies c ON i.company_id = c.company_id
         WHERE 1=1
       `;
-      const queryParams: any[] = [];
+      const queryParams: unknown[] = [];
 
       if (userMajorId !== null) {
         queryParams.push(userMajorId);
@@ -570,7 +570,7 @@ export class StudentController {
       // still leave the first N students reassigned.
       const targetIds: number[] = [];
       for (const id of studentIds) {
-        const studentId = parseInt(id as any, 10);
+        const studentId = parseInt(String(id), 10);
         if (isNaN(studentId)) continue;
 
         const studentRes = await query('SELECT major_id FROM students WHERE student_id = $1', [studentId]);

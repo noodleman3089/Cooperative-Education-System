@@ -27,8 +27,8 @@ export class JobPostController {
         return;
       }
 
-      const parsedCompanyId = parseInt(company_id as any, 10);
-      const parsedQuota = parseInt(quota as any, 10);
+      const parsedCompanyId = parseInt(String(company_id), 10);
+      const parsedQuota = parseInt(String(quota), 10);
 
       if (isNaN(parsedCompanyId)) {
         res.status(400).json({ message: 'company_id must be a valid integer.' });

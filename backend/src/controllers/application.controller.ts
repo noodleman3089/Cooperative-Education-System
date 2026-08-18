@@ -25,7 +25,7 @@ export class ApplicationController {
         return;
       }
 
-      const parsedSemesterId = parseInt(semester_id as any, 10);
+      const parsedSemesterId = parseInt(String(semester_id), 10);
       if (isNaN(parsedSemesterId)) {
         res.status(400).json({ message: 'semester_id must be a valid integer.' });
         return;
@@ -33,7 +33,7 @@ export class ApplicationController {
 
       // เกรดเป็นค่าที่นักศึกษาแจ้งเอง จึงบังคับให้กรอกและอยู่ในช่วงที่เป็นไปได้
       // ตัวเลขนี้ยังไม่แตะ students.cumulative_gpa จนกว่าหัวหน้าสาขาจะอนุมัติ (SEC-05)
-      const parsedGpa = parseFloat(claimed_gpa as any);
+      const parsedGpa = parseFloat(String(claimed_gpa));
       if (claimed_gpa === undefined || claimed_gpa === null || claimed_gpa === '' || isNaN(parsedGpa)) {
         res.status(400).json({ message: 'กรุณากรอกเกรดเฉลี่ยสะสมตามที่ปรากฏในใบแสดงผลการเรียน' });
         return;

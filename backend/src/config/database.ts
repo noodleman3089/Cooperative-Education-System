@@ -23,7 +23,7 @@ pool.on('error', (err) => {
   console.error('Unexpected error on idle database client', err);
 });
 
-export const query = async (text: string, params?: any[]) => {
+export const query = async (text: string, params?: unknown[]) => {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);

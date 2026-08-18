@@ -92,7 +92,7 @@ export class ApplicationModel {
       JOIN students s ON a.student_id = s.student_id
       JOIN coop_semesters sem ON a.semester_id = sem.semester_id
     `;
-    const params: any[] = [];
+    const params: unknown[] = [];
     const conditions: string[] = [];
 
     if (majorId !== null) {

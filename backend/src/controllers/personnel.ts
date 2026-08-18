@@ -42,7 +42,7 @@ export class PersonnelController {
         JOIN master_major m ON p.major_id = m.major_id
         WHERE 1=1
       `;
-      const queryParams: any[] = [];
+      const queryParams: unknown[] = [];
 
       if (userMajorId !== null) {
         queryParams.push(userMajorId);

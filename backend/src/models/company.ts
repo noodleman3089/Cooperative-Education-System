@@ -96,7 +96,7 @@ export class CompanyModel {
     userRoles: string[]
   ): Promise<Company[]> {
     const conditions: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let paramIndex = 1;
 
     const isStudent = userRoles.includes('student');

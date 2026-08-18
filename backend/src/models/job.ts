@@ -112,7 +112,7 @@ export class JobPostModel {
       JOIN companies c ON j.company_id = c.company_id
       WHERE 1=1
     `;
-    const queryParams: any[] = [];
+    const queryParams: unknown[] = [];
 
     if (filters.created_by !== undefined) {
       queryParams.push(filters.created_by);
