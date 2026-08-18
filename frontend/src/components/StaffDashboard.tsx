@@ -851,7 +851,10 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setSuccess(`ออกเอกสารราชการให้กับนักศึกษาและส่งเรื่องให้คณบดีพิจารณาเรียบร้อยแล้ว`);
       setSelectedIntent(null);
       setSelectedTemplateId('');
-      await loadData();
+      // ต้องเป็น background reload — loadData() เปล่าๆ ตั้ง loading = true ซึ่งทำให้ทั้งหน้า
+      // ถูกแทนด้วย PageSkeleton แถบ "ออกเอกสาร...เรียบร้อยแล้ว" ที่เพิ่งตั้งจึงหายจากจอ
+      // จนกว่าการโหลดจะเสร็จ — เป็นเหตุผลเดียวกับที่ useDashboardData มี isBackground มาแต่ต้น
+      await loadData(true);
     } catch (err) {
       console.error('Document generation error:', err);
       setError(getErrorMessage(err, 'การสร้างเอกสารล้มเหลว ตรวจสอบข้อมูลติดต่อ HR บริษัทปลายทาง'));
