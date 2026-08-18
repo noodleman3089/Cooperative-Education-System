@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { PersonnelModel } from '../models/personnel';
 import { resolveMajorScope, sendAccessError } from '../utils/access';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class PersonnelController {
   /**
@@ -67,8 +68,7 @@ export class PersonnelController {
       res.status(200).json(rows);
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Personnel List Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving personnel.' });
+      sendUnexpectedError(res, error, 'Get Personnel List Error', 'An internal server error occurred while retrieving personnel.');
     }
   }
 
@@ -107,8 +107,7 @@ export class PersonnelController {
         personnel_id: personnelId
       });
     } catch (error) {
-      console.error('Approve Personnel Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating personnel status.' });
+      sendUnexpectedError(res, error, 'Approve Personnel Error', 'An internal server error occurred while updating personnel status.');
     }
   }
 
@@ -156,8 +155,7 @@ export class PersonnelController {
       const result = await query(queryStr, [personnelId]);
       res.status(200).json(result.rows);
     } catch (error) {
-      console.error('Get Supervised Students Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving supervised students.' });
+      sendUnexpectedError(res, error, 'Get Supervised Students Error', 'An internal server error occurred while retrieving supervised students.');
     }
   }
 }

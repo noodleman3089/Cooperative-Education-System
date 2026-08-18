@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { StudentModel } from '../models/student';
+import { sendUnexpectedError } from '../utils/httpError';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -243,8 +244,7 @@ export const checkStudentEligibility = async (
 
     next();
   } catch (error) {
-    console.error('Check Student Eligibility Error:', error);
-    res.status(500).json({ message: 'An internal server error occurred while verifying eligibility.' });
+    sendUnexpectedError(res, error, 'Check Student Eligibility Error', 'An internal server error occurred while verifying eligibility.');
   }
 };
 

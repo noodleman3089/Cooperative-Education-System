@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { sanitizeCsvCell } from '../middlewares/validation';
+import { sendUnexpectedError } from '../utils/httpError';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -186,8 +187,7 @@ export class StaffImportController {
         },
       });
     } catch (error) {
-      console.error('Staff Import Students General Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during student import.' });
+      sendUnexpectedError(res, error, 'Staff Import Students General Error', 'An internal server error occurred during student import.');
     }
   }
 }

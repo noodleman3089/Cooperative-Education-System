@@ -7,6 +7,7 @@ import { notifyStudentStatusChange } from '../utils/email';
 import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class IntentFormController {
   /**
@@ -212,9 +213,8 @@ export class IntentFormController {
           form_id: formId,
         });
       }
-    } catch (error: any) {
-      console.error('Update Intent Status Error:', error);
-      res.status(500).json({ message: error.message || 'An internal server error occurred while updating intent status.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Update Intent Status Error', 'An internal server error occurred while updating intent status.');
     }
   }
 
@@ -268,8 +268,7 @@ export class IntentFormController {
         parental_consent_path: consentPath,
       });
     } catch (error) {
-      console.error('Upload Parental Consent Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while uploading parental consent.' });
+      sendUnexpectedError(res, error, 'Upload Parental Consent Error', 'An internal server error occurred while uploading parental consent.');
     }
   }
 
@@ -297,8 +296,7 @@ export class IntentFormController {
       );
       res.status(200).json(result.rows);
     } catch (error) {
-      console.error('Get Student Intents Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving your intents.' });
+      sendUnexpectedError(res, error, 'Get Student Intents Error', 'An internal server error occurred while retrieving your intents.');
     }
   }
 
@@ -413,8 +411,7 @@ export class IntentFormController {
       res.status(200).json(result.rows);
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Intents Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving intents.' });
+      sendUnexpectedError(res, error, 'Get Intents Error', 'An internal server error occurred while retrieving intents.');
     }
   }
 
@@ -495,8 +492,7 @@ export class IntentFormController {
       res.status(200).json(row);
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Intent Detail Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving intent details.' });
+      sendUnexpectedError(res, error, 'Get Intent Detail Error', 'An internal server error occurred while retrieving intent details.');
     }
   }
 
@@ -563,9 +559,8 @@ export class IntentFormController {
           form_id: formId,
         });
       }
-    } catch (error: any) {
-      console.error('Update Intent Status By Dept Head Error:', error);
-      res.status(500).json({ message: error.message || 'An internal server error occurred while updating intent status.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Update Intent Status By Dept Head Error', 'An internal server error occurred while updating intent status.');
     }
   }
 
@@ -609,9 +604,8 @@ export class IntentFormController {
       counts.dispatch_eligible = Number(dispatchEligibleResult.rows[0]?.count || 0);
 
       res.status(200).json(counts);
-    } catch (error: any) {
-      console.error('Get Pipeline Summary Error:', error);
-      res.status(500).json({ message: error.message || 'An error occurred while fetching pipeline summary.' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get Pipeline Summary Error', 'An error occurred while fetching pipeline summary.');
     }
   }
 

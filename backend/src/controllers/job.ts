@@ -3,6 +3,7 @@ import { JobPostModel } from '../models/job';
 import { CompanyModel } from '../models/company';
 import { CreateJobPostBody } from '../types';
 import { writeAudit, AuditAction } from '../utils/audit';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class JobPostController {
   /**
@@ -84,8 +85,7 @@ export class JobPostController {
         job,
       });
     } catch (error) {
-      console.error('Create Job Post Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while creating job post.' });
+      sendUnexpectedError(res, error, 'Create Job Post Error', 'An internal server error occurred while creating job post.');
     }
   }
 
@@ -132,8 +132,7 @@ export class JobPostController {
         job_id: jobId,
       });
     } catch (error) {
-      console.error('Publish Job Post Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while publishing the job post.' });
+      sendUnexpectedError(res, error, 'Publish Job Post Error', 'An internal server error occurred while publishing the job post.');
     }
   }
 
@@ -191,8 +190,7 @@ export class JobPostController {
         job_id: jobId,
       });
     } catch (error) {
-      console.error('Reject Job Post Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while rejecting the job post.' });
+      sendUnexpectedError(res, error, 'Reject Job Post Error', 'An internal server error occurred while rejecting the job post.');
     }
   }
 
@@ -241,8 +239,7 @@ export class JobPostController {
       const jobs = await JobPostModel.getJobsWithFilters(filters);
       res.status(200).json(jobs);
     } catch (error) {
-      console.error('Get Job Postings Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving job postings.' });
+      sendUnexpectedError(res, error, 'Get Job Postings Error', 'An internal server error occurred while retrieving job postings.');
     }
   }
 }

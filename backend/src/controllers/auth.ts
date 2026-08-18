@@ -11,6 +11,7 @@ import { OAuth2Client } from 'google-auth-library';
 import { sendPasswordResetEmail, sendPasswordSetNoticeEmail } from '../utils/email';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
+import { sendUnexpectedError } from '../utils/httpError';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -146,8 +147,7 @@ export class AuthController {
         },
       });
     } catch (error) {
-      console.error('Google SSO Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during Google SSO authentication.' });
+      sendUnexpectedError(res, error, 'Google SSO Error', 'An internal server error occurred during Google SSO authentication.');
     }
   }
 
@@ -276,8 +276,7 @@ export class AuthController {
         },
       });
     } catch (error) {
-      console.error('Login Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during login.' });
+      sendUnexpectedError(res, error, 'Login Error', 'An internal server error occurred during login.');
     }
   }
 
@@ -336,8 +335,7 @@ export class AuthController {
 
       res.status(200).json({ message: 'ตั้งรหัสผ่านสำเร็จ' });
     } catch (error) {
-      console.error('Set Password Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน' });
+      sendUnexpectedError(res, error, 'Set Password Error', 'เกิดข้อผิดพลาดในการตั้งรหัสผ่าน');
     }
   }
 
@@ -375,8 +373,7 @@ export class AuthController {
 
       res.status(200).json({ message: 'หากอีเมลนี้มีอยู่ในระบบ เราจะส่งลิงก์รีเซ็ตรหัสผ่านให้ท่านทางอีเมล' });
     } catch (error) {
-      console.error('Forgot Password Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการร้องขอรีเซ็ตรหัสผ่าน' });
+      sendUnexpectedError(res, error, 'Forgot Password Error', 'เกิดข้อผิดพลาดในการร้องขอรีเซ็ตรหัสผ่าน');
     }
   }
 
@@ -434,8 +431,7 @@ export class AuthController {
           : 'รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่',
       });
     } catch (error) {
-      console.error('Reset Password Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการรีเซ็ตรหัสผ่าน' });
+      sendUnexpectedError(res, error, 'Reset Password Error', 'เกิดข้อผิดพลาดในการรีเซ็ตรหัสผ่าน');
     }
   }
 
@@ -613,8 +609,7 @@ export class AuthController {
         user: tokenPayload,
       });
     } catch (error) {
-      console.error('Claim Personnel Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการยืนยันตัวตนบุคลากร' });
+      sendUnexpectedError(res, error, 'Claim Personnel Error', 'เกิดข้อผิดพลาดในการยืนยันตัวตนบุคลากร');
     }
   }
 }

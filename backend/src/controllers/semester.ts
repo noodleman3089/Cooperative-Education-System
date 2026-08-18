@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CoopSemesterModel } from '../models/semester';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class CoopSemesterController {
   /**
@@ -16,8 +17,7 @@ export class CoopSemesterController {
       }
       res.status(200).json(activeSemester);
     } catch (error) {
-      console.error('Get Active Semester Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving active semester.' });
+      sendUnexpectedError(res, error, 'Get Active Semester Error', 'An internal server error occurred while retrieving active semester.');
     }
   }
 }

@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { ApplicationModel } from '../models/application';
 import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { getErrorMessage } from '../utils/httpError';
+import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
 
 export class ApplicationController {
   /**
@@ -84,12 +84,8 @@ export class ApplicationController {
         success: true,
         data: applications,
       });
-    } catch (error: any) {
-      console.error('Get My Applications Error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'An internal server error occurred.',
-      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get My Applications Error', 'An internal server error occurred.');
     }
   }
 
@@ -124,13 +120,9 @@ export class ApplicationController {
         success: true,
         data: applications,
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Applications Error:', error);
-      res.status(500).json({
-        success: false,
-        message: 'An internal server error occurred.',
-      });
+      sendUnexpectedError(res, error, 'Get Applications Error', 'An internal server error occurred.');
     }
   }
 
@@ -225,13 +217,9 @@ export class ApplicationController {
         success: true,
         message: 'บันทึกผลการประเมินเรียบร้อยแล้ว',
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Evaluate By Advisor Error:', error);
-      res.status(500).json({
-        success: false,
-        message: error.message || 'An internal server error occurred.',
-      });
+      sendUnexpectedError(res, error, 'Evaluate By Advisor Error', 'An internal server error occurred.');
     }
   }
 

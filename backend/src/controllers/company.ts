@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CompanyModel } from '../models/company';
 import { GoogleSearchCompanyBody } from '../types';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class CompanyController {
   /**
@@ -64,8 +65,7 @@ export class CompanyController {
         is_verified: newCompany.is_verified,
       });
     } catch (error) {
-      console.error('Google Search Company Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during company lookup.' });
+      sendUnexpectedError(res, error, 'Google Search Company Error', 'An internal server error occurred during company lookup.');
     }
   }
 
@@ -102,8 +102,7 @@ export class CompanyController {
         company_id: companyId,
       });
     } catch (error) {
-      console.error('Verify Company Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while verifying the company.' });
+      sendUnexpectedError(res, error, 'Verify Company Error', 'An internal server error occurred while verifying the company.');
     }
   }
 
@@ -133,8 +132,7 @@ export class CompanyController {
 
       res.status(200).json(companies);
     } catch (error) {
-      console.error('Get Companies Directory Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving the company directory.' });
+      sendUnexpectedError(res, error, 'Get Companies Directory Error', 'An internal server error occurred while retrieving the company directory.');
     }
   }
 
@@ -181,8 +179,7 @@ export class CompanyController {
         company_id: companyId,
       });
     } catch (error) {
-      console.error('Update Company Contact Info Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating contact info.' });
+      sendUnexpectedError(res, error, 'Update Company Contact Info Error', 'An internal server error occurred while updating contact info.');
     }
   }
 
@@ -207,8 +204,7 @@ export class CompanyController {
 
       res.status(200).json(company);
     } catch (error) {
-      console.error('Get My Company Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving company profile.' });
+      sendUnexpectedError(res, error, 'Get My Company Error', 'An internal server error occurred while retrieving company profile.');
     }
   }
 
@@ -254,8 +250,7 @@ export class CompanyController {
         company_id: company.company_id,
       });
     } catch (error) {
-      console.error('Update My Company Contact Info Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating contact info.' });
+      sendUnexpectedError(res, error, 'Update My Company Contact Info Error', 'An internal server error occurred while updating contact info.');
     }
   }
 }

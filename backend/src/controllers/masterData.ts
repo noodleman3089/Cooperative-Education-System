@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { MasterModel } from '../models/master';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class MasterDataController {
   /**
@@ -24,8 +25,7 @@ export class MasterDataController {
         googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || ''
       });
     } catch (error) {
-      console.error('Error fetching master data:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving master data.' });
+      sendUnexpectedError(res, error, 'Error fetching master data', 'An internal server error occurred while retrieving master data.');
     }
   }
 }

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { resolveMajorScope, sendAccessError } from '../utils/access';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class CoopProgressController {
   /**
@@ -188,10 +189,9 @@ export class CoopProgressController {
         success: true,
         data: studentsProgress
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Dashboard Progress Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred.' });
+      sendUnexpectedError(res, error, 'Get Dashboard Progress Error', 'An internal server error occurred.');
     }
   }
 }

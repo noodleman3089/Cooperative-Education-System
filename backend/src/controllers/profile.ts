@@ -264,8 +264,7 @@ export class ProfileController {
         res.status(400).json({ message: `Profile retrieval is not supported for current roles.` });
       }
     } catch (error) {
-      console.error('Get Profile Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving profile.' });
+      sendUnexpectedError(res, error, 'Get Profile Error', 'An internal server error occurred while retrieving profile.');
     }
   }
 

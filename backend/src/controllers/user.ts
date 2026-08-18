@@ -8,6 +8,7 @@ import { sendCompanyInviteEmail, sendMentorInviteEmail } from '../utils/email';
 import { createInviteLink } from '../utils/invite';
 import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { sendUnexpectedError } from '../utils/httpError';
 
 
 
@@ -21,8 +22,7 @@ export class UserController {
       const users = await UserModel.getAll();
       res.status(200).json(users);
     } catch (error) {
-      console.error('Get All Users Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while fetching users.' });
+      sendUnexpectedError(res, error, 'Get All Users Error', 'An internal server error occurred while fetching users.');
     }
   }
 
@@ -48,8 +48,7 @@ export class UserController {
       const { password_hash: _, ...userWithoutHash } = user;
       res.status(200).json(userWithoutHash);
     } catch (error) {
-      console.error('Get User By ID Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while fetching the user.' });
+      sendUnexpectedError(res, error, 'Get User By ID Error', 'An internal server error occurred while fetching the user.');
     }
   }
 
@@ -113,8 +112,7 @@ export class UserController {
         inviteLink: process.env.NODE_ENV !== 'production' ? inviteLink : undefined
       });
     } catch (error) {
-      console.error('Create User Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while creating the user.' });
+      sendUnexpectedError(res, error, 'Create User Error', 'An internal server error occurred while creating the user.');
     }
   }
 
@@ -177,8 +175,7 @@ export class UserController {
         inviteLink: process.env.NODE_ENV !== 'production' ? inviteLink : undefined,
       });
     } catch (error) {
-      console.error('Resend Invite Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการส่งลิงก์เชิญ' });
+      sendUnexpectedError(res, error, 'Resend Invite Error', 'เกิดข้อผิดพลาดในการส่งลิงก์เชิญ');
     }
   }
 
@@ -237,8 +234,7 @@ export class UserController {
         user: updatedUser
       });
     } catch (error) {
-      console.error('Update User Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating the user.' });
+      sendUnexpectedError(res, error, 'Update User Error', 'An internal server error occurred while updating the user.');
     }
   }
 
@@ -271,8 +267,7 @@ export class UserController {
 
       res.status(200).json({ message: 'User and all associated profiles deleted successfully.' });
     } catch (error) {
-      console.error('Delete User Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while deleting the user.' });
+      sendUnexpectedError(res, error, 'Delete User Error', 'An internal server error occurred while deleting the user.');
     }
   }
 
@@ -404,8 +399,7 @@ export class UserController {
         }
       });
     } catch (error) {
-      console.error('Import Users Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during user import.' });
+      sendUnexpectedError(res, error, 'Import Users Error', 'An internal server error occurred during user import.');
     }
   }
 }

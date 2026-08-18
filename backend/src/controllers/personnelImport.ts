@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import pool from '../config/database';
 import { sanitizeCsvCell } from '../middlewares/validation';
+import { sendUnexpectedError } from '../utils/httpError';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -138,8 +139,7 @@ export class PersonnelImportController {
         },
       });
     } catch (error) {
-      console.error('Personnel Import General Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred during personnel import.' });
+      sendUnexpectedError(res, error, 'Personnel Import General Error', 'An internal server error occurred during personnel import.');
     }
   }
 
@@ -206,14 +206,12 @@ export class PersonnelImportController {
         res.status(200).json({ message: 'เพิ่ม/อัปเดตข้อมูลบุคลากรเรียบร้อยแล้ว' });
       } catch (dbErr) {
         await client.query('ROLLBACK');
-        console.error('Failed to add personnel manually:', dbErr);
-        res.status(500).json({ message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูล' });
+        sendUnexpectedError(res, dbErr, 'Failed to add personnel manually', 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงฐานข้อมูล');
       } finally {
         client.release();
       }
     } catch (error) {
-      console.error('Add single personnel general error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์' });
+      sendUnexpectedError(res, error, 'Add single personnel general error', 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์');
     }
   }
 
@@ -232,8 +230,7 @@ export class PersonnelImportController {
       );
       res.status(200).json(result.rows);
     } catch (error) {
-      console.error('Get preseeded personnel error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการดึงข้อมูลรายชื่อบุคลากรล่วงหน้า' });
+      sendUnexpectedError(res, error, 'Get preseeded personnel error', 'เกิดข้อผิดพลาดในการดึงข้อมูลรายชื่อบุคลากรล่วงหน้า');
     }
   }
 
@@ -268,8 +265,7 @@ export class PersonnelImportController {
       await pool.query('DELETE FROM personnel_preseed_list WHERE employee_code = $1', [employee_code]);
       res.status(200).json({ message: 'ลบข้อมูลรายชื่อบุคลากรล่วงหน้าสำเร็จ' });
     } catch (error) {
-      console.error('Delete preseeded personnel error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการลบข้อมูลบุคลากรล่วงหน้า' });
+      sendUnexpectedError(res, error, 'Delete preseeded personnel error', 'เกิดข้อผิดพลาดในการลบข้อมูลบุคลากรล่วงหน้า');
     }
   }
 }

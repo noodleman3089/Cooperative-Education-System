@@ -11,6 +11,7 @@ import {
 } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
+import { sendUnexpectedError } from '../utils/httpError';
 
 export class StudentController {
   /**
@@ -148,8 +149,7 @@ export class StudentController {
       });
 
     } catch (error) {
-      console.error('Get Student Dashboard Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving student dashboard.' });
+      sendUnexpectedError(res, error, 'Get Student Dashboard Error', 'An internal server error occurred while retrieving student dashboard.');
     }
   }
 
@@ -187,8 +187,7 @@ export class StudentController {
         student: updatedStudent,
       });
     } catch (error) {
-      console.error('Update Optional Profile Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating optional profile.' });
+      sendUnexpectedError(res, error, 'Update Optional Profile Error', 'An internal server error occurred while updating optional profile.');
     }
   }
 
@@ -248,8 +247,7 @@ export class StudentController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Verify Student Eligibility Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while verifying student eligibility.' });
+      sendUnexpectedError(res, error, 'Verify Student Eligibility Error', 'An internal server error occurred while verifying student eligibility.');
     }
   }
 
@@ -369,8 +367,7 @@ export class StudentController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Update Registry Fields Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while updating registry fields.' });
+      sendUnexpectedError(res, error, 'Update Registry Fields Error', 'An internal server error occurred while updating registry fields.');
     }
   }
 
@@ -432,8 +429,7 @@ export class StudentController {
       res.status(200).json(result.rows);
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Get Students List Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while retrieving student list.' });
+      sendUnexpectedError(res, error, 'Get Students List Error', 'An internal server error occurred while retrieving student list.');
     }
   }
 
@@ -515,8 +511,7 @@ export class StudentController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Assign Advisor Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while assigning advisor.' });
+      sendUnexpectedError(res, error, 'Assign Advisor Error', 'An internal server error occurred while assigning advisor.');
     }
   }
 
@@ -631,8 +626,7 @@ export class StudentController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('Batch Assign Personnel Error:', error);
-      res.status(500).json({ message: 'An internal server error occurred while assigning personnel.' });
+      sendUnexpectedError(res, error, 'Batch Assign Personnel Error', 'An internal server error occurred while assigning personnel.');
     }
   }
 
@@ -673,8 +667,7 @@ export class StudentController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      console.error('getAccommodationAndPlan Error:', error);
-      res.status(500).json({ message: 'Failed to retrieve accommodation and work plan' });
+      sendUnexpectedError(res, error, 'getAccommodationAndPlan Error', 'Failed to retrieve accommodation and work plan');
     }
   }
 
@@ -780,8 +773,7 @@ export class StudentController {
         client.release();
       }
     } catch (error) {
-      console.error('submitAccommodationAndPlan Error:', error);
-      res.status(500).json({ message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง' });
+      sendUnexpectedError(res, error, 'submitAccommodationAndPlan Error', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
     }
   }
 }
