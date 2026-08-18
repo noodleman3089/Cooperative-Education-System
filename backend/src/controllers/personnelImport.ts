@@ -22,7 +22,7 @@ export class PersonnelImportController {
         email: string | null;
       }
 
-      let personnelToImport: PersonnelImportRow[] = [];
+      const personnelToImport: PersonnelImportRow[] = [];
       let csvContent = '';
 
       if (req.file) {

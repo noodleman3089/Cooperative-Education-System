@@ -22,5 +22,16 @@ export default defineConfig([
     files: ['**/*.ts'],
     extends: [js.configs.recommended, tseslint.configs.recommended],
     languageOptions: { globals: globals.node },
+    rules: {
+      // ขีดล่างนำหน้า = "ตั้งใจไม่ใช้" ซึ่งเป็นธรรมเนียมที่โค้ดนี้ใช้อยู่แล้ว
+      // (_req/_file ของ multer · _next ของ error middleware ที่ express บังคับให้มี 4 อาร์กิวเมนต์
+      //  · const { password_hash: _omitted, ...safeUser } ที่ตัดรหัสผ่านออกจาก response)
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
+      // types/index.ts ต้องใช้ namespace จริง — เป็นวิธีเดียวที่ augment Express.Request ได้
+      '@typescript-eslint/no-namespace': ['error', { allowDeclarations: true }],
+    },
   },
 ]);

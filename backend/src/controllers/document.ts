@@ -283,7 +283,7 @@ export class DocumentController {
       fs.writeFileSync(absoluteFilePath, pdfBytes);
 
       // 7. Insert official_documents record in DB
-      let officialDoc = await OfficialDocumentModel.create({
+      const officialDoc = await OfficialDocumentModel.create({
         type: template.type,
         student_id: parsedStudentId,
         company_id: parsedCompanyId,

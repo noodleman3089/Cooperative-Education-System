@@ -44,7 +44,8 @@ export class ProfileController {
 
       if (type === 'student') {
         const body = req.body as StudentProfileSetupBody;
-        let { student_code, major_id, province_id, enrollment_year } = body;
+        let { student_code } = body;
+        const { major_id, province_id, enrollment_year } = body;
 
         // Auto-extract student code if missing
         if (!student_code) {

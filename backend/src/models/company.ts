@@ -97,7 +97,6 @@ export class CompanyModel {
   ): Promise<Company[]> {
     const conditions: string[] = [];
     const values: unknown[] = [];
-    let paramIndex = 1;
 
     const isStudent = userRoles.includes('student');
     const isStaffGroup = userRoles.some(role => ['staff', 'advisor', 'dean'].includes(role));
@@ -107,9 +106,8 @@ export class CompanyModel {
       conditions.push('is_verified = TRUE');
     } else if (isStaffGroup) {
       if (filters.is_verified !== undefined) {
-        conditions.push(`is_verified = $${paramIndex}`);
+        conditions.push(`is_verified = $${values.length + 1}`);
         values.push(filters.is_verified);
-        paramIndex++;
       }
     } else {
       // Safe fallback for other roles: only return verified companies
@@ -118,9 +116,8 @@ export class CompanyModel {
 
     // Search filter (partial match ILIKE on name_th or name_en)
     if (filters.search) {
-      conditions.push(`(name_th ILIKE $${paramIndex} OR name_en ILIKE $${paramIndex})`);
+      conditions.push(`(name_th ILIKE $${values.length + 1} OR name_en ILIKE $${values.length + 1})`);
       values.push(`%${filters.search}%`);
-      paramIndex++;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

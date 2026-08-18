@@ -108,7 +108,7 @@ export async function runMigrations(quiet = false): Promise<string[]> {
         await client.query('ROLLBACK');
         // ล้มกลางทางแล้วหยุดทันที — migration ตัวถัดไปมักพึ่งตัวก่อนหน้า
         // การรันต่อจะได้ error กองพะเนินที่หาต้นเหตุยากกว่าเดิม
-        throw new Error(`Migration failed and was rolled back: ${file}\n${(err as Error).message}`);
+        throw new Error(`Migration failed and was rolled back: ${file}\n${(err as Error).message}`, { cause: err });
       }
     }
 

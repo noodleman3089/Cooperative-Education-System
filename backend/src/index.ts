@@ -310,7 +310,7 @@ app.get('/api/files/documents/:doc_id', authenticateToken, async (req: Request, 
       return;
     }
 
-    let filePath = doc.generated_file_path ? path.join(process.cwd(), doc.generated_file_path) : '';
+    const filePath = doc.generated_file_path ? path.join(process.cwd(), doc.generated_file_path) : '';
     if (!filePath || !fs.existsSync(filePath)) {
       const fallbackPath = path.join(process.cwd(), 'secure_private/templates/cover_letter_template.pdf');
       if (fs.existsSync(fallbackPath)) {

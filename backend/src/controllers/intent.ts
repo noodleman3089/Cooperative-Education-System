@@ -589,7 +589,7 @@ export class IntentFormController {
       };
 
       summaryResult.rows.forEach((row: { status: string; count: number }) => {
-        if (counts.hasOwnProperty(row.status)) {
+        if (Object.prototype.hasOwnProperty.call(counts, row.status)) {
           counts[row.status] = Number(row.count);
         }
       });

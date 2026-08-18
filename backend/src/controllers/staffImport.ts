@@ -24,7 +24,7 @@ export class StaffImportController {
         email: string | null;
       }
 
-      let studentsToImport: StudentImportRow[] = [];
+      const studentsToImport: StudentImportRow[] = [];
       const invalidRows: string[] = [];
 
       // 1. Parse CSV from request body (raw text) or file upload if provided

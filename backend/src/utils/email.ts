@@ -103,7 +103,7 @@ export const sendCompanyInviteEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Company invitation email successfully sent to: ${toEmail}`);
-  } catch (error) {
+  } catch {
     console.error('════════════════════════════════════════════════════');
     console.error(`[Email] COMPANY INVITE (SMTP failed — dev console fallback)`);
     console.error(`  To: ${toEmail}`);
@@ -140,7 +140,7 @@ export const sendMentorInviteEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Mentor invitation email successfully sent to: ${toEmail}`);
-  } catch (error) {
+  } catch {
     console.error('════════════════════════════════════════════════════');
     console.error(`[Email] MENTOR INVITE (SMTP failed — dev console fallback)`);
     console.error(`  To: ${toEmail}`);
@@ -180,7 +180,7 @@ export const sendPasswordSetNoticeEmail = async (
       html: renderEmailHtml({ title, themeColor: '#1e3a5f', content }),
     });
     console.log(`[Email] Password-set notice sent to: ${toEmail}`);
-  } catch (error) {
+  } catch {
     console.error(`[Email] Failed to send password-set notice to ${toEmail}`);
   }
 };
@@ -235,7 +235,7 @@ export const sendSignedDocumentEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Signed document email with PDF attachment successfully sent to: ${toEmail}`);
-  } catch (error) {
+  } catch {
     console.error('========================================================');
     console.error(`FAILED TO SEND SIGNED DOCUMENT EMAIL to ${toEmail}`);
     console.error(`Please configure SMTP settings in .env`);
@@ -286,7 +286,7 @@ export const sendPasswordResetEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`[Email] Password reset email sent to: ${toEmail}`);
-  } catch (error) {
+  } catch {
     console.error('════════════════════════════════════════════════════');
     console.error(`[Email] PASSWORD RESET (SMTP failed — dev console fallback)`);
     console.error(`  To: ${toEmail}`);
@@ -404,7 +404,7 @@ export const notifyStudentStatusChange = async (
     const safeCompanyName = esc(company_name || '');
     const safeReason = reason ? esc(reason) : '';
 
-    let subject = 'อัปเดตสถานะการพิจารณาคำขอสหกิจศึกษา — RMUTTO';
+    const subject = 'อัปเดตสถานะการพิจารณาคำขอสหกิจศึกษา — RMUTTO';
     let statusLabel = '';
     let detailsHtml = '';
 
@@ -505,7 +505,7 @@ export const notifyStudentStatusChangeByDocId = async (
     const safeCompanyName = esc(company_name || '');
     const docTypeLabel = doc_type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์รับนักศึกษา' : 'หนังสือส่งตัวนักศึกษา';
 
-    let subject = 'เอกสารทางการสหกิจศึกษาได้รับการลงนามแล้ว — RMUTTO';
+    const subject = 'เอกสารทางการสหกิจศึกษาได้รับการลงนามแล้ว — RMUTTO';
     let statusLabel = '';
     let detailsHtml = '';
 
