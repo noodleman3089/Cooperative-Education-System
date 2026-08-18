@@ -134,6 +134,19 @@ const FIELD_TAB: Record<string, TabId> = {
   altEmail: 'contact',
 };
 
+/**
+ * ข้อความผิดพลาดใต้ช่องกรอกหนึ่งช่อง
+ *
+ * เคยประกาศอยู่ *ในตัว* StudentProfile ซึ่งทำให้มันเป็น component ชนิดใหม่ทุกครั้ง
+ * ที่ StudentProfile re-render → React ถือว่าเป็นคนละ component แล้ว unmount ของเดิม
+ * ทิ้งทั้งต้นไม้แล้ว mount ใหม่ · ฟอร์มนี้ re-render ทุกตัวอักษรที่พิมพ์ จึงเสีย
+ * DOM ของข้อความผิดพลาดใหม่ทุกครั้งโดยไม่จำเป็น
+ */
+const FieldError: React.FC<{ message?: string }> = ({ message }) =>
+  message ? (
+    <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-400">{message}</p>
+  ) : null;
+
 const StudentProfile: React.FC = () => {
   const [profile, setProfile] = useState<StudentType | null>(null);
   const [majors, setMajors] = useState<Major[]>([]);
@@ -442,11 +455,6 @@ const StudentProfile: React.FC = () => {
   const errorCountFor = (tab: TabId) =>
     Object.entries(fieldErrors).filter(([f, msg]) => msg && FIELD_TAB[f] === tab).length;
 
-  const FieldError: React.FC<{ name: string }> = ({ name }) =>
-    fieldErrors[name] ? (
-      <p className="mt-1 text-xs font-semibold text-red-700 dark:text-red-400">{fieldErrors[name]}</p>
-    ) : null;
-
   if (loading) {
     return (
       <PageSkeleton variant='form' />
@@ -741,7 +749,7 @@ const StudentProfile: React.FC = () => {
                   }}
                   className={fieldClass('firstName')}
                 />
-                <FieldError name="firstName" />
+                <FieldError message={fieldErrors.firstName} />
               </div>
 
               <div className="sm:col-span-4">
@@ -760,7 +768,7 @@ const StudentProfile: React.FC = () => {
                   }}
                   className={fieldClass('lastName')}
                 />
-                <FieldError name="lastName" />
+                <FieldError message={fieldErrors.lastName} />
               </div>
 
               <div className="sm:col-span-2">
@@ -881,7 +889,7 @@ const StudentProfile: React.FC = () => {
                   }}
                   className={fieldClass('phone')}
                 />
-                <FieldError name="phone" />
+                <FieldError message={fieldErrors.phone} />
               </div>
 
               <div>
@@ -900,7 +908,7 @@ const StudentProfile: React.FC = () => {
                   }}
                   className={fieldClass('altEmail')}
                 />
-                <FieldError name="altEmail" />
+                <FieldError message={fieldErrors.altEmail} />
               </div>
 
               <div>
