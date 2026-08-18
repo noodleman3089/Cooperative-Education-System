@@ -10,7 +10,8 @@
     "db:setup": "ts-node src/db/setup.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "db:migrate": "ts-node src/db/migrate.ts"
+    "db:migrate": "ts-node src/db/migrate.ts",
+    "lint": "eslint ."
   },
   "keywords": [
     "nodejs",
@@ -48,6 +49,7 @@
     "puppeteer": "^25.1.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.49.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
@@ -56,8 +58,11 @@
     "@types/node": "^26.2.0",
     "@types/pg": "^8.11.6",
     "dotenv": "^16.4.5",
+    "eslint": "^10.3.0",
+    "globals": "^17.6.0",
     "nodemon": "^3.1.4",
     "ts-node": "^10.9.2",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2"
   }
 }
