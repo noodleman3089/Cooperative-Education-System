@@ -30,3 +30,20 @@ export function sendUnexpectedError(
   console.error(`${logLabel}:`, error);
   res.status(500).json({ message: fallbackMessage });
 }
+
+/**
+ * ข้อความจาก error ที่จับได้ — แทนการประกาศ `catch (error: any)` แล้วอ่าน `error.message` ตรงๆ
+ *
+ * มี controller 8 จุดที่ตอบ 4xx พร้อมข้อความจาก error เพราะ model โยน Error ที่มีข้อความ
+ * สำหรับผู้ใช้จริง (โควตาเต็ม · สถานะไม่ถูกต้อง · ข้ามสาขา) และ E2E assert ข้อความพวกนี้อยู่
+ * เช่น business-rules.spec.ts ที่ตรวจว่าใบความจำนงเกินโควตาต้องบอกคำว่า quota
+ * → จุดพวกนั้น **ห้าม** เปลี่ยนไปใช้ sendUnexpectedError เพราะข้อความจะหายไป
+ *
+ * ต่างจาก `error.message || fallback` เดิมที่เดียว: ถ้า message เป็นค่าที่ไม่ใช่สตริงแต่ truthy
+ * เดิมจะส่งค่านั้นออกไปทั้งก้อน ตอนนี้ได้ fallback แทน — ปิดช่องรั่วโดยไม่เปลี่ยนพฤติกรรมจริง
+ * เพราะทุก throw ในโปรเจคเป็น `new Error(string)`
+ */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  const message = (error as { message?: unknown } | undefined)?.message;
+  return typeof message === 'string' && message ? message : fallback;
+}

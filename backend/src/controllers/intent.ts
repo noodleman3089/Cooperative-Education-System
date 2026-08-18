@@ -6,6 +6,7 @@ import { query } from '../config/database';
 import { notifyStudentStatusChange } from '../utils/email';
 import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { getErrorMessage } from '../utils/httpError';
 
 export class IntentFormController {
   /**
@@ -100,12 +101,12 @@ export class IntentFormController {
         message: 'Cooperative education intent submitted successfully.',
         intentForm,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Submit Intent Error:', error);
       
       // Return business logic validation error as 400 Bad Request
       res.status(400).json({
-        message: error.message || 'An error occurred while submitting your cooperative education intent.',
+        message: getErrorMessage(error, 'An error occurred while submitting your cooperative education intent.'),
       });
     }
   }

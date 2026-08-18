@@ -5,6 +5,7 @@ import { notifyStudentStatusChange, sendMentorInviteEmail } from '../utils/email
 import { createInviteLink } from '../utils/invite';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { getErrorMessage } from '../utils/httpError';
 
 export class AcceptanceController {
   /**
@@ -96,10 +97,10 @@ export class AcceptanceController {
           intent_id: intentId,
         });
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('Update Company Acceptance Status Error:', error);
       res.status(400).json({
-        message: error.message || 'An error occurred while updating the application status.',
+        message: getErrorMessage(error, 'An error occurred while updating the application status.'),
       });
     }
   }
@@ -167,10 +168,10 @@ export class AcceptanceController {
         message: 'อัปโหลดหลักฐานการตอบรับเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบเอกสาร',
         intentForm: updatedIntent,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Student Accept Error:', error);
       res.status(400).json({
-        message: error.message || 'An error occurred while submitting student acceptance.',
+        message: getErrorMessage(error, 'An error occurred while submitting student acceptance.'),
       });
     }
   }
@@ -209,10 +210,10 @@ export class AcceptanceController {
         message: 'Student application reported as failed. Student is unlocked to apply again.',
         intent_id: intentId,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Student Fail Error:', error);
       res.status(400).json({
-        message: error.message || 'An error occurred while reporting application failure.',
+        message: getErrorMessage(error, 'An error occurred while reporting application failure.'),
       });
     }
   }
@@ -380,10 +381,10 @@ export class AcceptanceController {
 
         res.status(200).json({ success: true, message: 'ปฏิเสธหลักฐานการตอบรับเรียบร้อยแล้ว' });
       }
-    } catch (error: any) {
+    } catch (error) {
       await client.query('ROLLBACK');
       console.error('Approve By Officer Error:', error);
-      res.status(400).json({ message: error.message || 'An error occurred during approval.' });
+      res.status(400).json({ message: getErrorMessage(error, 'An error occurred during approval.') });
     } finally {
       client.release();
     }

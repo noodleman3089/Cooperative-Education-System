@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ApplicationModel } from '../models/application';
 import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { getErrorMessage } from '../utils/httpError';
 
 export class ApplicationController {
   /**
@@ -55,11 +56,11 @@ export class ApplicationController {
         message: 'Application submitted successfully.',
         data: application,
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Submit Application Error:', error);
       res.status(400).json({
         success: false,
-        message: error.message || 'An error occurred while submitting your application.',
+        message: getErrorMessage(error, 'An error occurred while submitting your application.'),
       });
     }
   }
@@ -306,12 +307,12 @@ export class ApplicationController {
             ? 'อนุมัติใบสมัครเรียบร้อยแล้ว นักศึกษาได้รับสิทธิ์เข้าร่วมสหกิจศึกษา'
             : 'บันทึกผลการพิจารณาเรียบร้อยแล้ว',
       });
-    } catch (error: any) {
+    } catch (error) {
       if (sendAccessError(res, error)) return;
       console.error('Approve By Dept Head Error:', error);
       res.status(400).json({
         success: false,
-        message: error.message || 'An error occurred while approving the application.',
+        message: getErrorMessage(error, 'An error occurred while approving the application.'),
       });
     }
   }

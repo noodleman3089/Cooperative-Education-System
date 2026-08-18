@@ -12,6 +12,7 @@ import { DocumentTemplateModel } from '../models/documentTemplate';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { UserModel } from '../models/user';
 import { query } from '../config/database';
+import { getErrorMessage } from '../utils/httpError';
 import { DocuSignService } from '../utils/docusign';
 import { GenerateDocumentBody, BatchSignDocumentsBody } from '../types';
 import {
@@ -503,9 +504,9 @@ export class DocumentController {
           
           // Trigger onboarding email to company representative / mentor
           await DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId);
-        } catch (err: any) {
+        } catch (err) {
           console.error(`Error processing doc_id: ${docId}`, err);
-          failedDocs.push({ doc_id: docId, error: err.message || 'Unknown error while signing.' });
+          failedDocs.push({ doc_id: docId, error: getErrorMessage(err, 'Unknown error while signing.') });
         }
       }
 
