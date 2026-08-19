@@ -36,6 +36,11 @@ export const AuditAction = {
   JOB_POST_REJECTED: 'job_post.rejected',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   FINAL_REPORT_REVIEWED: 'final_report.reviewed',
+  COMPANY_VERIFIED: 'company.verified',
+  COMPANY_UNVERIFIED: 'company.unverified',
+  COMPANY_CREATED: 'company.created',
+  COMPANY_UPDATED: 'company.updated',
+  COMPANY_DELETED: 'company.deleted',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
