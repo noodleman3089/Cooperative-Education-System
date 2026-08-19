@@ -114,6 +114,22 @@ export class DocumentController {
         return;
       }
 
+      // เงื่อนไขที่สองของด่านเดียวกัน: ชื่อ ที่อยู่ และผู้รับที่พิมพ์ลงหนังสือฉบับนี้
+      // มาจากแถวใน companies ซึ่งส่วนใหญ่ "นักศึกษา" เป็นคนสร้างเอง — ค้นจาก
+      // Google Maps หรือกรอกมือตอนยื่นแบบหาที่ฝึกเอง · การรับรองของเจ้าหน้าที่คือ
+      // จุดเดียวที่มีมนุษย์ตรวจก่อนที่ข้อมูลนั้นจะกลายเป็นหนังสือที่คณบดีเซ็น
+      //
+      // ก่อนหน้านี้ is_verified ถูกใช้แค่กรองว่านักศึกษาเห็นบริษัทในทำเนียบไหม
+      // ไม่ได้กันอะไรเลย ทั้งที่คอมเมนต์ใน routes/company.ts อ้างมาตลอดว่ากันตรงนี้
+      if (!company.is_verified) {
+        res.status(409).json({
+          message:
+            'สถานประกอบการนี้ยังไม่ผ่านการรับรอง กรุณารับรองที่เมนู "ทำเนียบสถานประกอบการ" ก่อนออกหนังสือ',
+          company_id: parsedCompanyId,
+        });
+        return;
+      }
+
       // 3. Check for missing company contact information
       if (!company.contact_person || !company.contact_position || !company.email) {
         res.status(400).json({
