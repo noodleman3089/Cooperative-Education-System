@@ -34,6 +34,7 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   final_evaluation: 'cards',
   final_progress: 'table',
   dispatch_letters: 'table',
+  companies: 'table',
   announcements: 'table',
   appointments: 'table',
   users: 'table',

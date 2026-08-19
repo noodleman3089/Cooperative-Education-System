@@ -126,6 +126,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
       </svg>
     ),
+    // 15b. Company directory
+    companies: (
+      <svg className="h-4 w-4 shrink-0 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+      </svg>
+    ),
     // 16. PR Announcements
     announcements: (
       <svg className="h-4 w-4 shrink-0 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -202,6 +208,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'dashboard', label: 'แดชบอร์ดจัดส่งตัวนักศึกษา', icon: icons.dashboard },
       { id: 'dispatch_letters', label: 'ออกหนังสือส่งตัวนักศึกษา', icon: icons.dispatch },
       { id: 'jobs', label: 'อนุมัติประกาศงาน', icon: icons.jobs },
+      { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies },
       { id: 'announcements', label: 'จัดการข่าวประชาสัมพันธ์', icon: icons.announcements },
       { id: 'appointments', label: 'ตรวจสอบการนัดหมาย', icon: icons.appointments },
       { id: 'users', label: 'จัดการสิทธิ์ & บัญชีผู้ใช้', icon: icons.users },

@@ -36,6 +36,7 @@ const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
 const MentorProfile = lazy(() => import('./Company/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
+const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
 const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 
@@ -233,6 +234,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'announcements') return <StaffDashboard activeMenu="announcements" />;
         if (activeMenu === 'users') return <StaffDashboard activeMenu="users" />;
         if (activeMenu === 'import') return <StaffDashboard activeMenu="import" />;
+        if (activeMenu === 'companies') return <CompanyDirectory />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         return <StaffDashboard activeMenu="dashboard" />;
