@@ -166,6 +166,19 @@ export class StudentModel {
     return res.rows[0] as Student;
   }
 
+  /**
+   * ⛔ language_proficiency กับ interested_job_types เป็นคอลัมน์ JSONB และค่าที่ส่งมาเป็น
+   * "อาร์เรย์" — ต้อง JSON.stringify ก่อนเสมอ ห้ามส่งอาร์เรย์ดิบเข้าไป
+   *
+   * node-pg แปลงค่าพารามิเตอร์ตามชนิดของ JS ไม่ใช่ตามชนิดของคอลัมน์ปลายทาง:
+   * object ธรรมดาถูก stringify ให้เอง แต่ **อาร์เรย์ถูกแปลงเป็น array literal ของ
+   * Postgres** ซึ่งไม่ใช่ JSON ที่ถูกต้อง → pg คืน 22P02 → sendUnexpectedError แปลงเป็น
+   * 400 "ข้อมูลที่กรอกยาวเกินกำหนดหรือมีรูปแบบไม่ถูกต้อง" ผู้ใช้จึงเห็นกรอบแดงที่ไม่ได้
+   * บอกอะไรเลย ทั้งที่กรอกถูกต้องทุกช่อง
+   *
+   * อีก 3 คอลัมน์ JSONB ในระบบ (evidence_photos · scores_detail · audit_log.detail)
+   * stringify ไว้แล้วทั้งหมด — จุดนี้เป็นจุดเดียวที่ตกหล่น
+   */
   static async updateOptionalProfile(
     studentId: number,
     skillsAndActivities: string | null,
@@ -178,7 +191,13 @@ export class StudentModel {
        SET skills_and_activities = $2, language_proficiency = $3, preferred_work_region = $4, interested_job_types = $5
        WHERE student_id = $1 
        RETURNING *`,
-      [studentId, skillsAndActivities, languageProficiency, preferredWorkRegion, interestedJobTypes]
+      [
+        studentId,
+        skillsAndActivities,
+        languageProficiency == null ? null : JSON.stringify(languageProficiency),
+        preferredWorkRegion,
+        interestedJobTypes == null ? null : JSON.stringify(interestedJobTypes),
+      ]
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as Student;
