@@ -7,7 +7,7 @@ import ResumePdfModal from './ResumePdfModal';
 import { loadThaiAddressData, type ProvinceItem } from '../data/thaiAddress';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input, Select, Textarea } from './ui/Input';
 
 interface Major {
@@ -190,6 +190,8 @@ const StudentProfile: React.FC = () => {
   // Status & Submit States
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** ยังไม่เคยกรอกประวัติ — เป็นสถานะปกติของนักศึกษาใหม่ ไม่ใช่ความผิดพลาด */
+  const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -251,16 +253,44 @@ const StudentProfile: React.FC = () => {
       // stored address can be split against it in the same pass — splitting it
       // needs the province list, and a separate effect would have raced.
       // `loadThaiAddressData` caches, so the reload after a save is free.
-      const [profileData, masterData, addressData] = await Promise.all([
+      // แยก settle ทีละรายการ เพราะทั้งสามอย่างไม่ได้ขึ้นต่อกัน — เดิมใช้ Promise.all
+      // ทำให้ 404 ของ /profile/me (ซึ่งคือนักศึกษาทุกคนก่อนกรอกประวัติครั้งแรก) โยนทิ้ง
+      // ทั้งรายชื่อสาขาวิชาและข้อมูลที่อยู่ไปด้วย ฟอร์มจึงเหลือ dropdown ว่างเปล่า
+      // ทั้งที่ผู้ใช้ต้องใช้มันกรอกพอดี — อาการเดียวกับ BUG-03 ของหน้าแดชบอร์ด
+      const [profileResult, masterResult, addressResult] = await Promise.allSettled([
         api.get('/profile/me'),
         api.get('/master-data'),
         loadThaiAddressData(),
       ]);
 
-      const prof = profileData.profile as StudentType;
+      if (masterResult.status === 'fulfilled') {
+        setMajors(masterResult.value.majors || []);
+      } else {
+        console.error('Failed to load master data:', masterResult.reason);
+      }
+
+      if (addressResult.status === 'fulfilled') {
+        setThaiAddress(addressResult.value);
+      } else {
+        console.error('Failed to load Thai address data:', addressResult.reason);
+      }
+      const addressData = addressResult.status === 'fulfilled' ? addressResult.value : null;
+
+      if (profileResult.status === 'rejected') {
+        console.error('Failed to load student profile:', profileResult.reason);
+        // 404 ที่นี่ไม่ใช่ความล้มเหลว แต่คือนักศึกษาที่ยังไม่เคยกรอกประวัติ
+        // ซึ่งเป็นสถานะแรกของทุกคน · เดิมบอกให้ "ลองใหม่อีกครั้ง" ซึ่งลองกี่ครั้งก็ไม่ได้
+        // เพราะสิ่งที่ต้องทำคือกรอกฟอร์มที่อยู่ตรงหน้าแล้วกดบันทึก
+        const notOnboarded = getErrorStatus(profileResult.reason) === 404;
+        setNotice(notOnboarded ? 'ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกให้ครบทุกหมวดแล้วกดปุ่มบันทึกข้อมูลโปรไฟล์' : null);
+        setError(notOnboarded ? null : 'ไม่สามารถดึงข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+        return;
+      }
+
+      setError(null);
+      setNotice(null);
+      const prof = profileResult.value.profile as StudentType;
       setProfile(prof);
-      setMajors(masterData.majors || []);
-      setThaiAddress(addressData);
 
       if (prof) {
         setStudentCode(prof.student_code || '');
@@ -272,7 +302,7 @@ const StudentProfile: React.FC = () => {
         setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
         setAltEmail(prof.alt_email || '');
         setPhone(prof.phone || '');
-        if (prof.current_address) {
+        if (prof.current_address && addressData) {
           const parts = splitStoredAddress(prof.current_address, addressData);
           setCurrentAddress(prof.current_address);
           setAddrHouseNo(parts.detail);
@@ -498,6 +528,7 @@ const StudentProfile: React.FC = () => {
           into view — the save button now sits at the bottom of the page, and an
           answer the student has to scroll up to find reads as no answer. */}
       <div ref={alertRef}>
+        <AlertBanner variant="info" message={notice} />
         <AlertBanner variant="error" message={error} />
         <AlertBanner variant="success" message={success} />
       </div>

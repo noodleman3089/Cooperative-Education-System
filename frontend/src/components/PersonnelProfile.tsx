@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
-import { getErrorMessage } from '../utils/errors';
+import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input, Select } from './ui/Input';
 
 interface Major {
@@ -21,6 +21,8 @@ const PersonnelProfile: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** ยังไม่เคยกรอกประวัติ — สถานะปกติของบุคลากรที่เพิ่งได้รับสิทธิ์ ไม่ใช่ความผิดพลาด */
+  const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [birthDate, setBirthDate] = useState('');
@@ -43,13 +45,30 @@ const PersonnelProfile: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const [profileData, masterData] = await Promise.all([
+      // แยก settle ทีละรายการ — 404 ของ /profile/me คือบุคลากรที่ยังไม่เคยกรอกประวัติ
+      // ซึ่งเดิมโยนรายชื่อสาขาวิชาทิ้งไปด้วย ทำให้ dropdown ที่ต้องใช้กรอกว่างเปล่า
+      const [profileResult, masterResult] = await Promise.allSettled([
         api.get('/profile/me'),
         api.get('/master-data')
       ]);
 
+      if (masterResult.status === 'fulfilled') {
+        setMajors(masterResult.value.majors || []);
+      } else {
+        console.error('Failed to load master data:', masterResult.reason);
+      }
+
+      if (profileResult.status === 'rejected') {
+        console.error('Failed to load personnel profile:', profileResult.reason);
+        const notOnboarded = getErrorStatus(profileResult.reason) === 404;
+        setNotice(notOnboarded ? 'ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกข้อมูลแล้วกดบันทึก' : null);
+        setError(notOnboarded ? null : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+        return;
+      }
+
+      setNotice(null);
+      const profileData = profileResult.value;
       setRoles(profileData.roles || []);
-      setMajors(masterData.majors || []);
 
       const prof = profileData.profile;
       if (prof) {
@@ -236,6 +255,7 @@ const PersonnelProfile: React.FC = () => {
         </p>
       </div>
 
+      <AlertBanner variant="info" message={notice} className="mb-4" />
       <AlertBanner variant="error" message={error} className="mb-4" />
 
       <AlertBanner variant="success" message={success} className="mb-4" />
