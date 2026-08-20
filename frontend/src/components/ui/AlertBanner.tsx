@@ -1,8 +1,8 @@
 import React from 'react';
 import type { ReactNode } from 'react';
-import { AlertCircle, CheckCircle2, Info } from 'lucide-react';
+import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 
-export type AlertVariant = 'error' | 'success' | 'info';
+export type AlertVariant = 'error' | 'success' | 'info' | 'warning';
 
 const VARIANTS: Record<AlertVariant, { Icon: typeof AlertCircle; box: string; icon: string }> = {
   error: {
@@ -19,6 +19,13 @@ const VARIANTS: Record<AlertVariant, { Icon: typeof AlertCircle; box: string; ic
     Icon: Info,
     box: 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-950/40 dark:border-blue-800/50 dark:text-blue-400',
     icon: 'text-blue-500',
+  },
+  // ไม่ใช่ error แต่ก็ไม่ใช่ข่าวดี — "มีบางอย่างยังไม่ได้ตั้งค่า ระบบจึงยังไม่บังคับกฎ"
+  // amber-800 บนพื้น amber-50 ผ่าน 4.5:1 ส่วน amber-400 บนพื้นมืดผ่านเช่นกัน
+  warning: {
+    Icon: AlertTriangle,
+    box: 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-400',
+    icon: 'text-amber-600 dark:text-amber-500',
   },
 };
 

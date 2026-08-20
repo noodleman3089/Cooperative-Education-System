@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { FinalReportController } from '../controllers/finalReport.controller';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { uploadFinalReport } from '../middlewares/multer';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -10,6 +11,8 @@ router.post(
   '/',
   authenticateToken,
   authorizeRoles('student'),
+  // ต้องอยู่ *ก่อน* multer — ดูเหตุผลเดียวกันที่ routes/reportOutline.ts
+  requireCalendarWindow('final_report'),
   uploadFinalReport.single('report'),
   FinalReportController.submitReport
 );

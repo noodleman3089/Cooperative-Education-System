@@ -8,6 +8,8 @@ import { statusText } from '../components/ui/StatusBadge';
 import api from '../services/api';
 import { Lock } from 'lucide-react';
 import { getErrorStatus } from '../utils/errors';
+import { formatThaiDate, formatThaiRange } from '../utils/thaiDate';
+import type { CoopCalendarResponse } from '../types/api';
 
 /**
  * Every screen in the application hangs off this one switch, so this is also
@@ -37,6 +39,7 @@ const MentorProfile = lazy(() => import('./Company/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
+const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
 const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 
@@ -58,6 +61,24 @@ const STAGE_GATED_STUDENT_MENUS = [
   'final_report',
 ] as const;
 
+/**
+ * กิจกรรมในปฏิทินสหกิจ → เมนูที่ควรขึ้นกุญแจเมื่ออยู่นอกช่วงที่เจ้าหน้าที่ตั้งไว้
+ *
+ * นี่คือความรู้ของฝั่ง UI ล้วนๆ — backend ไม่รู้จักคำว่า "เมนู" มันรู้แค่ว่า
+ * endpoint ไหนถูกล็อกด้วย key ไหน (`middlewares/calendarGate.ts`) จึงเก็บไว้ที่นี่
+ *
+ * `intent_submission` จงใจไม่อยู่ในนี้: เมนู jobs ต้องเปิดให้ดูประกาศงานได้เสมอ
+ * เหมือนที่ STAGE_GATED_STUDENT_MENUS ไม่ล็อก jobs — ตัวปุ่มยื่นบนการ์ดเป็นคน
+ * อธิบายเอง เพราะเซิร์ฟเวอร์ตอบ 403 พร้อมข้อความไทยเต็มอยู่แล้ว
+ */
+const CALENDAR_LOCKED_MENU_BY_ACTIVITY: Record<string, string> = {
+  coop_application: 'application',
+  accommodation_plan: 'accommodation_plan',
+  weekly_log: 'weekly_log',
+  report_outline: 'report_outline',
+  final_report: 'final_report',
+};
+
 interface StudentStage {
   hasProfile: boolean;
   intentStatus: string | null;
@@ -65,15 +86,18 @@ interface StudentStage {
 
 /** Full-screen version of the padlock in the sidebar, with the way forward. */
 const StageLockedScreen: React.FC<{
+  /** หัวเรื่องต้องตรงกับเหตุผลจริง — "ยังไม่ถึงขั้นตอนนี้" ใช้กับกรณีหมดช่วงไม่ได้
+   *  มันบอกตรงข้ามกับความจริงและทำให้นักศึกษาเข้าใจว่ารออีกหน่อยแล้วจะเปิด */
+  heading: string;
   reason: string;
   actionLabel: string;
   onAction: () => void;
-}> = ({ reason, actionLabel, onAction }) => (
+}> = ({ heading, reason, actionLabel, onAction }) => (
   <div className="page-enter mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
       <Lock className="h-7 w-7" />
     </div>
-    <h3 className="text-lg font-bold text-gray-800 dark:text-white">ยังไม่ถึงขั้นตอนนี้</h3>
+    <h3 className="text-lg font-bold text-gray-800 dark:text-white">{heading}</h3>
     <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-gray-500 dark:text-gray-400">
       {reason}
     </p>
@@ -109,27 +133,40 @@ const Dashboard: React.FC = () => {
   // How far through the co-op this student is, purely to decide which menus are
   // usable yet. Only the two facts the gate needs are kept.
   const [stage, setStage] = useState<StudentStage | null>(null);
+  // ปฏิทินสหกิจ — อีกด่านหนึ่งที่ล็อกเมนู คนละเรื่องกับ stage ด้านบน
+  const [calendar, setCalendar] = useState<CoopCalendarResponse | null>(null);
 
   useEffect(() => {
     if (currentRole !== 'student') {
       setStage(null);
+      setCalendar(null);
       return;
     }
 
     let cancelled = false;
     const load = async () => {
-      try {
-        const data = await api.get('/students/dashboard');
-        if (!cancelled) {
-          setStage({ hasProfile: true, intentStatus: data?.activeIntent?.status ?? null });
-        }
-      } catch (err) {
+      // allSettled ไม่ใช่ all — ปฏิทินล่มต้องไม่ทำให้ stage หาย และกลับกัน
+      // (BUG-03 ตระกูลเดียวกัน เกิดมาสามครั้งแล้วในโปรเจคนี้)
+      const [stageRes, calRes] = await Promise.allSettled([
+        api.get('/students/dashboard'),
+        api.get('/calendar'),
+      ]);
+      if (cancelled) return;
+
+      if (stageRes.status === 'fulfilled') {
+        setStage({
+          hasProfile: true,
+          intentStatus: stageRes.value?.activeIntent?.status ?? null,
+        });
+      } else if (getErrorStatus(stageRes.reason) === 404) {
         // 404 is the student who has not filled the profile in yet. Anything
         // else is the server having a bad day, and a bad day must not invent a
         // padlock — leave the menus as they were.
-        if (!cancelled && getErrorStatus(err) === 404) {
-          setStage({ hasProfile: false, intentStatus: null });
-        }
+        setStage({ hasProfile: false, intentStatus: null });
+      }
+
+      if (calRes.status === 'fulfilled') {
+        setCalendar(calRes.value as CoopCalendarResponse);
       }
     };
 
@@ -147,7 +184,41 @@ const Dashboard: React.FC = () => {
     };
   }, [currentRole]);
 
-  const lockedMenus = useMemo<Record<string, string>>(() => {
+  /** ล็อกที่มาจากปฏิทิน — กิจกรรมที่ยังไม่ถึงช่วง หรือหมดช่วงไปแล้ว
+   *  เก็บ heading คู่กับ reason เพราะสองกรณีนี้ต้องพาดหัวคนละแบบ */
+  const calendarLocks = useMemo<Record<string, { heading: string; reason: string }>>(() => {
+    if (currentRole !== 'student' || !calendar) return {};
+
+    const locks: Record<string, { heading: string; reason: string }> = {};
+    for (const activity of calendar.activities) {
+      const menuId = CALENDAR_LOCKED_MENU_BY_ACTIVITY[activity.activity_key];
+      // not_configured = เจ้าหน้าที่ยังไม่ตั้ง = ยังไม่มีกฎ ต้องไม่ล็อก (fail-open
+      // ตรงกับ middlewares/calendarGate.ts ฝั่งเซิร์ฟเวอร์)
+      if (!menuId || !activity.start_date || !activity.end_date) continue;
+
+      if (activity.status === 'upcoming') {
+        locks[menuId] = {
+          heading: 'ยังไม่ถึงช่วงที่เปิดให้ทำรายการ',
+          reason:
+            `ยังไม่ถึงช่วง "${activity.label}" ตามปฏิทินสหกิจศึกษา ` +
+            `ระบบจะเปิดให้ทำรายการวันที่ ${formatThaiRange(activity.start_date, activity.end_date)} ` +
+            `— ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด`,
+        };
+      } else if (activity.status === 'closed') {
+        locks[menuId] = {
+          heading: 'หมดช่วงที่เปิดให้ทำรายการแล้ว',
+          reason:
+            `หมดช่วง "${activity.label}" แล้ว (เปิดถึงวันที่ ${formatThaiDate(activity.end_date)}) ` +
+            `ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ` +
+            `กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษาเพื่อขยายช่วงในปฏิทิน`,
+        };
+      }
+    }
+    return locks;
+  }, [currentRole, calendar]);
+
+  /** ล็อกตามขั้นตอนของนักศึกษาคนนั้น — ของเดิม ไม่เกี่ยวกับเวลา */
+  const stageLocks = useMemo<Record<string, string>>(() => {
     if (currentRole !== 'student' || !stage || stage.intentStatus === 'accepted') return {};
 
     const reason = !stage.hasProfile
@@ -158,6 +229,17 @@ const Dashboard: React.FC = () => {
 
     return Object.fromEntries(STAGE_GATED_STUDENT_MENUS.map((id) => [id, reason]));
   }, [currentRole, stage]);
+
+  /**
+   * stage ทับ calendar โดยตั้งใจ — ด่านที่มาก่อนในเส้นทางชนะ
+   * ถ้ายังไม่มีที่ฝึกงาน การบอกว่า "หมดช่วงส่งบันทึกรายสัปดาห์" ไม่ช่วยอะไรเลย
+   */
+  const lockedMenus = useMemo<Record<string, string>>(() => {
+    const fromCalendar = Object.fromEntries(
+      Object.entries(calendarLocks).map(([menu, lock]) => [menu, lock.reason])
+    );
+    return { ...fromCalendar, ...stageLocks };
+  }, [calendarLocks, stageLocks]);
 
   useEffect(() => {
     const handleNavigation = (e: Event) => {
@@ -183,19 +265,33 @@ const Dashboard: React.FC = () => {
     switch (currentRole) {
       case 'student':
         if (lockedMenus[activeMenu]) {
-          const needsProfile = stage ? !stage.hasProfile : false;
+          // ล็อกด้วยปฏิทินล้วน (ไม่ใช่ขั้นตอน) → ปุ่มพากลับไปหน้าแรกที่มีปฏิทินให้ดู
+          const calendarLock = !stageLocks[activeMenu] ? calendarLocks[activeMenu] : undefined;
+          const calendarOnly = !!calendarLock;
+          const needsProfile = !calendarOnly && (stage ? !stage.hasProfile : false);
           return (
             <StageLockedScreen
+              heading={calendarLock ? calendarLock.heading : 'ยังไม่ถึงขั้นตอนนี้'}
               reason={lockedMenus[activeMenu]}
               actionLabel={
-                needsProfile
-                  ? 'กรอกประวัตินักศึกษา'
-                  : stage?.intentStatus
-                    ? 'ดูสถานะใบความจำนง'
-                    : 'เลือกตำแหน่งงานเพื่อยื่นความจำนง'
+                calendarOnly
+                  ? 'ดูปฏิทินสหกิจศึกษา'
+                  : needsProfile
+                    ? 'กรอกประวัตินักศึกษา'
+                    : stage?.intentStatus
+                      ? 'ดูสถานะใบความจำนง'
+                      : 'เลือกตำแหน่งงานเพื่อยื่นความจำนง'
               }
               onAction={() =>
-                setActiveMenu(needsProfile ? 'profile' : stage?.intentStatus ? 'dashboard' : 'jobs')
+                setActiveMenu(
+                  calendarOnly
+                    ? 'dashboard'
+                    : needsProfile
+                      ? 'profile'
+                      : stage?.intentStatus
+                        ? 'dashboard'
+                        : 'jobs'
+                )
               }
             />
           );
@@ -235,6 +331,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'users') return <StaffDashboard activeMenu="users" />;
         if (activeMenu === 'import') return <StaffDashboard activeMenu="import" />;
         if (activeMenu === 'companies') return <CompanyDirectory />;
+        if (activeMenu === 'calendar') return <CoopCalendarManager />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         return <StaffDashboard activeMenu="dashboard" />;

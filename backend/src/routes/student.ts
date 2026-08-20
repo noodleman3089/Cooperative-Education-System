@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { StudentController } from '../controllers/student';
 import { StaffImportController } from '../controllers/staffImport';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -70,6 +71,7 @@ router.get(
 router.post(
   '/:id/accommodation-plan',
   authorizeRoles('student'),
+  requireCalendarWindow('accommodation_plan'),
   StudentController.submitAccommodationAndPlan
 );
 

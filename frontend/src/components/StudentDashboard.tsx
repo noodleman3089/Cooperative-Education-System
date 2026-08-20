@@ -9,9 +9,12 @@ import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import StatusBadge from './ui/StatusBadge';
 import Button from './ui/Button';
-import { Pin, UserPen } from 'lucide-react';
+import { CalendarDays, Pin, UserPen } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input } from './ui/Input';
+import CoopCalendarModal from './CoopCalendarModal';
+import { formatThaiDate } from '../utils/thaiDate';
+import type { CoopCalendarResponse } from '../types/api';
 
 /** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนสุดของแดชบอร์ด */
 interface Announcement {
@@ -51,6 +54,10 @@ const StudentDashboard: React.FC = () => {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<Announcement | null>(null);
 
+  // ปฏิทินสหกิจ — คนละระบบกับประกาศประชาสัมพันธ์ด้านบน อยู่คู่กันบนหน้าเดียว
+  const [calendar, setCalendar] = useState<CoopCalendarResponse | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+
   const loadDashboardData = async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
@@ -59,15 +66,22 @@ const StudentDashboard: React.FC = () => {
       // Previously Promise.all meant a failing /students/dashboard (a student who
       // has not completed onboarding gets a 404) threw before setAnnouncements
       // ever ran — announcements silently disappeared from the whole page.
-      const [dashResult, annResult] = await Promise.allSettled([
+      const [dashResult, annResult, calResult] = await Promise.allSettled([
         api.get('/students/dashboard'),
-        api.get('/announcements')
+        api.get('/announcements'),
+        api.get('/calendar')
       ]);
 
       if (annResult.status === 'fulfilled') {
         setAnnouncements(annResult.value?.data || []);
       } else {
         console.error('Failed to load announcements:', annResult.reason);
+      }
+
+      if (calResult.status === 'fulfilled') {
+        setCalendar(calResult.value as CoopCalendarResponse);
+      } else {
+        console.error('Failed to load co-op calendar:', calResult.reason);
       }
 
       if (dashResult.status === 'fulfilled') {
@@ -214,6 +228,85 @@ const StudentDashboard: React.FC = () => {
     </div>
   );
 
+  /**
+   * แถบปฏิทิน — บอกว่า "ตอนนี้อยู่ช่วงอะไร" หรือ "ช่วงถัดไปคือเมื่อไหร่"
+   *
+   * จงใจ **ไม่ใช้ gradient** เหมือนแถบประกาศด้านบน สองแถบไล่สีเต็มความกว้าง
+   * ซ้อนกันจะแย่งสายตากันเอง และประกาศด่วนของเจ้าหน้าที่ต้องเด่นกว่าเสมอ
+   *
+   * ยังไม่มีอะไรถูกตั้งเลย = คืน null ไม่ขึ้นแถบ — fail-open ต้องเงียบ
+   * ไม่ใช่ขึ้นแถบบอกว่า "ไม่มีข้อมูล" ซึ่งเป็นเสียงรบกวนล้วนๆ
+   */
+  const calendarBanner = (() => {
+    if (!calendar) return null;
+
+    // ยุบสองแหล่ง (กิจกรรมตายตัว + รายการอิสระ) ให้เป็นรูปเดียวก่อน
+    // แถบนี้ไม่สนว่าอันไหนล็อกอะไร สนแค่ชื่อกับวัน
+    const items = [
+      ...calendar.activities
+        .filter((a) => a.start_date && a.end_date)
+        .map((a) => ({
+          name: a.label,
+          start_date: a.start_date as string,
+          end_date: a.end_date as string,
+          status: a.status,
+        })),
+      ...calendar.custom_events.map((c) => ({
+        name: c.title,
+        start_date: c.start_date,
+        end_date: c.end_date,
+        status: c.status,
+      })),
+    ];
+
+    if (items.length === 0) return null;
+
+    const openNow = items.filter((i) => i.status === 'open');
+    const upcoming = items
+      .filter((i) => i.status === 'upcoming')
+      .sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/50 dark:bg-emerald-950/30">
+        <div className="min-w-0 space-y-1">
+          <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+            ปฏิทินสหกิจศึกษา
+          </p>
+          {openNow.length > 0 ? (
+            openNow.map((item) => (
+              <p key={item.name} className="text-sm text-emerald-800 dark:text-emerald-300">
+                ตอนนี้อยู่ในช่วง: <span className="font-semibold">{item.name}</span> (ถึง{' '}
+                {formatThaiDate(item.end_date)})
+              </p>
+            ))
+          ) : upcoming.length > 0 ? (
+            <p className="text-sm text-emerald-800 dark:text-emerald-300">
+              ช่วงถัดไป: <span className="font-semibold">{upcoming[0].name}</span> เริ่ม{' '}
+              {formatThaiDate(upcoming[0].start_date)}
+            </p>
+          ) : (
+            <p className="text-sm text-emerald-800 dark:text-emerald-300">
+              กำหนดการของภาคการศึกษานี้ผ่านไปหมดแล้ว
+            </p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setCalendarOpen(true)}
+          aria-label="ดูปฏิทินสหกิจศึกษาทั้งหมด"
+          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-gray-800"
+        >
+          <CalendarDays className="h-4 w-4" />
+          ดูปฏิทินทั้งหมด
+        </button>
+      </div>
+    );
+  })();
+
+  const calendarModal = calendarOpen && calendar && (
+    <CoopCalendarModal data={calendar} onClose={() => setCalendarOpen(false)} />
+  );
+
   const announcementModal = selectedAnnouncement && (
     <Modal
       onClose={() => setSelectedAnnouncement(null)}
@@ -258,6 +351,7 @@ const StudentDashboard: React.FC = () => {
     return (
       <div className="space-y-6">
         {announcementBanner}
+        {calendarBanner}
         <AlertBanner variant="error" message={error} />
 
         {needsProfile && (
@@ -282,6 +376,7 @@ const StudentDashboard: React.FC = () => {
         )}
 
         {selectedAnnouncement && announcementModal}
+        {calendarModal}
       </div>
     );
   }
@@ -423,6 +518,9 @@ const StudentDashboard: React.FC = () => {
     <div className="space-y-6 page-enter">
       {/* PR Announcements Banner */}
       {announcementBanner}
+
+      {/* Co-op Calendar Banner — separate system, sits under the PR notice */}
+      {calendarBanner}
 
       {/* Bento Grid Profile Banner */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -751,6 +849,9 @@ const StudentDashboard: React.FC = () => {
 
       {/* Announcement Detail Modal */}
       {selectedAnnouncement && announcementModal}
+
+      {/* Co-op Calendar Modal */}
+      {calendarModal}
 
       <ConfirmDialog
         open={confirmingFailure}

@@ -21,6 +21,51 @@ export interface Announcement {
   author_name?: string | null;
 }
 
+/**
+ * ปฏิทินสหกิจศึกษา — ตอบจาก `GET /api/calendar`
+ *
+ * รายการกิจกรรมตายตัวและชื่อไทยของมันมาจาก backend (`utils/coopCalendar.ts`)
+ * ฝั่งนี้จึงจงใจไม่ประกาศรายการซ้ำ เพิ่มกิจกรรมใหม่แล้วหน้าจอขึ้นเอง
+ */
+export type CalendarStatus = 'not_configured' | 'upcoming' | 'open' | 'closed';
+
+/** กิจกรรมตายตัว — คืนมาครบทุกตัวเสมอ รวมอันที่ยังไม่ได้ตั้งช่วง */
+export interface CoopCalendarActivity {
+  activity_key: string;
+  label: string;
+  event_id: number | null;
+  start_date: string | null;
+  end_date: string | null;
+  note: string | null;
+  status: CalendarStatus;
+}
+
+/** รายการที่เจ้าหน้าที่พิมพ์เอง — แสดงในปฏิทินอย่างเดียว ไม่ล็อกอะไร */
+export interface CoopCalendarCustomEvent {
+  event_id: number;
+  title: string;
+  start_date: string;
+  end_date: string;
+  note: string | null;
+  status: CalendarStatus;
+}
+
+export interface CoopCalendarSemester {
+  semester_id: number;
+  academic_year: number;
+  semester: string;
+  is_active: boolean;
+}
+
+export interface CoopCalendarResponse {
+  /** null เมื่อยังไม่มีภาคการศึกษาที่เปิดใช้งาน — ไม่ใช่ข้อผิดพลาด */
+  semester: CoopCalendarSemester | null;
+  /** วันนี้ตามเวลาไทย คิดที่ฐานข้อมูล ไม่ใช่นาฬิกาเบราว์เซอร์ */
+  today: string;
+  activities: CoopCalendarActivity[];
+  custom_events: CoopCalendarCustomEvent[];
+}
+
 /** แถวในคิวอนุมัติประกาศงานของเจ้าหน้าที่ */
 export interface JobPostRow {
   job_id: number;

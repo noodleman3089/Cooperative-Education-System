@@ -41,6 +41,12 @@ export const AuditAction = {
   COMPANY_CREATED: 'company.created',
   COMPANY_UPDATED: 'company.updated',
   COMPANY_DELETED: 'company.deleted',
+  // ปฏิทินสหกิจ: ช่วงเวลาที่ตั้งตรงนี้ล็อกการทำรายการของนักศึกษาทั้งรุ่น
+  // "ใครขยับวันปิดรับ" จึงเป็นคำถามที่จะมีคนถามจริง — UPDATE เก็บค่าเดิมไว้ใน detail.previous
+  // (การถูกปฏิเสธเพราะอยู่นอกช่วงจงใจไม่บันทึก มันเป็น traffic ปกติ ไม่ใช่การกระทำที่ต้องรับผิดชอบ)
+  CALENDAR_EVENT_CREATED: 'coop_calendar.created',
+  CALENDAR_EVENT_UPDATED: 'coop_calendar.updated',
+  CALENDAR_EVENT_DELETED: 'coop_calendar.deleted',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

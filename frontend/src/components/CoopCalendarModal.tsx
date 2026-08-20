@@ -1,0 +1,136 @@
+import React from 'react';
+import { Lock } from 'lucide-react';
+import Modal, { ModalBody, ModalFooter } from './ui/Modal';
+import Button from './ui/Button';
+import { formatThaiRange } from '../utils/thaiDate';
+import type { CalendarStatus, CoopCalendarResponse } from '../types/api';
+
+/**
+ * ปฏิทินสหกิจศึกษาที่นักศึกษาเปิดดู
+ *
+ * เป็น **รายการเรียงตามเวลา ไม่ใช่ตารางเดือนแบบ grid** โดยตั้งใจ:
+ * ข้อมูลจริงมีราวหกถึงสิบสองช่วงต่อภาคการศึกษา ช่วงละหลายสัปดาห์
+ * ส่วนคำถามที่นักศึกษาถามคือ "ตอนนี้ช่วงอะไร แล้วอันถัดไปเมื่อไหร่"
+ * ซึ่งรายการตอบตรงกว่า อ่านบนมือถือได้ และไม่ต้องมีตรรกะวางแท่งที่คร่อม
+ * สัปดาห์/เดือนหรือทับกัน ซึ่งเป็นโค้ดหลายร้อยบรรทัดที่ยังไม่มีใครขอ
+ *
+ * ไม่ fetch เอง — StudentDashboard โหลดปฏิทินไว้แล้วตั้งแต่เปิดหน้า
+ */
+
+/** หนึ่งบรรทัดในปฏิทิน ไม่ว่ามาจากกิจกรรมตายตัวหรือรายการที่เจ้าหน้าที่เพิ่มเอง */
+interface CalendarLine {
+  key: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  note: string | null;
+  status: CalendarStatus;
+  /** true = อยู่นอกช่วงแล้วทำรายการไม่ได้จริง ไม่ใช่แค่ข้อมูลประกอบ */
+  locksSubmission: boolean;
+}
+
+const GROUPS: { status: CalendarStatus; heading: string; dot: string }[] = [
+  { status: 'open', heading: 'กำลังอยู่ในช่วงนี้', dot: 'bg-emerald-500' },
+  { status: 'upcoming', heading: 'ที่กำลังจะถึง', dot: 'bg-blue-500' },
+  { status: 'closed', heading: 'ผ่านไปแล้ว', dot: 'bg-gray-400 dark:bg-gray-600' },
+];
+
+const CoopCalendarModal: React.FC<{ data: CoopCalendarResponse; onClose: () => void }> = ({
+  data,
+  onClose,
+}) => {
+  const lines: CalendarLine[] = [
+    // กิจกรรมที่เจ้าหน้าที่ยังไม่ตั้งช่วงจะไม่โผล่ — ยังไม่มีวันให้บอก
+    ...data.activities
+      .filter((a) => a.start_date && a.end_date)
+      .map((a) => ({
+        key: `a-${a.activity_key}`,
+        title: a.label,
+        start_date: a.start_date as string,
+        end_date: a.end_date as string,
+        note: a.note,
+        status: a.status,
+        locksSubmission: true,
+      })),
+    ...data.custom_events.map((c) => ({
+      key: `c-${c.event_id}`,
+      title: c.title,
+      start_date: c.start_date,
+      end_date: c.end_date,
+      note: c.note,
+      status: c.status,
+      locksSubmission: false,
+    })),
+  ].sort((a, b) => a.start_date.localeCompare(b.start_date));
+
+  return (
+    <Modal onClose={onClose} size="lg" title="ปฏิทินสหกิจศึกษา">
+      <ModalBody className="space-y-5">
+        {data.semester && (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            ภาคเรียนที่ {data.semester.semester}/{data.semester.academic_year}
+          </p>
+        )}
+
+        {lines.length === 0 ? (
+          <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+            เจ้าหน้าที่งานสหกิจศึกษายังไม่ได้กำหนดปฏิทินของภาคการศึกษานี้
+            ระหว่างนี้ยังทำรายการได้ตามปกติ
+          </p>
+        ) : (
+          GROUPS.map(({ status, heading, dot }) => {
+            const group = lines.filter((l) => l.status === status);
+            if (group.length === 0) return null;
+            return (
+              <section key={status}>
+                <h4 className="mb-2 text-sm font-bold text-gray-800 dark:text-gray-200">
+                  {heading}
+                </h4>
+                <ul className="space-y-2">
+                  {group.map((line) => (
+                    <li
+                      key={line.key}
+                      className="flex items-start gap-3 rounded-xl border border-gray-200 p-3 dark:border-gray-800"
+                    >
+                      <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${dot}`} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-800 dark:text-gray-100">
+                          {line.title}
+                        </p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {formatThaiRange(line.start_date, line.end_date)}
+                        </p>
+                        {line.note && (
+                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            {line.note}
+                          </p>
+                        )}
+                      </div>
+                      {line.locksSubmission && (
+                        <span
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-400"
+                          title="นอกช่วงนี้ระบบจะไม่รับรายการ"
+                        >
+                          <Lock className="h-3 w-3" />
+                          ล็อกการทำรายการ
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })
+        )}
+      </ModalBody>
+
+      <ModalFooter>
+        <Button size="sm" onClick={onClose}>
+          ปิดหน้าต่าง
+        </Button>
+      </ModalFooter>
+    </Modal>
+  );
+};
+
+export default CoopCalendarModal;

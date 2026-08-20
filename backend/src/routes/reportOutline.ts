@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { ReportOutlineController } from '../controllers/reportOutline';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { uploadReportOutline } from '../middlewares/multer';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -10,6 +11,9 @@ router.post(
   '/',
   authenticateToken,
   authorizeRoles('student'),
+  // ต้องอยู่ *ก่อน* multer — ไม่งั้นคำขอที่อยู่นอกช่วงจะเขียนไฟล์ลงดิสก์ก่อนถูกปฏิเสธ
+  // แล้วเหลือไฟล์กำพร้าที่ไม่มีแถวในฐานอ้างถึงทุกครั้ง
+  requireCalendarWindow('report_outline'),
   uploadReportOutline.single('outline'),
   ReportOutlineController.uploadOutline
 );

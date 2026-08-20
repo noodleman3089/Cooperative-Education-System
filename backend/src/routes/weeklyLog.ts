@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { WeeklyLogController } from '../controllers/weeklyLog';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -9,6 +10,7 @@ router.post(
   '/',
   authenticateToken,
   authorizeRoles('student'),
+  requireCalendarWindow('weekly_log'),
   WeeklyLogController.submitLog
 );
 

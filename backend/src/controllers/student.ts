@@ -707,6 +707,12 @@ export class StudentController {
       }
 
       // Check if student has an active intent and check the start date to enforce the "first week" rule
+      //
+      // ⚠️ นี่คือด่านที่ *สอง* ไม่ใช่ด่านซ้ำ — อย่าลบทิ้งเพราะคิดว่าปฏิทินทำแทนแล้ว
+      //   ด่านแรก  = `requireCalendarWindow('accommodation_plan')` ที่ routes/student.ts
+      //              ช่วงกลางที่เจ้าหน้าที่ตั้ง เท่ากันทั้งรุ่น
+      //   ด่านนี้   = 7 วันนับจาก `intent_forms.start_date` ของนักศึกษา *แต่ละคน*
+      //              ซึ่งไม่เท่ากันเลยสักคน ปฏิทินกลางจึงแทนไม่ได้
       const intentRes = await query(`
         SELECT start_date FROM intent_forms 
         WHERE student_id = $1 AND status = 'accepted'

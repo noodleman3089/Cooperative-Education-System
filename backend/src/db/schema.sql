@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS document_templates CASCADE;
 DROP TABLE IF EXISTS coop_applications CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
+DROP TABLE IF EXISTS coop_calendar_events CASCADE;
 DROP TABLE IF EXISTS job_posts CASCADE;
 DROP TABLE IF EXISTS report_outline_versions CASCADE;
 DROP TABLE IF EXISTS report_outlines CASCADE;
@@ -179,6 +180,54 @@ CREATE TABLE IF NOT EXISTS announcements (
     created_by INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 6.2. Coop Calendar Events Table (ปฏิทินสหกิจศึกษา)
+--
+-- One row = one window of one academic semester.
+--   activity_key NOT NULL -- a fixed activity wired to a real endpoint. Outside
+--                            its window the server refuses the submission.
+--   activity_key NULL     -- a free-form entry staff typed in (orientation day,
+--                            fieldwork period). It shows on the calendar and
+--                            locks nothing.
+--
+-- The Thai label of a fixed activity is deliberately NOT stored here (hence
+-- `title` is nullable): the single source of truth is
+-- backend/src/utils/coopCalendar.ts. Keeping a second copy in the database
+-- means that one day the two disagree and nobody knows which one is right.
+--
+-- There is deliberately no CHECK constraining `activity_key` to the known set.
+-- Adding an activity would then require a migration every time and would create
+-- exactly the second source of truth this table avoids. The controller
+-- validates against the constant instead, and a key the code does not recognise
+-- simply locks nothing — the same fail-open direction as an unset window.
+CREATE TABLE IF NOT EXISTS coop_calendar_events (
+    event_id SERIAL PRIMARY KEY,
+    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE CASCADE,
+    activity_key VARCHAR(50),
+    title VARCHAR(255),
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    note TEXT,
+    -- SET NULL rather than RESTRICT or CASCADE, on purpose: deleting a staff
+    -- account must not fail because of the calendar (RESTRICT) and must not take
+    -- a whole cohort's schedule down with it (CASCADE, which is what
+    -- `announcements` does). Who set what lives in `audit_log` per SEC-07.
+    created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT coop_calendar_events_range CHECK (end_date >= start_date),
+    CONSTRAINT coop_calendar_events_title_required CHECK (activity_key IS NOT NULL OR title IS NOT NULL)
+);
+
+-- A fixed activity gets one window per semester, so the staff screen is a fixed
+-- list of rows with two date fields — no logic deciding which row is the real
+-- one. Partial index: free-form entries (key NULL) may repeat freely.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_coop_calendar_activity_once
+    ON coop_calendar_events (semester_id, activity_key)
+    WHERE activity_key IS NOT NULL;
+
+-- The only index with a real caller: fetch a whole semester in date order for
+-- the calendar screen. The gate already rides the unique index above.
+CREATE INDEX IF NOT EXISTS idx_coop_calendar_semester ON coop_calendar_events (semester_id, start_date);
 
 -- 6.5. Coop Applications Table (System 1)
 CREATE TABLE IF NOT EXISTS coop_applications (

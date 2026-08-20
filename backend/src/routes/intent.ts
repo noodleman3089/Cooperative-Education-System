@@ -3,6 +3,7 @@ import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { checkStudentEligibility } from '../middlewares/validation';
 import { uploadParentalConsent, validateUploadedFile } from '../middlewares/multer';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -41,7 +42,10 @@ router.get(
 router.post(
   '/',
   authorizeRoles('student'),
+  // ปฏิทินมาหลังคุณสมบัติโดยตั้งใจ — "คุณสมบัติไม่ผ่านเกณฑ์" เป็นคำตอบที่ตรงกว่า
+  // สำหรับคนที่ยังไม่ผ่านคัดกรอง ต่อให้ตอนนี้จะอยู่ในช่วงเปิดรับพอดีก็ตาม
   checkStudentEligibility,
+  requireCalendarWindow('intent_submission'),
   IntentFormController.submitIntent
 );
 
