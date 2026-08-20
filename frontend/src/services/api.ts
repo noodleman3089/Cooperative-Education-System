@@ -44,7 +44,19 @@ class ApiClient {
       }
     }
 
-    const response = await fetch(url, config);
+    // fetch จะ reject เป็น TypeError('Failed to fetch') เมื่อยังไม่มีคำตอบจากเซิร์ฟเวอร์เลย
+    // — เซิร์ฟเวอร์ไม่ได้เปิด เน็ตหลุด หรือถูก CORS บล็อก · ข้อความนั้นเป็นสตริงภายในของ
+    // เบราว์เซอร์ ไม่ใช่ภาษาไทย และ getErrorMessage จะหยิบไปแสดงแทนข้อความสำรองที่ผู้เรียก
+    // ตั้งใจเขียน ทำให้ผู้ใช้เห็นคำว่า "Failed to fetch" กลางหน้าจอโดยไม่รู้ว่าต้องทำอะไรต่อ
+    let response: Response;
+    try {
+      response = await fetch(url, config);
+    } catch (networkError) {
+      throw new Error(
+        'เชื่อมต่อกับเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบว่าระบบเปิดใช้งานอยู่ แล้วลองใหม่อีกครั้ง',
+        { cause: networkError }
+      );
+    }
 
     if (response.status === 401) {
       if (!path.startsWith('/auth/')) {
