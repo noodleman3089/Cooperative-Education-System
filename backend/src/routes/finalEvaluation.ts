@@ -4,15 +4,15 @@ import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
 
-// Submit evaluations (Mentor or Advisor)
+// บันทึกแบบประเมิน (พี่เลี้ยงเท่านั้น — ทั้ง สหกิจ 15 และ 16 เป็นของพี่เลี้ยง)
 router.post(
   '/',
   authenticateToken,
-  authorizeRoles('mentor', 'advisor'),
+  authorizeRoles('mentor'),
   FinalEvaluationController.submitEvaluation
 );
 
-// View assigned students (Mentor: scoreable · Company representative: read-only)
+// รายชื่อนักศึกษาบนหน้าจอประเมิน (พี่เลี้ยง: ให้คะแนนได้ · บริษัท: อ่านอย่างเดียว)
 router.get(
   '/my-students',
   authenticateToken,
@@ -20,12 +20,15 @@ router.get(
   FinalEvaluationController.getMyStudents
 );
 
-// View evaluations for a specific student (Advisor, Dept Head, Staff)
+// ออกแบบประเมินที่กรอกแล้วเป็น PDF
+// ต้องเป็น /pdf/:formCode/:studentId ไม่ใช่ /:studentId/pdf/... ไม่งั้น segment แรก
+// จะเป็น param แล้วไปชนกับ /my-students
+// ⛔ ไม่มี `student` โดยตั้งใจ — เอกสารนี้ใส่ซองประทับตรา "ลับ" นักศึกษาต้องเข้าไม่ถึง
 router.get(
-  '/student/:studentId',
+  '/pdf/:formCode/:studentId',
   authenticateToken,
-  authorizeRoles('advisor', 'staff', 'dept_head'),
-  FinalEvaluationController.getStudentEvaluation
+  authorizeRoles('mentor', 'advisor', 'staff', 'dept_head'),
+  FinalEvaluationController.exportEvaluationPdf
 );
 
 export default router;

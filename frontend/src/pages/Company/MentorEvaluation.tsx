@@ -2,11 +2,36 @@ import React, { useState } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
-import { User, ClipboardList, CheckCircle, FileText, ChevronRight } from 'lucide-react';
+import { User, ClipboardList, FileText, ChevronRight, Printer } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
+import type { RubricItem } from './evaluationRubric';
+import {
+  SAHATKIT_15_ITEMS,
+  SAHATKIT_15_SECTIONS,
+  SAHATKIT_16_ITEMS,
+  SAHATKIT_16_SCALE,
+  WOULD_HIRE_CHOICES,
+} from './evaluationRubric';
+
+/**
+ * แบบประเมินของพนักงานที่ปรึกษา (พี่เลี้ยง) — สองใบ
+ *
+ *   สหกิจ 15 — แบบประเมินผลนักศึกษา 18 ข้อ เต็ม 100 → ใช้ตัดเกรด
+ *   สหกิจ 16 — แบบประเมินรายงาน 14 ข้อ ระดับ 1-5 เต็ม 70 → เรตติ้ง ไม่รวมเกรด
+ *
+ * ทั้งสองใบเป็นของพี่เลี้ยงตามที่แบบฟอร์มจริงระบุ — เดิมระบบมี rubric 10 ข้อที่คิด
+ * ขึ้นเองใบเดียว (ปนเรื่องคนกับเรื่องรายงาน) และเอาการประเมินรายงานไปให้อาจารย์ทำ
+ * ทั้งที่ไม่มีแบบฟอร์มไหนในชุด 01-16 ที่อาจารย์เป็นผู้ประเมิน
+ *
+ * เมนูเดียวสองแท็บ ไม่แยกเป็นสองเมนู เพราะรายชื่อนักศึกษามาจาก query เดียว
+ * การแยกเมนูแปลว่าต้องเรนเดอร์รายชื่อ + skeleton + polling ซ้ำสองที่
+ */
+
+type FormCode = 'sahatkit_15' | 'sahatkit_16';
 
 interface Student {
   student_id: number;
@@ -16,90 +41,67 @@ interface Student {
   major_name_th: string;
   company_name: string;
   mentor_name: string | null;
-  mentor_score: number | null;
+  sahatkit15_score: number | null;
+  sahatkit16_score: number | null;
   final_report_status: string | null;
   final_report_path: string | null;
 }
 
-type RubricGroup = 'behavior' | 'performance' | 'report';
+/** ทุกข้อเริ่มที่ "ยังไม่ให้" เสมอ — ฟอร์มให้คะแนนห้าม default เป็นคะแนนเต็ม
+ *  เพราะแยกไม่ออกว่าตั้งใจให้เต็มหรือแค่ยังไม่ได้แตะ */
+const blankScores = (items: RubricItem[]): Record<string, number | ''> =>
+  Object.fromEntries(items.map((i) => [i.key, '' as number | '']));
 
-/** Every rubric item starts unset — see the note on `scores` below. */
-const BLANK_SCORES: Record<string, number | ''> = {
-  punctuality: '',
-  responsibility: '',
-  teamwork: '',
-  ethics: '',
-  learning: '',
-  technical: '',
-  quality: '',
-  reportContent: '',
-  reportFormat: '',
-  utility: ''
+const FORM_META: Record<FormCode, { tab: string; title: string; maxTotal: number; items: RubricItem[] }> = {
+  sahatkit_15: {
+    tab: 'สหกิจ 15 — แบบประเมินผลนักศึกษา',
+    title: 'แบบประเมินผลนักศึกษาสหกิจศึกษา (สหกิจ 15)',
+    maxTotal: 100,
+    items: SAHATKIT_15_ITEMS,
+  },
+  sahatkit_16: {
+    tab: 'สหกิจ 16 — แบบประเมินรายงาน',
+    title: 'แบบประเมินรายงานนักศึกษาสหกิจศึกษา (สหกิจ 16)',
+    maxTotal: 70,
+    items: SAHATKIT_16_ITEMS,
+  },
 };
 
 const MentorEvaluation: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [activeForm, setActiveForm] = useState<FormCode>('sahatkit_15');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [confirmingSubmit, setConfirmingSubmit] = useState(false);
-
-  /**
-   * Whether this account may score, or is only watching.
-   *
-   * A company representative and a mentor are two different accounts — SEC-03
-   * refuses to attach the `mentor` role to an existing user — but the company
-   * has its own "ประเมินผลนักศึกษา" menu, which used to answer 403 and show a
-   * red banner forever. A representative now sees every placement at their
-   * company and whether it has been scored; the score itself is the mentor's to
-   * give, which is also who signs สก 13 on paper.
-   */
   const [canEvaluate, setCanEvaluate] = useState(true);
 
-  /**
-   * Rubric scores, 1–10 each, all unset to begin with.
-   *
-   * The form used to open with all ten pre-filled at 10 and a submit button
-   * reading "ส่งผลประเมิน (คะแนน: 100)" — so opening it and pressing save
-   * awarded a perfect score without a single judgement being made, and nothing
-   * distinguished a deliberate 100 from an untouched form. The same bug was
-   * fixed on the advisor's form in round 12; this one was never touched.
-   */
-  const [scores, setScores] = useState<Record<string, number | ''>>({ ...BLANK_SCORES });
+  const [scores, setScores] = useState<Record<string, number | ''>>(blankScores(SAHATKIT_15_ITEMS));
+  const [strength, setStrength] = useState('');
+  const [improvement, setImprovement] = useState('');
+  const [comments, setComments] = useState('');
+  const [wouldHire, setWouldHire] = useState('');
+  const [reportTitleTh, setReportTitleTh] = useState('');
+  const [reportTitleEn, setReportTitleEn] = useState('');
 
-  const [comments, setComments] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<RubricGroup>('behavior');
+  const meta = FORM_META[activeForm];
+  const unscored = meta.items.filter((item) => scores[item.key] === '' || scores[item.key] === undefined);
+  const total = meta.items.reduce((sum, item) => {
+    const v = scores[item.key];
+    return sum + (typeof v === 'number' ? v : 0);
+  }, 0);
 
-  const rubrics = {
-    behavior: [
-      { id: 'punctuality', label: '1. ความตรงต่อเวลาและการปฏิบัติตามระเบียบวินัย', desc: 'การตรงต่อเวลา เข้าปฏิบัติงานตามเวลา และปฏิบัติตามระเบียบข้อบังคับขององค์กร' },
-      { id: 'responsibility', label: '2. ความรับผิดชอบต่อหน้าที่และความกระตือรือร้น', desc: 'ความเอาใจใส่ในงานที่ได้รับมอบหมาย ทำงานเสร็จตรงเวลา และแสดงความขยันหมั่นเพียร' },
-      { id: 'teamwork', label: '3. การมีมนุษยสัมพันธ์และการทำงานร่วมกับผู้อื่น', desc: 'การเข้ากับผู้อื่นได้ดี การสื่อสาร และการทำงานร่วมกันเป็นทีมในองค์กร' },
-      { id: 'ethics', label: '4. ความซื่อสัตย์และจริยธรรมในการทำงาน', desc: 'ความซื่อสัตย์สุจริต การรักษาความลับของบริษัท และจริยธรรมในวิชาชีพ' }
-    ],
-    performance: [
-      { id: 'learning', label: '5. ความสามารถในการเรียนรู้และการปรับตัว', desc: 'ทักษะการเรียนรู้งานใหม่ ความเข้าใจ และความพยายามเรียนรู้สิ่งใหม่ๆ' },
-      { id: 'technical', label: '6. ความรู้และความเชี่ยวชาญทางเทคนิค/ปฏิบัติการ', desc: 'ทักษะทางเทคนิคและความสามารถในการประยุกต์ใช้ความรู้จากห้องเรียนสู่งานจริง' },
-      { id: 'quality', label: '7. คุณภาพ ประสิทธิภาพ และความแม่นยำของผลงาน', desc: 'ความละเอียดรอบคอบในการทำงาน ความถูกต้อง และประสิทธิภาพโดยรวมของเนื้องาน' }
-    ],
-    report: [
-      { id: 'reportContent', label: '8. ความถูกต้องและเนื้อหาที่ครอบคลุมในเล่มรายงาน', desc: 'เนื้อหาสาระของรายงานมีความสมบูรณ์เชิงวิชาการและการปฏิบัติงานจริง' },
-      { id: 'reportFormat', label: '9. รูปเล่มและการจัดระเบียบรายงานที่เป็นระบบ', desc: 'ความเรียบร้อยของการจัดพิมพ์ รูปแบบหัวข้อ และการจัดโครงสร้างรายงาน' },
-      { id: 'utility', label: '10. ประโยชน์และความคุ้มค่าของโครงงานต่อบริษัท', desc: 'ประโยชน์ที่องค์กรหรือสถานประกอบการจะได้รับจากตัวผลงานหรืองานวิจัยชิ้นนี้' }
-    ]
-  };
+  /** ยอดย่อยรายหมวดของ สหกิจ 15 ให้ตรงกับกล่องสรุปบนกระดาษ */
+  const sectionTotal = (keys: string[]) =>
+    keys.reduce((sum, key) => {
+      const v = scores[key];
+      return sum + (typeof v === 'number' ? v : 0);
+    }, 0);
 
-  const allRubrics = [...rubrics.behavior, ...rubrics.performance, ...rubrics.report];
-  const unscoredRubrics = allRubrics.filter((r) => scores[r.id] === '');
-  const tabOf = (rubricId: string): RubricGroup =>
-    rubrics.behavior.some((r) => r.id === rubricId) ? 'behavior'
-      : rubrics.performance.some((r) => r.id === rubricId) ? 'performance'
-      : 'report';
-
-  // `isBackground`: a poll must not wipe the "ยังให้คะแนนไม่ครบ" banner the
-  // mentor is currently reading, nor throw the form back to a skeleton.
+  // `isBackground`: การ poll ต้องไม่ล้างแถบ "ยังให้คะแนนไม่ครบ" ที่พี่เลี้ยงกำลังอ่าน
+  // และต้องไม่โยนฟอร์มกลับไปเป็น skeleton
   const loadStudents = async (isBackground = false) => {
     try {
       if (!isBackground) {
@@ -116,44 +118,61 @@ const MentorEvaluation: React.FC = () => {
     }
   };
 
-  // A report arriving is the student's action, not this screen's, so it has to
-  // look again rather than wait for a manual reload.
   useDashboardData(loadStudents, []);
+
+  const resetForm = (form: FormCode) => {
+    setScores(blankScores(FORM_META[form].items));
+    setStrength('');
+    setImprovement('');
+    setComments('');
+    setWouldHire('');
+    setReportTitleTh('');
+    setReportTitleEn('');
+  };
 
   const handleSelectStudent = (student: Student) => {
     setSelectedStudent(student);
     setSuccess(null);
     setError(null);
-    setComments('');
-    setScores({ ...BLANK_SCORES });
-    setActiveTab('behavior');
+    setActiveForm('sahatkit_15');
+    resetForm('sahatkit_15');
   };
 
-  const handleScoreChange = (rubricId: string, val: number | '') => {
-    setScores(prev => ({
-      ...prev,
-      [rubricId]: val
-    }));
+  const handleSwitchForm = (form: FormCode) => {
+    setActiveForm(form);
+    setError(null);
+    setSuccess(null);
+    resetForm(form);
   };
 
-  /** Sum of what has been scored so far — not a final score until all ten are in. */
-  const calculateTotal = () =>
-    Object.values(scores).reduce((sum: number, v) => sum + (v === '' ? 0 : v), 0);
+  const handleScoreChange = (key: string, val: number | '') =>
+    setScores((prev) => ({ ...prev, [key]: val }));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent) return;
 
-    // The API totals whatever rubric keys arrive, so a partly filled form would
-    // be stored as a real — and quietly wrong — score out of 100.
-    if (unscoredRubrics.length > 0) {
+    if (unscored.length > 0) {
       setError(
-        `ยังให้คะแนนไม่ครบ เหลืออีก ${unscoredRubrics.length} ข้อ: ${unscoredRubrics
-          .map((r) => r.label.split('.')[0])
-          .join(', ')}`
+        `ยังให้คะแนนไม่ครบ เหลืออีก ${unscored.length} ข้อ: ${unscored.map((i) => i.no).join(', ')}`
       );
       setSuccess(null);
-      setActiveTab(tabOf(unscoredRubrics[0].id));
+      // เดิมใช้การกระโดดแท็บ ตอนนี้ฟอร์มเป็นหน้าเลื่อนเดียว จึงเลื่อนไปข้อแรกที่ขาดแทน
+      document
+        .getElementById(`score-${unscored[0].key}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
+    if (activeForm === 'sahatkit_15' && !wouldHire) {
+      setError('กรุณาตอบคำถามว่าจะรับนักศึกษาเข้าทำงานหรือไม่');
+      setSuccess(null);
+      return;
+    }
+
+    if (activeForm === 'sahatkit_16' && (!reportTitleTh.trim() || !reportTitleEn.trim())) {
+      setError('กรุณากรอกหัวข้อรายงานทั้งภาษาไทยและภาษาอังกฤษ');
+      setSuccess(null);
       return;
     }
 
@@ -164,19 +183,31 @@ const MentorEvaluation: React.FC = () => {
   const submitEvaluation = async () => {
     if (!selectedStudent) return;
 
+    const scoresDetail: Record<string, unknown> = { ...scores, other_comments: comments };
+    if (activeForm === 'sahatkit_15') {
+      scoresDetail.strength = strength;
+      scoresDetail.improvement = improvement;
+      scoresDetail.would_hire = wouldHire;
+    } else {
+      scoresDetail.report_title_th = reportTitleTh;
+      scoresDetail.report_title_en = reportTitleEn;
+    }
+
     try {
       setSubmitting(true);
       setError(null);
 
       await api.post('/final-evaluations', {
         studentId: selectedStudent.student_id,
-        scoresDetail: {
-          ...scores,
-          comments
-        }
+        formCode: activeForm,
+        scoresDetail,
       });
 
-      setSuccess('ส่งผลการประเมินนักศึกษาเรียบร้อยแล้ว');
+      setSuccess(
+        activeForm === 'sahatkit_15'
+          ? 'บันทึกแบบประเมิน สหกิจ 15 เรียบร้อยแล้ว'
+          : 'บันทึกแบบประเมิน สหกิจ 16 เรียบร้อยแล้ว'
+      );
       setConfirmingSubmit(false);
       setSelectedStudent(null);
       await loadStudents();
@@ -188,31 +219,79 @@ const MentorEvaluation: React.FC = () => {
     }
   };
 
+  const pdfHref = (form: FormCode, studentId: number) =>
+    `${API_BASE_URL}/final-evaluations/pdf/${form}/${studentId}`;
+
   if (loading) {
-    // The screen is a grid of student cards, not a table. Drawing a table meant
-    // the layout changed shape the moment the data arrived — the one thing a
-    // skeleton exists to prevent.
-    return (
-      <PageSkeleton variant='cards' />
-    );
+    // หน้านี้เป็นกริดการ์ดนักศึกษา ไม่ใช่ตาราง — วาดตารางแล้วเลย์เอาต์จะเปลี่ยนรูป
+    // ตอนข้อมูลมา ซึ่งเป็นสิ่งเดียวที่ skeleton มีไว้ป้องกัน
+    return <PageSkeleton variant="cards" />;
   }
 
-  return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      <AlertBanner variant="error" message={error} />
+  const scoreOptions = (max: number) =>
+    Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+      <option key={n} value={n}>
+        {n}
+      </option>
+    ));
 
+  /** แถวให้คะแนนหนึ่งข้อ — ใช้ร่วมกันทั้งสองฟอร์ม */
+  const scoreRow = (item: RubricItem) => (
+    <div
+      key={item.key}
+      id={`score-${item.key}`}
+      className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 py-3 last:border-b-0 dark:border-gray-700"
+    >
+      <div className="min-w-0 flex-1">
+        <h4 className="text-sm font-bold text-gray-900 dark:text-white">
+          {item.no}. {item.label}
+        </h4>
+        {item.desc && (
+          <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">{item.desc}</p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <label
+          htmlFor={`select-${item.key}`}
+          className="whitespace-nowrap text-xs text-gray-600 dark:text-gray-400"
+        >
+          คะแนน (1-{item.max}):
+        </label>
+        <Select
+          id={`select-${item.key}`}
+          size="sm"
+          className="w-24"
+          aria-label={`${item.no}. ${item.label}`}
+          aria-invalid={scores[item.key] === ''}
+          error={scores[item.key] === ''}
+          value={scores[item.key]}
+          onChange={(e) =>
+            handleScoreChange(item.key, e.target.value === '' ? '' : Number(e.target.value))
+          }
+        >
+          <option value="">ยังไม่ให้</option>
+          {scoreOptions(item.max)}
+        </Select>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-6">
+      <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
 
       {!selectedStudent ? (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
-          {/* h2 like every other screen — this was the only h1 in the app. */}
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2 flex items-center gap-2">
-            <ClipboardList className="w-6 h-6 text-brand-blue dark:text-blue-400" />
-            {canEvaluate ? 'รายชื่อประเมินผลนักศึกษาสหกิจศึกษา' : 'สถานะการประเมินนักศึกษาของสถานประกอบการ'}
-          </h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-8">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm md:p-8 dark:border-gray-700 dark:bg-gray-800">
+          <h2 className="mb-2 flex items-center gap-2 text-2xl font-bold text-gray-900 dark:text-white">
+            <ClipboardList className="h-6 w-6 text-brand-blue dark:text-blue-400" />
             {canEvaluate
-              ? 'เลือกนักศึกษาที่ปฏิบัติงานในความดูแลของท่านเพื่อบันทึกแบบประเมินผลออนไลน์ (คะแนนเต็ม 100 คะแนนดิบ)'
+              ? 'รายชื่อประเมินผลนักศึกษาสหกิจศึกษา'
+              : 'สถานะการประเมินนักศึกษาของสถานประกอบการ'}
+          </h2>
+          <p className="mb-8 text-gray-600 dark:text-gray-400">
+            {canEvaluate
+              ? 'เลือกนักศึกษาเพื่อกรอกแบบประเมิน 2 ใบ — สหกิจ 15 (ประเมินผลนักศึกษา เต็ม 100) และ สหกิจ 16 (ประเมินรายงาน เต็ม 70)'
               : 'ติดตามว่านักศึกษาแต่ละคนได้รับการประเมินจากพนักงานที่ปรึกษาแล้วหรือยัง — การให้คะแนนเป็นหน้าที่ของพนักงานที่ปรึกษาที่ดูแลนักศึกษาโดยตรง'}
           </p>
 
@@ -225,36 +304,50 @@ const MentorEvaluation: React.FC = () => {
                       <h3 className="font-bold text-gray-900 dark:text-white">
                         {std.first_name} {std.last_name}
                       </h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">รหัสประจำตัว: {std.student_code}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">สาขาวิชา: {std.major_name_th}</p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        รหัสประจำตัว: {std.student_code}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        สาขาวิชา: {std.major_name_th}
+                      </p>
                       {!canEvaluate && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                        <p className="text-xs text-gray-600 dark:text-gray-400">
                           พนักงานที่ปรึกษา: {std.mentor_name || 'ยังไม่ระบุ'}
                         </p>
                       )}
                       {std.final_report_status ? (
-                        <span className="inline-flex items-center text-xs font-semibold text-green-700 bg-green-50 dark:bg-green-950/20 dark:text-green-400 px-2 py-0.5 rounded-full">
+                        <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-950/20 dark:text-green-400">
                           ส่งเล่มรายงานสมบูรณ์แล้ว
                         </span>
                       ) : (
-                        <span className="inline-flex items-center text-xs font-semibold text-gray-600 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full dark:text-gray-400">
+                        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                           ยังไม่ส่งเล่มรายงาน
                         </span>
                       )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-2">
-                      {std.mentor_score !== null ? (
-                        <span className="text-xs font-bold text-green-700 bg-green-50 dark:bg-green-950/30 dark:text-green-400 px-3 py-1 rounded-lg">
-                          ประเมินแล้ว ({std.mentor_score}/100)
-                        </span>
-                      ) : canEvaluate ? (
-                        <span className="text-xs font-medium text-brand-blue bg-blue-50 dark:bg-blue-950/30 px-3 py-1 rounded-lg flex items-center dark:text-blue-400">
-                          รอการประเมิน <ChevronRight className="w-4 h-4 ml-1" />
+                    <div className="flex flex-col items-end gap-1.5">
+                      {std.sahatkit15_score !== null ? (
+                        <span className="rounded-lg bg-green-50 px-3 py-1 text-xs font-bold text-green-700 dark:bg-green-950/30 dark:text-green-400">
+                          สหกิจ 15: {std.sahatkit15_score}/100
                         </span>
                       ) : (
-                        <span className="text-xs font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400 px-3 py-1 rounded-lg">
-                          รอพนักงานที่ปรึกษาประเมิน
+                        <span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                          สหกิจ 15: รอประเมิน
+                        </span>
+                      )}
+                      {std.sahatkit16_score !== null ? (
+                        <span className="rounded-lg bg-green-50 px-3 py-1 text-xs font-bold text-green-700 dark:bg-green-950/30 dark:text-green-400">
+                          สหกิจ 16: {std.sahatkit16_score}/70
+                        </span>
+                      ) : (
+                        <span className="rounded-lg bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                          สหกิจ 16: รอประเมิน
+                        </span>
+                      )}
+                      {canEvaluate && (
+                        <span className="flex items-center text-xs font-medium text-brand-blue dark:text-blue-400">
+                          กรอกแบบประเมิน <ChevronRight className="ml-1 h-4 w-4" />
                         </span>
                       )}
                     </div>
@@ -269,7 +362,7 @@ const MentorEvaluation: React.FC = () => {
                     type="button"
                     key={std.student_id}
                     onClick={() => handleSelectStudent(std)}
-                    className={`${cardClass} hover:border-brand-blue cursor-pointer hover:shadow-md text-left`}
+                    className={`${cardClass} cursor-pointer text-left hover:border-brand-blue hover:shadow-md`}
                   >
                     {body}
                   </button>
@@ -281,166 +374,276 @@ const MentorEvaluation: React.FC = () => {
               })}
             </div>
           ) : (
-            <div className="text-center py-16 border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl">
-              <User className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 dark:text-white">ยังไม่มีนักศึกษาปฏิบัติงานในระบบ</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">จะเห็นนักศึกษาก็ต่อเมื่อมีการเพิ่มพี่เลี้ยงและตอบรับเข้างานสำเร็จในเฟสที่ 1</p>
+            <div className="rounded-2xl border-2 border-dashed border-gray-200 py-16 text-center dark:border-gray-700">
+              <User className="mx-auto mb-4 h-12 w-12 text-gray-600 dark:text-gray-400" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                ยังไม่มีนักศึกษาปฏิบัติงานในระบบ
+              </h3>
+              <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                จะเห็นนักศึกษาก็ต่อเมื่อมีการเพิ่มพี่เลี้ยงและตอบรับเข้างานสำเร็จในเฟสที่ 1
+              </p>
             </div>
           )}
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
-          {/* Header */}
-          <div className="bg-brand-blue px-6 py-6 text-white flex justify-between items-center flex-wrap gap-4">
+        <form
+          onSubmit={handleSubmit}
+          className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4 bg-brand-blue px-6 py-6 text-white">
             <div>
-              <span className="text-xs font-bold uppercase tracking-wider bg-white/20 px-2.5 py-1 rounded-full">
-                แบบประเมินผลออนไลน์ (คะแนนดิบ)
+              {/* ป้ายเป็นพื้นขาวทึบ ไม่ใช่ bg-white/20 — ขาว 20% ทับ brand-blue ทำให้พื้น
+                  *สว่างขึ้น* ตัวอักษรขาวจึงเหลือ 3.62 ตกเกณฑ์ 4.5 (วัดจริงแล้ว) */}
+              <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold tracking-wider text-brand-blue uppercase">
+                {meta.title}
               </span>
-              <h2 className="text-xl font-bold mt-2">
+              <h2 className="mt-2 text-xl font-bold">
                 ผู้รับประเมิน: {selectedStudent.first_name} {selectedStudent.last_name}
               </h2>
-              <p className="text-xs opacity-80 mt-1">รหัสนักศึกษา: {selectedStudent.student_code} | บริษัท: {selectedStudent.company_name}</p>
+              {/* text-blue-100 บน brand-blue ได้ 4.24 ตกเกณฑ์ — ใช้ขาวเต็ม */}
+              <p className="text-sm text-white">
+                รหัสประจำตัว: {selectedStudent.student_code} · {selectedStudent.major_name_th}
+              </p>
             </div>
-
-            <div className="bg-white/10 px-4 py-2.5 rounded-xl border border-white/20 text-center">
-              <span className="text-xs uppercase block opacity-80">คะแนนที่ให้แล้ว</span>
-              <span className="text-3xl font-extrabold">{calculateTotal()}</span>
-              <span className="text-xs opacity-75"> / 100</span>
-              <span className="block text-xs opacity-90 mt-0.5">
-                {unscoredRubrics.length > 0 ? `ยังเหลืออีก ${unscoredRubrics.length} ข้อ` : 'ให้คะแนนครบทุกข้อแล้ว'}
+            <div className="text-right">
+              <span className="block text-xs uppercase opacity-80">คะแนนที่ให้แล้ว</span>
+              <span className="text-3xl font-bold">
+                {total} / {meta.maxTotal}
+              </span>
+              <span className="block text-xs opacity-80">
+                {unscored.length > 0 ? `ยังเหลืออีก ${unscored.length} ข้อ` : 'ให้คะแนนครบทุกข้อแล้ว'}
               </span>
             </div>
           </div>
 
-          {/* Tab Navigation */}
-          <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/80">
-            {(['behavior', 'performance', 'report'] as const).map((tab) => {
-              const remaining = rubrics[tab].filter((r) => scores[r.id] === '').length;
+          {/* แถบเลือกฟอร์ม — สองใบเป็นของพี่เลี้ยงคนเดียวกัน จึงอยู่ในหน้าเดียว */}
+          <div className="flex flex-wrap border-b border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/40">
+            {(Object.keys(FORM_META) as FormCode[]).map((code) => {
+              const submitted =
+                code === 'sahatkit_15'
+                  ? selectedStudent.sahatkit15_score
+                  : selectedStudent.sahatkit16_score;
               return (
                 <button
-                  key={tab}
+                  key={code}
                   type="button"
-                  onClick={() => setActiveTab(tab)}
-                  className={`flex-1 py-4 text-sm font-semibold transition-all duration-200 border-b-2
-                    ${activeTab === tab
-                      ? 'border-brand-blue text-brand-blue dark:text-blue-400 bg-white dark:bg-gray-800'
-                      : 'border-transparent text-gray-600 hover:text-gray-700 hover:bg-gray-100/50 dark:text-gray-400 dark:hover:bg-gray-700/50'}`}
+                  onClick={() => handleSwitchForm(code)}
+                  className={`flex-1 px-4 py-3 text-sm font-bold transition-colors ${
+                    activeForm === code
+                      ? 'border-b-2 border-brand-blue bg-white text-brand-blue dark:bg-gray-800 dark:text-blue-400'
+                      : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
+                  }`}
                 >
-                  {tab === 'behavior' ? '1. ด้านพฤติกรรม' : tab === 'performance' ? '2. ด้านผลงาน' : '3. เล่มรายงาน'}
-                  {remaining > 0 && (
-                    <span className="ml-2 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full bg-amber-100 text-amber-800 text-xs font-bold dark:bg-amber-950/40 dark:text-amber-300">
-                      {remaining}
-                    </span>
-                  )}
+                  {FORM_META[code].tab}
+                  <span className="mt-0.5 block text-xs font-normal">
+                    {submitted !== null
+                      ? `ส่งแล้ว (${submitted}/${FORM_META[code].maxTotal})`
+                      : 'ยังไม่ได้ส่ง'}
+                  </span>
                 </button>
               );
             })}
           </div>
 
-          {/* Form Content */}
-          <div className="p-6 md:p-8 space-y-6">
-            {selectedStudent.final_report_path && activeTab === 'report' && (
-              <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-900/30 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2 text-sm text-blue-800 dark:text-blue-300">
-                  <FileText className="w-5 h-5 text-blue-500" />
-                  <span>นักศึกษาอัปโหลดรายงานเล่มสมบูรณ์เข้าระบบแล้ว</span>
-                </div>
-                {/* Was http://localhost:5000/uploads/… — a hardcoded host with no
-                    express.static behind it, so this link has never opened a
-                    file. Round 11 repointed the advisor's and student's copies
-                    of the same link; this third one was missed. */}
-                <a
-                  href={`${API_BASE_URL}/files/${selectedStudent.final_report_path}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs font-bold text-brand-blue hover:underline dark:text-blue-400 whitespace-nowrap"
-                >
-                  เปิดอ่านเล่มรายงาน (PDF)
-                </a>
-              </div>
+          <div className="space-y-5 p-6 md:p-8">
+            {(activeForm === 'sahatkit_15'
+              ? selectedStudent.sahatkit15_score
+              : selectedStudent.sahatkit16_score) !== null && (
+              <AlertBanner
+                variant="warning"
+                message={
+                  <>
+                    แบบประเมินใบนี้ถูกส่งไปแล้ว — การกรอกและกดส่งอีกครั้งจะ
+                    <strong>ทับของเดิมทั้งใบ</strong> ไม่ใช่การแก้เฉพาะข้อที่เปลี่ยน
+                    <br />
+                    <a
+                      href={pdfHref(activeForm, selectedStudent.student_id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-1 inline-flex items-center gap-1 font-bold underline"
+                    >
+                      <Printer className="h-4 w-4" />
+                      เปิดแบบประเมินที่ส่งไปแล้ว (PDF)
+                    </a>
+                  </>
+                }
+              />
             )}
 
-            <div className="space-y-8">
-              {rubrics[activeTab].map((rub) => (
-                <div key={rub.id} className="border-b border-gray-100 dark:border-gray-700/60 pb-6 last:border-0 last:pb-0">
-                  <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-3">
-                    <div>
-                      <h4 className="font-bold text-gray-900 dark:text-white text-sm">{rub.label}</h4>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{rub.desc}</p>
+            {activeForm === 'sahatkit_15' ? (
+              <>
+                {SAHATKIT_15_SECTIONS.map((section) => (
+                  <section key={section.no}>
+                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="font-bold text-gray-900 dark:text-white">
+                        หมวดที่ {section.no} {section.title}
+                      </h3>
+                      <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-brand-blue dark:bg-blue-950/40 dark:text-blue-300">
+                        {sectionTotal(section.items.map((i) => i.key))} / {section.max}
+                      </span>
                     </div>
+                    <div className="rounded-xl border border-gray-200 px-4 dark:border-gray-700">
+                      {section.items.map(scoreRow)}
+                    </div>
+                  </section>
+                ))}
 
-                    <div className="flex items-center gap-3">
-                      <label className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">คะแนนที่ได้ (1-10):</label>
-                      <select
-                        value={scores[rub.id]}
-                        aria-label={rub.label}
-                        aria-invalid={scores[rub.id] === ''}
-                        onChange={(e) => handleScoreChange(rub.id, e.target.value === '' ? '' : Number(e.target.value))}
-                        className={`w-28 px-3 py-1.5 rounded-lg border bg-white text-sm font-semibold focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:text-white ${
-                          scores[rub.id] === ''
-                            ? 'border-amber-300 dark:border-amber-700'
-                            : 'border-gray-200 dark:border-gray-700'
-                        }`}
+                <div>
+                  <label
+                    htmlFor="strength"
+                    className="mb-1 block text-sm font-bold text-gray-900 dark:text-white"
+                  >
+                    จุดเด่นของนักศึกษา / Strength
+                  </label>
+                  <Textarea
+                    id="strength"
+                    rows={3}
+                    value={strength}
+                    onChange={(e) => setStrength(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="improvement"
+                    className="mb-1 block text-sm font-bold text-gray-900 dark:text-white"
+                  >
+                    ข้อควรปรับปรุงของนักศึกษา / Improvement
+                  </label>
+                  <Textarea
+                    id="improvement"
+                    rows={3}
+                    value={improvement}
+                    onChange={(e) => setImprovement(e.target.value)}
+                  />
+                </div>
+
+                <fieldset className="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+                  <legend className="px-2 text-sm font-bold text-gray-900 dark:text-white">
+                    หากนักศึกษาผู้นี้สำเร็จการศึกษาแล้ว ท่านจะรับเข้าทำงานหรือไม่
+                  </legend>
+                  <div className="flex flex-wrap gap-5">
+                    {WOULD_HIRE_CHOICES.map((choice) => (
+                      <label
+                        key={choice.value}
+                        className="flex cursor-pointer items-center gap-2 text-sm text-gray-800 dark:text-gray-200"
                       >
-                        <option value="">ยังไม่ให้</option>
-                        {[...Array(10)].map((_, i) => (
-                          <option key={i + 1} value={i + 1}>{i + 1}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <input
+                          type="radio"
+                          name="would_hire"
+                          value={choice.value}
+                          checked={wouldHire === choice.value}
+                          onChange={(e) => setWouldHire(e.target.value)}
+                          className="h-4 w-4 accent-brand-blue"
+                        />
+                        {choice.label}
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+              </>
+            ) : (
+              <>
+                {selectedStudent.final_report_path && (
+                  <a
+                    href={`${API_BASE_URL}/files/${selectedStudent.final_report_path}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-brand-blue hover:bg-blue-50 dark:border-gray-700 dark:text-blue-400 dark:hover:bg-gray-700"
+                  >
+                    <FileText className="h-4 w-4" />
+                    เปิดอ่านเล่มรายงานฉบับสมบูรณ์
+                  </a>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor="report_title_th"
+                      className="mb-1 block text-sm font-bold text-gray-900 dark:text-white"
+                    >
+                      หัวข้อรายงาน (ภาษาไทย)
+                    </label>
+                    <Input
+                      id="report_title_th"
+                      type="text"
+                      value={reportTitleTh}
+                      onChange={(e) => setReportTitleTh(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="report_title_en"
+                      className="mb-1 block text-sm font-bold text-gray-900 dark:text-white"
+                    >
+                      Report title (English)
+                    </label>
+                    <Input
+                      id="report_title_en"
+                      type="text"
+                      value={reportTitleEn}
+                      onChange={(e) => setReportTitleEn(e.target.value)}
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
 
-            {/* General Feedback Comments (Visible on all tabs or as a final step) */}
-            <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-              <label className="block text-sm font-bold text-gray-900 dark:text-white mb-2">
-                ความคิดเห็นและข้อเสนอแนะเพิ่มเติมเกี่ยวกับการฝึกสหกิจศึกษาของนักศึกษา
+                <p className="rounded-xl bg-gray-50 p-3 text-xs text-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                  <strong>เกณฑ์การประเมิน</strong> {SAHATKIT_16_SCALE}
+                  <br />
+                  คะแนนของแบบประเมินนี้เป็นเรตติ้งคุณภาพรายงาน{' '}
+                  <strong>ไม่นำไปรวมกับคะแนนประเมินผล (สหกิจ 15)</strong>
+                </p>
+
+                <div className="rounded-xl border border-gray-200 px-4 dark:border-gray-700">
+                  {SAHATKIT_16_ITEMS.map(scoreRow)}
+                </div>
+              </>
+            )}
+
+            <div>
+              <label
+                htmlFor="other_comments"
+                className="mb-1 block text-sm font-bold text-gray-900 dark:text-white"
+              >
+                ข้อคิดเห็นเพิ่มเติม / Other comments
               </label>
-              <textarea
+              <Textarea
+                id="other_comments"
+                rows={3}
                 value={comments}
                 onChange={(e) => setComments(e.target.value)}
-                placeholder="กรอกข้อแนะนำ จุดแข็ง หรือจุดที่ควรพัฒนาของนักศึกษาเพื่อแจ้งทางอาจารย์และเป็นประโยชน์แก่นักศึกษาในการปรับปรุงตัว..."
-                rows={4}
-                className="w-full px-4 py-3 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
               />
             </div>
-          </div>
 
-          {/* Actions Footer */}
-          <div className="bg-gray-50 dark:bg-gray-900/60 px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-4">
-            <Button variant="secondary" onClick={() => setSelectedStudent(null)}>
-              ย้อนกลับ
-            </Button>
+            {unscored.length > 0 && (
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-400">
+                ยังให้คะแนนไม่ครบ {unscored.length} ข้อ: {unscored.map((i) => i.no).join(', ')}
+              </p>
+            )}
 
-            <Button
-              type="submit"
-              variant="success"
-              icon={<CheckCircle className="w-5 h-5" />}
-              loading={submitting}
-              loadingLabel="กำลังส่ง..."
-            >
-              ส่งผลประเมิน
-            </Button>
+            <div className="flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <Button type="button" variant="secondary" onClick={() => setSelectedStudent(null)}>
+                ย้อนกลับ
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                ส่งผลประเมิน
+              </Button>
+            </div>
           </div>
         </form>
       )}
 
-      {/* The score lands in audit_log and the mentor cannot revise it afterwards. */}
-      <ConfirmDialog
-        open={confirmingSubmit}
-        title="ยืนยันส่งผลการประเมิน"
-        message={
-          selectedStudent
-            ? `ส่งคะแนนประเมิน ${calculateTotal()}/100 ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) ใช่หรือไม่? เมื่อส่งแล้วจะไม่สามารถแก้ไขคะแนนเองได้`
-            : ''
-        }
-        confirmLabel="ยืนยันส่งคะแนน"
-        busy={submitting}
-        onConfirm={submitEvaluation}
-        onCancel={() => setConfirmingSubmit(false)}
-      />
+      {selectedStudent && (
+        <ConfirmDialog
+          open={confirmingSubmit}
+          title="ยืนยันส่งผลการประเมิน"
+          message={`ส่ง${meta.title} ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) คะแนน ${total}/${meta.maxTotal} ใช่หรือไม่? เมื่อส่งแล้วจะไม่สามารถแก้ไขคะแนนเองได้`}
+          confirmLabel="ยืนยันส่งคะแนน"
+          busy={submitting}
+          onConfirm={submitEvaluation}
+          onCancel={() => setConfirmingSubmit(false)}
+        />
+      )}
     </div>
   );
 };

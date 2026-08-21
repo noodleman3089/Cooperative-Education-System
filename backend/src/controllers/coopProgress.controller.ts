@@ -72,10 +72,10 @@ export class CoopProgressController {
           rep_fin.status as final_report_status,
           rep_fin.file_path as final_report_path,
           rep_fin.report_id as final_report_id,
-          -- Mentor Evaluation
-          eval_men.total_score as mentor_score,
-          -- Advisor Evaluation
-          eval_adv.total_score as advisor_score,
+          -- แบบประเมินของพี่เลี้ยงสองใบ — ทั้งคู่เป็นของพี่เลี้ยง ไม่ใช่ของอาจารย์
+          -- สหกิจ 15 เต็ม 100 ใช้ตัดเกรด · สหกิจ 16 เต็ม 70 เป็นเรตติ้งรายงาน ไม่รวมเกรด
+          eval_15.total_score as sahatkit15_score,
+          eval_16.total_score as sahatkit16_score,
           -- Notifications Cooldown
           notif.last_notified_at
         FROM students s
@@ -88,8 +88,10 @@ export class CoopProgressController {
         LEFT JOIN final_reports rep_fin ON s.student_id = rep_fin.student_id AND rep_fin.version = (
             SELECT COALESCE(MAX(version), 1) FROM final_reports WHERE student_id = s.student_id
         )
-        LEFT JOIN final_evaluations eval_men ON s.student_id = eval_men.student_id AND eval_men.evaluator_role = 'mentor'
-        LEFT JOIN final_evaluations eval_adv ON s.student_id = eval_adv.student_id AND eval_adv.evaluator_role = 'advisor'
+        LEFT JOIN final_evaluations eval_15 ON s.student_id = eval_15.student_id
+             AND eval_15.evaluator_role = 'mentor' AND eval_15.form_code = 'sahatkit_15'
+        LEFT JOIN final_evaluations eval_16 ON s.student_id = eval_16.student_id
+             AND eval_16.evaluator_role = 'mentor' AND eval_16.form_code = 'sahatkit_16'
         LEFT JOIN mentor_notifications notif ON s.student_id = notif.student_id
         WHERE 1=1
       `;
@@ -119,8 +121,8 @@ export class CoopProgressController {
           outlineApproved: false,
           supervisionCompleted: false,
           finalReportSubmitted: false,
-          mentorEvaluated: false,
-          advisorEvaluated: false
+          evaluation15Submitted: false,
+          evaluation16Submitted: false
         };
 
         // 1. Intent Approved (20%)
@@ -153,16 +155,19 @@ export class CoopProgressController {
           details.finalReportSubmitted = true;
         }
 
-        // 6. Mentor Evaluation (10%)
-        if (row.mentor_score !== null && row.mentor_score !== undefined) {
+        // 6. สหกิจ 15 — แบบประเมินผลนักศึกษา (10%)
+        // 7. สหกิจ 16 — แบบประเมินรายงาน (10%)
+        // ทั้งสองใบเป็นภาระของพี่เลี้ยงคนเดียวกันและจำเป็นทั้งคู่ — ท้ายฟอร์มเขียนเองว่า
+        // "หากนักศึกษาไม่ได้รับแบบประเมินดังกล่าว จะไม่ผ่านการประเมินผล" การแยก 10+10
+        // จึงบอกได้ว่าค้างใบไหน ต่างจากการยุบเป็น 20 ก้อนเดียวที่บอกไม่ได้
+        if (row.sahatkit15_score !== null && row.sahatkit15_score !== undefined) {
           progress += 10;
-          details.mentorEvaluated = true;
+          details.evaluation15Submitted = true;
         }
 
-        // 7. Advisor Evaluation (10%)
-        if (row.advisor_score !== null && row.advisor_score !== undefined) {
+        if (row.sahatkit16_score !== null && row.sahatkit16_score !== undefined) {
           progress += 10;
-          details.advisorEvaluated = true;
+          details.evaluation16Submitted = true;
         }
 
         return {
@@ -178,9 +183,10 @@ export class CoopProgressController {
           finalReportStatus: row.final_report_status || 'not_submitted',
           finalReportPath: row.final_report_path || null,
           finalReportId: row.final_report_id || null,
-          mentorScore: row.mentor_score !== null ? parseFloat(row.mentor_score) : null,
-          advisorScore: row.advisor_score !== null ? parseFloat(row.advisor_score) : null,
-          totalScore: (row.mentor_score !== null ? parseFloat(row.mentor_score) : 0) + (row.advisor_score !== null ? parseFloat(row.advisor_score) : 0),
+          // ไม่มี totalScore อีกแล้ว — สองใบคนละมาตร (100 กับ 70) และเจ้าของเคาะว่า
+          // เกรดมาจาก สหกิจ 15 อย่างเดียว การบวกกันจะสร้างตัวเลขที่ไม่มีความหมาย
+          sahatkit15Score: row.sahatkit15_score !== null ? parseFloat(row.sahatkit15_score) : null,
+          sahatkit16Score: row.sahatkit16_score !== null ? parseFloat(row.sahatkit16_score) : null,
           lastNotifiedAt: row.last_notified_at || null
         };
       });

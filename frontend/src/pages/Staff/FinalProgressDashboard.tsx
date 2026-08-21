@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { ClipboardList, Users, Search, Mail, Download, RefreshCw, CheckCircle, Clock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
@@ -22,14 +22,14 @@ interface StudentProgress {
     outlineApproved: boolean;
     supervisionCompleted: boolean;
     finalReportSubmitted: boolean;
-    mentorEvaluated: boolean;
-    advisorEvaluated: boolean;
+    evaluation15Submitted: boolean;
+    evaluation16Submitted: boolean;
   };
   finalReportStatus: string;
   finalReportPath: string | null;
-  mentorScore: number | null;
-  advisorScore: number | null;
-  totalScore: number;
+  // สองใบคนละมาตร (100 กับ 70) จงใจไม่มีช่องรวม — เกรดมาจาก สหกิจ 15 อย่างเดียว
+  sahatkit15Score: number | null;
+  sahatkit16Score: number | null;
   lastNotifiedAt: string | null;
 }
 
@@ -119,9 +119,8 @@ const FinalProgressDashboard: React.FC = () => {
       'อาจารย์ที่ปรึกษา',
       'สถานประกอบการ',
       'เปอร์เซ็นต์งาน (%)',
-      'คะแนนพี่เลี้ยง (100)',
-      'คะแนนอาจารย์ (100)',
-      'คะแนนรวมสะสม (200)'
+      'ผลประเมิน สหกิจ 15 (เต็ม 100)',
+      'ประเมินรายงาน สหกิจ 16 (เต็ม 70)'
     ];
 
     // Data rows mapping
@@ -132,9 +131,8 @@ const FinalProgressDashboard: React.FC = () => {
       std.advisorName,
       std.companyName,
       `${std.progressPercent}%`,
-      std.mentorScore !== null ? std.mentorScore : '-',
-      std.advisorScore !== null ? std.advisorScore : '-',
-      std.totalScore
+      std.sahatkit15Score !== null ? std.sahatkit15Score : '-',
+      std.sahatkit16Score !== null ? std.sahatkit16Score : '-'
     ]);
 
     // A value containing a double quote used to break the row it sat in \u2014
@@ -209,7 +207,7 @@ const FinalProgressDashboard: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-brand-blue dark:text-blue-400" />
-              กระดานติดตามสถานะผลและคะแนนสะสม (Final Progress Dashboard)
+              กระดานติดตามสถานะและผลการประเมิน (Final Progress Dashboard)
             </h1>
             <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
               ติดตามภาพรวมความก้าวหน้า รายเล่มรายงาน และคะแนนประเมินดิบสะสมของนักศึกษา
@@ -267,9 +265,8 @@ const FinalProgressDashboard: React.FC = () => {
                   <th className="p-4 font-bold">ข้อมูลนักศึกษา</th>
                   <th className="p-4 font-bold">สถานประกอบการ</th>
                   <th className="p-4 font-bold">ความคืบหน้า (%)</th>
-                  <th className="p-4 font-bold text-center">คะแนนพี่เลี้ยง (100)</th>
-                  <th className="p-4 font-bold text-center">คะแนนอาจารย์ (100)</th>
-                  <th className="p-4 font-bold text-center">คะแนนสะสม (200)</th>
+                  <th className="p-4 font-bold text-center">ผลประเมิน สหกิจ 15 (100)</th>
+                  <th className="p-4 font-bold text-center">ประเมินรายงาน สหกิจ 16 (70)</th>
                   <th className="p-4 font-bold text-right">การจัดการ</th>
                 </tr>
               </thead>
@@ -298,18 +295,39 @@ const FinalProgressDashboard: React.FC = () => {
                         <span className="font-bold text-gray-900 dark:text-white whitespace-nowrap">{std.progressPercent}%</span>
                       </div>
                     </td>
-                    <td className="p-4 text-center font-bold text-sm text-gray-800 dark:text-gray-200">
-                      {std.mentorScore !== null ? `${std.mentorScore}` : <span className="text-gray-600 dark:text-gray-400 font-medium">-</span>}
+                    <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
+                      {std.sahatkit15Score !== null ? (
+                        <a
+                          href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_15/${std.studentId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-blue hover:underline dark:text-blue-400"
+                        >
+                          {std.sahatkit15Score}
+                        </a>
+                      ) : (
+                        <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
+                      )}
                     </td>
-                    <td className="p-4 text-center font-bold text-sm text-gray-800 dark:text-gray-200">
-                      {std.advisorScore !== null ? `${std.advisorScore}` : <span className="text-gray-600 dark:text-gray-400 font-medium">-</span>}
-                    </td>
-                    <td className="p-4 text-center font-black text-sm text-brand-blue dark:text-blue-400">
-                      {std.totalScore}
+                    <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
+                      {std.sahatkit16Score !== null ? (
+                        <a
+                          href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_16/${std.studentId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-brand-blue hover:underline dark:text-blue-400"
+                        >
+                          {std.sahatkit16Score}
+                          <span className="text-xs font-normal text-gray-600 dark:text-gray-400">/70</span>
+                        </a>
+                      ) : (
+                        <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       {/* Notify button active only if report is uploaded but mentor score is missing */}
-                      {std.finalReportStatus !== 'not_submitted' && std.mentorScore === null && (
+                      {std.finalReportStatus !== 'not_submitted' &&
+                        (std.sahatkit15Score === null || std.sahatkit16Score === null) && (
                         <div className="flex items-center justify-end gap-2">
                           {isCooldownActive(std.lastNotifiedAt) ? (
                             <span className="text-xs text-orange-500 bg-orange-50 dark:bg-orange-950/20 px-2.5 py-1.5 rounded-lg flex items-center gap-1">

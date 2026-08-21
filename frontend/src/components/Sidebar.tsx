@@ -193,7 +193,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'students', label: 'รายชื่อนักศึกษาในที่ปรึกษา', icon: icons.students },
       { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
       { id: 'supervision', label: 'บันทึกการนิเทศงาน', icon: icons.supervision },
-      { id: 'final_evaluation', label: 'ประเมินรายงานฉบับสมบูรณ์', icon: icons.evaluation },
+      // อาจารย์ไม่ได้ประเมิน — ทั้ง สหกิจ 15 และ 16 เป็นของพนักงานที่ปรึกษาตามแบบฟอร์มจริง
+      // หน้านี้คือการตรวจอนุมัติเล่มรายงาน (สหกิจ 14) + ดูผลประเมินอย่างเดียว
+      // menu id คงเดิมโดยตั้งใจ: ผูกอยู่ 5 ที่รวม NavId ของ e2e การเปลี่ยนควรเป็น commit แยก
+      { id: 'final_evaluation', label: 'ตรวจเล่มรายงานฉบับสมบูรณ์', icon: icons.evaluation },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
     ],
     dept_head: [

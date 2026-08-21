@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>แบบประเมินผลนักศึกษาสหกิจศึกษา (สหกิจ 15)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+
+    /* ขนาดตัวอักษรและ padding ถูกบีบให้เนื้อหาลงพอดี 4 หน้าเท่ากระดาษจริง
+       แก้ค่าพวกนี้เมื่อไหร่ ต้องออก PDF แล้วนับหน้าใหม่ทุกครั้ง */
+    @page { size: A4; }
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Sarabun', 'TH Sarabun PSK', sans-serif;
+      font-size: 11.5pt;
+      line-height: 1.3;
+      color: #000;
+      background: #fff;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* หน้าสุดท้ายไม่ต้องขึ้นหน้าใหม่ ไม่งั้นจะได้หน้าเปล่าท้ายเล่ม */
+    .page { page-break-after: always; }
+    .page:last-child { page-break-after: auto; }
+
+    .org-line { font-size: 12pt; }
+    .form-tag { float: right; font-size: 12pt; font-weight: 700; }
+
+    .header-title {
+      text-align: center;
+      font-size: 14pt;
+      font-weight: 700;
+      margin: 8px 0 2px;
+    }
+    .header-subtitle {
+      text-align: center;
+      font-size: 12pt;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .note-box {
+      border: 1px solid #000;
+      padding: 5px 8px;
+      font-size: 10pt;
+      margin-bottom: 8px;
+    }
+    .note-box ol { margin: 2px 0 0; padding-left: 16px; }
+    .note-box li { margin-bottom: 1px; }
+
+    .section-heading {
+      font-weight: 700;
+      margin: 8px 0 4px;
+      font-size: 12pt;
+    }
+
+    .info-grid { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+    .info-grid td { padding: 2px 0; vertical-align: bottom; font-size: 11pt; }
+    .fill { border-bottom: 1px dotted #000; padding: 0 6px; }
+
+    .eval-table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+    .eval-table th, .eval-table td {
+      border: 1px solid #000;
+      padding: 3px 6px;
+      font-size: 10.5pt;
+      vertical-align: top;
+    }
+    .eval-table th { background: #eee; font-weight: 700; text-align: center; }
+    .eval-table .item-no { width: 40px; text-align: center; }
+    .eval-table .score-col { width: 70px; text-align: center; font-weight: 700; }
+    .eval-table .max-col { width: 70px; text-align: center; }
+    .item-en { font-size: 9.5pt; color: #333; }
+    .subtotal-row td { background: #f5f5f5; font-weight: 700; }
+
+    .free-text {
+      border: 1px solid #000;
+      min-height: 80px;
+      padding: 6px 8px;
+      margin-bottom: 10px;
+      white-space: pre-wrap;
+      font-size: 11pt;
+    }
+
+    .choice-line { margin: 6px 0 10px; font-size: 11.5pt; }
+    .choice-line span { margin-right: 26px; }
+
+    .summary-box { border: 2px solid #000; padding: 8px 10px; margin-top: 12px; }
+    .summary-box .summary-title { font-weight: 700; text-align: center; margin-bottom: 6px; }
+    .summary-table { width: 100%; border-collapse: collapse; }
+    .summary-table td { border: 1px solid #000; padding: 4px 8px; font-size: 11pt; }
+    .summary-table td.num { width: 90px; text-align: center; font-weight: 700; }
+    .summary-table tr.grand td { background: #eee; font-weight: 700; }
+
+    .sign-block { margin-top: 18px; text-align: right; font-size: 11pt; line-height: 1.9; }
+    .sign-block .line { display: inline-block; width: 220px; border-bottom: 1px dotted #000; }
+
+    .footer-note {
+      margin-top: 12px;
+      font-size: 10pt;
+      border-top: 1px solid #000;
+      padding-top: 5px;
+    }
+
+    .page-note { margin-top: 10px; text-align: right; font-size: 9.5pt; color: #333; }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════ หน้า 1 ══════════════ -->
+<div class="page">
+  <div class="form-tag">(สหกิจ15)</div>
+  <div class="org-line">คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ</div>
+  <div class="org-line">มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก</div>
+
+  <div class="header-title">แบบประเมินผลนักศึกษาสหกิจศึกษา</div>
+  <div class="header-subtitle">สำหรับหน่วยงาน สถานประกอบการ</div>
+
+  <div class="note-box">
+    <strong>คำชี้แจง</strong>
+    <ol>
+      <li>ผู้ให้ข้อมูลในแบบประเมินนี้ต้องเป็นพนักงานที่ปรึกษา (Job supervisor) ของนักศึกษาสหกิจศึกษา หรือบุคคลที่ได้รับมอบหมายให้ทำหน้าที่แทน</li>
+      <li>แบบประเมินผลนี้มีทั้งหมด 18 ข้อ โปรดให้ข้อมูลครบทุกข้อ เพื่อความสมบูรณ์ของการประเมินผล</li>
+      <li>เมื่อประเมินผลเรียบร้อยแล้ว โปรดนำเอกสารนี้ใส่ซองประทับตรา “ลับ” และให้นักศึกษานำส่งอาจารย์นิเทศงานสหกิจศึกษาทันทีที่นักศึกษากลับมหาวิทยาลัย</li>
+    </ol>
+  </div>
+
+  <div class="section-heading">ข้อมูลทั่วไป – Work Term Information</div>
+  <table class="info-grid">
+    <tr>
+      <td style="width:170px;">ชื่อ – นามสกุล นักศึกษา</td>
+      <td class="fill">{{student_name}}</td>
+      <td style="width:110px; text-align:right;">รหัสประจำตัว</td>
+      <td class="fill" style="width:150px;">{{student_code}}</td>
+    </tr>
+    <tr>
+      <td>สาขาวิชา</td>
+      <td class="fill">{{major_name}}</td>
+      <td style="text-align:right;">คณะ</td>
+      <td class="fill">{{faculty_name}}</td>
+    </tr>
+    <tr>
+      <td>ชื่อสถานประกอบการ</td>
+      <td class="fill" colspan="3">{{company_name}}</td>
+    </tr>
+    <tr>
+      <td>ชื่อ – นามสกุลผู้ประเมิน</td>
+      <td class="fill" colspan="3">{{evaluator_name}}</td>
+    </tr>
+    <tr>
+      <td>ตำแหน่ง</td>
+      <td class="fill">{{evaluator_position}}</td>
+      <td style="text-align:right;">แผนก</td>
+      <td class="fill">{{evaluator_department}}</td>
+    </tr>
+  </table>
+
+  <div class="section-heading">1. ผลสำเร็จของงาน – Work Achievement</div>
+  <table class="eval-table">
+    <tr>
+      <th class="item-no">ข้อ</th>
+      <th>หัวข้อการประเมิน / Items</th>
+      <th class="max-col">คะแนนเต็ม</th>
+      <th class="score-col">คะแนนที่ได้</th>
+    </tr>
+    <tr>
+      <td class="item-no">1.1</td>
+      <td><strong>ปริมาณงาน</strong> <span class="item-en">(Quantity of work)</span><br>
+        ปริมาณงานที่ปฏิบัติสำเร็จตามหน้าที่หรือตามที่ได้รับมอบหมายภายในระยะเวลาที่กำหนด</td>
+      <td class="max-col">10</td>
+      <td class="score-col">{{s.work_quantity}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">1.2</td>
+      <td><strong>คุณภาพงาน</strong> <span class="item-en">(Quality of work)</span><br>
+        ผลงานมีความถูกต้องครบถ้วนสมบูรณ์ ความประณีตเรียบร้อย โดยไม่เกิดปัญหา งานไม่ติดค้าง ทำงานเสร็จทันเวลาหรือก่อนเวลาที่กำหนด</td>
+      <td class="max-col">10</td>
+      <td class="score-col">{{s.work_quality}}</td>
+    </tr>
+  </table>
+
+  <div class="page-note">หน้าที่ 1/4</div>
+</div>
+
+<!-- ══════════════ หน้า 2 ══════════════ -->
+<div class="page">
+  <div class="form-tag">(สหกิจ15)</div>
+
+  <div class="section-heading">2. ความรู้ความสามารถ / Knowledge and Ability</div>
+  <table class="eval-table">
+    <tr>
+      <th class="item-no">ข้อ</th>
+      <th>หัวข้อการประเมิน / Items</th>
+      <th class="max-col">คะแนนเต็ม</th>
+      <th class="score-col">คะแนนที่ได้</th>
+    </tr>
+    <tr>
+      <td class="item-no">2.1</td>
+      <td><strong>ความรู้ความสามารถทางวิชาการ</strong> <span class="item-en">(Academic ability)</span><br>
+        นักศึกษามีความรู้ทางวิชาการเพียงพอที่จะสามารถทำงานตามที่ได้รับมอบหมาย</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.academic_ability}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.2</td>
+      <td><strong>ความสามารถในการเรียนรู้และประยุกต์วิชาการ</strong> <span class="item-en">(Ability to learn and apply knowledge)</span><br>
+        ความรวดเร็วในการเรียนรู้ การเข้าใจในข้อมูล ข่าวสาร และวิธีการทำงาน ตลอดจนการนำความรู้ไปประยุกต์ใช้งาน</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.learn_and_apply}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.3</td>
+      <td><strong>ความรู้ความชำนาญด้านปฏิบัติการ</strong> <span class="item-en">(Practical ability)</span><br>
+        หลังจากได้รับการสอนงานครั้งแรก ครั้งต่อไปนักศึกษาสามารถปฏิบัติงานได้อย่างถูกต้องโดยไม่ต้องคุมงาน</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.practical_ability}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.4</td>
+      <td><strong>วิจารณญาณและการตัดสินใจ</strong> <span class="item-en">(Judgment and decision making)</span><br>
+        วิเคราะห์ข้อมูลและปัญหาอย่างรอบคอบก่อนตัดสินใจ แก้ปัญหาเฉพาะหน้าได้ดี และไว้วางใจให้ตัดสินใจเองได้</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.judgment_decision}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.5</td>
+      <td><strong>การจัดการและวางแผน</strong> <span class="item-en">(Organization and planning)</span><br>
+        สามารถจัดลำดับความสำคัญของงาน และวางแผนการดำเนินงานในส่วนที่เกี่ยวข้องอย่างมีประสิทธิภาพ</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.organization_planning}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.6</td>
+      <td><strong>ทักษะการสื่อสาร</strong> <span class="item-en">(Communication skills)</span><br>
+        ติดต่อสื่อสาร พูด เขียน และนำเสนอได้ชัดเจน ถูกต้อง รัดกุม รู้จักสอบถาม และชี้แจงผลการปฏิบัติงานได้</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.communication_skills}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.7</td>
+      <td><strong>การพัฒนาด้านภาษาและวัฒนธรรมต่างประเทศ</strong> <span class="item-en">(Foreign language and cultural development)</span><br>
+        ความสามารถใช้ภาษาต่างประเทศในการปฏิบัติงานและติดต่อสื่อสาร ตลอดจนการปรับตัวเข้ากับการทำงานกับชาวต่างประเทศ</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.foreign_language_culture}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">2.8</td>
+      <td><strong>ความเหมาะสมต่อตำแหน่งงานที่ได้รับมอบหมาย</strong> <span class="item-en">(Suitability for job position)</span><br>
+        พัฒนาตนเองให้ปฏิบัติงานตามตำแหน่งงานและลักษณะงานที่ได้รับมอบหมายได้อย่างเหมาะสม</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.job_suitability}}</td>
+    </tr>
+  </table>
+
+  <div class="page-note">หน้าที่ 2/4</div>
+</div>
+
+<!-- ══════════════ หน้า 3 ══════════════ -->
+<div class="page">
+  <div class="form-tag">(สหกิจ15)</div>
+
+  <div class="section-heading">3. ความรับผิดชอบต่อหน้าที่</div>
+  <table class="eval-table">
+    <tr>
+      <th class="item-no">ข้อ</th>
+      <th>หัวข้อการประเมิน / Items</th>
+      <th class="max-col">คะแนนเต็ม</th>
+      <th class="score-col">คะแนนที่ได้</th>
+    </tr>
+    <tr>
+      <td class="item-no">3.1</td>
+      <td><strong>ความรับผิดชอบและเป็นผู้ที่ไว้วางใจได้</strong> <span class="item-en">(Responsibility and dependability)</span><br>
+        ดำเนินงานให้สำเร็จลุล่วงโดยคำนึงถึงเป้าหมาย ยอมรับผลที่เกิดจากการทำงานอย่างมีเหตุผล และไว้วางใจให้รับผิดชอบงานที่ยากขึ้นได้</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.responsibility_dependability}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">3.2</td>
+      <td><strong>ความสนใจ อุตสาหะในการทำงาน</strong> <span class="item-en">(Interest in work)</span><br>
+        มีความกระตือรือร้น ความอุตสาหะ ความตั้งใจที่จะทำงานให้สำเร็จ ไม่ย่อท้อต่อปัญหาและอุปสรรค</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.interest_in_work}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">3.3</td>
+      <td><strong>ความสามารถเริ่มต้นทำงานได้ด้วยตนเอง</strong> <span class="item-en">(Initiative or self starter)</span><br>
+        เมื่อได้รับคำชี้แนะ สามารถเริ่มทำงานได้เองโดยไม่ต้องรอคำสั่ง เสนอตัวขอเข้าช่วยงานนอกเหนือจากงานประจำ</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.initiative_self_starter}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">3.4</td>
+      <td><strong>การตอบสนองต่อการสั่งการ</strong> <span class="item-en">(Response to supervision)</span><br>
+        ยินดีรับคำสั่ง คำแนะนำ คำวิจารณ์ ไม่แสดงความอึดอัดใจเมื่อได้รับคำตักเตือน และปรับตัวตามข้อเสนอแนะได้รวดเร็ว</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.response_to_supervision}}</td>
+    </tr>
+  </table>
+
+  <div class="section-heading">4. ลักษณะส่วนบุคคล / Personality</div>
+  <table class="eval-table">
+    <tr>
+      <th class="item-no">ข้อ</th>
+      <th>หัวข้อการประเมิน / Items</th>
+      <th class="max-col">คะแนนเต็ม</th>
+      <th class="score-col">คะแนนที่ได้</th>
+    </tr>
+    <tr>
+      <td class="item-no">4.1</td>
+      <td><strong>บุคลิกภาพและการวางตัว</strong> <span class="item-en">(Personality)</span><br>
+        มีทัศนคติที่ดี มีวุฒิภาวะ อ่อนน้อมถ่อมตน แต่งกายสุภาพเรียบร้อย ตรงต่อเวลา และปรับตัวเข้ากับสังคมในองค์กรได้</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.personality}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">4.2</td>
+      <td><strong>มนุษยสัมพันธ์</strong> <span class="item-en">(Interpersonal skills)</span><br>
+        ร่วมงานกับผู้อื่นและทำงานเป็นทีมได้ดี เป็นผู้ที่ช่วยก่อให้เกิดความร่วมมือประสานงาน</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.interpersonal_skills}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">4.3</td>
+      <td><strong>ความมีระเบียบวินัย ปฏิบัติตามวัฒนธรรมขององค์กร</strong> <span class="item-en">(Discipline and adaptability)</span><br>
+        สนใจเรียนรู้ กฎระเบียบ นโยบาย ปฏิบัติตามระเบียบบริหารงานบุคลากร กฎความปลอดภัย และการควบคุมคุณภาพ 5 ส.</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.discipline_adaptability}}</td>
+    </tr>
+    <tr>
+      <td class="item-no">4.4</td>
+      <td><strong>คุณธรรมและจริยธรรม</strong> <span class="item-en">(Ethics and morality)</span><br>
+        มีความซื่อสัตย์สุจริต มีจิตสาธารณะ รู้จักเสียสละ ช่วยเหลือผู้อื่น และรักษาความลับขององค์กร</td>
+      <td class="max-col">5</td>
+      <td class="score-col">{{s.ethics_morality}}</td>
+    </tr>
+  </table>
+
+  <table class="eval-table">
+    <tr>
+      <th>สรุปคะแนนรายหมวด</th>
+      <th class="max-col">คะแนนเต็ม</th>
+      <th class="score-col">คะแนนที่ได้</th>
+    </tr>
+    {{#each section_totals}}
+    <tr class="subtotal-row">
+      <td>หมวดที่ {{this.no}} {{this.label}}</td>
+      <td class="max-col">{{this.max}}</td>
+      <td class="score-col">{{this.got}}</td>
+    </tr>
+    {{/each}}
+  </table>
+
+  <div class="page-note">หน้าที่ 3/4</div>
+</div>
+
+<!-- ══════════════ หน้า 4 ══════════════ -->
+<div class="page">
+  <div class="form-tag">(สหกิจ15)</div>
+
+  <div class="section-heading">โปรดให้ข้อคิดเห็นที่เป็นประโยชน์แก่นักศึกษา / Please give comments on the student</div>
+
+  <div>จุดเด่นของนักศึกษา / Strength</div>
+  <div class="free-text">{{strength}}</div>
+
+  <div>ข้อควรปรับปรุงของนักศึกษา / Improvement</div>
+  <div class="free-text">{{improvement}}</div>
+
+  <div class="section-heading">
+    หากนักศึกษาผู้นี้สำเร็จการศึกษาแล้ว ท่านจะรับเข้าทำงานในสถานประกอบการนี้หรือไม่ (หากมีโอกาสเลือก)
+  </div>
+  <div class="item-en">Once this student graduates, will you be interested to offer him/her a job?</div>
+  <div class="choice-line">
+    <span>{{#if hire_accept}}☑{{else}}☐{{/if}} รับ / Yes</span>
+    <span>{{#if hire_unsure}}☑{{else}}☐{{/if}} ไม่แน่ใจ / Not sure</span>
+    <span>{{#if hire_reject}}☑{{else}}☐{{/if}} ไม่รับ / No</span>
+  </div>
+
+  <div>ข้อคิดเห็นเพิ่มเติม / Other comments</div>
+  <div class="free-text">{{other_comments}}</div>
+
+  <div class="sign-block">
+    ลงชื่อ / Evaluator’s Signature <span class="line"></span><br>
+    ( <span class="line">{{evaluator_name}}</span> )<br>
+    ตำแหน่ง / Position <span class="line">{{evaluator_position}}</span><br>
+    วันที่ / Date <span class="line">{{submitted_date}}</span>
+  </div>
+
+  <div class="summary-box">
+    <div class="summary-title">สำหรับอาจารย์นิเทศงานสหกิจศึกษา</div>
+    <table class="summary-table">
+      <tr>
+        <td>คะแนนรวม ข้อ 1.1 – 1.2 (เต็ม 20)</td>
+        <td class="num">{{#with section_totals.[0]}}{{this.got}}{{/with}}</td>
+      </tr>
+      <tr>
+        <td>คะแนนรวม ข้อ 2.1 – 2.8 (เต็ม 40)</td>
+        <td class="num">{{#with section_totals.[1]}}{{this.got}}{{/with}}</td>
+      </tr>
+      <tr>
+        <td>คะแนนรวม ข้อ 3.1 – 3.4 (เต็ม 20)</td>
+        <td class="num">{{#with section_totals.[2]}}{{this.got}}{{/with}}</td>
+      </tr>
+      <tr>
+        <td>คะแนนรวม ข้อ 4.1 – 4.4 (เต็ม 20)</td>
+        <td class="num">{{#with section_totals.[3]}}{{this.got}}{{/with}}</td>
+      </tr>
+      <tr class="grand">
+        <td>รวมคะแนนทั้งสิ้น (เต็ม 100)</td>
+        <td class="num">{{grand_total}}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="footer-note">
+    <strong>หมายเหตุ</strong> ขอความกรุณาตอบแบบประเมินผลของนักศึกษาภายในระยะเวลาที่กำหนด
+    หากนักศึกษาไม่ได้รับแบบประเมินดังกล่าว จะไม่ผ่านการประเมินผล
+  </div>
+
+  <div class="page-note">หน้าที่ 4/4</div>
+</div>
+
+</body>
+</html>

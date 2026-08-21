@@ -441,14 +441,31 @@ CREATE TABLE IF NOT EXISTS final_reports (
 );
 
 -- 19. Final Evaluations (Phase 4)
+--
+-- พนักงานที่ปรึกษา (พี่เลี้ยง) กรอกสองใบต่อนักศึกษาหนึ่งคน — ทั้งคู่เป็นของพี่เลี้ยง
+-- ตามที่แบบฟอร์มจริงระบุ ไม่ใช่ของอาจารย์:
+--   sahatkit_15 — แบบประเมินผลนักศึกษา 18 ข้อ เต็ม 100 → ใช้ตัดเกรด
+--   sahatkit_16 — แบบประเมินรายงาน 14 ข้อ ระดับ 1-5 เต็ม 70 → เรตติ้งดิบ ไม่รวมเกรด
+--
+-- คีย์เดิมเป็น (student_id, evaluator_role) ใบที่สองจึงไป ON CONFLICT ทับใบแรก
+-- form_code เข้ามาเป็นคอลัมน์ที่สามของ UNIQUE เพื่อให้สองใบอยู่ร่วมกันได้
+--
+-- `evaluator_role` ยังอนุญาต 'advisor' ทั้งที่เฟสนี้ไม่มีใครเขียน — จงใจไม่แตะ
+-- เพราะ สหกิจ 13 (แบบบันทึกการนิเทศของอาจารย์) ยังไม่ตัดสินว่าจะลงตารางนี้
+-- หรือไปอยู่กับ supervision_logs การตัด CHECK ทิ้งตอนนี้คือการปิดทางล่วงหน้า
+--
+-- ⚠️ ต้องตั้งชื่อ UNIQUE เอง — e2e/schema-drift.spec.ts เทียบ pg_indexes.indexdef
+-- ซึ่งมีชื่อ index อยู่ในสตริง ถ้าปล่อยให้ Postgres ตั้งเอง ชื่อจะไม่ตรงกับฝั่ง
+-- migration ที่ใช้ ADD CONSTRAINT แล้วเทสต์จะแดง
 CREATE TABLE IF NOT EXISTS final_evaluations (
     evaluation_id SERIAL PRIMARY KEY,
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     evaluator_role VARCHAR(50) NOT NULL CHECK (evaluator_role IN ('mentor', 'advisor')),
+    form_code VARCHAR(20) NOT NULL CHECK (form_code IN ('sahatkit_15', 'sahatkit_16')),
     scores_detail JSONB NOT NULL,
     total_score NUMERIC(5, 2) NOT NULL,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (student_id, evaluator_role)
+    CONSTRAINT final_evaluations_student_form_key UNIQUE (student_id, evaluator_role, form_code)
 );
 
 -- 20. Audit Log (append-only)
