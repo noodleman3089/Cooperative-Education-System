@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import StudentWelcomeGuide from './StudentWelcomeGuide';
 import PageSkeleton from './ui/Skeleton';
 import { useDashboardData } from '../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../services/api';
@@ -49,6 +50,13 @@ const StudentDashboard: React.FC = () => {
   const [confirmingFailure, setConfirmingFailure] = useState(false);
   // 404 from /students/dashboard means "not onboarded yet", not "broken".
   const [needsProfile, setNeedsProfile] = useState(false);
+
+  // guide มีไว้ให้ "ผู้ใช้ครั้งแรก" เท่านั้น ซึ่งระบบรู้เองอยู่แล้วว่าคือใคร — คนที่ยังไม่มี
+  // ประวัติในฐาน (needsProfile) · กรอกประวัติเสร็จเมื่อไหร่ guide หายเอง จึงไม่ต้องจำอะไรทั้งสิ้น
+  // เดิมใช้ localStorage ซึ่งผิดสองทาง: key ไม่ผูก user (เครื่องแชร์ในแล็บ คนที่สองไม่เห็นเลย)
+  // และมันไปโผล่ในหน้าหลักของคนที่กรอกประวัติแล้วแต่ยังไม่ยื่นใบความจำนง ซึ่งไม่ใช่ผู้ใช้ครั้งแรก
+  const [showGuide, setShowGuide] = useState(true);
+  const dismissGuide = () => setShowGuide(false);
 
   // PR Announcements states
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -354,25 +362,33 @@ const StudentDashboard: React.FC = () => {
         {calendarBanner}
         <AlertBanner variant="error" message={error} />
 
+        {/* guide ครอบคลุมกว่าการ์ดนี้ (บอกครบ 3 ขั้น + มีปุ่มไปหน้าประวัติอยู่แล้ว) จึงแสดง
+            อย่างใดอย่างหนึ่ง ไม่ใช่ทั้งคู่ — เดิมขึ้น "ยินดีต้อนรับสู่ระบบสหกิจศึกษา" ซ้อนกันสองบล็อก
+            พร้อมปุ่มไปหน้าเดียวกันสองปุ่ม · ternary ไม่ใช่ && เพราะกด "ซ่อนคำแนะนำนี้" แล้ว
+            ต้องยังเหลืออะไรบอกว่าให้ไปกรอกประวัติ */}
         {needsProfile && (
-          <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400">
-              <UserPen className="h-7 w-7" />
+          showGuide ? (
+            <StudentWelcomeGuide onDismiss={dismissGuide} />
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400">
+                <UserPen className="h-7 w-7" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                ยินดีต้อนรับสู่ระบบสหกิจศึกษา
+              </h3>
+              <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
+                ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกประวัตินักศึกษาให้ครบถ้วนก่อน
+                จึงจะเริ่มยื่นใบความจำนงและติดตามสถานะสหกิจศึกษาได้
+              </p>
+              <Button
+                className="mt-6"
+                onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'profile' }))}
+              >
+                กรอกประวัตินักศึกษา
+              </Button>
             </div>
-            <h3 className="text-lg font-bold text-gray-800 dark:text-white">
-              ยินดีต้อนรับสู่ระบบสหกิจศึกษา
-            </h3>
-            <p className="mx-auto mt-2 max-w-md text-sm text-gray-500 dark:text-gray-400">
-              ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกประวัตินักศึกษาให้ครบถ้วนก่อน
-              จึงจะเริ่มยื่นใบความจำนงและติดตามสถานะสหกิจศึกษาได้
-            </p>
-            <Button
-              className="mt-6"
-              onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'profile' }))}
-            >
-              กรอกประวัตินักศึกษา
-            </Button>
-          </div>
+          )
         )}
 
         {selectedAnnouncement && announcementModal}
