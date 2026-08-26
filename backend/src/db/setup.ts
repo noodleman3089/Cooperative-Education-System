@@ -3,7 +3,6 @@ import pool from '../config/database';
 import fs from 'fs';
 import path from 'path';
 import { hashPassword } from '../utils/password';
-import { PDFDocument } from 'pdf-lib';
 import { stampAllMigrations } from './migrate';
 
 
@@ -87,16 +86,10 @@ export async function setupDatabase(quiet = false) {
     await client.query(seedsSql);
     log('Master data seeded successfully.');
 
-    // Seed default document templates (re-syncing all required official templates)
-    log('Seeding default document templates...');
-    await client.query('DELETE FROM document_templates');
-    await client.query(`
-      INSERT INTO document_templates (name, file_path, type) VALUES
-      ('หนังสือขอความอนุเคราะห์รับนักศึกษา (Cover Letter)', 'secure_private/templates/cover_letter_template.html', 'cover_letter'),
-      ('หนังสือส่งตัวนักศึกษาสหกิจศึกษา (Transfer Letter)', 'secure_private/templates/transfer_letter_template.html', 'transfer_letter'),
-      ('บันทึกข้อความขออนุมัติเดินทางไปราชการ (Travel Request)', 'secure_private/templates/travel_request_template.html', 'travel_request')
-    `);
-    log('Default document templates seeded.');
+    // ⛔ ไม่มีแม่แบบให้ seed อีกแล้ว — แม่แบบ HTML ทั้งชุดถูกโละเมื่อ 2026-08-26
+    // ตารางยังอยู่เพราะ `official_documents.template_id` อ้างถึงมันด้วย FK RESTRICT
+    // เอกสารที่ออกไปแล้วจึงต้องมีแถวแม่แบบของตัวเองค้างอยู่ ห้ามล้างตารางทิ้ง
+    log('Document templates: none to seed (HTML templates removed 2026-08-26).');
 
     // Step 3: Insert Default Testing Users with Hashed Passwords and Roles
     log('Seeding default test user accounts...');
@@ -228,36 +221,10 @@ async function generateTestAssets() {
     }
   }
 
-  const templates = [
-    'cover_letter_template.pdf',
-    'transfer_letter_template.pdf'
-  ];
-
-  for (const templateName of templates) {
-    const templatePath = path.join(rootDir, 'secure_private', 'templates', templateName);
-    if (!fs.existsSync(templatePath)) {
-      const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595.276, 841.89]); // A4 Size
-      
-      page.drawText('OFFICIAL COOPERATIVE EDUCATION LETTER', { x: 100, y: 750, size: 16 });
-      page.drawText('Rajamangala University of Technology East (RMUTTO)', { x: 100, y: 720, size: 11 });
-      page.drawText('---------------------------------------------------------------------------', { x: 100, y: 700, size: 11 });
-
-      page.drawText('Student Code: [STUDENT_CODE]', { x: 100, y: 650, size: 11 });
-      page.drawText('GPA: [GPA]', { x: 100, y: 630, size: 11 });
-      page.drawText('Company: [COMPANY]', { x: 100, y: 610, size: 11 });
-      page.drawText('Contact Person: [CONTACT]', { x: 100, y: 590, size: 11 });
-      page.drawText('Contact Position: [POSITION]', { x: 100, y: 570, size: 11 });
-
-      page.drawText('Signed by:', { x: 100, y: 220, size: 11 });
-      page.drawText('________________________', { x: 100, y: 170, size: 11 });
-      page.drawText('Dean of Faculty of Science and Technology', { x: 100, y: 150, size: 11 });
-
-      const pdfBytes = await pdfDoc.save();
-      fs.writeFileSync(templatePath, pdfBytes);
-      console.log(`Generated mock PDF template: ${templateName}`);
-    }
-  }
+  // ⛔ ไม่สร้างแม่แบบ mock อีกแล้ว — แม่แบบ HTML/PDF ทั้งชุดถูกโละเมื่อ 2026-08-26
+  // ตัวสร้างเดิมเขียน cover_letter_template.pdf / transfer_letter_template.pdf
+  // กลับเข้าโฟลเดอร์ทุกครั้งที่รัน db:setup ซึ่งจะทำให้ไฟล์ที่เพิ่งลบงอกกลับมาเงียบๆ
+  // (`e2e/document-templates-removed.spec.ts` เคสที่ 2 เป็นด่านที่จับได้)
 
   const signaturePath = path.join(rootDir, 'secure_private', 'signatures', 'dean_sig.png');
   if (!fs.existsSync(signaturePath)) {

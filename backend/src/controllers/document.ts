@@ -3,18 +3,14 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { PDFDocument } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
-import Handlebars from 'handlebars';
-import { StudentModel } from '../models/student';
 import { CompanyModel } from '../models/company';
 import { PersonnelModel } from '../models/personnel';
-import { DocumentTemplateModel } from '../models/documentTemplate';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { UserModel } from '../models/user';
 import { query } from '../config/database';
 import { getErrorMessage } from '../utils/httpError';
 import { DocuSignService } from '../utils/docusign';
-import { GenerateDocumentBody, BatchSignDocumentsBody } from '../types';
+import { BatchSignDocumentsBody } from '../types';
 import {
   notifyStudentStatusChangeByDocId,
   sendCompanyInviteEmail,
@@ -23,7 +19,6 @@ import {
 import { createInviteLink } from '../utils/invite';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
-import { launchPdfBrowser } from '../utils/browser';
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -33,314 +28,18 @@ if (!JWT_SECRET) {
 }
 
 /**
- * An intent must have cleared the department head before any official letter is
- * generated for it. 'accepted' is included so post-placement paperwork (dispatch
- * letters, contracts) can still be produced.
+ * ⛔ การ **ออก** เอกสารราชการถูกโละทั้งเส้นเมื่อ 2026-08-26 พร้อมแม่แบบ HTML
+ *
+ * ที่หายไปคือ `generateDocument` · `generateDispatchLetter` · `getDispatchEligibleStudents`
+ * · `listTemplates` — ทั้งหมดพึ่งไฟล์ใน `secure_private/templates/` ที่ไม่มีแล้ว
+ * เจ้าของสั่งโละก่อนแล้วออกแบบวิธีออกเอกสารใหม่ทีหลัง
+ *
+ * ที่ยังอยู่คือฝั่ง **อ่านและลงนามของเดิม** ซึ่งไม่เคยพึ่งแม่แบบเลย:
+ * `listDocuments` · `batchSignDocuments` (เซ็นไฟล์ที่ออกไว้แล้วใน uploads)
+ * · `signingComplete` · `onboardCompanyAndSendEmail`
+ * เอกสารที่ออกไปแล้วจึงยังเปิดดู ยังลงนาม และยังส่งอีเมลได้ตามปกติ
  */
-const DOCUMENT_ELIGIBLE_INTENT_STATUSES = [
-  'approved_by_dept_head',
-  'pending_sign',
-  'signed',
-  'pending_acceptance',
-  'pending_officer_approval',
-  'accepted',
-];
-
 export class DocumentController {
-  /**
-   * Prep data and generate a PDF using Mail Merge overlay.
-   * Route: POST /api/documents/generate
-   * Access: staff
-   */
-  static async generateDocument(req: Request, res: Response): Promise<void> {
-    try {
-      const { student_id, company_id, template_id } = req.body as GenerateDocumentBody;
-
-      // 1. Validation
-      if (student_id === undefined || company_id === undefined || template_id === undefined) {
-        res.status(400).json({ message: 'Required fields: student_id, company_id, template_id.' });
-        return;
-      }
-
-      const parsedStudentId = parseInt(String(student_id), 10);
-      const parsedCompanyId = parseInt(String(company_id), 10);
-      const parsedTemplateId = parseInt(String(template_id), 10);
-
-      if (isNaN(parsedStudentId) || isNaN(parsedCompanyId) || isNaN(parsedTemplateId)) {
-        res.status(400).json({ message: 'student_id, company_id, and template_id must be valid integers.' });
-        return;
-      }
-
-      // 2. Fetch Profiles and Templates
-      const [student, company, template] = await Promise.all([
-        StudentModel.findByStudentId(parsedStudentId),
-        CompanyModel.findById(parsedCompanyId),
-        DocumentTemplateModel.findById(parsedTemplateId),
-      ]);
-
-      if (!student) {
-        res.status(404).json({ message: `Student profile not found for ID: ${parsedStudentId}.` });
-        return;
-      }
-
-      if (!company) {
-        res.status(404).json({ message: `Company not found for ID: ${parsedCompanyId}.` });
-        return;
-      }
-
-      if (!template) {
-        res.status(404).json({ message: `Document template not found for ID: ${parsedTemplateId}.` });
-        return;
-      }
-
-      // SEC-04: an official letter may only be produced for a placement that has
-      // actually cleared the advisor and the department head. Without this check
-      // staff could mint a signed-ready document for any student/company pair and
-      // the dean's batch-sign step would happily stamp it.
-      const approvedIntent = await query(
-        `SELECT form_id, status FROM intent_forms
-         WHERE student_id = $1 AND company_id = $2 AND status = ANY($3::text[])
-         ORDER BY form_id DESC LIMIT 1`,
-        [parsedStudentId, parsedCompanyId, DOCUMENT_ELIGIBLE_INTENT_STATUSES]
-      );
-
-      if ((approvedIntent.rowCount ?? 0) === 0) {
-        res.status(409).json({
-          message:
-            'ไม่พบแบบแจ้งความจำนงที่ผ่านการอนุมัติของหัวหน้าสาขาวิชาสำหรับนักศึกษาและสถานประกอบการคู่นี้ ไม่สามารถออกเอกสารได้',
-          student_id: parsedStudentId,
-          company_id: parsedCompanyId,
-        });
-        return;
-      }
-
-      // เงื่อนไขที่สองของด่านเดียวกัน: ชื่อ ที่อยู่ และผู้รับที่พิมพ์ลงหนังสือฉบับนี้
-      // มาจากแถวใน companies ซึ่งส่วนใหญ่ "นักศึกษา" เป็นคนสร้างเอง — ค้นจาก
-      // Google Maps หรือกรอกมือตอนยื่นแบบหาที่ฝึกเอง · การรับรองของเจ้าหน้าที่คือ
-      // จุดเดียวที่มีมนุษย์ตรวจก่อนที่ข้อมูลนั้นจะกลายเป็นหนังสือที่คณบดีเซ็น
-      //
-      // ก่อนหน้านี้ is_verified ถูกใช้แค่กรองว่านักศึกษาเห็นบริษัทในทำเนียบไหม
-      // ไม่ได้กันอะไรเลย ทั้งที่คอมเมนต์ใน routes/company.ts อ้างมาตลอดว่ากันตรงนี้
-      if (!company.is_verified) {
-        res.status(409).json({
-          message:
-            'สถานประกอบการนี้ยังไม่ผ่านการรับรอง กรุณารับรองที่เมนู "ทำเนียบสถานประกอบการ" ก่อนออกหนังสือ',
-          company_id: parsedCompanyId,
-        });
-        return;
-      }
-
-      // 3. Check for missing company contact information
-      if (!company.contact_person || !company.contact_position || !company.email) {
-        res.status(400).json({
-          message: 'Company contact info (contact_person, contact_position, email) must be filled by staff before generating PDF.',
-          company_id: parsedCompanyId,
-        });
-        return;
-      }
-
-      // 4. Resolve Template File Path
-      let templateFilePath = path.isAbsolute(template.file_path)
-        ? template.file_path
-        : path.join(process.cwd(), template.file_path);
-
-      if (!fs.existsSync(templateFilePath)) {
-        // Try fallback in secure_private/templates/
-        const fallbackPath = path.join(process.cwd(), 'secure_private', 'templates', path.basename(template.file_path));
-        if (fs.existsSync(fallbackPath)) {
-          templateFilePath = fallbackPath;
-        } else {
-          res.status(400).json({ message: `Template PDF file not found at path: ${template.file_path}` });
-          return;
-        }
-      }
-
-      // 5. Process Template and Generate PDF (supporting HTML and PDF templates)
-      let pdfBytes: Uint8Array;
-
-      if (templateFilePath.endsWith('.html')) {
-        console.log('Rendering HTML template using Handlebars and Puppeteer...');
-        
-        // 5.1 The students this letter is about.
-        //
-        // This filtered on `status = 'accepted'`, which is backwards for the two
-        // letters that carry a name list. สหกิจ 04 (แบบแจ้งรายชื่อ) is what the
-        // faculty sends *so that* the company can select students — it goes out
-        // before anyone has been accepted, so the old filter produced an empty
-        // list exactly when the document was needed. The same set the SEC-04
-        // guard above already accepts is the right one: cleared the department
-        // head, up to and including a finished placement.
-        const studentsQuery = await query(
-          `SELECT s.student_code,
-                  COALESCE(s.first_name, '') || ' ' || COALESCE(s.last_name, '') as student_name,
-                  m.major_name_th
-           FROM intent_forms i
-           JOIN students s ON i.student_id = s.student_id
-           JOIN master_major m ON s.major_id = m.major_id
-           WHERE i.company_id = $1 AND i.status = ANY($2::text[])
-           ORDER BY s.student_code ASC`,
-          [parsedCompanyId, DOCUMENT_ELIGIBLE_INTENT_STATUSES]
-        );
-
-        // No empty-list fallback: the SEC-04 check above already proved this
-        // student/company pair has an intent in exactly this status set, so the
-        // query cannot come back empty. The fallback that used to sit here
-        // invented a major from the first two digits of the student code
-        // (`startsWith('64') ? 'วิทยาการคอมพิวเตอร์' : 'เทคโนโลยีสารสนเทศ'`) and
-        // printed the guess onto an official letter the dean then signed.
-        const studentList = studentsQuery.rows.map((row, index) => ({
-          no: index + 1,
-          student_code: row.student_code,
-          student_name: row.student_name,
-          major_name: row.major_name_th
-        }));
-
-        // 5.2 Compile HTML using Handlebars
-        const htmlSource = fs.readFileSync(templateFilePath, 'utf8');
-        const compiledTemplate = Handlebars.compile(htmlSource);
-
-        const thaiDate = new Date().toLocaleDateString('th-TH', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-
-        const startDateFormatted = new Date().toLocaleDateString('th-TH', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-
-        const endDateObj = new Date();
-        endDateObj.setMonth(endDateObj.getMonth() + 4);
-        const endDateFormatted = endDateObj.toLocaleDateString('th-TH', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric'
-        });
-
-        const renderedHtml = compiledTemplate({
-          document_number: `ศธ ๐๖๒๒/ว ${(Math.floor(Math.random() * 900) + 100).toString()}`,
-          company_name: company.name_th,
-          recipient_name: company.contact_person || 'ผู้จัดการฝ่ายทรัพยากรบุคคล',
-          job_position: company.contact_position || 'ผู้จัดการฝ่ายทรัพยากรบุคคล',
-          students: studentList,
-          academic_year: '๒๕๖๘',
-          start_date: startDateFormatted,
-          end_date: endDateFormatted,
-          staff_name: 'หัวหน้างานสหกิจศึกษา',
-          staff_position: 'เจ้าหน้าที่ประสานงานสหกิจศึกษา',
-          current_date: thaiDate
-        });
-
-        // 5.3 Convert rendered HTML to PDF Buffer via Puppeteer
-        const browser = await launchPdfBrowser();
-        const page = await browser.newPage();
-        await page.setContent(renderedHtml, { waitUntil: 'load' });
-        const pdfBuffer = await page.pdf({ 
-          format: 'A4',
-          margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' }
-        });
-        await browser.close();
-
-        pdfBytes = new Uint8Array(pdfBuffer);
-      } else {
-        // PDF Mail Merge Fallback
-        const templateBytes = fs.readFileSync(templateFilePath);
-        const pdfDoc = await PDFDocument.load(templateBytes);
-        pdfDoc.registerFontkit(fontkit);
-
-        const fontPath = path.join(process.cwd(), 'secure_private', 'fonts', 'Srabun-Regular.ttf');
-        let customFont;
-        if (fs.existsSync(fontPath) && fs.statSync(fontPath).size > 0) {
-          try {
-            const fontBytes = fs.readFileSync(fontPath);
-            customFont = await pdfDoc.embedFont(fontBytes);
-          } catch (err) {
-            console.error('Failed to embed Thai font in document generator:', err);
-          }
-        }
-
-        const pages = pdfDoc.getPages();
-        const firstPage = pages[0];
-
-        // Mail Merge Overlay coordinates (GPA displays N/A if null)
-        firstPage.drawText(student.student_code, { x: 250, y: 650, size: 11, font: customFont });
-        firstPage.drawText(student.cumulative_gpa ? Number(student.cumulative_gpa).toFixed(2) : 'N/A', { x: 250, y: 630, size: 11, font: customFont });
-        firstPage.drawText(company.name_th, { x: 250, y: 610, size: 11, font: customFont });
-        firstPage.drawText(company.contact_person || '', { x: 250, y: 590, size: 11, font: customFont });
-        firstPage.drawText(company.contact_position || '', { x: 250, y: 570, size: 11, font: customFont });
-
-        pdfBytes = await pdfDoc.save();
-      }
-
-      // 6. Save Generated PDF in secure folder
-      const secureDocsDir = path.join(process.cwd(), 'secure_private', 'documents');
-      if (!fs.existsSync(secureDocsDir)) {
-        fs.mkdirSync(secureDocsDir, { recursive: true });
-      }
-
-      const uniqueFileName = `doc_${student.student_id}_${company.company_id}_${Date.now()}.pdf`;
-      const relativeFilePath = path.join('secure_private', 'documents', uniqueFileName).replace(/\\/g, '/');
-      const absoluteFilePath = path.join(process.cwd(), relativeFilePath);
-
-      fs.writeFileSync(absoluteFilePath, pdfBytes);
-
-      // 7. Insert official_documents record in DB
-      const officialDoc = await OfficialDocumentModel.create({
-        type: template.type,
-        student_id: parsedStudentId,
-        company_id: parsedCompanyId,
-        template_id: parsedTemplateId,
-        generated_file_path: relativeFilePath,
-        status: 'pending_sign',
-      });
-
-      // 8. DocuSign Integration (if configured)
-      if (DocuSignService.isConfigured()) {
-        try {
-          console.log('DocuSign is configured. Sending envelope...');
-
-          const envelopeId = await DocuSignService.sendEnvelopeForSigning({
-            pdfPath: relativeFilePath,
-            recipientName: 'Dean of Science and Technology',
-            recipientEmail: 'dean1@test.com', // In production, this would be fetched from Dean's user profile
-            studentCode: student.student_code,
-            companyName: company.name_th,
-          });
-
-          await OfficialDocumentModel.updateEnvelopeId(officialDoc.doc_id, envelopeId);
-          officialDoc.docusign_envelope_id = envelopeId;
-          console.log(`DocuSign Envelope ID ${envelopeId} linked successfully.`);
-        } catch (dsError) {
-          console.error('DocuSign envelope submission failed, continuing with local sign status:', dsError);
-        }
-      }
-
-      writeAudit({
-        action: AuditAction.DOCUMENT_GENERATED,
-        entityType: 'official_document',
-        entityId: officialDoc.doc_id,
-        subjectId: parsedStudentId,
-        detail: {
-          type: template.type,
-          template_id: parsedTemplateId,
-          company_id: parsedCompanyId,
-          intent_form_id: approvedIntent.rows[0].form_id,
-        },
-      }, req).catch(() => undefined);
-
-      res.status(201).json({
-        message: DocuSignService.isConfigured()
-          ? 'Official document generated and uploaded to DocuSign (pending signature).'
-          : 'Official document generated successfully and is pending Dean signature (Local mode).',
-        document: officialDoc,
-      });
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Generate Document Error', 'An internal server error occurred during document generation.');
-    }
-  }
-
   /**
    * Secure E-Signature & Batch Approval for Official Documents.
    * Route: POST /api/documents/batch-sign
@@ -654,20 +353,6 @@ export class DocumentController {
   }
 
   /**
-   * List all document templates.
-   * Route: GET /api/documents/templates
-   * Access: staff, advisor, dept_head, dean
-   */
-  static async listTemplates(_req: Request, res: Response): Promise<void> {
-    try {
-      const templates = await DocumentTemplateModel.findAll();
-      res.status(200).json(templates);
-    } catch (error) {
-      sendUnexpectedError(res, error, 'List Templates Error', 'An internal server error occurred while retrieving templates.');
-    }
-  }
-
-  /**
    * Helper to automatically create a company/mentor user account and email them
    * login credentials once the Dean signs a placement document.
    */
@@ -749,151 +434,6 @@ export class DocumentController {
       }
     } catch (error) {
       console.error(`Error in onboardCompanyAndSendEmail for company ID ${companyId}:`, error);
-    }
-  }
-  /**
-   * Get students who are accepted and eligible for dispatch letter (Staff only)
-   * Route: GET /api/documents/dispatch-eligible
-   */
-  static async getDispatchEligibleStudents(_req: Request, res: Response): Promise<void> {
-    try {
-      // Find intent forms with status = 'accepted' where the student does NOT have a pending or signed dispatch_letter yet
-      const eligibleQuery = await query(`
-        SELECT i.form_id, i.student_id, i.company_id, i.start_date,
-               s.student_code, s.first_name as student_first_name, s.last_name as student_last_name,
-               c.name_th as company_name_th,
-               m.name as mentor_name
-        FROM intent_forms i
-        JOIN students s ON i.student_id = s.student_id
-        JOIN companies c ON i.company_id = c.company_id
-        LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
-        LEFT JOIN official_documents d ON d.student_id = i.student_id AND d.type = 'dispatch_letter'
-        WHERE i.status = 'accepted' AND d.doc_id IS NULL
-      `);
-      res.status(200).json(eligibleQuery.rows);
-    } catch (error) {
-      sendUnexpectedError(res, error, 'getDispatchEligibleStudents error', 'Error retrieving dispatch eligible students');
-    }
-  }
-
-  /**
-   * Generate dispatch letter (mock 1-to-1) for a list of students (Staff only)
-   * Route: POST /api/documents/generate-dispatch
-   */
-  static async generateDispatchLetter(req: Request, res: Response): Promise<void> {
-    try {
-      const { studentIds, documentNumber } = req.body;
-      if (!Array.isArray(studentIds) || studentIds.length === 0) {
-        res.status(400).json({ message: 'Required field: studentIds array' });
-        return;
-      }
-      if (!documentNumber || typeof documentNumber !== 'string') {
-        res.status(400).json({ message: 'Required field: documentNumber string' });
-        return;
-      }
-
-      const generatedDocs = [];
-
-      const browser = await launchPdfBrowser();
-
-      try {
-        for (const studentId of studentIds) {
-          // Mock generation - 1 student per document
-          const parsedStudentId = parseInt(String(studentId), 10);
-          if (isNaN(parsedStudentId)) continue;
-          
-          // Check if student exists and has an accepted intent form
-          const intentRes = await query(`
-            SELECT i.company_id, c.name_th as company_name, s.student_code, s.first_name, s.last_name
-            FROM intent_forms i
-            JOIN students s ON i.student_id = s.student_id
-            JOIN companies c ON i.company_id = c.company_id
-            WHERE i.student_id = $1 AND i.status = 'accepted'
-          `, [parsedStudentId]);
-
-          if (intentRes.rowCount === 0) continue;
-          
-          const intent = intentRes.rows[0];
-          const parsedCompanyId = intent.company_id;
-          
-          // Load official transfer letter HTML template
-          const templatePath = path.join(process.cwd(), 'secure_private', 'templates', 'transfer_letter_template.html');
-          let htmlSource = '';
-          if (fs.existsSync(templatePath)) {
-            const rawTemplate = fs.readFileSync(templatePath, 'utf8');
-            const compiled = Handlebars.compile(rawTemplate);
-            htmlSource = compiled({
-              document_number: documentNumber,
-              current_date: new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' }),
-              recipient_name: 'ผู้จัดการฝ่ายทรัพยากรบุคคล',
-              company_name: intent.company_name,
-              start_date: '๑๖ พฤษภาคม ๒๕๖๙',
-              end_date: '๑๖ กันยายน ๒๕๖๙',
-              students: [
-                {
-                  no: 1,
-                  student_code: intent.student_code,
-                  student_name: `${intent.first_name} ${intent.last_name}`,
-                  major_name: 'วิทยาการคอมพิวเตอร์'
-                }
-              ]
-            });
-          } else {
-            // The inline fallback that used to live here built HTML by string
-            // concatenation from student-supplied data (company name, document
-            // number) and fed it to Puppeteer running with --no-sandbox. The
-            // template file is version-controlled and always present, so the
-            // fallback was dead code carrying real HTML-injection risk. Fail
-            // loudly instead of rendering an unescaped document.
-            throw new Error(
-              `ไม่พบไฟล์เทมเพลตหนังสือส่งตัว: ${templatePath} กรุณาตรวจสอบโฟลเดอร์ secure_private/templates`
-            );
-          }
-
-          const page = await browser.newPage();
-          await page.setContent(htmlSource, { waitUntil: 'load' });
-          const pdfBuffer = await page.pdf({ 
-            format: 'A4',
-            margin: { top: '20mm', bottom: '20mm', left: '20mm', right: '20mm' }
-          });
-          await page.close();
-
-          const pdfBytes = new Uint8Array(pdfBuffer);
-          const uniqueFileName = `dispatch_${parsedStudentId}_${parsedCompanyId}_${Date.now()}.pdf`;
-          const relativeFilePath = path.posix.join('secure_private', 'documents', uniqueFileName);
-          const absoluteFilePath = path.join(process.cwd(), 'secure_private', 'documents', uniqueFileName);
-
-          const secureDocsDir = path.dirname(absoluteFilePath);
-          if (!fs.existsSync(secureDocsDir)) {
-            fs.mkdirSync(secureDocsDir, { recursive: true });
-          }
-          fs.writeFileSync(absoluteFilePath, pdfBytes);
-
-          // create official_document
-          // Find a fallback template_id since this is mocked and we don't have a dispatch template row strictly guaranteed
-          const templateRes = await query(`SELECT template_id FROM document_templates LIMIT 1`);
-          const templateId = (templateRes.rowCount ?? 0) > 0 ? templateRes.rows[0].template_id : 1;
-
-          const officialDoc = await OfficialDocumentModel.create({
-            document_number: documentNumber,
-            type: 'dispatch_letter',
-            student_id: parsedStudentId,
-            company_id: parsedCompanyId,
-            template_id: templateId,
-            generated_file_path: relativeFilePath,
-            status: 'pending_sign'
-          });
-
-          generatedDocs.push(officialDoc);
-        }
-      } finally {
-        await browser.close();
-      }
-
-      res.status(201).json({ message: 'Dispatch letters generated successfully', documents: generatedDocs });
-
-    } catch (error) {
-      sendUnexpectedError(res, error, 'generateDispatchLetter error', 'Error generating dispatch letter');
     }
   }
 }

@@ -1,6 +1,6 @@
 import React, { useState, useContext } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
-import api, { API_BASE_URL } from '../../services/api';
+import api from '../../services/api';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { AuthContext } from '../../context/AuthContext';
 import { MapPin, Calendar, Users, FileText, Send } from 'lucide-react';
@@ -173,20 +173,9 @@ const SupervisionTracking: React.FC = () => {
           </p>
         </div>
 
-        {/* This button, and the whole panel of visit information below it, used
-            to live in AdvisorDashboard's `activeMenu === 'supervision'` branch —
-            which Dashboard.tsx never routes to, because it sends `supervision`
-            here instead. The template exists on the server and nothing else in
-            the application links to it, so until now an advisor could not print
-            the travel memo at all. */}
-        <Button
-          variant="secondary"
-          icon={<FileText className="h-4 w-4" />}
-          onClick={() => window.open(`${API_BASE_URL}/files/download/travel-request-template`, '_blank')}
-          className="shrink-0 self-start sm:self-auto"
-        >
-          พิมพ์บันทึกข้อความขออนุมัติเดินทางราชการ
-        </Button>
+        {/* ปุ่มพิมพ์บันทึกข้อความขออนุมัติเดินทางราชการถูกถอดออกเมื่อ 2026-08-26
+            พร้อมแม่แบบ HTML ทั้งชุด — ปลายทางไม่มีแล้ว การเก็บปุ่มไว้เท่ากับ
+            ให้อาจารย์กดแล้วได้ 404 · วิธีออกเอกสารแบบใหม่ยังอยู่ระหว่างออกแบบ */}
       </div>
 
       <AlertBanner variant="error" message={error} />

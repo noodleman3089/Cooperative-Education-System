@@ -23,40 +23,6 @@ interface StaffDashboardProps {
   defaultTab?: string;
 }
 
-interface StudentIntent {
-  form_id: number;
-  student_id: number;
-  student_code: string;
-  student_name?: string;
-  first_name?: string;
-  last_name?: string;
-  company_id: number;
-  company_name_th: string;
-  job_id: number;
-  job_title?: string;
-  status: string;
-}
-
-/**
- * `student_name` is declared on the type but `/api/intents` never sends it — the
- * query returns `first_name` and `last_name`. The placement list fell back to
- * the literal "นักศึกษาสหกิจ" and the generation panel had no fallback at all,
- * so the officer issuing an official letter read "นักศึกษา: (640101001)".
- * (The same fix was made in AdvisorDashboard; these were the two sites left.)
- */
-const intentStudentName = (intent?: StudentIntent | null): string =>
-  [intent?.first_name, intent?.last_name].filter(Boolean).join(' ').trim()
-  || intent?.student_name
-  || intent?.student_code
-  || 'ไม่ระบุชื่อ';
-
-interface DocumentTemplate {
-  template_id: number;
-  name: string;
-  type: string;
-  file_path: string;
-}
-
 interface GeneratedDocument {
   doc_id: number;
   type: string;
@@ -134,8 +100,6 @@ const PIPELINE_STEPS: {
 const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard', defaultTab }) => {
   const currentTab = defaultTab || (['jobs', 'announcements', 'users', 'import'].includes(activeMenu) ? activeMenu : 'dashboard');
 
-  const [intents, setIntents] = useState<StudentIntent[]>([]);
-  const [templates, setTemplates] = useState<DocumentTemplate[]>([]);
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -180,9 +144,6 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [isAddingStudent, setIsAddingStudent] = useState(false);
 
   // Document Generation states
-  const [selectedIntent, setSelectedIntent] = useState<StudentIntent | null>(null);
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | ''>('');
-  const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
 
   // User list states (for user mgmt tab)
   const [users, setUsers] = useState<UserRow[]>([]);
@@ -228,16 +189,13 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       if (!isBackground) setLoading(true);
       setError(null);
 
-      // Fetch intents, templates, documents, and pipeline summary in parallel
-      const [intentsData, templatesData, docsData, summaryData] = await Promise.all([
-        api.get('/intents'),
-        api.get('/documents/templates'),
+      // แม่แบบเอกสารไม่มีให้โหลดแล้ว — `GET /documents/templates` ถูกถอดพร้อมกับ
+      // การออกเอกสารเมื่อ 2026-08-26 · ประวัติเอกสารที่ออกไปแล้วยังโหลดตามปกติ
+      const [docsData, summaryData] = await Promise.all([
         api.get('/documents'),
         api.get('/intents/pipeline-summary').catch(() => null)
       ]);
 
-      setIntents(intentsData || []);
-      setTemplates(templatesData || []);
       setDocuments(docsData || []);
       if (summaryData) {
         setPipelineSummary(summaryData);
@@ -831,40 +789,6 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setResendingInvite(null);
     }
   };
-
-  // Generate official PDF document
-  const handleGenerateDocSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedIntent || !selectedTemplateId) return;
-
-    setIsGeneratingDoc(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await api.post('/documents/generate', {
-        student_id: selectedIntent.student_id,
-        company_id: selectedIntent.company_id,
-        template_id: selectedTemplateId
-      });
-
-      setSuccess(`ออกเอกสารราชการให้กับนักศึกษาและส่งเรื่องให้คณบดีพิจารณาเรียบร้อยแล้ว`);
-      setSelectedIntent(null);
-      setSelectedTemplateId('');
-      // ต้องเป็น background reload — loadData() เปล่าๆ ตั้ง loading = true ซึ่งทำให้ทั้งหน้า
-      // ถูกแทนด้วย PageSkeleton แถบ "ออกเอกสาร...เรียบร้อยแล้ว" ที่เพิ่งตั้งจึงหายจากจอ
-      // จนกว่าการโหลดจะเสร็จ — เป็นเหตุผลเดียวกับที่ useDashboardData มี isBackground มาแต่ต้น
-      await loadData(true);
-    } catch (err) {
-      console.error('Document generation error:', err);
-      setError(getErrorMessage(err, 'การสร้างเอกสารล้มเหลว ตรวจสอบข้อมูลติดต่อ HR บริษัทปลายทาง'));
-    } finally {
-      setIsGeneratingDoc(false);
-    }
-  };
-
-  // Filter student intents that have placement accepted
-  const acceptedPlacements = intents.filter(i => i.status === 'accepted');
 
   /**
    * The queue mixed published, pending and closed postings in one undifferentiated
@@ -2081,100 +2005,21 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             </div>
           </div>
 
-          {/* Document Generation Tab */}
-          {/* Top Info Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* Action 1: Placement list of students */}
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              <div>
-                <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
-                  <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                    นักศึกษาผ่านการสัมภาษณ์ & รอจดหมายส่งตัว ({acceptedPlacements.length} รายการ)
-                  </span>
-                </div>
-                
-                {acceptedPlacements.length > 0 ? (
-                  <div className="max-h-[250px] overflow-y-auto divide-y divide-gray-100 dark:divide-gray-800">
-                    {acceptedPlacements.map((intent) => (
-                      <div key={intent.form_id} className="p-4 flex justify-between items-center hover:bg-gray-50/50 dark:hover:bg-gray-800/10 text-xs">
-                        <div>
-                          <span className="block font-bold text-gray-800 dark:text-gray-200">{intentStudentName(intent)}</span>
-                          <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">รหัส: {intent.student_code} | บริษัท: {intent.company_name_th}</span>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setSelectedIntent(intent)}
-                          className="shrink-0 border-brand-blue text-brand-blue dark:text-blue-400 dark:border-blue-800"
-                        >
-                          เลือกออกจดหมาย
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-12 text-gray-500 dark:text-gray-400 text-xs">
-                    ไม่มีนักศึกษาที่ได้รับการตอบรับและรอออกจดหมายส่งตัวในขณะนี้
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Action 2: Generation Setup Form (visible when student selected) */}
-            <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 flex flex-col justify-between">
-              {selectedIntent ? (
-                <form onSubmit={handleGenerateDocSubmit} className="space-y-4">
-                  <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">ขั้นตอนทำจดหมายจดทะเบียนกลุ่ม</h3>
-                  
-                  <div className="p-3 bg-gray-50 dark:bg-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg text-xs space-y-1">
-                    <div><span className="text-gray-500 dark:text-gray-400">นักศึกษา:</span> <span className="font-bold text-gray-800 dark:text-white">{intentStudentName(selectedIntent)} ({selectedIntent.student_code})</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">สถานประกอบการ:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.company_name_th}</span></div>
-                    <div><span className="text-gray-500 dark:text-gray-400">ตำแหน่งงาน:</span> <span className="font-bold text-gray-800 dark:text-white">{selectedIntent.job_title || 'ระบุทั่วไป'}</span></div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                      เลือกแม่แบบฟอร์มเอกสาร (Template)
-                    </label>
-                    <Select
-                      required
-                      value={selectedTemplateId}
-                      onChange={(e) => setSelectedTemplateId(Number(e.target.value))}
-                    >
-                      <option value="">-- กรุณาเลือกแม่แบบเอกสาร --</option>
-                      {templates.map((t) => (
-                        <option key={t.template_id} value={t.template_id}>
-                          {t.name} (ประเภท: {t.type === 'cover_letter' ? 'ขอความอนุเคราะห์' : 'ส่งตัวนักศึกษา'})
-                        </option>
-                      ))}
-                    </Select>
-                  </div>
-
-                  <div className="flex flex-wrap justify-end gap-2 pt-4">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedIntent(null);
-                        setSelectedTemplateId('');
-                      }}
-                    >
-                      ยกเลิก
-                    </Button>
-                    <Button type="submit" size="sm" loading={isGeneratingDoc} loadingLabel="กำลังออกเอกสาร...">
-                      ยืนยันการออกเอกสาร
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <div className="text-center py-16 text-gray-500 dark:text-gray-400 text-xs">
-                  กรุณาเลือกนักศึกษาจากตารางซ้ายมือเพื่อทำการออกเอกสารจดหมายราชการ
-                </div>
-              )}
-            </div>
-
-          </div>
+          {/* ⛔ การออกเอกสารราชการถูกโละพร้อมแม่แบบ HTML ทั้งชุด (2026-08-26)
+              ฟอร์มเลือกแม่แบบและปุ่มออกเอกสารถูกถอดออกทั้งก้อน ไม่ใช่ซ่อนไว้ —
+              ปุ่มที่กดแล้วได้ 404 แย่กว่าการบอกตรงๆ ว่ากำลังปรับปรุง
+              ประวัติเอกสารที่ออกไปแล้วด้านล่างยังใช้งานได้ตามปกติ */}
+          <AlertBanner
+            variant="info"
+            message={
+              <>
+                <strong>ระบบออกเอกสารราชการอยู่ระหว่างปรับปรุง</strong> — วิธีออกหนังสือ
+                ขอความอนุเคราะห์และหนังสือส่งตัวกำลังถูกออกแบบใหม่ ระหว่างนี้ยังออกเอกสาร
+                ใหม่จากระบบไม่ได้ · เอกสารที่ออกไปแล้วยังเปิดดูและติดตามสถานะได้ตามปกติ
+                ที่ตารางด้านล่าง
+              </>
+            }
+          />
 
           {/* Generated Documents Log */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">

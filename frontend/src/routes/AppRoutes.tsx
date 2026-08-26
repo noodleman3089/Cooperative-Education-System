@@ -20,7 +20,6 @@ const OnboardingStudent = lazy(() => import('../pages/Student/OnboardingStudent'
 const OnboardingPersonnel = lazy(() => import('../pages/Staff/OnboardingPersonnel'));
 const SetPassword = lazy(() => import('../pages/SetPassword'));
 const AppointmentResponse = lazy(() => import('../pages/Company/AppointmentResponse'));
-const DispatchLetterCreator = lazy(() => import('../pages/Staff/DispatchLetterCreator'));
 const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
 const MentorEvaluation = lazy(() => import('../pages/Company/MentorEvaluation'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
@@ -133,15 +132,6 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute>
             <Dashboard />
-          </ProtectedRoute>
-        } 
-      />
-
-      <Route 
-        path="/staff/dispatch-letters" 
-        element={
-          <ProtectedRoute requiredRoles={['staff', 'dean']}>
-            <DispatchLetterCreator />
           </ProtectedRoute>
         } 
       />

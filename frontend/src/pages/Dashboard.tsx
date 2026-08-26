@@ -25,7 +25,6 @@ const AdvisorDashboard = lazy(() => import('../components/AdvisorDashboard'));
 const DeptHeadDashboard = lazy(() => import('../components/DeptHeadDashboard'));
 const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
 const StaffDashboard = lazy(() => import('../components/StaffDashboard'));
-const DispatchLetterCreator = lazy(() => import('./Staff/DispatchLetterCreator'));
 const CompanyDashboard = lazy(() => import('../components/CompanyDashboard'));
 const PersonnelProfile = lazy(() => import('../components/PersonnelProfile'));
 const AccommodationWorkPlan = lazy(() => import('./Student/AccommodationWorkPlan'));
@@ -329,7 +328,6 @@ const Dashboard: React.FC = () => {
         return <DeanDashboard activeMenu="dashboard" />;
         
       case 'staff':
-        if (activeMenu === 'dispatch_letters') return <DispatchLetterCreator />;
         if (activeMenu === 'appointments') return <AppointmentAudit />;
         if (activeMenu === 'jobs') return <StaffDashboard activeMenu="jobs" />;
         if (activeMenu === 'announcements') return <StaffDashboard activeMenu="announcements" />;

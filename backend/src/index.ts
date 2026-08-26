@@ -7,11 +7,9 @@ import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import jwt from 'jsonwebtoken';
-import { launchPdfBrowser } from './utils/browser';
 import type { JwtPayload } from 'jsonwebtoken';
 import { PDFDocument } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-import Handlebars from 'handlebars';
 import { xssSanitizer } from './middlewares/validation';
 import { authenticateToken } from './middlewares/auth';
 import { AUTH_COOKIE } from './utils/authCookie';
@@ -195,83 +193,6 @@ app.get('/api/files/download/parental-consent-template', async (req: Request, re
   }
 });
 
-// Route: GET /api/files/download/travel-request-template (Advisor travel request memo PDF)
-app.get('/api/files/download/travel-request-template', authenticateToken, async (_req: Request, res: Response, next: NextFunction) => {
-  try {
-    const templateFilePath = path.join(process.cwd(), 'secure_private', 'templates', 'travel_request_template.html');
-    
-    if (!fs.existsSync(templateFilePath)) {
-      res.status(404).json({ message: 'Travel request template not found.' });
-      return;
-    }
-
-    const htmlSource = fs.readFileSync(templateFilePath, 'utf8');
-    const compiledTemplate = Handlebars.compile(htmlSource);
-
-    const thaiDate = new Date().toLocaleDateString('th-TH', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
-
-    const destinationsQuery = await query(`
-      SELECT s.student_code, s.first_name || ' ' || s.last_name as student_name,
-             c.name_th as company_name, c.province
-      FROM intent_forms i
-      JOIN students s ON i.student_id = s.student_id
-      JOIN companies c ON i.company_id = c.company_id
-      WHERE i.status = 'accepted'
-      LIMIT 5
-    `);
-
-    let destinations = destinationsQuery.rows.map((row, idx) => ({
-      no: idx + 1,
-      student_name: row.student_name,
-      student_code: row.student_code,
-      company_name: row.company_name,
-      province: row.province || 'ชลบุรี',
-      advisor_name: 'อาจารย์ผู้ดูแล'
-    }));
-
-    if (destinations.length === 0) {
-      destinations = [{
-        no: 1,
-        student_name: 'นักศึกษาสหกิจศึกษา',
-        student_code: '64010001',
-        company_name: 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด',
-        province: 'สมุทรปราการ',
-        advisor_name: 'อาจารย์ผู้ดูแล'
-      }];
-    }
-
-    const renderedHtml = compiledTemplate({
-      document_number: `ศธ ๐๖๒๒/ว ${(Math.floor(Math.random() * 900) + 100).toString()}`,
-      current_date: thaiDate,
-      travel_date: thaiDate,
-      transport_type: 'รถยนต์ส่วนบุคคล / รถยนต์คณะวิทยาศาสตร์ฯ',
-      destinations: destinations,
-      applicant_name: 'อาจารย์ผู้นิเทศก์การปฏิบัติงานสหกิจศึกษา'
-    });
-
-    const browser = await launchPdfBrowser();
-    const page = await browser.newPage();
-    await page.setContent(renderedHtml, { waitUntil: 'load' });
-    const pdfBuffer = await page.pdf({ 
-      format: 'A4',
-      margin: { top: '20mm', bottom: '20mm', left: '25mm', right: '20mm' }
-    });
-    await browser.close();
-
-    res.contentType('application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="travel_request.pdf"');
-    // ต้องห่อเป็น Buffer ก่อนเสมอ — `page.pdf()` ของ puppeteer คืน Uint8Array
-    // ตั้งแต่ v23 และ Express จะ serialize Uint8Array เป็น JSON ({"0":37,"1":80,...})
-    // แทนที่จะส่งไบต์ดิบ ผู้ใช้จึงได้ไฟล์ขยะแทน PDF โดยที่ status ยังเป็น 200
-    res.send(Buffer.from(pdfBuffer));
-  } catch (error) {
-    next(error);
-  }
-});
 
 // Route: GET /api/files/documents/:doc_id (Retrieve generated cover/transfer letters)
 app.get('/api/files/documents/:doc_id', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
@@ -436,13 +357,6 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
 
 // API Base Routing
 app.use('/api', apiRouter);
-
-// Frontend test client dashboard (ponytail: extracted to external static file to keep index.ts readable)
-if (process.env.NODE_ENV !== 'production') {
-  app.get('/dashboard', (_req: Request, res: Response) => {
-    res.sendFile(path.join(process.cwd(), 'secure_private', 'templates', 'dashboard.html'));
-  });
-}
 
 
 // Basic Route for Healthcheck
