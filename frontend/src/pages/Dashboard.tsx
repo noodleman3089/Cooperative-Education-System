@@ -34,6 +34,7 @@ const WeeklyLog = lazy(() => import('./Student/WeeklyLog'));
 const SupervisionTracking = lazy(() => import('./Advisor/SupervisionTracking'));
 const AppointmentAudit = lazy(() => import('./Staff/AppointmentAudit'));
 const FinalReportSubmission = lazy(() => import('./Student/FinalReportSubmission'));
+const EvaluationResult = lazy(() => import('./Student/EvaluationResult'));
 const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
 const MentorProfile = lazy(() => import('./Company/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
@@ -59,6 +60,8 @@ const STAGE_GATED_STUDENT_MENUS = [
   'report_outline',
   'weekly_log',
   'final_report',
+  // ยังไม่มีที่ฝึกงาน = ยังไม่มีพี่เลี้ยง = ไม่มีทางมีผลประเมิน
+  'evaluation_result',
 ] as const;
 
 /**
@@ -304,6 +307,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'report_outline') return <ReportOutline />;
         if (activeMenu === 'weekly_log') return <WeeklyLog />;
         if (activeMenu === 'final_report') return <FinalReportSubmission />;
+        if (activeMenu === 'evaluation_result') return <EvaluationResult />;
         return <StudentDashboard />;
         
       case 'advisor':

@@ -35,9 +35,6 @@ export const AuditAction = {
   JOB_POST_PUBLISHED: 'job_post.published',
   JOB_POST_REJECTED: 'job_post.rejected',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
-  // แบบประเมินเป็นเอกสารที่ต้องใส่ซองประทับตรา "ลับ" — การเปิดพิมพ์จึงควรมีร่องรอย
-  // ว่าใครเปิด เช่นเดียวกับการลงนามและการให้คะแนน
-  EVALUATION_PDF_EXPORTED: 'evaluation.pdf_exported',
   FINAL_REPORT_REVIEWED: 'final_report.reviewed',
   COMPANY_VERIFIED: 'company.verified',
   COMPANY_UNVERIFIED: 'company.unverified',

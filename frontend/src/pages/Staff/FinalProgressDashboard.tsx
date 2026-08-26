@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api, { API_BASE_URL } from '../../services/api';
+import api from '../../services/api';
 import { ClipboardList, Users, Search, Mail, Download, RefreshCw, CheckCircle, Clock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
@@ -297,29 +297,17 @@ const FinalProgressDashboard: React.FC = () => {
                     </td>
                     <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
                       {std.sahatkit15Score !== null ? (
-                        <a
-                          href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_15/${std.studentId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand-blue hover:underline dark:text-blue-400"
-                        >
-                          {std.sahatkit15Score}
-                        </a>
+                        <span>{std.sahatkit15Score}</span>
                       ) : (
                         <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
                       )}
                     </td>
                     <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
                       {std.sahatkit16Score !== null ? (
-                        <a
-                          href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_16/${std.studentId}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-brand-blue hover:underline dark:text-blue-400"
-                        >
+                        <span>
                           {std.sahatkit16Score}
                           <span className="text-xs font-normal text-gray-600 dark:text-gray-400">/70</span>
-                        </a>
+                        </span>
                       ) : (
                         <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
                       )}

@@ -185,6 +185,9 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'report_outline', label: 'โครงร่างรายงานปฏิบัติงาน', icon: icons.report_outline },
       { id: 'weekly_log', label: 'บันทึกการทำงานรายสัปดาห์', icon: icons.weekly_log },
       { id: 'final_report', label: 'รายงานการปฏิบัติงานสมบูรณ์', icon: icons.final_report },
+      // ผลประเมินจากพี่เลี้ยง — เซิร์ฟเวอร์เปิดให้ดูหลังสิ้นสุดช่วงปฏิบัติงานเท่านั้น
+      // เมนูจึงอยู่ตลอด แต่ปลายทางเป็นหน้าอธิบายว่าจะเปิดเมื่อไหร่ (ไม่ใช่ปุ่มตาย)
+      { id: 'evaluation_result', label: 'ผลประเมินจากพี่เลี้ยง', icon: icons.evaluation },
       { id: 'profile', label: 'ข้อมูลส่วนตัว & เรซูเม่', icon: icons.profile }
     ],
     advisor: [

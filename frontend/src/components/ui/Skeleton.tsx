@@ -32,6 +32,8 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   // student cards. They were mapped to 'table', so the layout changed shape as
   // the data landed. Neither screen contains a table at all.
   final_evaluation: 'cards',
+  // หน้าผลประเมินของนักศึกษาเป็นรายการคะแนนทีละข้อ = รูปทรงเดียวกับตาราง
+  evaluation_result: 'table',
   final_progress: 'table',
   dispatch_letters: 'table',
   companies: 'table',

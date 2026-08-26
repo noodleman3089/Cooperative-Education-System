@@ -20,15 +20,14 @@ router.get(
   FinalEvaluationController.getMyStudents
 );
 
-// ออกแบบประเมินที่กรอกแล้วเป็น PDF
-// ต้องเป็น /pdf/:formCode/:studentId ไม่ใช่ /:studentId/pdf/... ไม่งั้น segment แรก
-// จะเป็น param แล้วไปชนกับ /my-students
-// ⛔ ไม่มี `student` โดยตั้งใจ — เอกสารนี้ใส่ซองประทับตรา "ลับ" นักศึกษาต้องเข้าไม่ถึง
+// ผลประเมินของนักศึกษาเอง — ไม่มี :studentId โดยตั้งใจ อ่าน id จาก token เท่านั้น
+// เปิดเผยเฉพาะเมื่อพ้นช่วงปฏิบัติงานแล้ว (ตัวคุมอยู่ใน controller ไม่ใช่ที่นี่
+// เพราะข้อความปฏิเสธต้องบอกวันที่ที่จะเปิดให้ดู)
 router.get(
-  '/pdf/:formCode/:studentId',
+  '/my-result',
   authenticateToken,
-  authorizeRoles('mentor', 'advisor', 'staff', 'dept_head'),
-  FinalEvaluationController.exportEvaluationPdf
+  authorizeRoles('student'),
+  FinalEvaluationController.getMyResult
 );
 
 export default router;

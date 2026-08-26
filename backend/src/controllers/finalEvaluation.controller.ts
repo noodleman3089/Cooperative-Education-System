@@ -1,16 +1,13 @@
-import { Request, Response, NextFunction } from 'express';
-import fs from 'fs';
-import path from 'path';
-import Handlebars from 'handlebars';
+import { Request, Response } from 'express';
 import { query } from '../config/database';
-import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { CoopCalendarModel } from '../models/coopCalendar';
+import { calendarStatus } from '../utils/coopCalendar';
+import { formatThaiDate } from '../utils/thaiDate';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
-import { launchPdfBrowser } from '../utils/browser';
 import {
   EVALUATION_FORMS,
   FORM_LABEL,
-  FormCode,
   isFormCode,
   validateEvaluationPayload,
 } from '../config/evaluationRubric';
@@ -25,87 +22,16 @@ import {
  * เขียนไว้ตรงๆ ว่าผู้ให้ข้อมูลของ สหกิจ 16 คือ "พนักงานที่ปรึกษา (Job Supervisor)")
  * — เดิมระบบเอา สหกิจ 16 ไปให้อาจารย์ทำด้วย rubric 10 ข้อที่คิดขึ้นเอง
  *
- * ทั้งสองใบเป็นเอกสารที่ต้องใส่ซองประทับตรา "ลับ" → นักศึกษาต้องเข้าไม่ถึง
- * `authorizeRoles` ของทุก route ในไฟล์นี้จึงไม่มี `student` และห้ามใส่เพิ่ม
- */
-
-/** โฟลเดอร์แม่แบบ — อ่านไฟล์ตรงๆ แบบเดียวกับ travel-request ไม่ผ่าน document_templates */
-const TEMPLATE_DIR = path.join(process.cwd(), 'secure_private', 'templates');
-
-/** หมวดของ สหกิจ 15 สำหรับกล่องสรุปท้ายฟอร์ม — ลำดับและป้ายตรงกับกระดาษ */
-const SAHATKIT_15_SECTIONS: { no: number; label: string; keys: string[]; max: number }[] = [
-  { no: 1, label: 'ผลสำเร็จของงาน (ข้อ 1.1 – 1.2)', keys: ['work_quantity', 'work_quality'], max: 20 },
-  {
-    no: 2,
-    label: 'ความรู้ความสามารถ (ข้อ 2.1 – 2.8)',
-    keys: [
-      'academic_ability',
-      'learn_and_apply',
-      'practical_ability',
-      'judgment_decision',
-      'organization_planning',
-      'communication_skills',
-      'foreign_language_culture',
-      'job_suitability',
-    ],
-    max: 40,
-  },
-  {
-    no: 3,
-    label: 'ความรับผิดชอบต่อหน้าที่ (ข้อ 3.1 – 3.4)',
-    keys: [
-      'responsibility_dependability',
-      'interest_in_work',
-      'initiative_self_starter',
-      'response_to_supervision',
-    ],
-    max: 20,
-  },
-  {
-    no: 4,
-    label: 'ลักษณะส่วนบุคคล (ข้อ 4.1 – 4.4)',
-    keys: ['personality', 'interpersonal_skills', 'discipline_adaptability', 'ethics_morality'],
-    max: 20,
-  },
-];
-
-/**
- * ป้ายข้อของ สหกิจ 16 เรียงตรงกับ `EVALUATION_FORMS.sahatkit_16.items`
+ * **นักศึกษาดูผลของตัวเองได้ — แต่หลังสิ้นสุดช่วงปฏิบัติงานเท่านั้น** (`getMyResult`)
  *
- * อยู่ที่นี่แทนที่จะฝังใน template เพราะตาราง 14 แถวเป็น `{{#each}}` — การพิมพ์
- * ป้ายลง HTML ตรงๆ จะต้องเขียน 14 แถวซ้ำกันทั้งหมดพร้อมช่องติ๊ก 6 ช่องต่อแถว
- * (ต่างจาก สหกิจ 15 ที่แต่ละข้อมีคำอธิบายยาวไม่เท่ากัน จึงเขียนเป็นแถวจริงคุ้มกว่า)
+ * บนกระดาษสองใบนี้ใส่ซองปิดผนึกประทับตรา "ลับ" (`เอกสาร/ข้อมูล ขั้นตอนเอกสาร.txt:158,167`)
+ * เจตนาของซองคือกันนักศึกษาแก้คะแนนระหว่างถือซองมาส่งมหาวิทยาลัย ซึ่งในระบบนี้
+ * พี่เลี้ยงกรอกเข้าฐานข้อมูลตรงๆ นักศึกษาแก้ไม่ได้อยู่แล้ว — เจตนาเดิมจึงถูกรักษาไว้
+ * ด้วยกลไกอื่น (บรรทัดฐานเดียวกับ SEC-09) เจ้าของเคาะเรื่องนี้เมื่อ 2026-08-26
+ *
+ * ⛔ ที่ยังห้ามคือ **การเห็นคะแนนระหว่างยังปฏิบัติงานอยู่** เพราะพี่เลี้ยงกับนักศึกษา
+ * ยังทำงานด้วยกันทุกวัน `getMyResult` จึงเปิดเผยเฉพาะเมื่อพ้นช่วงแล้วเท่านั้น
  */
-const SAHATKIT_16_LABELS = [
-  'เลือกหัวข้อมีความเหมาะสมในระดับใด',
-  'เนื้อหารายละเอียดบทที่ 1',
-  'เนื้อหารายละเอียดบทที่ 2',
-  'เนื้อหารายละเอียดบทที่ 3',
-  'เนื้อหารายละเอียดบทที่ 4',
-  'ความเหมาะสมของเนื้อหาโดยภาพรวม',
-  'การใช้ภาษามีความเหมาะสม',
-  'ความสมบูรณ์ของรายงาน ในส่วนสารบัญ',
-  'ความสมบูรณ์ของรายงาน ในส่วนบรรณานุกรม การอ้างอิง',
-  'ความสมบูรณ์ของรายงาน',
-  'ความถูกต้องของรูปแบบที่กำหนด',
-  'ความเหมาะสมของระยะเวลาในการทำรายงาน',
-  'การใช้ภาพประกอบสอดคล้องกับเนื้อหา',
-  'โดยภาพรวมของการจัดทำรายงานสหกิจ',
-];
-
-/** อ่านคะแนนหนึ่งข้อจาก JSONB — คืน null เมื่อเป็น "–" หรือไม่มีค่า */
-const readScore = (detail: Record<string, unknown>, key: string): number | null => {
-  const raw = detail[key];
-  if (raw === null || raw === undefined) return null;
-  const n = typeof raw === 'number' ? raw : Number(raw);
-  return Number.isFinite(n) ? n : null;
-};
-
-/** ข้อความจาก JSONB — คืนสตริงว่างเพื่อให้ Handlebars ไม่พิมพ์คำว่า undefined */
-const readText = (detail: Record<string, unknown>, key: string): string => {
-  const raw = detail[key];
-  return typeof raw === 'string' ? raw : '';
-};
 
 export class FinalEvaluationController {
   /**
@@ -270,191 +196,102 @@ export class FinalEvaluationController {
   }
 
   /**
-   * ออกแบบประเมินที่กรอกแล้วเป็น PDF ตามหน้าตาแบบฟอร์มราชการ
-   * Route: GET /api/final-evaluations/pdf/:formCode/:studentId
-   * Access: mentor (ของตัวเอง) · advisor / staff / dept_head (ตาม SEC-06)
+   * ผลประเมินของนักศึกษาเอง
+   * Route: GET /api/final-evaluations/my-result
+   * Access: student เท่านั้น
    *
-   * จงใจไม่ใช้ `POST /api/documents/generate` — ตัวนั้นเป็น staff-only บังคับ
-   * ให้บริษัทผ่านการรับรอง และเขียน `official_documents` เข้าคิวรอคณบดีลงนาม
-   * ซึ่งผิดกับเอกสารลับที่พี่เลี้ยงลงนามคนเดียว
+   * ⛔ ไม่มีพารามิเตอร์ให้ระบุนักศึกษาโดยตั้งใจ — `students.student_id` เป็น PK
+   * เดียวกับ `users.user_id` อยู่แล้ว การอ่าน id จาก token จึงไม่มีทางชี้ไปที่คนอื่น
+   * ได้เลย ไม่ต้องมีชั้นตรวจสิทธิ์เพิ่ม และไม่มีช่องให้ลองสุ่ม id (SEC-06)
    */
-  static async exportEvaluationPdf(
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ): Promise<void> {
+  static async getMyResult(req: Request, res: Response): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({ message: 'Unauthorized. Please log in.' });
         return;
       }
-
-      const { formCode } = req.params;
-      const targetStudentId = parseInt(req.params.studentId, 10);
-      if (isNaN(targetStudentId) || !isFormCode(formCode)) {
-        res.status(400).json({ message: 'ข้อมูลที่ร้องขอไม่ถูกต้อง' });
+      if (!req.user.roles.includes('student')) {
+        res.status(403).json({ message: 'หน้านี้สำหรับนักศึกษาเท่านั้น' });
         return;
       }
 
-      const { userId, roles } = req.user;
-      if (roles.includes('mentor')) {
-        const own = await query(
-          `SELECT mentor_id FROM intent_forms
-            WHERE student_id = $1 AND mentor_id = $2 AND status = 'accepted'`,
-          [targetStudentId, userId]
-        );
-        if ((own.rowCount ?? 0) === 0) {
-          res.status(403).json({ message: 'คุณไม่มีสิทธิ์เข้าถึงผลประเมินของนักศึกษาคนนี้' });
-          return;
-        }
-      } else {
-        // SEC-06: คะแนนที่ปิดผนึกเปิดได้เฉพาะคนที่รับผิดชอบนักศึกษาคนนี้
-        await assertCanReviewStudentWork(userId, roles, targetStudentId);
+      const studentId = req.user.userId;
+
+      // ไม่มีแถวใน students = ยังไม่กรอกประวัติ → ปฏิเสธ ไม่ใช่คืนผลว่างเปล่า (SEC-06)
+      const profile = await query(`SELECT student_id FROM students WHERE student_id = $1`, [
+        studentId,
+      ]);
+      if ((profile.rowCount ?? 0) === 0) {
+        res.status(403).json({
+          message: 'ยังไม่มีข้อมูลประวัตินักศึกษาในระบบ กรุณากรอกประวัติให้ครบก่อน',
+        });
+        return;
       }
 
-      const dataRes = await query(
-        `SELECT s.student_code, s.first_name, s.last_name,
-                mj.major_name_th, f.faculty_name_th,
-                c.name_th AS company_name,
-                men.name AS evaluator_name,
-                men.position AS evaluator_position,
-                men.department AS evaluator_department,
-                ev.scores_detail, ev.total_score, ev.submitted_at
-           FROM final_evaluations ev
-           JOIN students s       ON ev.student_id = s.student_id
-           JOIN master_major mj  ON s.major_id = mj.major_id
-           JOIN master_faculty f ON mj.faculty_id = f.faculty_id
-           LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status = 'accepted'
-           LEFT JOIN companies c ON i.company_id = c.company_id
-           LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
-          WHERE ev.student_id = $1 AND ev.form_code = $2 AND ev.evaluator_role = 'mentor'`,
-        [targetStudentId, formCode]
+      // ⚠️ ด่านนี้ **fail-closed** ซึ่งตรงข้ามกับ middlewares/calendarGate.ts โดยตั้งใจ
+      //
+      //   calendarGate เป็นเรื่อง *กำหนดการทำรายการ* — ไม่ได้ตั้งช่วง = ยังไม่มีกฎ = ผ่าน
+      //                 เพราะเดาผิดคือปิดระบบใส่นักศึกษาทั้งรุ่น
+      //   ตัวนี้เป็นเรื่อง *การเปิดเผยคะแนนลับ* — ไม่รู้ว่าจบช่วงหรือยัง = ยังไม่เปิด
+      //                 เพราะเดาผิดคือนักศึกษาเห็นคะแนนขณะยังนั่งทำงานกับพี่เลี้ยงอยู่
+      //
+      // ใช้ช่วง weekly_log เพราะมันคือช่วงที่นักศึกษาออกปฏิบัติงานจริงตามปฏิทิน
+      // (`coop_semesters` มีแค่ปี/ภาค ไม่มีวันเริ่ม-สิ้นสุด และ COOP_ACTIVITY_KEYS
+      // จงใจไม่มีคีย์ 'ช่วงออกปฏิบัติงาน' เพราะไม่มี endpoint ให้ล็อก)
+      const window = await CoopCalendarModel.findActiveWindow('weekly_log');
+      const status = window
+        ? calendarStatus(window.today, window.start_date, window.end_date)
+        : 'not_configured';
+
+      if (status !== 'closed') {
+        const message =
+          status === 'not_configured' || !window?.end_date
+            ? 'ระบบจะเปิดให้ดูผลประเมินหลังสิ้นสุดช่วงปฏิบัติงานตามปฏิทินสหกิจศึกษา — ตอนนี้เจ้าหน้าที่ยังไม่ได้ตั้งช่วงบันทึกการปฏิบัติงานไว้ กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษา'
+            : `ผลประเมินจะเปิดให้ดูหลังสิ้นสุดช่วงปฏิบัติงาน คือหลังวันที่ ${formatThaiDate(
+                window.end_date
+              )} ตามปฏิทินสหกิจศึกษา`;
+        res.status(403).json({ message });
+        return;
+      }
+
+      const evalRes = await query(
+        `SELECT form_code, scores_detail, total_score, submitted_at
+           FROM final_evaluations
+          WHERE student_id = $1 AND evaluator_role = 'mentor'`,
+        [studentId]
       );
 
-      if ((dataRes.rowCount ?? 0) === 0) {
-        res.status(404).json({ message: `ยังไม่มีแบบประเมิน ${FORM_LABEL[formCode]} ของนักศึกษาคนนี้` });
-        return;
+      const byForm: Record<string, unknown> = {};
+      for (const row of evalRes.rows) {
+        const formCode: unknown = row.form_code;
+        // แถวที่ form_code ไม่รู้จักถูกข้ามทิ้ง ไม่ใช่ส่งออกไปพร้อม max_total = null
+        // เพราะหน้าจอคิดเปอร์เซ็นต์จากตัวหารนั้น — ตัวหารว่างจะกลายเป็นคะแนนที่โกหก
+        if (!isFormCode(formCode)) continue;
+        byForm[formCode] = {
+          form_code: formCode,
+          scores_detail: row.scores_detail ?? {},
+          // total_score เป็น NUMERIC ซึ่ง `pg` คืนมาเป็นสตริง ("100.00") — ส่งดิบไป
+          // หน้าจอจะพิมพ์ "100.00 / 100" ให้นักศึกษาอ่าน
+          total_score: row.total_score === null ? null : Number(row.total_score),
+          max_total: EVALUATION_FORMS[formCode].maxTotal,
+          submitted_at: row.submitted_at,
+        };
       }
 
-      const row = dataRes.rows[0];
-      const detail = (row.scores_detail ?? {}) as Record<string, unknown>;
-
-      const templatePath = path.join(TEMPLATE_DIR, `${formCode}_template.html`);
-      if (!fs.existsSync(templatePath)) {
-        res.status(404).json({ message: 'ไม่พบแม่แบบเอกสาร' });
-        return;
-      }
-
-      const compiled = Handlebars.compile(fs.readFileSync(templatePath, 'utf8'));
-      const context = FinalEvaluationController.buildPdfContext(formCode, row, detail);
-      const renderedHtml = compiled(context);
-
-      const browser = await launchPdfBrowser();
-      const page = await browser.newPage();
-      await page.setContent(renderedHtml, { waitUntil: 'load' });
-      const pdfBuffer = await page.pdf({
-        format: 'A4',
-        margin: { top: '15mm', bottom: '15mm', left: '20mm', right: '15mm' },
-      });
-      await browser.close();
-
-      writeAudit(
-        {
-          action: AuditAction.EVALUATION_PDF_EXPORTED,
-          entityType: 'final_evaluation',
-          entityId: `${targetStudentId}:${formCode}`,
-          subjectId: targetStudentId,
-          detail: { form_code: formCode },
+      res.status(200).json({
+        success: true,
+        data: {
+          sahatkit_15: byForm.sahatkit_15 ?? null,
+          sahatkit_16: byForm.sahatkit_16 ?? null,
         },
-        req
-      ).catch(() => undefined);
-
-      res.contentType('application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename="${formCode}_${row.student_code}.pdf"`
-      );
-      // puppeteer v23+ คืน Uint8Array — ไม่ห่อ Buffer แล้ว Express จะ serialize
-      // เป็น JSON โดย status ยังเป็น 200 ผู้ใช้จึงได้ไฟล์ขยะแทน PDF
-      res.send(Buffer.from(pdfBuffer));
+      });
     } catch (error) {
-      if (sendAccessError(res, error)) return;
-      next(error);
+      sendUnexpectedError(
+        res,
+        error,
+        'Get My Evaluation Result Error',
+        'เกิดข้อผิดพลาดขณะดึงผลประเมิน'
+      );
     }
-  }
-
-  /** ประกอบ context ให้ Handlebars — ยอดรวมคิดที่นี่เพราะ Handlebars บวกเลขไม่ได้ */
-  private static buildPdfContext(
-    formCode: FormCode,
-    row: Record<string, unknown>,
-    detail: Record<string, unknown>
-  ): Record<string, unknown> {
-    const submittedAt = row.submitted_at instanceof Date ? row.submitted_at : new Date();
-    const base: Record<string, unknown> = {
-      student_name: `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim(),
-      student_code: row.student_code ?? '',
-      major_name: row.major_name_th ?? '',
-      faculty_name: row.faculty_name_th ?? '',
-      company_name: row.company_name ?? '',
-      evaluator_name: row.evaluator_name ?? '',
-      evaluator_position: row.evaluator_position ?? '',
-      evaluator_department: row.evaluator_department ?? '',
-      submitted_date: submittedAt.toLocaleDateString('th-TH', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      }),
-      other_comments: readText(detail, 'other_comments'),
-    };
-
-    if (formCode === 'sahatkit_15') {
-      const scores: Record<string, number | null> = {};
-      for (const item of EVALUATION_FORMS.sahatkit_15.items) {
-        scores[item.key] = readScore(detail, item.key);
-      }
-      const sectionTotals = SAHATKIT_15_SECTIONS.map((section) => ({
-        no: section.no,
-        label: section.label,
-        max: section.max,
-        got: section.keys.reduce((sum, key) => sum + (scores[key] ?? 0), 0),
-      }));
-
-      const wouldHire = readText(detail, 'would_hire');
-      return {
-        ...base,
-        s: scores,
-        section_totals: sectionTotals,
-        grand_total: sectionTotals.reduce((sum, s) => sum + s.got, 0),
-        strength: readText(detail, 'strength'),
-        improvement: readText(detail, 'improvement'),
-        hire_accept: wouldHire === 'accept',
-        hire_unsure: wouldHire === 'unsure',
-        hire_reject: wouldHire === 'reject',
-      };
-    }
-
-    // สหกิจ 16 — ตารางเป็นช่องติ๊ก 5/4/3/2/1/– จึงแปลงคะแนนเป็นธงก่อน
-    // ทำใน TS แทนการลงทะเบียน Handlebars helper ตัวใหม่
-    const rows = EVALUATION_FORMS.sahatkit_16.items.map((item, index) => {
-      const value = readScore(detail, item.key);
-      return {
-        no: index + 1,
-        label: SAHATKIT_16_LABELS[index],
-        v5: value === 5,
-        v4: value === 4,
-        v3: value === 3,
-        v2: value === 2,
-        v1: value === 1,
-        dash: value === null,
-      };
-    });
-
-    return {
-      ...base,
-      rows,
-      report_title_th: readText(detail, 'report_title_th'),
-      report_title_en: readText(detail, 'report_title_en'),
-      grand_total: row.total_score ?? 0,
-    };
   }
 }

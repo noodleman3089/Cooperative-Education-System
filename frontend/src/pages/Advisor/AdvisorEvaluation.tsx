@@ -318,15 +318,6 @@ const AdvisorEvaluation: React.FC = () => {
                     <span className="text-2xl font-bold text-gray-900 dark:text-white">
                       สหกิจ 15: {selectedStudent.sahatkit15Score}/100
                     </span>
-                    <a
-                      href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_15/${selectedStudent.studentId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 flex items-center gap-1.5 text-sm font-bold text-brand-blue hover:underline dark:text-blue-400"
-                    >
-                      <FileText className="h-4 w-4" />
-                      เปิดแบบประเมิน (PDF)
-                    </a>
                   </>
                 ) : (
                   <span className="text-sm text-amber-800 dark:text-amber-400">
@@ -347,15 +338,6 @@ const AdvisorEvaluation: React.FC = () => {
                     <span className="block text-xs text-gray-600 dark:text-gray-400">
                       เรตติ้งคุณภาพรายงาน ไม่รวมกับคะแนนประเมินผล
                     </span>
-                    <a
-                      href={`${API_BASE_URL}/final-evaluations/pdf/sahatkit_16/${selectedStudent.studentId}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-2 flex items-center gap-1.5 text-sm font-bold text-brand-blue hover:underline dark:text-blue-400"
-                    >
-                      <FileText className="h-4 w-4" />
-                      เปิดแบบประเมิน (PDF)
-                    </a>
                   </>
                 ) : (
                   <span className="text-sm text-amber-800 dark:text-amber-400">

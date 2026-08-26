@@ -2,20 +2,20 @@ import React, { useState } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
-import { User, ClipboardList, FileText, ChevronRight, Printer } from 'lucide-react';
+import { User, ClipboardList, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
-import type { RubricItem } from './evaluationRubric';
+import type { RubricItem } from '../../config/evaluationRubric';
 import {
   SAHATKIT_15_ITEMS,
   SAHATKIT_15_SECTIONS,
   SAHATKIT_16_ITEMS,
   SAHATKIT_16_SCALE,
   WOULD_HIRE_CHOICES,
-} from './evaluationRubric';
+} from '../../config/evaluationRubric';
 
 /**
  * แบบประเมินของพนักงานที่ปรึกษา (พี่เลี้ยง) — สองใบ
@@ -218,9 +218,6 @@ const MentorEvaluation: React.FC = () => {
       setSubmitting(false);
     }
   };
-
-  const pdfHref = (form: FormCode, studentId: number) =>
-    `${API_BASE_URL}/final-evaluations/pdf/${form}/${studentId}`;
 
   if (loading) {
     // หน้านี้เป็นกริดการ์ดนักศึกษา ไม่ใช่ตาราง — วาดตารางแล้วเลย์เอาต์จะเปลี่ยนรูป
@@ -455,16 +452,6 @@ const MentorEvaluation: React.FC = () => {
                   <>
                     แบบประเมินใบนี้ถูกส่งไปแล้ว — การกรอกและกดส่งอีกครั้งจะ
                     <strong>ทับของเดิมทั้งใบ</strong> ไม่ใช่การแก้เฉพาะข้อที่เปลี่ยน
-                    <br />
-                    <a
-                      href={pdfHref(activeForm, selectedStudent.student_id)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 font-bold underline"
-                    >
-                      <Printer className="h-4 w-4" />
-                      เปิดแบบประเมินที่ส่งไปแล้ว (PDF)
-                    </a>
                   </>
                 }
               />
