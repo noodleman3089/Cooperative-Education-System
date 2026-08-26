@@ -7,11 +7,9 @@ import { Users, FileText, CheckCircle, Search, Filter, ExternalLink, Calendar } 
 import WeeklyLogViewModal from './WeeklyLogViewModal';
 import AlertBanner from './ui/AlertBanner';
 import StatusBadge from './ui/StatusBadge';
-import Modal, { ModalBody, ModalFooter } from './ui/Modal';
-import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
 import type { ReportOutlineRow, StudentRow } from '../types/api';
-import { Select, Textarea } from './ui/Input';
+import { Select } from './ui/Input';
 import ReportOutlineReviewModal from './ReportOutlineReviewModal';
 
 interface AdvisorDashboardProps {
@@ -76,13 +74,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [orientationFilter, setOrientationFilter] = useState('all');
 
-  // Rejection modal state for inline reject button
-  const [rejectingIntentId, setRejectingIntentId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [customReason, setCustomReason] = useState('');
-  const [submittingAction, setSubmittingAction] = useState<number | null>(null);
-  /** Shown inside the rejection dialog — see handleRejectSubmit. */
-  const [rejectError, setRejectError] = useState<string | null>(null);
 
   const loadData = async (isBackground = false) => {
     try {
@@ -144,60 +135,12 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
   useDashboardData(loadData, [activeMenu]);
 
-  // Inline Approve handler (required for E2E tests and quick actions)
-  const handleApprove = async (id: number) => {
-    const intent = intents.find((i) => i.form_id === id);
-    setSubmittingAction(id);
-    setError(null);
-    setSuccess(null);
-    try {
-      await api.patch(`/intents/${id}/status`, { status: 'approved_by_advisor' });
-      // Approving moves the form on to the department head and cannot be undone
-      // from here, and the only visible effect used to be the row disappearing.
-      setSuccess(
-        `อนุมัติใบความจำนงของ ${intentStudentName(intent)} แล้ว ส่งต่อให้หัวหน้าสาขาวิชาพิจารณาเป็นลำดับถัดไป`
-      );
-      // Dispatch update event to sync bell notification and reload list
-      window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err) {
-      setError(getErrorMessage(err, 'การอนุมัติใบความจำนงล้มเหลว'));
-    } finally {
-      setSubmittingAction(null);
-    }
-  };
+  // ⚠️ handleApprove ถูกลบเมื่อ 2026-08-26 — การอนุมัติและการตีกลับของอาจารย์ที่ปรึกษา
+  // ย้ายไปอยู่บนกระดาษ (แบบคำร้องเอกสารหมายเลข 1) ทั้งคู่: ช่อง "เห็นควรอนุญาต /
+  // อื่น ๆ ระบุ" อยู่บนใบนั้นเอง ระบบจึงไม่ได้รอให้ใครกดปุ่มที่นี่อีกแล้ว
+  // · endpoint `PATCH /intents/:id/status` ยังอยู่ฝั่งเซิร์ฟเวอร์สำหรับใบเก่าที่ค้าง
+  //   ในเส้นทางเดิม แต่หน้าจอไม่เรียกอีกแล้ว
 
-  // Inline Reject submit handler
-  const handleRejectSubmit = async () => {
-    if (rejectingIntentId === null) return;
-    const intent = intents.find((i) => i.form_id === rejectingIntentId);
-    const finalReason = rejectReason === 'other' ? customReason.trim() : rejectReason;
-    if (!finalReason) {
-      // Inside the dialog, not on the page behind it: the page banner is
-      // covered by the backdrop, so choosing nothing looked like a dead button.
-      setRejectError('กรุณาเลือกสาเหตุการตีกลับ หรือกรอกเหตุผลของท่านเอง');
-      return;
-    }
-
-    setSubmittingAction(rejectingIntentId);
-    setError(null);
-    setSuccess(null);
-    setRejectError(null);
-    try {
-      await api.patch(`/intents/${rejectingIntentId}/status`, { status: 'rejected', reason: finalReason });
-      setRejectingIntentId(null);
-      setRejectReason('');
-      setCustomReason('');
-      setSuccess(
-        `ตีกลับใบความจำนงของ ${intentStudentName(intent)} แล้ว นักศึกษาจะเห็นเหตุผลและยื่นใหม่ได้`
-      );
-      // Dispatch update event to sync bell notification and reload list
-      window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err) {
-      setRejectError(getErrorMessage(err, 'การปฏิเสธใบความจำนงล้มเหลว'));
-    } finally {
-      setSubmittingAction(null);
-    }
-  };
 
   const advisorModals = (
     <>
@@ -608,10 +551,18 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
       {/* Pending list table */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex justify-between items-center">
+        <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
           <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-            คำขอที่รอพิจารณาอนุมัติ ({pendingIntents.length} รายการ)
+            ใบความจำนงของนักศึกษาในความดูแล ({pendingIntents.length} รายการ)
           </span>
+          {/* ⚠️ ตั้งแต่ 2026-08-26 การอนุมัติของอาจารย์ที่ปรึกษาอยู่บน **กระดาษ**
+              (แบบคำร้องเอกสารหมายเลข 1) ระบบไม่ได้รอให้กดปุ่มที่นี่อีกแล้ว
+              ปุ่มอนุมัติ/ตีกลับถูกถอดออก ไม่ใช่ซ่อน — ปุ่มที่กดแล้วไม่มีผลจริงต่อ
+              เส้นทางเอกสารคือหน้าเสีย */}
+          <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+            การลงนามอนุมัติอยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น — หน้านี้ไว้ติดตามว่า
+            นักศึกษาในความดูแลยื่นที่ไหนและไปถึงขั้นไหนแล้ว
+          </p>
         </div>
 
         {pendingIntents.length > 0 ? (
@@ -627,8 +578,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {pendingIntents.map((intent) => {
-                  const isPendingAction = submittingAction === intent.form_id;
-
                   return (
                     <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
@@ -654,29 +603,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                           ตรวจทาน
                         </button>
 
-                        {/* 2. Reject button (Direct inline/dialog required by E2E tests) */}
-                        <button
-                          type="button"
-                          onClick={() => setRejectingIntentId(intent.form_id)}
-                          disabled={isPendingAction}
-                          className="py-1.5 px-2.5 rounded-lg border border-red-200 text-red-700 dark:text-red-400 hover:bg-red-50 hover:border-red-300 font-bold transition-all disabled:opacity-50 text-xs"
-                        >
-                          ตีกลับ
-                        </button>
-
-                        {/* 3. Approve button (Direct quick action required by E2E tests) */}
-                        <button
-                          type="button"
-                          onClick={() => handleApprove(intent.form_id)}
-                          disabled={isPendingAction}
-                          className={`py-1.5 px-2.5 rounded-lg text-white font-bold transition-all text-xs ${
-                            !isPendingAction
-                              ? 'bg-brand-blue hover:bg-blue-600 shadow-sm'
-                              : 'bg-gray-100 text-gray-600 dark:text-gray-400 cursor-not-allowed dark:bg-gray-800'
-                          }`}
-                        >
-                          {isPendingAction ? 'รอ...' : 'อนุมัติ'}
-                        </button>
                         </div>
                       </td>
                     </tr>
@@ -692,80 +618,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         )}
       </div>
 
-      {/* Rejection Modal Dialog (Required for inline Reject action) */}
-      {rejectingIntentId !== null && (
-        <Modal
-          onClose={() => {
-            setRejectingIntentId(null);
-            setRejectReason('');
-            setCustomReason('');
-            setRejectError(null);
-          }}
-          size="md"
-          closeOnBackdrop={false}
-          title="ปฏิเสธและตีกลับใบความจำนง"
-        >
-          <ModalBody>
-            <div className="space-y-4">
-              <AlertBanner variant="error" message={rejectError} />
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  สาเหตุการตีกลับหลัก
-                </label>
-                <Select
-                  value={rejectReason}
-                  onChange={(e) => setRejectReason(e.target.value)}
-                >
-                  <option value="">-- กรุณาเลือกสาเหตุการปฏิเสธ --</option>
-                  <option value="ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน">ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน</option>
-                  <option value="สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร">สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร</option>
-                  <option value="ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง">ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง</option>
-                  <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                </Select>
-              </div>
-
-              {rejectReason === 'other' && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    ระบุเหตุผลเพิ่มเติม (ภาษาไทย)
-                  </label>
-                  <Textarea
-                    rows={3}
-                    placeholder="กรอกเหตุผลรายละเอียดที่จะตีกลับแจ้งไปยังนักศึกษา"
-                    value={customReason}
-                    onChange={(e) => setCustomReason(e.target.value)}
-                  />
-                </div>
-              )}
-            </div>
-          </ModalBody>
-
-          <ModalFooter>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={submittingAction !== null}
-              onClick={() => {
-                setRejectingIntentId(null);
-                setRejectReason('');
-                setCustomReason('');
-                setRejectError(null);
-              }}
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              loading={submittingAction === rejectingIntentId}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={handleRejectSubmit}
-            >
-              ยืนยันการปฏิเสธ
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
 
     </div>
   );

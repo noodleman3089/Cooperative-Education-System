@@ -38,12 +38,31 @@ export const STUDENT_ACCEPT_FROM = ['approved_by_dept_head', 'pending_sign', 'si
 /** A student may report a failed interview any time before the placement is final. */
 export const STUDENT_FAIL_FROM = [
   'pending_advisor',
+  'pending_officer_request',
   'approved_by_advisor',
   'approved_by_dept_head',
   'pending_sign',
   'signed',
   'pending_acceptance',
 ];
+
+/**
+ * เอกสารหมายเลข 1 — เส้นทางที่ลายเซ็นอยู่บนกระดาษ (เจ้าของเคาะ 2026-08-26)
+ *
+ *   pending_advisor            นักศึกษายื่นคำร้องแล้ว กำลังเดินเรื่องกระดาษอยู่
+ *        ↓ อัปโหลดกระดาษที่ที่ปรึกษาและหัวหน้าสาขาลงนามแล้ว
+ *   pending_officer_request    รอเจ้าหน้าที่ตรวจกระดาษ
+ *        ↓ เจ้าหน้าที่กดผ่าน (คนเดียวที่กดในระบบ)
+ *   approved_by_dept_head      ← คงชื่อเดิมไว้ เพราะทุกอย่างท้ายน้ำอ่านค่านี้
+ *
+ * ⛔ `approved_by_advisor` ไม่มีใครไปถึงอีกแล้วในเส้นทางใหม่ แต่ **ห้ามลบออกจาก
+ * allow-list** — ใบความจำนงเก่าในฐานจริงยังค้างอยู่ที่สถานะนั้นได้
+ *
+ * ⛔ ห้ามใช้ `pending_officer_approval` ซ้ำ มันเป็นคนละขั้น (นักศึกษาส่งหลักฐาน
+ * การตอบรับจากสถานประกอบการ ซึ่งเกิดหลังจากนี้มาก) ชื่อคล้ายกันแต่คนละเรื่อง
+ */
+export const OFFICER_RECEIVE_FROM = ['pending_advisor', 'pending_officer_request'];
+export const OFFICER_DECISION_FROM = ['pending_officer_request'];
 
 export function assertAllowedTransition(action: string, currentStatus: string, allowedFrom: string[]): void {
   if (!allowedFrom.includes(currentStatus)) {
@@ -323,6 +342,167 @@ export class IntentFormModel {
   /**
    * Find an intent form by ID.
    */
+  /**
+   * บันทึกไฟล์แบบคำร้องที่ลงนามบนกระดาษแล้ว แล้วเลื่อนสถานะไปรอเจ้าหน้าที่
+   *
+   * อัปโหลดทับได้ตราบใดที่ยังไม่ผ่านมือเจ้าหน้าที่ (สแกนเบลอ ลืมหน้าหลัง ฯลฯ)
+   * — `OFFICER_RECEIVE_FROM` จึงรวม `pending_officer_request` ไว้ด้วย
+   * คืน path เดิมออกมาให้ผู้เรียกลบไฟล์ทิ้ง ไม่งั้นโฟลเดอร์จะบวมตามจำนวนครั้งที่อัปซ้ำ
+   */
+  static async attachRequestForm(
+    formId: number,
+    studentId: number,
+    filePath: string
+  ): Promise<{ previousPath: string | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, status, request_form_path FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      if (row.student_id !== studentId) {
+        throw new Error('คุณอัปโหลดได้เฉพาะคำร้องของตัวเองเท่านั้น');
+      }
+      assertAllowedTransition('upload_request_form', row.status, OFFICER_RECEIVE_FROM);
+
+      await client.query(
+        `UPDATE intent_forms
+            SET request_form_path = $1, status = 'pending_officer_request', reject_reason = NULL
+          WHERE form_id = $2`,
+        [filePath, formId]
+      );
+
+      await client.query('COMMIT');
+      return { previousPath: row.request_form_path as string | null };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่รับคำร้อง — จุดเดียวในระบบที่ใบความจำนงผ่านไปต่อได้
+   *
+   * ทำสามอย่างในทรานแซกชันเดียว เพราะทั้งสามเป็นผลของการตรวจกระดาษใบเดียวกัน
+   * และถ้าแยกกันแล้วพลาดกลางทาง จะได้ใบความจำนงที่ผ่านแล้วแต่บริษัทยังไม่รับรอง
+   *   1. บันทึกชื่อ/วันที่ผู้ลงนามสองคนที่อ่านจากกระดาษ + เลขที่หนังสือออก
+   *   2. เลื่อนสถานะไป approved_by_dept_head
+   *   3. รับรองสถานประกอบการ (SEC-04) — ชื่อกับที่อยู่บนกระดาษคือสิ่งที่จะถูก
+   *      พิมพ์ลงหนังสือราชการ การตรวจของเจ้าหน้าที่ตรงนี้คือด่านเดียวที่มีมนุษย์อ่าน
+   */
+  static async officerApproveRequest(
+    formId: number,
+    officerUserId: number,
+    input: {
+      advisorSignerName: string;
+      advisorSignedDate: string;
+      deptHeadSignerName: string;
+      deptHeadSignedDate: string;
+      documentNo: string;
+    }
+  ): Promise<{ studentId: number; companyId: number }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status, request_form_path
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      assertAllowedTransition('officer_approve', row.status, OFFICER_DECISION_FROM);
+      if (!row.request_form_path) {
+        throw new Error('ยังไม่มีไฟล์แบบคำร้องที่ลงนามแล้วในระบบ');
+      }
+
+      await client.query(
+        `UPDATE intent_forms
+            SET status = 'approved_by_dept_head',
+                advisor_signer_name = $1, advisor_signed_date = $2,
+                dept_head_signer_name = $3, dept_head_signed_date = $4,
+                officer_document_no = $5,
+                officer_approved_at = NOW(), officer_approved_by = $6,
+                reject_reason = NULL
+          WHERE form_id = $7`,
+        [
+          input.advisorSignerName,
+          input.advisorSignedDate,
+          input.deptHeadSignerName,
+          input.deptHeadSignedDate,
+          input.documentNo,
+          officerUserId,
+          formId,
+        ]
+      );
+
+      await client.query('UPDATE companies SET is_verified = TRUE WHERE company_id = $1', [
+        row.company_id,
+      ]);
+
+      await client.query('COMMIT');
+      return { studentId: row.student_id as number, companyId: row.company_id as number };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่ตีกลับคำร้อง — เหตุผลบังคับ และเก็บบนแถวไม่ใช่แค่ audit_log
+   * เพราะคนที่ต้องอ่านคือนักศึกษา ส่วน audit_log จงใจไม่มี read API (SEC-07)
+   *
+   * ล้าง `request_form_path` ทิ้งด้วย เพื่อให้หน้าจอนักศึกษากลับไปอยู่สภาพ
+   * "ยังไม่ได้ส่ง" จริงๆ ไม่ใช่ค้างไฟล์เดิมไว้แล้วเข้าใจว่าส่งไปแล้ว
+   */
+  static async officerRejectRequest(
+    formId: number,
+    reason: string
+  ): Promise<{ studentId: number; previousPath: string | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, status, request_form_path FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      assertAllowedTransition('officer_reject', row.status, OFFICER_DECISION_FROM);
+
+      await client.query(
+        `UPDATE intent_forms
+            SET status = 'pending_advisor', request_form_path = NULL, reject_reason = $1
+          WHERE form_id = $2`,
+        [reason, formId]
+      );
+
+      await client.query('COMMIT');
+      return {
+        studentId: row.student_id as number,
+        previousPath: row.request_form_path as string | null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   static async findById(formId: number): Promise<IntentForm | null> {
     const res = await query(
       `SELECT form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path 

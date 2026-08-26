@@ -44,6 +44,7 @@ const StudentDashboard: React.FC = () => {
   const [mentorDept, setMentorDept] = useState('');
   const [startDate, setStartDate] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
   const [confirmingFailure, setConfirmingFailure] = useState(false);
@@ -119,6 +120,28 @@ const StudentDashboard: React.FC = () => {
   };
 
   useDashboardData(loadDashboardData);
+
+  /** อัปโหลดแบบคำร้อง (เอกสารหมายเลข 1) ที่อาจารย์ลงนามบนกระดาษแล้ว */
+  const handleRequestFormUpload = async (e: React.ChangeEvent<HTMLInputElement>, formId: number) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('request_form', file);
+
+    setUploadingRequestForm(true);
+    setError(null);
+    try {
+      await api.post(`/intents/${formId}/request-form`, formData);
+      await loadDashboardData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'อัปโหลดแบบคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+    } finally {
+      setUploadingRequestForm(false);
+      // ให้เลือกไฟล์เดิมซ้ำได้ ถ้ารอบแรกพลาด
+      e.target.value = '';
+    }
+  };
 
   const handleProofSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -620,7 +643,10 @@ const StudentDashboard: React.FC = () => {
               <div>
                 <span className="text-xs text-gray-500 block mb-2 dark:text-gray-400">สถานะการพิจารณา:</span>
                 <div className="flex items-center gap-2">
-                  <StatusBadge status={activeIntent.status} />
+                  {/* domain="intent": `pending_advisor` ของใบความจำนงแปลว่า
+                      "เอาแบบคำร้องไปให้ลงนาม" ไม่ใช่ "รออาจารย์กดปุ่ม" เหมือน
+                      สหกิจ 01 กับโครงร่างรายงานที่ใช้ key เดียวกัน */}
+                  <StatusBadge status={activeIntent.status} domain="intent" />
                 </div>
               </div>
 
@@ -647,6 +673,71 @@ const StudentDashboard: React.FC = () => {
                   </svg>
                   เปิดแบบคำร้องเพื่อสั่งพิมพ์
                 </a>
+
+                {/* ขั้นถัดไป: อัปโหลดกระดาษที่ลงนามแล้ว
+                    เปิดให้ทำได้ทั้งตอน pending_advisor (ยังไม่เคยส่ง) และ
+                    pending_officer_request (ส่งแล้วแต่ยังไม่ผ่านมือเจ้าหน้าที่ —
+                    สแกนเบลอหรือลืมหน้าหลังต้องส่งใหม่ได้) */}
+                {(activeIntent.status === 'pending_advisor' ||
+                  activeIntent.status === 'pending_officer_request') && (
+                  <div className="mt-3">
+                    {activeIntent.request_form_path ? (
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span data-testid="request-form-uploaded">
+                          ส่งแบบคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ
+                        </span>
+                        <a
+                          href={`${API_BASE_URL}/files/${activeIntent.request_form_path}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-bold text-brand-blue underline dark:text-blue-400"
+                        >
+                          เปิดไฟล์ที่ส่งไป
+                        </a>
+                      </div>
+                    ) : (
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
+                          ลงนามครบทั้งสองช่องแล้ว อัปโหลดไฟล์ที่สแกนหรือถ่ายรูปกลับเข้าระบบ
+                          (PDF หรือรูปภาพ ไม่เกิน 10 MB)
+                        </span>
+                        <input
+                          type="file"
+                          accept=".pdf,.png,.jpg,.jpeg"
+                          disabled={uploadingRequestForm}
+                          data-testid="upload-request-form"
+                          onChange={(e) => handleRequestFormUpload(e, activeIntent.form_id)}
+                          className="block w-full cursor-pointer text-xs text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300"
+                        />
+                      </label>
+                    )}
+                    {uploadingRequestForm && (
+                      <span className="mt-1 block text-xs text-gray-600 dark:text-gray-400">
+                        กำลังอัปโหลด...
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                {/* เจ้าหน้าที่ตีกลับ — เหตุผลอยู่บนแถว ไม่ใช่แค่ audit_log (SEC-07)
+                    เพราะคนที่ต้องอ่านคือนักศึกษา */}
+                {activeIntent.status === 'pending_advisor' && activeIntent.reject_reason && (
+                  <div className="mt-3">
+                    <AlertBanner
+                      variant="warning"
+                      message={
+                        <>
+                          <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {activeIntent.reject_reason}
+                          <br />
+                          แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย
+                        </>
+                      }
+                    />
+                  </div>
+                )}
               </div>
 
               {activeIntent.status === 'approved_by_dept_head' && (

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { checkStudentEligibility } from '../middlewares/validation';
+import { uploadRequestForm, validateUploadedFile } from '../middlewares/multer';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
@@ -60,6 +61,33 @@ router.patch(
   '/:id/dept-head-status',
   authorizeRoles('dept_head'),
   IntentFormController.updateIntentStatusByDeptHead
+);
+
+// เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดผ่านในระบบ
+// (อาจารย์ที่ปรึกษา/หัวหน้าสาขายังมี PATCH ของตัวเองอยู่ด้านบนสำหรับใบเก่าที่ค้าง
+//  อยู่ในเส้นทางเดิม — ใบใหม่จะไม่มีทางไปถึงสถานะ approved_by_advisor อีก)
+
+// Route: POST /api/intents/:id/request-form (นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว)
+router.post(
+  '/:id/request-form',
+  authorizeRoles('student'),
+  uploadRequestForm.single('request_form'),
+  validateUploadedFile(['pdf', 'png', 'jpg']),
+  IntentFormController.uploadRequestForm
+);
+
+// Route: PATCH /api/intents/:id/officer-approve (เจ้าหน้าที่รับคำร้อง)
+router.patch(
+  '/:id/officer-approve',
+  authorizeRoles('staff'),
+  IntentFormController.officerApproveRequest
+);
+
+// Route: PATCH /api/intents/:id/officer-reject (เจ้าหน้าที่ตีกลับ)
+router.patch(
+  '/:id/officer-reject',
+  authorizeRoles('staff'),
+  IntentFormController.officerRejectRequest
 );
 
 // Route: GET /api/intents/:id/request-form

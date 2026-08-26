@@ -145,7 +145,15 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     // not the advisor who has to grade it, and not the student who uploaded it.
     // Both screens linked straight at http://localhost:5000/uploads/..., which
     // has never resolved to anything.
-    const allowedCategories = ['resumes', 'signatures', 'acceptance_evidence', 'final_reports'];
+    const allowedCategories = [
+      'resumes',
+      'signatures',
+      'acceptance_evidence',
+      'final_reports',
+      // แบบคำร้อง (เอกสารหมายเลข 1) ที่ลงนามแล้ว — เจ้าหน้าที่ต้องเปิดดูก่อนกดผ่าน
+      // และนักศึกษาต้องเปิดดูของตัวเองได้ว่าอัปไฟล์ไหนไป
+      'request_forms',
+    ];
     if (!allowedCategories.includes(category)) {
       res.status(404).json({ message: 'Category not found.' });
       return;
@@ -216,8 +224,13 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
         // multer names these `finalreport-user-<id>-…`, so the owner test is the
         // same shape as the other three.
         const reportPrefix = `finalreport-user-${userId}-`;
+        const requestFormPrefix = `requestform-user-${userId}-`;
 
-        const isOwner = safeName.startsWith(filePrefix) || safeName.startsWith(evidencePrefix) || safeName.startsWith(reportPrefix);
+        const isOwner =
+          safeName.startsWith(filePrefix) ||
+          safeName.startsWith(evidencePrefix) ||
+          safeName.startsWith(reportPrefix) ||
+          safeName.startsWith(requestFormPrefix);
         if (!isOwner) {
           res.status(403).json({ message: 'Forbidden. You do not have access to this file.' });
           return;
@@ -228,6 +241,9 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     // Only now, once the caller has been shown to be entitled to this file, does
     // a missing one fall back to the blank template.
     if (!fs.existsSync(filePath)) {
+      // ⚠️ fallback นี้ชี้ไปแม่แบบที่ถูกโละไปแล้ว 2026-08-26 จึงไม่มีวันเจอไฟล์
+      // ปล่อยไว้เฉยๆ ไม่ได้ทำอันตราย แต่ผลจริงคือทุกกรณีตกไปที่ 404 ด้านล่าง
+      // ซึ่งเป็นพฤติกรรมที่ถูกต้องกว่าการคืนแม่แบบเปล่าอยู่แล้ว
       if (['resumes', 'acceptance_evidence'].includes(category)) {
         const fallbackPath = path.join(process.cwd(), 'secure_private', 'templates', 'cover_letter_template.pdf');
         if (fs.existsSync(fallbackPath)) {

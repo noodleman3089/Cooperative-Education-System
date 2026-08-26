@@ -7,10 +7,7 @@ import type { StudentProfile, IntentForm } from '../types/api';
 import AssignAdvisorModal from './AssignAdvisorModal';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
-import ConfirmDialog from './ui/ConfirmDialog';
-import Modal, { ModalBody, ModalFooter } from './ui/Modal';
-import { getErrorMessage } from '../utils/errors';
-import { Select, Textarea } from './ui/Input';
+import { Select } from './ui/Input';
 
 interface Personnel {
   personnel_id: number;
@@ -25,22 +22,6 @@ interface DeptHeadDashboardProps {
   activeMenu?: string;
 }
 
-/**
- * Why the department head is sending a form back. Deliberately a different list
- * from the advisor's: the advisor judges whether this placement suits this
- * student, while the head answers to the programme's rules and its capacity.
- * Every option below corresponds to something the system actually records —
- * `job_posts.quota`/`applied_count`, `students.is_eligible`,
- * `students.is_orientation_passed`, `companies.is_verified` — rather than
- * wording invented for the dropdown.
- */
-const DEPT_HEAD_REJECT_REASONS = [
-  'โควตารับนักศึกษาของตำแหน่งงาน/สาขาวิชาเต็มแล้ว',
-  'คุณสมบัติเบื้องต้นยังไม่ผ่านเกณฑ์ของหลักสูตร (หน่วยกิต/เกรดเฉลี่ยสะสม)',
-  'ยังไม่ผ่านการปฐมนิเทศสหกิจศึกษาตามระเบียบ',
-  'สถานประกอบการยังไม่ผ่านการรับรองจากสาขาวิชา',
-  'เอกสารประกอบคำร้องไม่ครบถ้วนตามระเบียบ',
-];
 
 /** `/students` sends first_name/last_name; every table here showed only the code. */
 const studentDisplayName = (s: { first_name?: string | null; last_name?: string | null; student_code?: string }): string =>
@@ -59,13 +40,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
 
   // Intent Approval States
   const [pendingIntents, setPendingIntents] = useState<IntentForm[]>([]);
-  const [submittingAction, setSubmittingAction] = useState<number | null>(null);
-  const [approvingIntentId, setApprovingIntentId] = useState<number | null>(null);
-  const [rejectingIntentId, setRejectingIntentId] = useState<number | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-  const [customReason, setCustomReason] = useState('');
-  /** Shown inside the rejection dialog, not on the page it covers. */
-  const [rejectError, setRejectError] = useState<string | null>(null);
 
   // Assignment Modal States
   const [selectedStudentIds, setSelectedStudentIds] = useState<number[]>([]);
@@ -88,8 +62,14 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       // so reading the approval queue also pulled every student and every
       // advisor in the department six times a minute to draw nothing.
       if (activeMenu === 'approval') {
-        const intentsRes = await api.get('/intents?status=approved_by_advisor');
-        setPendingIntents(intentsRes || []);
+        // ⚠️ เดิมกรอง `approved_by_advisor` ซึ่งเป็นสถานะของเส้นทางเก่าที่ไม่มีใบไหน
+        // ไปถึงอีกแล้วตั้งแต่ 2026-08-26 (ลายเซ็นย้ายไปอยู่บนกระดาษ) หน้านี้จึงว่างเปล่า
+        // ตลอดกาล · ใบที่หัวหน้าสาขาต้องเห็นคือใบที่ยังเดินกระดาษอยู่ทั้งสองสถานะ
+        const [pending, waitingOfficer] = await Promise.all([
+          api.get('/intents?status=pending_advisor').catch(() => []),
+          api.get('/intents?status=pending_officer_request').catch(() => []),
+        ]);
+        setPendingIntents([...(pending || []), ...(waitingOfficer || [])]);
       } else {
         const [studentsRes, personnelRes] = await Promise.all([
           api.get('/students'),
@@ -108,79 +88,10 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
 
   useDashboardData(loadData, [activeMenu]);
 
-  // ── Intent Approval Quick Handler ──
-  const handleApproveIntent = async () => {
-    const id = approvingIntentId;
-    if (id === null) return;
-    const intent = pendingIntents.find((i) => i.form_id === id);
-    setSubmittingAction(id);
-    setError(null);
-    setSuccess(null);
-    try {
-      await api.patch(`/intents/${id}/dept-head-status`, { status: 'approved_by_dept_head' });
-      setApprovingIntentId(null);
-      setSuccess(
-        `อนุมัติคำร้องของ ${intent ? studentDisplayName(intent) : 'นักศึกษา'} แล้ว — ส่งต่อให้เจ้าหน้าที่ออกจดหมายขอความอนุเคราะห์`
-      );
-      await loadData();
-      window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err) {
-      setApprovingIntentId(null);
-      setError(getErrorMessage(err, 'การอนุมัติคำร้องล้มเหลว'));
-    } finally {
-      setSubmittingAction(null);
-    }
-  };
-
-  /**
-   * The reason was never being sent. The API has always accepted it, written it
-   * to the audit log, and passed it into the student's notification email —
-   * which carries a dedicated line for it (`utils/email.ts`, the
-   * `rejected_by_dept_head` branch). Because the UI sent only the status, that
-   * line could never render: every student rejected at this stage was told the
-   * head had sent the form back, and nothing about what to change.
-   */
-  const handleRejectIntent = async () => {
-    const id = rejectingIntentId;
-    if (id === null) return;
-    const intent = pendingIntents.find((i) => i.form_id === id);
-    const finalReason = rejectReason === 'other' ? customReason.trim() : rejectReason;
-
-    if (!finalReason) {
-      setRejectError('กรุณาเลือกเหตุผลการตีกลับ หรือระบุเหตุผลของท่านเอง');
-      return;
-    }
-
-    setSubmittingAction(id);
-    setError(null);
-    setSuccess(null);
-    setRejectError(null);
-    try {
-      await api.patch(`/intents/${id}/dept-head-status`, {
-        status: 'rejected_by_dept_head',
-        reason: finalReason,
-      });
-      setRejectingIntentId(null);
-      setRejectReason('');
-      setCustomReason('');
-      setSuccess(
-        `ตีกลับคำร้องของ ${intent ? studentDisplayName(intent) : 'นักศึกษา'} แล้ว — ระบบแจ้งเหตุผลไปยังอีเมลนักศึกษาเรียบร้อย`
-      );
-      await loadData();
-      window.dispatchEvent(new CustomEvent('intent-updated'));
-    } catch (err) {
-      setRejectError(getErrorMessage(err, 'การปฏิเสธคำร้องล้มเหลว'));
-    } finally {
-      setSubmittingAction(null);
-    }
-  };
-
-  const closeRejectDialog = () => {
-    setRejectingIntentId(null);
-    setRejectReason('');
-    setCustomReason('');
-    setRejectError(null);
-  };
+  // ⚠️ handleApproveIntent / handleRejectIntent / closeRejectDialog ถูกลบเมื่อ
+  // 2026-08-26 — หัวหน้าสาขาลงนามช่อง "อนุญาต / ไม่อนุญาต" บนแบบคำร้อง
+  // (เอกสารหมายเลข 1) ด้วยปากกา · endpoint PATCH /intents/:id/dept-head-status
+  // ยังอยู่ฝั่งเซิร์ฟเวอร์สำหรับใบเก่าที่ค้างในเส้นทางเดิม แต่หน้าจอไม่เรียกแล้ว
 
   /**
    * Select-all covers what is on screen, not the whole department. Ticking it
@@ -644,10 +555,14 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       {/* ── VIEW 4: INTENT APPROVAL ── */}
       {activeMenu === 'approval' && (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800 flex justify-between items-center">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
             <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-              คำร้องที่รอพิจารณาอนุมัติ ({pendingIntents.length} รายการ)
+              คำร้องใบความจำนงในสาขาวิชา ({pendingIntents.length} รายการ)
             </span>
+            <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+              การลงนามอนุญาตอยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น — หน้านี้ไว้ดูว่ามีใคร
+              ยื่นที่ไหนบ้าง และตรวจทานรายละเอียดก่อนลงนามบนกระดาษ
+            </p>
           </div>
 
           {pendingIntents.length > 0 ? (
@@ -664,8 +579,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {pendingIntents.map((intent) => {
-                    const isPendingAction = submittingAction === intent.form_id;
-
                     return (
                       <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
@@ -687,27 +600,12 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                             ตรวจทาน
                           </Button>
                         </td>
-                        <td className="p-4 text-right">
-                          {/* The flex was on the <td>, which drops the cell out
-                              of the table's column sizing. */}
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              size="sm"
-                              disabled={isPendingAction}
-                              onClick={() => setApprovingIntentId(intent.form_id)}
-                            >
-                              อนุมัติ
-                            </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              disabled={isPendingAction}
-                              className="border-red-200 text-red-700 hover:bg-red-50 hover:border-red-300 dark:border-red-900/40 dark:text-red-400 dark:hover:bg-red-950/30"
-                              onClick={() => setRejectingIntentId(intent.form_id)}
-                            >
-                              ตีกลับ
-                            </Button>
-                          </div>
+                        <td className="p-4 text-right text-xs text-gray-600 dark:text-gray-400">
+                          {/* ⚠️ ปุ่มอนุมัติ/ตีกลับถูกถอดออกเมื่อ 2026-08-26 — ช่อง
+                              "อนุญาต / ไม่อนุญาต" ของหัวหน้าสาขาอยู่บนแบบคำร้อง
+                              (เอกสารหมายเลข 1) ที่นักศึกษานำมาให้ลงนามด้วยปากกา
+                              ระบบไม่ได้รอการกดที่นี่อีกแล้ว */}
+                          ลงนามบนแบบคำร้อง
                         </td>
                       </tr>
                     );
@@ -742,102 +640,9 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
         </div>
       )}
 
-      {/* Approving hands the form to the co-op office to raise the official
-          letter, and the head cannot take it back from here. */}
-      <ConfirmDialog
-        open={approvingIntentId !== null}
-        title="ยืนยันการอนุมัติคำร้อง"
-        message={`อนุมัติคำร้องของ ${
-          pendingIntents.find((i) => i.form_id === approvingIntentId)
-            ? studentDisplayName(pendingIntents.find((i) => i.form_id === approvingIntentId)!)
-            : 'นักศึกษา'
-        } ใช่หรือไม่? คำร้องจะถูกส่งต่อให้เจ้าหน้าที่ออกจดหมายขอความอนุเคราะห์ และย้อนกลับเองไม่ได้`}
-        confirmLabel="ยืนยัน อนุมัติคำร้อง"
-        busy={submittingAction === approvingIntentId}
-        onConfirm={handleApproveIntent}
-        onCancel={() => setApprovingIntentId(null)}
-      />
-
-      {/* Rejection now collects the reason the API, the audit log and the
-          student's email have all been ready to receive since day one. */}
-      {rejectingIntentId !== null && (
-        <Modal
-          onClose={closeRejectDialog}
-          size="md"
-          closeOnBackdrop={false}
-          title="ตีกลับคำร้องใบความจำนง"
-        >
-          <ModalBody>
-            <div className="space-y-4">
-              <AlertBanner variant="error" message={rejectError} />
-
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                เหตุผลที่เลือกจะถูกส่งไปยังอีเมลของนักศึกษา และบันทึกลงประวัติการตรวจสอบ
-                กรุณาเลือกให้ตรงกับสาเหตุจริง เพื่อให้นักศึกษาแก้ไขได้ถูกจุด
-              </p>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  เหตุผลเชิงระเบียบ / การบริหารจัดการของสาขาวิชา
-                </label>
-                <Select
-                  value={rejectReason}
-                  onChange={(e) => {
-                    setRejectReason(e.target.value);
-                    setRejectError(null);
-                  }}
-                >
-                  <option value="">-- กรุณาเลือกเหตุผล --</option>
-                  {DEPT_HEAD_REJECT_REASONS.map((reason) => (
-                    <option key={reason} value={reason}>
-                      {reason}
-                    </option>
-                  ))}
-                  <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                </Select>
-              </div>
-
-              {rejectReason === 'other' && (
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                    ระบุเหตุผลเพิ่มเติม (ข้อความนี้จะไปถึงนักศึกษาโดยตรง)
-                  </label>
-                  <Textarea
-                    rows={3}
-                    placeholder="เช่น ตำแหน่งงานนี้สาขาวิชาจัดสรรให้นักศึกษาชั้นปีที่ 4 ก่อนเป็นลำดับแรก"
-                    value={customReason}
-                    onChange={(e) => {
-                      setCustomReason(e.target.value);
-                      setRejectError(null);
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </ModalBody>
-
-          <ModalFooter>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={submittingAction !== null}
-              onClick={closeRejectDialog}
-            >
-              ยกเลิก
-            </Button>
-            <Button
-              variant="danger"
-              size="sm"
-              loading={submittingAction === rejectingIntentId}
-              loadingLabel="กำลังส่งข้อมูล..."
-              onClick={handleRejectIntent}
-            >
-              ยืนยันการตีกลับ
-            </Button>
-          </ModalFooter>
-        </Modal>
-      )}
-
+      {/* ⚠️ ConfirmDialog อนุมัติ และ Modal ตีกลับ ถูกลบเมื่อ 2026-08-26 —
+          หัวหน้าสาขาลงนามบนแบบคำร้อง (เอกสารหมายเลข 1) ด้วยปากกาแทน
+          หน้าจอนี้จึงไม่มีปุ่มที่เปลี่ยนสถานะใบความจำนงอีกแล้ว */}
       {/* Assignment Modal Component */}
       <AssignAdvisorModal
         isOpen={showAssignModal}

@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { IntentFormModel, COMPANY_VISIBLE_STATUSES } from '../models/intent';
 import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
@@ -238,7 +240,8 @@ export class IntentFormController {
       const studentId = req.user.userId;
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path
+                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path,
+                i.request_form_path, i.reject_reason, i.officer_document_no
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
          LEFT JOIN job_posts j ON i.job_id = j.job_id
@@ -292,7 +295,9 @@ export class IntentFormController {
         SELECT i.form_id, i.student_id, s.student_code, s.major_id, m.major_name_th,
                s.cumulative_gpa,
                i.company_id, c.name_th as company_name_th, i.semester_id, i.job_id, j.title as job_title, i.status,
-               s.resume_file, i.acceptance_evidence_path,
+               s.resume_file, i.acceptance_evidence_path, i.request_form_path,
+               i.advisor_signer_name, i.advisor_signed_date,
+               i.dept_head_signer_name, i.dept_head_signed_date, i.officer_document_no,
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason
@@ -558,6 +563,189 @@ export class IntentFormController {
       res.status(200).json(counts);
     } catch (error) {
       sendUnexpectedError(res, error, 'Get Pipeline Summary Error', 'An error occurred while fetching pipeline summary.');
+    }
+  }
+
+  /**
+   * นักศึกษาอัปโหลดแบบคำร้องที่ลงนามบนกระดาษแล้ว
+   * Route: POST /api/intents/:id/request-form
+   * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
+   */
+  static async uploadRequestForm(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ message: 'กรุณาแนบไฟล์แบบคำร้องที่ลงนามแล้ว' });
+        return;
+      }
+
+      const filePath = `request_forms/${req.file.filename}`;
+      const { previousPath } = await IntentFormModel.attachRequestForm(
+        formId,
+        req.user.userId,
+        filePath
+      );
+
+      // อัปทับของเดิม = ไฟล์เก่าไม่มีใครอ้างถึงแล้ว ลบทิ้งไม่ให้โฟลเดอร์บวม
+      // (ทำหลัง COMMIT เสมอ ถ้าลบก่อนแล้วทรานแซกชันล้ม จะเสียไฟล์ที่ยังใช้อยู่)
+      if (previousPath && previousPath !== filePath) {
+        const abs = path.join(process.cwd(), 'uploads', previousPath);
+        fs.promises.unlink(abs).catch(() => undefined);
+      }
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_REQUEST_FORM_UPLOADED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: req.user.userId,
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: 'อัปโหลดแบบคำร้องที่ลงนามแล้วเรียบร้อย รอเจ้าหน้าที่ตรวจสอบ',
+        form_id: formId,
+        request_form_path: filePath,
+      });
+    } catch (error) {
+      // ข้อความจากโมเดลเป็นภาษาไทยและอธิบายสาเหตุอยู่แล้ว (สถานะไม่ถูก / ไม่ใช่ของตัวเอง)
+      res.status(400).json({ message: getErrorMessage(error, 'อัปโหลดแบบคำร้องไม่สำเร็จ') });
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่รับคำร้อง — กรอกชื่อผู้ลงนามจากกระดาษ + ออกเลขที่หนังสือ
+   * Route: PATCH /api/intents/:id/officer-approve
+   * Access: staff
+   *
+   * ⛔ **บังคับครบทุกช่อง** — ค่าพวกนี้จะถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ที่คณบดี
+   * ลงนาม ปล่อยว่างช่องใดช่องหนึ่งแปลว่าหนังสือราชการออกไปโดยมีที่ว่าง
+   */
+  static async officerApproveRequest(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const {
+        advisor_signer_name,
+        advisor_signed_date,
+        dept_head_signer_name,
+        dept_head_signed_date,
+        document_no,
+      } = req.body ?? {};
+
+      const missing = [
+        ['ชื่ออาจารย์ที่ปรึกษาผู้ลงนาม', advisor_signer_name],
+        ['วันที่อาจารย์ที่ปรึกษาลงนาม', advisor_signed_date],
+        ['ชื่อหัวหน้าสาขาวิชาผู้ลงนาม', dept_head_signer_name],
+        ['วันที่หัวหน้าสาขาวิชาลงนาม', dept_head_signed_date],
+        ['เลขที่หนังสือออก', document_no],
+      ]
+        .filter(([, value]) => typeof value !== 'string' || !value.trim())
+        .map(([label]) => label);
+
+      if (missing.length > 0) {
+        res.status(400).json({ message: `กรุณากรอกให้ครบ: ${missing.join(' · ')}` });
+        return;
+      }
+
+      // วันที่รับเป็นสตริง YYYY-MM-DD ล้วน — ห้าม new Date() แล้วส่งต่อ เพราะจะเลื่อนวัน
+      const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+      if (!isDate(advisor_signed_date) || !isDate(dept_head_signed_date)) {
+        res.status(400).json({ message: 'รูปแบบวันที่ลงนามต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
+        return;
+      }
+
+      const { studentId } = await IntentFormModel.officerApproveRequest(formId, req.user.userId, {
+        advisorSignerName: advisor_signer_name.trim(),
+        advisorSignedDate: advisor_signed_date.trim(),
+        deptHeadSignerName: dept_head_signer_name.trim(),
+        deptHeadSignedDate: dept_head_signed_date.trim(),
+        documentNo: document_no.trim(),
+      });
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_OFFICER_APPROVED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: studentId,
+          detail: { document_no: document_no.trim() },
+        },
+        req
+      ).catch(() => undefined);
+
+      notifyStudentStatusChange(formId, 'approved_by_dept_head').catch(console.error);
+
+      res.status(200).json({ message: 'รับคำร้องเรียบร้อยแล้ว', form_id: formId });
+    } catch (error) {
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถรับคำร้องได้') });
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่ตีกลับคำร้อง — เหตุผลบังคับ
+   * Route: PATCH /api/intents/:id/officer-reject
+   * Access: staff
+   */
+  static async officerRejectRequest(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ตีกลับ เพื่อให้นักศึกษาแก้ไขได้ถูกจุด' });
+        return;
+      }
+
+      const { studentId, previousPath } = await IntentFormModel.officerRejectRequest(formId, reason);
+
+      if (previousPath) {
+        const abs = path.join(process.cwd(), 'uploads', previousPath);
+        fs.promises.unlink(abs).catch(() => undefined);
+      }
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_OFFICER_REJECTED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: studentId,
+          detail: { reason },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({ message: 'ตีกลับคำร้องเรียบร้อยแล้ว', form_id: formId });
+    } catch (error) {
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถตีกลับคำร้องได้') });
     }
   }
 

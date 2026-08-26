@@ -25,6 +25,11 @@ export const AuditAction = {
   INTENT_REJECTED_ADVISOR: 'intent.rejected_by_advisor',
   INTENT_APPROVED_DEPT_HEAD: 'intent.approved_by_dept_head',
   INTENT_REJECTED_DEPT_HEAD: 'intent.rejected_by_dept_head',
+  // เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดในระบบ
+  // จึงเป็นจุดเดียวที่มีคนรับผิดชอบให้ตามย้อนได้ว่าใครปล่อยคำร้องใบไหนผ่าน
+  INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',
+  INTENT_OFFICER_APPROVED: 'intent.officer_approved',
+  INTENT_OFFICER_REJECTED: 'intent.officer_rejected',
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',

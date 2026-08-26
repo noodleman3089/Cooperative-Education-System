@@ -3,7 +3,7 @@ import PageSkeleton, { skeletonFor } from './ui/Skeleton';
 import { useDashboardData } from '../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
-import Modal, { ModalBody } from './ui/Modal';
+import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
@@ -21,6 +21,18 @@ import type {
 interface StaffDashboardProps {
   activeMenu?: string;
   defaultTab?: string;
+}
+
+/** แถวในคิวคำร้องรอตรวจ — มาจาก GET /intents?status=pending_officer_request */
+interface RequestFormRow {
+  form_id: number;
+  student_id: number;
+  student_code?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name_th?: string;
+  company_id: number;
+  request_form_path?: string | null;
 }
 
 interface GeneratedDocument {
@@ -101,6 +113,20 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const currentTab = defaultTab || (['jobs', 'announcements', 'users', 'import'].includes(activeMenu) ? activeMenu : 'dashboard');
 
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
+  // คิวคำร้องขอหนังสือ (เอกสารหมายเลข 1) ที่นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว
+  const [requestQueue, setRequestQueue] = useState<RequestFormRow[]>([]);
+  const [reviewingRequest, setReviewingRequest] = useState<RequestFormRow | null>(null);
+  const [officerForm, setOfficerForm] = useState({
+    advisor_signer_name: '',
+    advisor_signed_date: '',
+    dept_head_signer_name: '',
+    dept_head_signed_date: '',
+    document_no: '',
+  });
+  const [officerBusy, setOfficerBusy] = useState(false);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
+  const [rejectingRequest, setRejectingRequest] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -191,12 +217,14 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
       // แม่แบบเอกสารไม่มีให้โหลดแล้ว — `GET /documents/templates` ถูกถอดพร้อมกับ
       // การออกเอกสารเมื่อ 2026-08-26 · ประวัติเอกสารที่ออกไปแล้วยังโหลดตามปกติ
-      const [docsData, summaryData] = await Promise.all([
+      const [docsData, summaryData, requestData] = await Promise.all([
         api.get('/documents'),
-        api.get('/intents/pipeline-summary').catch(() => null)
+        api.get('/intents/pipeline-summary').catch(() => null),
+        api.get('/intents?status=pending_officer_request').catch(() => [])
       ]);
 
       setDocuments(docsData || []);
+      setRequestQueue(requestData || []);
       if (summaryData) {
         setPipelineSummary(summaryData);
       }
@@ -774,6 +802,67 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
    * so if it expires or never arrives this is their way back in — there is no
    * self-service route for an account that has never had a password.
    */
+  /** เปิดคำร้องขึ้นมาตรวจ — ล้างฟอร์มทุกครั้ง ไม่ให้ค่าของคนก่อนหน้าค้าง */
+  const openRequestReview = (row: RequestFormRow) => {
+    setReviewingRequest(row);
+    setOfficerForm({
+      advisor_signer_name: '',
+      advisor_signed_date: '',
+      dept_head_signer_name: '',
+      dept_head_signed_date: '',
+      document_no: '',
+    });
+    setRejectReason('');
+    setRejectingRequest(false);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const officerFormIncomplete =
+    !officerForm.advisor_signer_name.trim() ||
+    !officerForm.advisor_signed_date ||
+    !officerForm.dept_head_signer_name.trim() ||
+    !officerForm.dept_head_signed_date ||
+    !officerForm.document_no.trim();
+
+  const submitOfficerApprove = async () => {
+    if (!reviewingRequest) return;
+    setOfficerBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/intents/${reviewingRequest.form_id}/officer-approve`, officerForm);
+      setSuccess(
+        `รับคำร้องของ ${reviewingRequest.student_code || ''} แล้ว เลขที่หนังสือ ${officerForm.document_no}`
+      );
+      setConfirmingApprove(false);
+      setReviewingRequest(null);
+      await loadData(true);
+    } catch (err) {
+      setConfirmingApprove(false);
+      setError(getErrorMessage(err, 'ไม่สามารถรับคำร้องได้'));
+    } finally {
+      setOfficerBusy(false);
+    }
+  };
+
+  const submitOfficerReject = async () => {
+    if (!reviewingRequest || !rejectReason.trim()) return;
+    setOfficerBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/intents/${reviewingRequest.form_id}/officer-reject`, {
+        reason: rejectReason.trim(),
+      });
+      setSuccess(`ตีกลับคำร้องของ ${reviewingRequest.student_code || ''} แล้ว`);
+      setReviewingRequest(null);
+      await loadData(true);
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถตีกลับคำร้องได้'));
+    } finally {
+      setOfficerBusy(false);
+    }
+  };
+
   const handleResendInvite = async (userId: number, email: string) => {
     setError(null);
     setSuccess(null);
@@ -2005,18 +2094,64 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             </div>
           </div>
 
-          {/* ⛔ การออกเอกสารราชการถูกโละพร้อมแม่แบบ HTML ทั้งชุด (2026-08-26)
-              ฟอร์มเลือกแม่แบบและปุ่มออกเอกสารถูกถอดออกทั้งก้อน ไม่ใช่ซ่อนไว้ —
-              ปุ่มที่กดแล้วได้ 404 แย่กว่าการบอกตรงๆ ว่ากำลังปรับปรุง
-              ประวัติเอกสารที่ออกไปแล้วด้านล่างยังใช้งานได้ตามปกติ */}
+          {/* คิวคำร้องขอหนังสือ (เอกสารหมายเลข 1)
+              ลายเซ็นของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บนกระดาษที่นักศึกษาอัปโหลดมา
+              เจ้าหน้าที่จึงเป็นคนเดียวที่กดผ่านในระบบ และเป็นคนกรอกชื่อผู้ลงนามจาก
+              กระดาษลงมาให้ระบบรู้ว่าใครเซ็นและเซ็นวันไหน */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                คำร้องขอหนังสือขอความอนุเคราะห์รอตรวจ ({requestQueue.length} รายการ)
+              </span>
+              <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                เปิดไฟล์ที่นักศึกษาอัปโหลด ตรวจว่าลงนามครบสองช่อง แล้วกรอกชื่อผู้ลงนามกับ
+                เลขที่หนังสือออกก่อนกดรับคำร้อง
+              </p>
+            </div>
+
+            {requestQueue.length > 0 ? (
+              <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+                {requestQueue.map((row) => (
+                  <div
+                    key={row.form_id}
+                    className="flex items-center justify-between gap-3 p-4 text-xs hover:bg-gray-50/50 dark:hover:bg-gray-800/10"
+                  >
+                    <div>
+                      <span className="block font-bold text-gray-800 dark:text-gray-200">
+                        {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-gray-600 dark:text-gray-400">
+                        รหัส: {row.student_code} | สถานประกอบการ: {row.company_name_th}
+                      </span>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      data-testid={`review-request-${row.form_id}`}
+                      onClick={() => openRequestReview(row)}
+                      className="shrink-0 border-brand-blue text-brand-blue dark:border-blue-800 dark:text-blue-400"
+                    >
+                      ตรวจคำร้อง
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-gray-600 dark:text-gray-400">
+                ไม่มีคำร้องรอตรวจในขณะนี้
+              </div>
+            )}
+          </div>
+
+          {/* ⛔ การ *ออกหนังสือ* ไปยังสถานประกอบการยังอยู่ระหว่างทำ (ก้อน 3 ของแผน)
+              ตรงนี้บอกตามจริงแทนการวางปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น */}
           <AlertBanner
             variant="info"
             message={
               <>
-                <strong>ระบบออกเอกสารราชการอยู่ระหว่างปรับปรุง</strong> — วิธีออกหนังสือ
-                ขอความอนุเคราะห์และหนังสือส่งตัวกำลังถูกออกแบบใหม่ ระหว่างนี้ยังออกเอกสาร
-                ใหม่จากระบบไม่ได้ · เอกสารที่ออกไปแล้วยังเปิดดูและติดตามสถานะได้ตามปกติ
-                ที่ตารางด้านล่าง
+                <strong>การออกหนังสือขอความอนุเคราะห์ยังอยู่ระหว่างพัฒนา</strong> — คำร้องที่
+                รับแล้วจะเข้าคิวรอคณบดีลงนามในขั้นถัดไป · เอกสารที่ออกไปแล้วยังเปิดดูและ
+                ติดตามสถานะได้ตามปกติที่ตารางด้านล่าง
               </>
             }
           />
@@ -2096,6 +2231,163 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
         busy={confirmBusy}
         onConfirm={runPendingConfirm}
         onCancel={() => setPendingConfirm(null)}
+      />
+
+      {/* ตรวจคำร้องขอหนังสือ (เอกสารหมายเลข 1) */}
+      {reviewingRequest && (
+        <Modal
+          onClose={() => setReviewingRequest(null)}
+          title={`ตรวจคำร้อง — ${[reviewingRequest.first_name, reviewingRequest.last_name].filter(Boolean).join(' ')} (${reviewingRequest.student_code || '-'})`}
+          size="lg"
+          closeOnBackdrop={false}
+        >
+          <ModalBody>
+            <div className="space-y-4">
+              {/* error ต้องอยู่ *ใน* modal ไม่ใช่แถบหลังกล่อง */}
+              <AlertBanner variant="error" message={error} />
+
+              <div className="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800">
+                <span className="text-gray-600 dark:text-gray-400">สถานประกอบการ: </span>
+                <span className="font-bold text-gray-800 dark:text-white">
+                  {reviewingRequest.company_name_th}
+                </span>
+                <p className="mt-1 text-gray-600 dark:text-gray-400">
+                  การกดรับคำร้องจะรับรองสถานประกอบการแห่งนี้เข้าทำเนียบไปในตัว เพราะชื่อและ
+                  ที่อยู่นี้คือสิ่งที่จะถูกพิมพ์ลงหนังสือที่คณบดีลงนาม
+                </p>
+              </div>
+
+              {reviewingRequest.request_form_path ? (
+                <a
+                  href={`${API_BASE_URL}/files/${reviewingRequest.request_form_path}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="open-uploaded-request-form"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
+                >
+                  เปิดไฟล์แบบคำร้องที่นักศึกษาอัปโหลด
+                </a>
+              ) : (
+                <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบคำร้องในระบบ" />
+              )}
+
+              {rejectingRequest ? (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">เหตุผลที่ตีกลับ (นักศึกษาจะเห็นข้อความนี้)</label>
+                  <Textarea
+                    rows={3}
+                    value={rejectReason}
+                    data-testid="officer-reject-reason"
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="เช่น ไฟล์ที่อัปโหลดขาดลายเซ็นหัวหน้าสาขาวิชา"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">ชื่ออาจารย์ที่ปรึกษาผู้ลงนาม</label>
+                    <Input
+                      value={officerForm.advisor_signer_name}
+                      data-testid="officer-advisor-name"
+                      onChange={(e) => setOfficerForm((f) => ({ ...f, advisor_signer_name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">วันที่อาจารย์ที่ปรึกษาลงนาม</label>
+                    <Input
+                      type="date"
+                      value={officerForm.advisor_signed_date}
+                      data-testid="officer-advisor-date"
+                      onChange={(e) => setOfficerForm((f) => ({ ...f, advisor_signed_date: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">ชื่อหัวหน้าสาขาวิชาผู้ลงนาม</label>
+                    <Input
+                      value={officerForm.dept_head_signer_name}
+                      data-testid="officer-dept-head-name"
+                      onChange={(e) => setOfficerForm((f) => ({ ...f, dept_head_signer_name: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">วันที่หัวหน้าสาขาวิชาลงนาม</label>
+                    <Input
+                      type="date"
+                      value={officerForm.dept_head_signed_date}
+                      data-testid="officer-dept-head-date"
+                      onChange={(e) => setOfficerForm((f) => ({ ...f, dept_head_signed_date: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">เลขที่หนังสือออก</label>
+                    <Input
+                      value={officerForm.document_no}
+                      data-testid="officer-document-no"
+                      placeholder="เช่น อว 0656.10/123"
+                      onChange={(e) => setOfficerForm((f) => ({ ...f, document_no: e.target.value }))}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            {rejectingRequest ? (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setRejectingRequest(false)}>
+                  ย้อนกลับ
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={!rejectReason.trim()}
+                  loading={officerBusy}
+                  data-testid="officer-reject-submit"
+                  onClick={submitOfficerReject}
+                >
+                  ยืนยันตีกลับ
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setRejectingRequest(true)}>
+                  ตีกลับให้แก้ไข
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={officerFormIncomplete}
+                  data-testid="officer-approve-open"
+                  onClick={() => setConfirmingApprove(true)}
+                >
+                  รับคำร้อง
+                </Button>
+              </>
+            )}
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* ออกเลขที่หนังสือราชการแล้วย้อนไม่ได้ — ต้องยืนยันก่อน และต้องบอกว่าทำกับใคร */}
+      <ConfirmDialog
+        open={confirmingApprove}
+        title="ยืนยันการรับคำร้อง"
+        message={
+          <>
+            รับคำร้องของ{' '}
+            <strong>
+              {[reviewingRequest?.first_name, reviewingRequest?.last_name].filter(Boolean).join(' ')}
+            </strong>{' '}
+            ({reviewingRequest?.student_code}) และออกเลขที่หนังสือ{' '}
+            <strong>{officerForm.document_no}</strong>
+            <br />
+            สถานประกอบการ <strong>{reviewingRequest?.company_name_th}</strong> จะถูกรับรอง
+            เข้าทำเนียบไปพร้อมกัน · เลขที่หนังสือที่ออกแล้วย้อนกลับไม่ได้
+          </>
+        }
+        confirmLabel="ออกเลขและรับคำร้อง"
+        busy={officerBusy}
+        onConfirm={submitOfficerApprove}
+        onCancel={() => setConfirmingApprove(false)}
       />
     </div>
   );

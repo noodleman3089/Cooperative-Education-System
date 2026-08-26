@@ -67,6 +67,7 @@ export class StudentController {
         const intentQuery = await query(
           `SELECT i.form_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
                   i.job_id, j.title as job_title, i.status, i.start_date, i.acceptance_evidence_path,
+                  i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
                   m.position as mentor_position, m.department as mentor_department
            FROM intent_forms i
@@ -93,6 +94,9 @@ export class StudentController {
             status: row.status,
             start_date: row.start_date,
             acceptance_evidence_path: row.acceptance_evidence_path,
+            request_form_path: row.request_form_path,
+            reject_reason: row.reject_reason,
+            officer_document_no: row.officer_document_no,
             mentor: row.mentor_id ? {
               mentor_id: row.mentor_id,
               name: row.mentor_name,

@@ -15,6 +15,7 @@ const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
 const RESUMES_DIR = path.join(UPLOADS_BASE_DIR, 'resumes');
 const SIGNATURES_DIR = path.join(UPLOADS_BASE_DIR, 'signatures');
 const EVIDENCES_DIR = path.join(UPLOADS_BASE_DIR, 'acceptance_evidence');
+const REQUEST_FORMS_DIR = path.join(UPLOADS_BASE_DIR, 'request_forms');
 
 // Ensure directories exist
 if (!fs.existsSync(UPLOADS_BASE_DIR)) {
@@ -28,6 +29,9 @@ if (!fs.existsSync(SIGNATURES_DIR)) {
 }
 if (!fs.existsSync(EVIDENCES_DIR)) {
   fs.mkdirSync(EVIDENCES_DIR, { recursive: true });
+}
+if (!fs.existsSync(REQUEST_FORMS_DIR)) {
+  fs.mkdirSync(REQUEST_FORMS_DIR, { recursive: true });
 }
 // 1. Resume Upload Configuration (PDF/Word documents only, max 5MB)
 const resumeStorage = multer.diskStorage({
@@ -120,6 +124,31 @@ export const uploadEvidence = multer({
   fileFilter: evidenceFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit
+  },
+});
+
+// 4. แบบคำร้องขอหนังสือ (เอกสารหมายเลข 1) ที่ลงนามด้วยปากกาแล้ว — PDF/รูป สูงสุด 10MB
+//
+// จำกัดใหญ่กว่าตัวอื่น (10MB ไม่ใช่ 5MB) โดยตั้งใจ: ไฟล์นี้มาจากการสแกนหรือถ่ายรูป
+// กระดาษ A4 ที่มีลายเซ็นสองจุด ซึ่งกล้องมือถือสมัยนี้ให้ไฟล์ใหญ่กว่าเอกสารที่ export
+// จากระบบมาก การตั้ง 5MB จะทำให้นักศึกษาถ่ายรูปแล้วอัปไม่ได้โดยไม่รู้ว่าต้องย่อ
+const requestFormStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, REQUEST_FORMS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const userId = req.user?.userId || 'unknown';
+    const cleanOrigName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `requestform-user-${userId}-${uniqueSuffix}${path.extname(cleanOrigName)}`);
+  },
+});
+
+export const uploadRequestForm = multer({
+  storage: requestFormStorage,
+  fileFilter: evidenceFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024,
   },
 });
 

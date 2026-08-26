@@ -237,6 +237,14 @@ export interface IntentForm {
   mentor_id?: number | null;
   start_date?: string | null;
   acceptance_evidence_path?: string | null;
+  // เอกสารหมายเลข 1 — กระดาษที่ลงนามแล้ว และสิ่งที่เจ้าหน้าที่อ่านจากกระดาษนั้น
+  request_form_path?: string | null;
+  reject_reason?: string | null;
+  officer_document_no?: string | null;
+  advisor_signer_name?: string | null;
+  advisor_signed_date?: string | null;
+  dept_head_signer_name?: string | null;
+  dept_head_signed_date?: string | null;
   student_code?: string;
   student_name?: string;
   major_name_th?: string;

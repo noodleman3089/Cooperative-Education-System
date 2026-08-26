@@ -26,7 +26,13 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   // who it is now waiting on. A student reading only "รอหัวหน้าสาขาวิชา" cannot
   // tell whether their advisor has looked at it yet, and that is the question
   // they open the page to answer.
+  // ⚠️ `pending_advisor` ถูกใช้ **สามโดเมน**: coop_applications (สหกิจ 01) ·
+  // intent_forms (ใบความจำนง) · report_outlines (สหกิจ 11) — สองโดเมนแรกและโดเมน
+  // สุดท้ายยังรออาจารย์กดจริง มีแต่ใบความจำนงที่ย้ายไปลงนามบนกระดาษเมื่อ 2026-08-26
+  // ข้อความกลางจึงต้องเป็นของ "รออาจารย์" ต่อไป และให้ใบความจำนงทับด้วย
+  // `DOMAIN_OVERRIDES` ข้างล่างแทน (นี่คือกับดัก key ชนข้ามโดเมนที่ CLAUDE.md เตือนไว้)
   pending_advisor: { text: 'รออาจารย์ที่ปรึกษาพิจารณา', tone: 'waiting' },
+  pending_officer_request: { text: 'ส่งคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ', tone: 'review' },
   approved_by_advisor: { text: 'ที่ปรึกษาอนุมัติแล้ว · รอหัวหน้าสาขาวิชา', tone: 'waiting' },
   approved_by_dept_head: { text: 'สาขาวิชาอนุมัติแล้ว · รอออกหนังสือ', tone: 'waiting' },
   pending_sign: { text: 'ออกหนังสือแล้ว · รอคณบดีลงนาม', tone: 'waiting' },
@@ -55,16 +61,42 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
 };
 
 /** The Thai wording on its own, for prose rather than a chip. */
-export const statusText = (status: string): string =>
-  STATUS_LABELS[status]?.text ?? status;
+/**
+ * โดเมนที่มี key ชนกับโดเมนอื่นแต่ความหมายไม่เหมือนกัน
+ *
+ * ตอนนี้มีตัวเดียวคือใบความจำนง (`intent_forms`) ที่สถานะ `pending_advisor`
+ * **ไม่ได้แปลว่ารออาจารย์กดปุ่ม** อีกแล้วตั้งแต่ 2026-08-26 — มันแปลว่านักศึกษา
+ * ต้องเอาแบบคำร้องไปให้ลงนามด้วยปากกาแล้วอัปโหลดกลับ
+ *
+ * ⛔ อย่าย้ายข้อความนี้ขึ้นไปทับใน `STATUS_LABELS` — สหกิจ 01 กับโครงร่างรายงาน
+ * ใช้ key เดียวกันและยังรออาจารย์กดจริงๆ
+ */
+type StatusDomain = 'intent';
+
+const DOMAIN_OVERRIDES: Record<StatusDomain, Record<string, { text: string; tone: Tone }>> = {
+  intent: {
+    pending_advisor: {
+      text: 'ยื่นคำร้องแล้ว · นำแบบคำร้องไปให้ลงนามแล้วอัปโหลดกลับ',
+      tone: 'waiting',
+    },
+  },
+};
+
+const lookup = (status: string, domain?: StatusDomain) =>
+  (domain ? DOMAIN_OVERRIDES[domain]?.[status] : undefined) ?? STATUS_LABELS[status];
+
+export const statusText = (status: string, domain?: StatusDomain): string =>
+  lookup(status, domain)?.text ?? status;
 
 interface StatusBadgeProps {
   status: string;
+  /** ระบุเมื่อ key ของโดเมนนี้ชนกับโดเมนอื่น — ดู DOMAIN_OVERRIDES */
+  domain?: StatusDomain;
   className?: string;
 }
 
-export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, className = '' }) => {
-  const known = STATUS_LABELS[status];
+export const StatusBadge: React.FC<StatusBadgeProps> = ({ status, domain, className = '' }) => {
+  const known = lookup(status, domain);
 
   // An unmapped status is a gap in this table, not something to dress up as a
   // label. Showing the raw value keeps it diagnosable instead of inventing
