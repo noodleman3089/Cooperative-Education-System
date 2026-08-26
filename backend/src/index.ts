@@ -39,7 +39,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://accounts.google.com"],
-      frameSrc: ["'self'", "https://accounts.google.com", "https://demo.docusign.net"],
+      frameSrc: ["'self'", "https://accounts.google.com"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "https://accounts.google.com"],
     },
@@ -95,7 +95,7 @@ app.get('/api/files/documents/:doc_id', authenticateToken, async (req: Request, 
     }
 
     const docQuery = await query(
-      `SELECT d.generated_file_path, d.student_id
+      `SELECT d.generated_file_path, d.student_id, d.status
        FROM official_documents d
        WHERE d.doc_id = $1 LIMIT 1`,
       [docId]
@@ -115,6 +115,19 @@ app.get('/api/files/documents/:doc_id', authenticateToken, async (req: Request, 
 
     if (!isStaff && !isOwner) {
       res.status(403).json({ message: 'Forbidden. You do not have access to this document.' });
+      return;
+    }
+
+    // ⛔ นักศึกษาดาวน์โหลดได้เฉพาะฉบับที่คณบดีลงนามแล้ว
+    //
+    // หนังสือถูกสร้างตั้งแต่ตอนเจ้าหน้าที่รับคำร้อง (สถานะ pending_sign) เพื่อให้
+    // เข้าคิวคณบดี — ฉบับนั้นยังไม่มีลายเซ็น ถ้าปล่อยให้โหลดได้ นักศึกษาอาจเอา
+    // หนังสือที่ยังไม่มีผลไปยื่นสถานประกอบการ · เจ้าหน้าที่กับคณบดียังเปิดดูได้
+    // เพราะเป็นคนตรวจและลงนามเอง
+    if (!isStaff && doc.status !== 'signed') {
+      res.status(403).json({
+        message: 'หนังสือฉบับนี้ยังรอคณบดีลงนาม จะดาวน์โหลดได้เมื่อลงนามเรียบร้อยแล้ว',
+      });
       return;
     }
 

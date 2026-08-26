@@ -37,11 +37,9 @@ const DeanSignModal: React.FC<DeanSignModalProps> = ({
     setActionLoading(true);
     setModalError(null);
     try {
-      const res = await api.post('/documents/batch-sign', { doc_ids: [docId] });
-      if (res.mode === 'docusign' && res.signing_urls && res.signing_urls.length > 0) {
-        // Open DocuSign in a new window/tab
-        window.open(res.signing_urls[0].signing_url, '_blank');
-      }
+      // ระบบวาดหนังสือใหม่พร้อมลายเซ็นให้เลย — ไม่มีเส้นทางเซ็นภายนอกแล้ว
+      // (DocuSign ถูกถอดออกทั้งหมด 2026-08-26)
+      await api.post('/documents/batch-sign', { doc_ids: [docId] });
       onSuccess();
     } catch (err) {
       setModalError(getErrorMessage(err, 'การลงนามเอกสารล้มเหลว'));

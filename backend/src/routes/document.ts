@@ -3,23 +3,18 @@ import { DocumentController } from '../controllers/document';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 /**
- * ⛔ เส้นทาง **ออก** เอกสารราชการถูกโละเมื่อ 2026-08-26 พร้อมแม่แบบ HTML
- * (`POST /generate` · `POST /generate-dispatch` · `GET /dispatch-eligible`
- * · `GET /templates`) — เจ้าของสั่งโละก่อนแล้วออกแบบวิธีใหม่ทีหลัง
+ * เอกสารราชการหลังการรื้อ 2026-08-26
  *
- * ที่เหลือคือการอ่านและการลงนามเอกสารที่ออกไปแล้ว ซึ่งทำงานกับไฟล์ใน
- * `secure_private/documents/` ไม่ใช่แม่แบบ จึงไม่ได้รับผลกระทบ
+ * การ **ออก** หนังสือย้ายไปอยู่ที่ `PATCH /api/intents/:id/officer-approve` —
+ * เจ้าหน้าที่รับคำร้อง (เอกสารหมายเลข 1) แล้วระบบวาดหนังสือขอความอนุเคราะห์
+ * จากโค้ดทันที ที่นี่จึงเหลือเฉพาะการดูรายการและการลงนามของคณบดี
+ *
+ * ⛔ **ไม่มี route สาธารณะแล้ว** — `/signing-complete` ของ DocuSign ถูกถอดออก
+ * ทั้งเส้น `router.use(authenticateToken)` จึงครอบทุก endpoint ในไฟล์นี้
  */
 
 const router = Router();
 
-// Route: GET /api/documents/signing-complete (Callback from DocuSign - Public browser redirect)
-router.get(
-  '/signing-complete',
-  DocumentController.signingComplete
-);
-
-// Protect subsequent document endpoints with authentication
 router.use(authenticateToken);
 
 // Route: GET /api/documents (Staff, Dean only)

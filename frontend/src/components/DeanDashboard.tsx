@@ -155,16 +155,13 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
       const res = await api.post('/documents/batch-sign', { doc_ids: selectedDocIds });
 
       const signedCount = res.signed_count || 0;
-      const urls = res.signing_urls || [];
       const failed = res.failed_documents || [];
 
-      // A batch can now come back mixed: some documents signed here, others
-      // handed back as DocuSign ceremonies for the dean to complete.
-      const parts: string[] = [];
-      if (signedCount > 0) parts.push(`ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`);
-      if (urls.length > 0) parts.push(`สร้างลิ้งค์สำหรับลงนามแบบกลุ่มสำเร็จ (จำนวน ${urls.length} รายการ) กำลังเปิดหน้าต่างลงนาม DocuSign...`);
-
-      if (parts.length > 0) setSuccess(parts.join(' · '));
+      // ⛔ DocuSign ถูกถอดออกทั้งหมดเมื่อ 2026-08-26 — การลงนามมีทางเดียวคือระบบ
+      // วาดหนังสือใหม่พร้อมลายเซ็นที่คณบดีอัปโหลดไว้ ไม่มีลิงก์ไปเซ็นที่อื่นอีก
+      if (signedCount > 0) {
+        setSuccess(`ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`);
+      }
 
       if (failed.length > 0) {
         setError(
@@ -172,8 +169,6 @@ const DeanDashboard: React.FC<DeanDashboardProps> = ({ activeMenu = 'dashboard',
           failed.map((f: { doc_id: number; error: string }) => `#DOC-${f.doc_id} (${f.error})`).join(' · ')
         );
       }
-
-      if (urls.length > 0) window.open(urls[0].signing_url, '_blank');
 
       setSelectedDocIds([]);
       // The bell counts pending documents and only recounts on this event.

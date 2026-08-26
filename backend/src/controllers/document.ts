@@ -1,15 +1,17 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-import { PDFDocument } from 'pdf-lib';
 import { CompanyModel } from '../models/company';
 import { PersonnelModel } from '../models/personnel';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { UserModel } from '../models/user';
 import { query } from '../config/database';
 import { getErrorMessage } from '../utils/httpError';
-import { DocuSignService } from '../utils/docusign';
+import {
+  buildCoverLetterPdf,
+  fetchCoverLetterDataByDoc,
+  toCoverLetterData,
+} from '../utils/coverLetterPdf';
 import { BatchSignDocumentsBody } from '../types';
 import {
   notifyStudentStatusChangeByDocId,
@@ -34,16 +36,24 @@ if (!JWT_SECRET) {
  * · `listTemplates` — ทั้งหมดพึ่งไฟล์ใน `secure_private/templates/` ที่ไม่มีแล้ว
  * เจ้าของสั่งโละก่อนแล้วออกแบบวิธีออกเอกสารใหม่ทีหลัง
  *
- * ที่ยังอยู่คือฝั่ง **อ่านและลงนามของเดิม** ซึ่งไม่เคยพึ่งแม่แบบเลย:
- * `listDocuments` · `batchSignDocuments` (เซ็นไฟล์ที่ออกไว้แล้วใน uploads)
- * · `signingComplete` · `onboardCompanyAndSendEmail`
- * เอกสารที่ออกไปแล้วจึงยังเปิดดู ยังลงนาม และยังส่งอีเมลได้ตามปกติ
+ * ตั้งแต่ 2026-08-26 หนังสือขอความอนุเคราะห์ถูก **วาดจากโค้ด** (`utils/coverLetterPdf.ts`)
+ * โดยเจ้าหน้าที่เป็นคนสั่งออกตอนรับคำร้อง (`controllers/intent.ts`) และคณบดีลงนามที่นี่
+ * · DocuSign ถูกถอดออกทั้งหมด — ไม่มีเส้นทางเซ็นภายนอกอีก
  */
 export class DocumentController {
   /**
-   * Secure E-Signature & Batch Approval for Official Documents.
+   * คณบดีลงนามหนังสือขอความอนุเคราะห์
    * Route: POST /api/documents/batch-sign
-   * Access: dean (strict RBAC)
+   * Access: dean เท่านั้น
+   *
+   * ⛔ **วาดหนังสือใหม่ทั้งใบพร้อมลายเซ็น ไม่ใช่แปะรูปลงไฟล์เดิม**
+   *
+   * ของเดิม `drawImage(sig, {x:100, y:165, …})` บน PDF ที่ตัวเองไม่ได้วาด จึงพลาดได้
+   * สี่ทาง: ที่อยู่ยาวขึ้นแล้วลายเซ็นทับข้อความ · หนังสือสองหน้าแต่แปะหน้าแรกเสมอ
+   * · รูปถูกยืดตามกรอบตายตัว · **เขียนทับไฟล์เดิม** จึงไม่มีต้นฉบับให้ถอยและกดซ้ำ
+   * = แปะซ้อน · ตอนนี้เราวาดเองจากข้อมูลในฐาน ตำแหน่งลายเซ็นจึงมาจากบรรทัดสุดท้ายจริง
+   *
+   * ฉบับลงนามเป็น **ไฟล์ใหม่** ต้นฉบับที่ยังไม่ลงนามอยู่ครบ — ตีกลับได้ กดซ้ำไม่ซ้อน
    */
   static async batchSignDocuments(req: Request, res: Response): Promise<void> {
     try {
@@ -53,54 +63,25 @@ export class DocumentController {
       }
 
       const { doc_ids } = req.body as BatchSignDocumentsBody;
-
       if (!doc_ids || !Array.isArray(doc_ids) || doc_ids.length === 0) {
         res.status(400).json({ message: 'Required field: doc_ids (non-empty array of integers).' });
         return;
       }
 
-      // Fetch Dean Profile
-      const deanUserId = req.user.userId;
-      const deanProfile = await PersonnelModel.findByPersonnelId(deanUserId);
-
+      const deanProfile = await PersonnelModel.findByPersonnelId(req.user.userId);
       if (!deanProfile) {
         res.status(404).json({ message: 'Dean profile not found.' });
         return;
       }
-
-      // Validate Dean E-Signature before processing
       if (!deanProfile.e_signature_file) {
         res.status(400).json({
-          message: "Dean e-signature file path not configured in profile. Please upload signature first.",
+          message: 'ยังไม่ได้อัปโหลดลายมือชื่อดิจิทัล กรุณาตั้งค่าลายมือชื่อก่อนลงนาม',
         });
         return;
       }
 
-      /**
-       * The signing route is chosen per document, not per environment.
-       *
-       * This used to be `if (DocuSignService.isConfigured())` around the whole
-       * batch, with the local pdf-lib overlay sitting in its `else`. Generating
-       * a document tolerates a failed DocuSign envelope (it logs and carries on,
-       * leaving `docusign_envelope_id` NULL), so any document that lost its
-       * envelope became permanently unsignable: the DocuSign branch rejected it
-       * for having no envelope, and the fallback written for exactly that case
-       * was unreachable because DocuSign *was* configured.
-       */
-      const docuSignAvailable = DocuSignService.isConfigured();
-
-      const signingUrls: { doc_id: number; signing_url: string }[] = [];
       const signedDocIds: number[] = [];
       const failedDocs: { doc_id: number; error: string }[] = [];
-
-      // Only documents taking the local route need the signature image, so it is
-      // read on first use rather than up front.
-      let cachedSigBytes: Buffer | null = null;
-      const signatureBytes = (): Buffer => {
-        if (cachedSigBytes) return cachedSigBytes;
-        cachedSigBytes = fs.readFileSync(DocumentController.resolveDeanSignaturePath(deanProfile.e_signature_file!));
-        return cachedSigBytes;
-      };
 
       for (const docId of doc_ids) {
         try {
@@ -116,124 +97,71 @@ export class DocumentController {
             continue;
           }
 
-          if (doc.status !== 'pending_sign') {
-            failedDocs.push({
-              doc_id: parsedDocId,
-              error: `Document status must be 'pending_sign'. Current: '${doc.status}'`,
-            });
+          // กันเซ็นซ้ำที่ **สถานะ** ไม่ใช่ที่ไฟล์ — กดสองครั้งติดกันต้องได้ผลเดียว
+          if (doc.status === 'signed') {
+            failedDocs.push({ doc_id: parsedDocId, error: 'เอกสารนี้ลงนามไปแล้ว' });
             continue;
           }
 
-          // ROUTE 1: this document has a DocuSign envelope waiting for the dean.
-          if (docuSignAvailable && doc.docusign_envelope_id) {
-            const secret = process.env.DOCUSIGN_WEBHOOK_SECRET || JWT_SECRET!;
-            const hmac = crypto.createHmac('sha256', secret);
-            hmac.update(`${parsedDocId}:${doc.docusign_envelope_id}`);
-            const callbackToken = hmac.digest('hex');
-
-            const returnUrl = (process.env.DOCUSIGN_RETURN_URL || 'http://localhost:5000/api/documents/signing-complete') + `?doc_id=${parsedDocId}&token=${callbackToken}`;
-            
-            const recipientName = req.user.email === 'dean1@test.com'
-              ? 'Dean of Science and Technology'
-              : req.user.email.split('@')[0];
-
-            // Generate embedded signing URL for the dean
-            const signingUrl = await DocuSignService.getEnvelopeSigningUrl(doc.docusign_envelope_id, {
-              recipientName: recipientName,
-              recipientEmail: req.user.email,
-              returnUrl: returnUrl,
-            });
-
-            signingUrls.push({ doc_id: parsedDocId, signing_url: signingUrl });
+          const letterRow = await fetchCoverLetterDataByDoc(parsedDocId);
+          if (!letterRow) {
+            failedDocs.push({ doc_id: parsedDocId, error: 'ไม่พบข้อมูลคำร้องของเอกสารนี้' });
             continue;
           }
 
-          // ROUTE 2: no envelope for this document — stamp the dean's stored
-          // signature onto the PDF here. This is the path the system falls back
-          // to when DocuSign is switched off entirely, and now also when a
-          // single document never got an envelope.
-          if (!doc.generated_file_path) {
-            failedDocs.push({ doc_id: parsedDocId, error: 'Document does not have a generated file path.' });
-            continue;
-          }
-
-          const absolutePdfPath = path.join(process.cwd(), doc.generated_file_path);
-          if (!fs.existsSync(absolutePdfPath)) {
-            failedDocs.push({ doc_id: parsedDocId, error: 'PDF file not found on disk.' });
-            continue;
-          }
-
-          const sigImageBytes = signatureBytes();
-          const pdfBytes = fs.readFileSync(absolutePdfPath);
-          const pdfDoc = await PDFDocument.load(pdfBytes);
-          const pages = pdfDoc.getPages();
-          const firstPage = pages[0];
-
-          // Embed signature image (PNG or JPEG) dynamically based on magic bytes
-          let sigImage;
-          const isPng = sigImageBytes[0] === 0x89 && sigImageBytes[1] === 0x50 && sigImageBytes[2] === 0x4e && sigImageBytes[3] === 0x47;
-          if (isPng) {
-            sigImage = await pdfDoc.embedPng(sigImageBytes);
-          } else {
-            sigImage = await pdfDoc.embedJpg(sigImageBytes);
-          }
-
-          firstPage.drawImage(sigImage, {
-            x: 100,
-            y: 165,
-            width: 100,
-            height: 50,
+          const signedBytes = await buildCoverLetterPdf(toCoverLetterData(letterRow), {
+            signatureFile: DocumentController.resolveDeanSignaturePath(deanProfile.e_signature_file),
+            signedDate: new Date(),
           });
 
-          // Flatten PDF Form Fields
-          pdfDoc.getForm().flatten();
+          const fileName = `cover_letter_signed_${parsedDocId}_${Date.now()}.pdf`;
+          const relativePath = path.posix.join('secure_private', 'documents', fileName);
+          const absolutePath = path.join(process.cwd(), relativePath);
+          fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+          fs.writeFileSync(absolutePath, signedBytes);
 
-          const finalizedBytes = await pdfDoc.save();
-          fs.writeFileSync(absolutePdfPath, finalizedBytes);
-
+          await OfficialDocumentModel.updateFilePath(parsedDocId, relativePath);
           await OfficialDocumentModel.updateStatusAndSignature(parsedDocId, 'signed', new Date());
           signedDocIds.push(parsedDocId);
 
-          writeAudit({
-            action: AuditAction.DOCUMENT_SIGNED,
-            entityType: 'official_document',
-            entityId: parsedDocId,
-            subjectId: doc.student_id,
-            detail: { mode: 'local_overlay', type: doc.type, company_id: doc.company_id },
-          }, req).catch(() => undefined);
+          writeAudit(
+            {
+              action: AuditAction.DOCUMENT_SIGNED,
+              entityType: 'official_document',
+              entityId: parsedDocId,
+              subjectId: doc.student_id,
+              detail: { type: doc.type, company_id: doc.company_id },
+            },
+            req
+          ).catch(() => undefined);
 
-          // Send email notification to student
+          // ⚠️ fire-and-forget — **ห้ามใส่ await** การส่งอีเมลไม่ควรทำให้คณบดีรอ
+          // (ของเดิม await ไว้กลางลูป ทำให้แถบ "ลงนามสำเร็จ" ไม่ขึ้นภายใน 10 วินาที)
           notifyStudentStatusChangeByDocId(parsedDocId, 'signed').catch(console.error);
-
-          // ⚠️ fire-and-forget เหมือนบรรทัดบน — **ห้ามใส่ await กลับ**
-          //
-          // ของเดิม `await` การส่งอีเมลไว้กลางลูปลงนาม คณบดีจึงต้องรอ SMTP ตอบ
-          // ต่อเอกสารหนึ่งใบก่อนที่หน้าจอจะขึ้นว่าลงนามสำเร็จ — ลงนาม 10 ใบก็รอ
-          // 10 รอบ ทั้งที่การลงนามในฐานข้อมูลเสร็จไปแล้ว
-          // อาการที่เห็นคือแถบ "ลงนามแบบกลุ่มสำเร็จ" ไม่ขึ้นภายใน 10 วินาที
-          // (coop-workflow Scenario 1 แดงเป็นครั้งคราวเพราะเหตุนี้)
-          DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId).catch(
-            console.error
-          );
         } catch (err) {
           console.error(`Error processing doc_id: ${docId}`, err);
-          failedDocs.push({ doc_id: docId, error: getErrorMessage(err, 'Unknown error while signing.') });
+          failedDocs.push({
+            doc_id: docId,
+            error: getErrorMessage(err, 'Unknown error while signing.'),
+          });
         }
       }
 
-      // `signed_count` counts documents that are actually signed now. It used to
-      // be set to the number of DocuSign URLs handed out, which are only an
-      // invitation to go and sign — nothing was signed at that point.
       res.status(200).json({
         message: 'Batch signature process completed.',
-        mode: signingUrls.length > 0 ? (signedDocIds.length > 0 ? 'mixed' : 'docusign') : 'local',
-        signing_urls: signingUrls,
+        mode: 'local',
+        signing_urls: [],
         signed_count: signedDocIds.length,
         signed_doc_ids: signedDocIds,
         failed_documents: failedDocs,
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Batch Sign Documents Error', 'An internal server error occurred during batch signature.');
+      sendUnexpectedError(
+        res,
+        error,
+        'Batch Sign Documents Error',
+        'เกิดข้อผิดพลาดขณะลงนามเอกสาร'
+      );
     }
   }
 
@@ -256,96 +184,8 @@ export class DocumentController {
     return found;
   }
 
-  /**
-   * Handle redirect callback from DocuSign embedded signing ceremony.
-   * Route: GET /api/documents/signing-complete
-   */
-  static async signingComplete(req: Request, res: Response): Promise<void> {
-    try {
-      const docIdStr = req.query.doc_id as string;
-      const event = req.query.event as string; // 'signing_complete', 'decline', etc.
-      const token = req.query.token as string;
-
-      if (!docIdStr) {
-        res.status(400).send('<h1>Missing Parameter</h1><p>Required query parameter: doc_id.</p>');
-        return;
-      }
-
-      const docId = parseInt(docIdStr, 10);
-      if (isNaN(docId)) {
-        res.status(400).send('<h1>Invalid Parameter</h1><p>doc_id must be an integer.</p>');
-        return;
-      }
-
-      const doc = await OfficialDocumentModel.findById(docId);
-      if (!doc) {
-        res.status(404).send('<h1>Document Not Found</h1>');
-        return;
-      }
-
-      // Verify HMAC token
-      const secret = process.env.DOCUSIGN_WEBHOOK_SECRET || JWT_SECRET!;
-      const expectedHmac = crypto.createHmac('sha256', secret);
-      expectedHmac.update(`${docId}:${doc.docusign_envelope_id}`);
-      const expectedToken = expectedHmac.digest('hex');
-
-      if (!token || token !== expectedToken) {
-        res.status(403).send('<h1>Access Denied</h1><p>Invalid or missing verification token.</p>');
-        return;
-      }
-
-      // Sanitize event to prevent Reflected XSS
-      const cleanEvent = (event || 'unknown').replace(/[^a-zA-Z0-9_-]/g, '');
-
-      if (cleanEvent !== 'signing_complete') {
-        res.status(200).send(`
-          <h1>Signing Terminated</h1>
-          <p>The signing process was not completed. Event status: ${cleanEvent}</p>
-          <script>setTimeout(() => window.close(), 3000)</script>
-        `);
-        return;
-      }
-
-      // Download the signed file from DocuSign and update DB status
-      if (doc.docusign_envelope_id) {
-        console.log(`Downloading signed document for docId: ${docId}, Envelope ID: ${doc.docusign_envelope_id}`);
-        await DocuSignService.downloadSignedDocument(doc.docusign_envelope_id, doc.generated_file_path!);
-      }
-
-      await OfficialDocumentModel.updateStatusAndSignature(docId, 'signed', new Date());
-
-      writeAudit({
-        action: AuditAction.DOCUMENT_SIGNED,
-        entityType: 'official_document',
-        entityId: docId,
-        subjectId: doc.student_id,
-        detail: { mode: 'docusign', envelope_id: doc.docusign_envelope_id, type: doc.type },
-      }).catch(() => undefined);
-
-      // Send email notification to student
-      notifyStudentStatusChangeByDocId(docId, 'signed').catch(console.error);
-
-      // Trigger onboarding email to company representative / mentor
-      await DocumentController.onboardCompanyAndSendEmail(doc.company_id, docId);
-
-      res.status(200).send(`
-        <div style="font-family: sans-serif; text-align: center; margin-top: 10%;">
-          <h1 style="color: #2e7d32;">✓ Signing Complete!</h1>
-          <p>The official document has been cryptographically signed via DocuSign and archived securely.</p>
-          <p style="color: #666; font-size: 14px;">This window will close automatically in 3 seconds...</p>
-        </div>
-        <script>setTimeout(() => window.close(), 3000)</script>
-      `);
-    } catch (error) {
-      // ไม่ใช้ sendUnexpectedError ที่นี่ — ปลายทางคือเบราว์เซอร์ของผู้เซ็นซึ่งรอ HTML
-      // ไม่ใช่ JSON · เป็นหนึ่งใน status(500) ดิบ 2 จุดที่เหลือโดยตั้งใจ
-      console.error('DocuSign Callback Error:', error);
-      // The message is not reflected back: it can carry database text (company
-      // names, document titles) that a student supplied, and this response is
-      // rendered as HTML in the signer's browser. It is logged above instead.
-      res.status(500).send('<h1>Callback Sync Error</h1><p>An unexpected error occurred. Please contact the co-op office.</p>');
-    }
-  }
+  // ⛔ signingComplete (DocuSign callback) ถูกลบเมื่อ 2026-08-26 — คณบดีกดยืนยัน
+  //    ในระบบแล้วระบบวาดหนังสือพร้อมลายเซ็นให้เลย ไม่มีเส้นทางเซ็นภายนอกอีก
 
   /**
    * List all official documents in the system.

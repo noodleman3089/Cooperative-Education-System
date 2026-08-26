@@ -2271,6 +2271,20 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบคำร้องในระบบ" />
               )}
 
+              {/* ตัวอย่างหนังสือขาออก — ด่านตรวจอยู่ **ก่อน** คณบดีลงนาม เพื่อไม่ให้
+                  ต้องรบกวนท่านกดใหม่เมื่อเจอข้อมูลผิดหลังเซ็นไปแล้ว
+                  เลขที่หนังสือในตัวอย่างจะยังว่างจนกว่าจะกดรับคำร้อง เพราะเลขเกิด
+                  ตอนนั้น — ที่เหลือหน้าตาเหมือนฉบับจริงทุกอย่าง */}
+              <a
+                href={`${API_BASE_URL}/intents/${reviewingRequest.form_id}/cover-letter/preview`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="preview-cover-letter"
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
+              >
+                ดูตัวอย่างหนังสือขอความอนุเคราะห์ที่จะออกให้
+              </a>
+
               {rejectingRequest ? (
                 <div className="space-y-2">
                   <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">เหตุผลที่ตีกลับ (นักศึกษาจะเห็นข้อความนี้)</label>

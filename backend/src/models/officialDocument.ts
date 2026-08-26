@@ -24,7 +24,8 @@ export class OfficialDocumentModel {
     type: string;
     student_id: number;
     company_id: number;
-    template_id: number;
+    /** NULL สำหรับหนังสือที่วาดจากโค้ด (ไม่มีแม่แบบ) — ดู migration 005 */
+    template_id?: number | null;
     generated_file_path: string;
     status: 'created' | 'pending_sign' | 'signed' | 'rejected';
   }): Promise<OfficialDocument> {
@@ -37,7 +38,7 @@ export class OfficialDocumentModel {
         docData.type,
         docData.student_id,
         docData.company_id,
-        docData.template_id,
+        docData.template_id ?? null,
         docData.generated_file_path,
         docData.status,
       ]
@@ -48,6 +49,18 @@ export class OfficialDocumentModel {
   /**
    * Update document status and signature timestamp.
    */
+  /**
+   * ชี้เอกสารไปที่ไฟล์ใหม่ — ใช้ตอนคณบดีลงนาม ซึ่งวาดหนังสือใหม่ทั้งใบพร้อมลายเซ็น
+   * เป็นคนละไฟล์กับต้นฉบับ (ของเดิมเขียนทับไฟล์เดิม กดซ้ำแล้วลายเซ็นซ้อน)
+   */
+  static async updateFilePath(docId: number, filePath: string): Promise<boolean> {
+    const res = await query(
+      'UPDATE official_documents SET generated_file_path = $1 WHERE doc_id = $2',
+      [filePath, docId]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
+
   static async updateStatusAndSignature(
     docId: number,
     status: 'created' | 'pending_sign' | 'signed' | 'rejected',

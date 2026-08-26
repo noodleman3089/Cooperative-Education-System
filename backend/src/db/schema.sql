@@ -319,10 +319,14 @@ CREATE TABLE IF NOT EXISTS official_documents (
     type VARCHAR(50) NOT NULL, -- e.g., 'cover_letter', 'transfer_letter', 'dispatch_letter'
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE RESTRICT,
-    template_id INT NOT NULL REFERENCES document_templates(template_id) ON DELETE RESTRICT,
+    -- NULL ได้ตั้งแต่ 2026-08-26: หนังสือถูก **วาดจากโค้ด** (utils/coverLetterPdf.ts)
+    -- ไม่ได้มาจากแม่แบบอีกแล้ว · คอลัมน์ยังอยู่เพื่อเอกสารเก่าที่เคยผูกกับแม่แบบจริง
+    template_id INT REFERENCES document_templates(template_id) ON DELETE RESTRICT,
     generated_file_path VARCHAR(255),
     status VARCHAR(50) NOT NULL DEFAULT 'created', -- 'created', 'pending_sign', 'signed', 'rejected'
     dean_signature_date TIMESTAMP,
+    -- ⚠️ DocuSign ถูกถอดออกทั้งหมดเมื่อ 2026-08-26 (คณบดีกดยืนยันในระบบแทน)
+    -- คอลัมน์นี้เก็บไว้เพราะฐานจริงอาจมีค่าเก่าค้างอยู่ ไม่มีใครเขียนลงไปอีกแล้ว
     docusign_envelope_id VARCHAR(255)
 );
 

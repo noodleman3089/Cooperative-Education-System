@@ -13,6 +13,12 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { renderRequestFormHtml, RequestFormData } from '../utils/requestFormHtml';
+import {
+  buildCoverLetterPdf,
+  fetchCoverLetterData,
+  toCoverLetterData,
+} from '../utils/coverLetterPdf';
+import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
@@ -674,13 +680,43 @@ export class IntentFormController {
         return;
       }
 
-      const { studentId } = await IntentFormModel.officerApproveRequest(formId, req.user.userId, {
-        advisorSignerName: advisor_signer_name.trim(),
-        advisorSignedDate: advisor_signed_date.trim(),
-        deptHeadSignerName: dept_head_signer_name.trim(),
-        deptHeadSignedDate: dept_head_signed_date.trim(),
-        documentNo: document_no.trim(),
-      });
+      const { studentId, companyId } = await IntentFormModel.officerApproveRequest(
+        formId,
+        req.user.userId,
+        {
+          advisorSignerName: advisor_signer_name.trim(),
+          advisorSignedDate: advisor_signed_date.trim(),
+          deptHeadSignerName: dept_head_signer_name.trim(),
+          deptHeadSignedDate: dept_head_signed_date.trim(),
+          documentNo: document_no.trim(),
+        }
+      );
+
+      // ออกหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) แล้วส่งเข้าคิวคณบดี
+      //
+      // ทำ *หลัง* ทรานแซกชันจบโดยตั้งใจ — การเขียนไฟล์ลงดิสก์ย้อนกลับไม่ได้พร้อมกับ
+      // ฐานข้อมูล ถ้าออกเอกสารล้มเหลว คำร้องที่ผ่านแล้วต้องไม่ย้อนกลับไปหานักศึกษา
+      // เจ้าหน้าที่กดออกใหม่ได้จากหน้าเดิม (ดูข้อความ error)
+      const letterRow = await fetchCoverLetterData(formId);
+      if (letterRow) {
+        const pdfBytes = await buildCoverLetterPdf(toCoverLetterData(letterRow));
+        const fileName = `cover_letter_${formId}_${Date.now()}.pdf`;
+        const relativePath = path.posix.join('secure_private', 'documents', fileName);
+        const absolutePath = path.join(process.cwd(), relativePath);
+
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+        fs.writeFileSync(absolutePath, pdfBytes);
+
+        await OfficialDocumentModel.create({
+          document_number: document_no.trim(),
+          type: 'cover_letter',
+          student_id: studentId,
+          company_id: companyId,
+          // ไม่มี template_id — หนังสือถูกวาดจากโค้ด ไม่ได้มาจากแม่แบบ (migration 005)
+          generated_file_path: relativePath,
+          status: 'pending_sign',
+        });
+      }
 
       writeAudit(
         {
@@ -746,6 +782,39 @@ export class IntentFormController {
       res.status(200).json({ message: 'ตีกลับคำร้องเรียบร้อยแล้ว', form_id: formId });
     } catch (error) {
       res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถตีกลับคำร้องได้') });
+    }
+  }
+
+  /**
+   * ตัวอย่างหนังสือขอความอนุเคราะห์ก่อนส่งเข้าคิวคณบดี
+   * Route: GET /api/intents/:id/cover-letter/preview
+   * Access: staff
+   *
+   * เจ้าของเคาะว่าด่านตรวจของเจ้าหน้าที่อยู่ **ก่อน** คณบดีลงนาม ไม่ใช่หลัง —
+   * เพราะถ้าตรวจหลังเซ็นแล้วเจอผิด ต้องรบกวนคณบดีให้กดใหม่ ซึ่งขัดกับเจตนา
+   * "ลดความลำบากฝั่งนั้น" · ตัวอย่างนี้จึงวาดด้วยตัววาดตัวเดียวกับฉบับจริง
+   * ต่างกันแค่ยังไม่มีลายเซ็น
+   */
+  static async previewCoverLetter(req: Request, res: Response): Promise<void> {
+    try {
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const row = await fetchCoverLetterData(formId);
+      if (!row) {
+        res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
+        return;
+      }
+
+      const pdfBytes = await buildCoverLetterPdf(toCoverLetterData(row));
+      res.contentType('application/pdf');
+      res.setHeader('Content-Disposition', 'inline; filename="cover-letter-preview.pdf"');
+      res.send(pdfBytes);
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Preview Cover Letter Error', 'สร้างตัวอย่างหนังสือไม่สำเร็จ');
     }
   }
 

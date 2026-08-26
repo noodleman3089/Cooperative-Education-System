@@ -90,6 +90,13 @@ router.patch(
   IntentFormController.officerRejectRequest
 );
 
+// Route: GET /api/intents/:id/cover-letter/preview (เจ้าหน้าที่ดูตัวอย่างก่อนส่งคิวคณบดี)
+router.get(
+  '/:id/cover-letter/preview',
+  authorizeRoles('staff'),
+  IntentFormController.previewCoverLetter
+);
+
 // Route: GET /api/intents/:id/request-form
 // แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1) — หน้า HTML สำหรับสั่งพิมพ์
 // ไม่ระบุ role ที่นี่โดยตั้งใจ: นักศึกษาเปิดของตัวเอง ส่วนบุคลากรใช้กติกาของ
