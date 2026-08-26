@@ -94,10 +94,6 @@ export async function setupDatabase(quiet = false) {
       INSERT INTO document_templates (name, file_path, type) VALUES
       ('หนังสือขอความอนุเคราะห์รับนักศึกษา (Cover Letter)', 'secure_private/templates/cover_letter_template.html', 'cover_letter'),
       ('หนังสือส่งตัวนักศึกษาสหกิจศึกษา (Transfer Letter)', 'secure_private/templates/transfer_letter_template.html', 'transfer_letter'),
-      ('ใบสมัครงานสหกิจศึกษา / Resume (สหกิจ03)', 'secure_private/templates/sahatkit_03_template.html', 'sahatkit_03'),
-      ('แบบแจ้งรายชื่อนักศึกษาสหกิจศึกษา (สหกิจ04)', 'secure_private/templates/sahatkit_04_template.html', 'sahatkit_04'),
-      ('หนังสือสัญญาเข้ารับการปฏิบัติงาน (สหกิจ05)', 'secure_private/templates/sahatkit_05_template.html', 'sahatkit_05'),
-      ('แบบบันทึกการนิเทศงาน (สหกิจ13)', 'secure_private/templates/sahatkit_13_template.html', 'sahatkit_13'),
       ('บันทึกข้อความขออนุมัติเดินทางไปราชการ (Travel Request)', 'secure_private/templates/travel_request_template.html', 'travel_request')
     `);
     log('Default document templates seeded.');
