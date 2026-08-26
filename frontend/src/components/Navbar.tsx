@@ -152,16 +152,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               });
             }
 
-            // 3. Consent form
-            if (activeIntent.parental_consent_path) {
-              studentNotifs.push({
-                id: 'consent_uploaded',
-                title: 'อัปโหลดใบยินยอมสำเร็จ',
-                description: 'อัปโหลดเอกสารหนังสือยินยอมผู้ปกครองเรียบร้อยแล้ว',
-                isSuccess: true,
-                isRead: false
-              });
-            }
           }
 
           // 4. Documents

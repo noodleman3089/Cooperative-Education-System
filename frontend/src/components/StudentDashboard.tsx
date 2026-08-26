@@ -35,7 +35,6 @@ const StudentDashboard: React.FC = () => {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [uploadingConsent, setUploadingConsent] = useState(false);
 
   // Manual Acceptance States
   const [mentorName, setMentorName] = useState('');
@@ -120,33 +119,6 @@ const StudentDashboard: React.FC = () => {
   };
 
   useDashboardData(loadDashboardData);
-
-  const handleConsentUpload = async (e: React.ChangeEvent<HTMLInputElement>, formId: number) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
-
-    const formData = new FormData();
-    formData.append('consent', file);
-
-    setUploadingConsent(true);
-    setError(null);
-
-    try {
-      await api.put(`/intents/${formId}/parental-consent`, formData);
-      await loadDashboardData();
-    } catch (err) {
-      setError(getErrorMessage(err, 'การอัปโหลดใบยินยอมล้มเหลว กรุณาลองใหม่อีกครั้ง'));
-    } finally {
-      setUploadingConsent(false);
-    }
-  };
-
-  const handleDownloadConsentTemplate = (intent: IntentForm) => {
-    // Dynamically request pre-filled parental consent template from backend
-    // Route: GET /api/files/download/parental-consent-template?intent_id=X
-    const url = `${API_BASE_URL}/files/download/parental-consent-template?intent_id=${intent.form_id}`;
-    window.open(url, '_blank');
-  };
 
   const handleProofSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -651,49 +623,6 @@ const StudentDashboard: React.FC = () => {
                   <StatusBadge status={activeIntent.status} />
                 </div>
               </div>
-
-              {/* Step 3 Action: Pre-filled PDF Consent download & Upload */}
-              {activeIntent.status === 'pending_advisor' && (
-                <div className="border-t border-gray-100 pt-4 mt-4 dark:border-gray-800 space-y-3">
-                  <span className="block text-xs font-bold text-gray-700 dark:text-gray-300">
-                    แบบฟอร์มหนังสือยินยอมผู้ปกครอง (Parental Consent)
-                  </span>
-
-                  {activeIntent.parental_consent_path ? (
-                    <div className="flex items-center gap-2 text-xs text-green-700 dark:text-green-400 font-semibold">
-                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                      </svg>
-                      อัปโหลดใบยินยอมสำเร็จแล้ว (รออาจารย์ปลดล็อกปุ่มอนุมัติ)
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        onClick={() => handleDownloadConsentTemplate(activeIntent)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-brand-blue hover:bg-blue-50/10 text-brand-blue text-xs font-bold transition-all dark:text-blue-400"
-                      >
-                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        ดาวน์โหลดแบบฟอร์ม PDF ที่กรอกข้อมูลให้ล่วงหน้า
-                      </button>
-
-                      <label className="block">
-                        <span className="sr-only">เลือกไฟล์สแกนคำยินยอม</span>
-                        <input
-                          type="file"
-                          accept=".pdf,.png,.jpg,.jpeg"
-                          disabled={uploadingConsent}
-                          onChange={(e) => handleConsentUpload(e, activeIntent.form_id)}
-                          className="block w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
-                        />
-                      </label>
-                      {uploadingConsent && <span className="text-xs text-gray-600 dark:text-gray-400 block">กำลังดำเนินการอัปโหลดไฟล์...</span>}
-                    </div>
-                  )}
-                </div>
-              )}
 
               {activeIntent.status === 'approved_by_dept_head' && (
                 <div className="border-t border-gray-100 pt-4 mt-4 dark:border-gray-800 space-y-4">

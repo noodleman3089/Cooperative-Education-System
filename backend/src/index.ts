@@ -6,13 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import jwt from 'jsonwebtoken';
-import type { JwtPayload } from 'jsonwebtoken';
-import { PDFDocument } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
 import { xssSanitizer } from './middlewares/validation';
 import { authenticateToken } from './middlewares/auth';
-import { AUTH_COOKIE } from './utils/authCookie';
 import apiRouter from './routes';
 import { query } from './config/database';
 import { assertEnvironment } from './config/validateEnv';
@@ -89,110 +84,6 @@ app.use(express.text({ type: ['text/csv', 'text/plain'], limit: '10mb' }));
 app.use(cookieParser());
 app.use(xssSanitizer);
 
-// Helper to authenticate the session from the httpOnly cookie.
-const verifyTokenHelper = (req: Request): JwtPayload | null => {
-  const token = req.cookies?.[AUTH_COOKIE];
-  if (!token) return null;
-  try {
-    // Fix Task 1.1: Enforce JWT_SECRET and remove fallback secret to prevent JWT forgery
-    return jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-  } catch {
-    return null;
-  }
-};
-
-// Route: GET /api/files/download/parental-consent-template (Pre-filled PDF template)
-app.get('/api/files/download/parental-consent-template', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const decoded = verifyTokenHelper(req);
-    if (!decoded) {
-      res.status(401).json({ message: 'Unauthorized. Invalid or missing token.' });
-      return;
-    }
-
-    const intentId = parseInt(req.query.intent_id as string, 10);
-    if (isNaN(intentId)) {
-      res.status(400).json({ message: 'Invalid intent ID.' });
-      return;
-    }
-
-    // Fetch intent, student, major and company details
-    const result = await query(
-      `SELECT i.form_id, i.student_id, s.student_code, m.major_name_th,
-              c.name_th as company_name_th, u.email as student_email
-       FROM intent_forms i
-       JOIN students s ON i.student_id = s.student_id
-       JOIN master_major m ON s.major_id = m.major_id
-       JOIN companies c ON i.company_id = c.company_id
-       JOIN users u ON s.student_id = u.user_id
-       WHERE i.form_id = $1 LIMIT 1`,
-      [intentId]
-    );
-
-    if (result.rowCount === 0) {
-      res.status(404).json({ message: 'Intent form not found.' });
-      return;
-    }
-
-    const row = result.rows[0];
-
-    // Check authorization: only the student owner or staff roles can download
-    const isStaff = decoded.roles.some((r: string) => ['staff', 'dean', 'advisor', 'dept_head'].includes(r));
-    const isOwner = decoded.roles.includes('student') && row.student_id === decoded.userId;
-
-    if (!isStaff && !isOwner) {
-      res.status(403).json({ message: 'Forbidden. You do not have access to this form.' });
-      return;
-    }
-
-    // Create PDF
-    const pdfDoc = await PDFDocument.create();
-    pdfDoc.registerFontkit(fontkit);
-    
-    const fontPath = path.join(process.cwd(), 'secure_private', 'fonts', 'Srabun-Regular.ttf');
-    let customFont;
-    if (fs.existsSync(fontPath) && fs.statSync(fontPath).size > 0) {
-      try {
-        const fontBytes = fs.readFileSync(fontPath);
-        customFont = await pdfDoc.embedFont(fontBytes);
-      } catch (err) {
-        console.error('Failed to embed Thai font:', err);
-      }
-    }
-
-    const page = pdfDoc.addPage([595.28, 841.89]); // A4
-    
-    // Draw text with Thai font
-    page.drawText('หนังสือแสดงความยินยอมของผู้ปกครอง', { x: 160, y: 770, size: 18, font: customFont });
-    page.drawText('ในการอนุญาตให้นักศึกษาเข้าปฏิบัติงานสหกิจศึกษา', { x: 130, y: 740, size: 16, font: customFont });
-
-    const contentText = 
-      `ข้าพเจ้า (ผู้ปกครอง) ยินยอมให้นักศึกษา นาย/นางสาว ${row.student_email.split('@')[0]} \n` +
-      `รหัสนักศึกษา: ${row.student_code}    สาขาวิชา: ${row.major_name_th} \n` +
-      `เข้าฝึกปฏิบัติงานสหกิจศึกษา ณ สถานประกอบการ ${row.company_name_th} \n\n` +
-      `โดยข้าพเจ้ายินดีและรับรองความประพฤติของนักศึกษาระหว่างปฏิบัติงานดังกล่าว`;
-
-    const lines = contentText.split('\n');
-    let currentY = 660;
-    for (const line of lines) {
-      page.drawText(line, { x: 60, y: currentY, size: 13, font: customFont });
-      currentY -= 25;
-    }
-
-    page.drawText('ลงชื่อ...................................................... ผู้ปกครอง', { x: 280, y: 450, size: 13, font: customFont });
-    page.drawText('(......................................................)', { x: 315, y: 420, size: 13, font: customFont });
-    page.drawText('ลงชื่อ...................................................... นักศึกษา', { x: 280, y: 350, size: 13, font: customFont });
-    page.drawText(`( ${row.student_email.split('@')[0]} )`, { x: 315, y: 320, size: 13, font: customFont });
-
-    const pdfBytes = await pdfDoc.save();
-    res.contentType('application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="consent-template-${row.student_code}.pdf"`);
-    res.send(Buffer.from(pdfBytes));
-  } catch (error) {
-    next(error);
-  }
-});
-
 
 // Route: GET /api/files/documents/:doc_id (Retrieve generated cover/transfer letters)
 app.get('/api/files/documents/:doc_id', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
@@ -254,7 +145,7 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     // not the advisor who has to grade it, and not the student who uploaded it.
     // Both screens linked straight at http://localhost:5000/uploads/..., which
     // has never resolved to anything.
-    const allowedCategories = ['resumes', 'signatures', 'acceptance_evidence', 'parental_consents', 'final_reports'];
+    const allowedCategories = ['resumes', 'signatures', 'acceptance_evidence', 'final_reports'];
     if (!allowedCategories.includes(category)) {
       res.status(404).json({ message: 'Category not found.' });
       return;
@@ -322,12 +213,11 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
       if (!isAuthorizedPartner) {
         const filePrefix = `resume-user-${userId}-`;
         const evidencePrefix = `evidence-user-${userId}-`;
-        const consentPrefix = `consent-user-${userId}-`;
         // multer names these `finalreport-user-<id>-…`, so the owner test is the
         // same shape as the other three.
         const reportPrefix = `finalreport-user-${userId}-`;
 
-        const isOwner = safeName.startsWith(filePrefix) || safeName.startsWith(evidencePrefix) || safeName.startsWith(consentPrefix) || safeName.startsWith(reportPrefix);
+        const isOwner = safeName.startsWith(filePrefix) || safeName.startsWith(evidencePrefix) || safeName.startsWith(reportPrefix);
         if (!isOwner) {
           res.status(403).json({ message: 'Forbidden. You do not have access to this file.' });
           return;
@@ -338,7 +228,7 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     // Only now, once the caller has been shown to be entitled to this file, does
     // a missing one fall back to the blank template.
     if (!fs.existsSync(filePath)) {
-      if (['resumes', 'parental_consents', 'acceptance_evidence'].includes(category)) {
+      if (['resumes', 'acceptance_evidence'].includes(category)) {
         const fallbackPath = path.join(process.cwd(), 'secure_private', 'templates', 'cover_letter_template.pdf');
         if (fs.existsSync(fallbackPath)) {
           res.sendFile(fallbackPath);

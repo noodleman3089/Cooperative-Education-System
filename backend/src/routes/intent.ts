@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { checkStudentEligibility } from '../middlewares/validation';
-import { uploadParentalConsent, validateUploadedFile } from '../middlewares/multer';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
@@ -63,13 +62,5 @@ router.patch(
   IntentFormController.updateIntentStatusByDeptHead
 );
 
-// Route: PUT /api/intents/:id/parental-consent (Students upload parental consent)
-router.put(
-  '/:id/parental-consent',
-  authorizeRoles('student'),
-  uploadParentalConsent.single('consent'),
-  validateUploadedFile(['pdf', 'png', 'jpg']),
-  IntentFormController.uploadParentalConsent
-);
 
 export default router;

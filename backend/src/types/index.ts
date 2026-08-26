@@ -156,7 +156,6 @@ export interface IntentForm {
   mentor_id?: number | null;
   start_date?: Date | string | null;
   acceptance_evidence_path?: string | null;
-  parental_consent_path?: string | null;
 }
 
 // Sprint 2 API Request Bodies

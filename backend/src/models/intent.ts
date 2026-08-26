@@ -325,7 +325,7 @@ export class IntentFormModel {
    */
   static async findById(formId: number): Promise<IntentForm | null> {
     const res = await query(
-      `SELECT form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path, parental_consent_path 
+      `SELECT form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path 
        FROM intent_forms 
        WHERE form_id = $1`,
       [formId]
@@ -481,7 +481,7 @@ export class IntentFormModel {
         `UPDATE intent_forms 
          SET status = 'accepted', mentor_id = $1, start_date = $2 
          WHERE form_id = $3
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path, parental_consent_path`,
+         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path`,
         [mentorUserId, new Date(startDate), intentId]
       );
 
@@ -686,7 +686,7 @@ export class IntentFormModel {
         `UPDATE intent_forms 
          SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2, acceptance_evidence_path = $3 
          WHERE form_id = $4
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path, parental_consent_path`,
+         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path`,
         [mentorUserId, new Date(startDate), evidencePath, intentId]
       );
 
@@ -747,14 +747,6 @@ export class IntentFormModel {
   /**
    * Update parental consent file path for an intent form.
    */
-  static async updateParentalConsent(intentId: number, path: string): Promise<boolean> {
-    const res = await query(
-      'UPDATE intent_forms SET parental_consent_path = $1 WHERE form_id = $2',
-      [path, intentId]
-    );
-    return (res.rowCount ?? 0) > 0;
-  }
-
   /**
    * Dept Head approval logic — transitions from 'approved_by_advisor' to 'approved_by_dept_head'.
    */

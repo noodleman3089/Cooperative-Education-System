@@ -278,7 +278,6 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     mentor_id INT REFERENCES mentors(mentor_id) ON DELETE SET NULL,
     start_date DATE,
     acceptance_evidence_path VARCHAR(255),
-    parental_consent_path VARCHAR(255),
     -- Why the placement was turned down. Written by the company's rejection for
     -- now: the advisor and department head already mail their reason and record
     -- it in audit_log, but the company had nowhere at all to put one, so a

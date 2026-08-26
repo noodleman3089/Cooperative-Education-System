@@ -219,60 +219,6 @@ export class IntentFormController {
   }
 
   /**
-   * Upload parental consent for intent form.
-   * Route: PUT /api/intents/:id/parental-consent
-   * Access: student
-   */
-  static async uploadParentalConsent(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const formId = parseInt(req.params.id, 10);
-      if (isNaN(formId)) {
-        res.status(400).json({ message: 'Invalid intent form ID format.' });
-        return;
-      }
-
-      if (!req.file) {
-        res.status(400).json({ message: 'Required file upload: consent.' });
-        return;
-      }
-
-      // Fetch intent form
-      const intentForm = await IntentFormModel.findById(formId);
-      if (!intentForm) {
-        res.status(404).json({ message: 'Intent form not found.' });
-        return;
-      }
-
-      // Check ownership
-      if (intentForm.student_id !== req.user.userId) {
-        res.status(403).json({ message: 'Unauthorized. You can only upload consent for your own intent form.' });
-        return;
-      }
-
-      const consentPath = `parental_consents/${req.file.filename}`;
-
-      const updated = await IntentFormModel.updateParentalConsent(formId, consentPath);
-      if (!updated) {
-        res.status(400).json({ message: 'Failed to update parental consent path.' });
-        return;
-      }
-
-      res.status(200).json({
-        message: 'Parental consent uploaded successfully.',
-        form_id: formId,
-        parental_consent_path: consentPath,
-      });
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Upload Parental Consent Error', 'An internal server error occurred while uploading parental consent.');
-    }
-  }
-
-  /**
    * Get intents submitted by the current student.
    * Route: GET /api/intents/me
    * Access: student
@@ -286,7 +232,7 @@ export class IntentFormController {
       const studentId = req.user.userId;
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.parental_consent_path, i.acceptance_evidence_path
+                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
          LEFT JOIN job_posts j ON i.job_id = j.job_id
@@ -340,7 +286,7 @@ export class IntentFormController {
         SELECT i.form_id, i.student_id, s.student_code, s.major_id, m.major_name_th,
                s.cumulative_gpa,
                i.company_id, c.name_th as company_name_th, i.semester_id, i.job_id, j.title as job_title, i.status,
-               s.resume_file, i.parental_consent_path, i.acceptance_evidence_path,
+               s.resume_file, i.acceptance_evidence_path,
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason
@@ -434,7 +380,7 @@ export class IntentFormController {
       }
 
       const result = await query(
-        `SELECT i.form_id, i.status, i.start_date, i.parental_consent_path, i.acceptance_evidence_path,
+        `SELECT i.form_id, i.status, i.start_date, i.acceptance_evidence_path,
                 s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.is_eligible, s.is_orientation_passed,
                 m_maj.major_name_th, m_maj.major_code, f.faculty_name_th,
                 u_std.email as student_email,

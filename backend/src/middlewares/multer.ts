@@ -15,7 +15,6 @@ const UPLOADS_BASE_DIR = path.join(process.cwd(), 'uploads');
 const RESUMES_DIR = path.join(UPLOADS_BASE_DIR, 'resumes');
 const SIGNATURES_DIR = path.join(UPLOADS_BASE_DIR, 'signatures');
 const EVIDENCES_DIR = path.join(UPLOADS_BASE_DIR, 'acceptance_evidence');
-const CONSENTS_DIR = path.join(UPLOADS_BASE_DIR, 'parental_consents');
 
 // Ensure directories exist
 if (!fs.existsSync(UPLOADS_BASE_DIR)) {
@@ -30,10 +29,6 @@ if (!fs.existsSync(SIGNATURES_DIR)) {
 if (!fs.existsSync(EVIDENCES_DIR)) {
   fs.mkdirSync(EVIDENCES_DIR, { recursive: true });
 }
-if (!fs.existsSync(CONSENTS_DIR)) {
-  fs.mkdirSync(CONSENTS_DIR, { recursive: true });
-}
-
 // 1. Resume Upload Configuration (PDF/Word documents only, max 5MB)
 const resumeStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -122,27 +117,6 @@ const evidenceFileFilter: FileFilter = (_req, file, cb) => {
 
 export const uploadEvidence = multer({
   storage: evidenceStorage,
-  fileFilter: evidenceFileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
-  },
-});
-
-// 4. Parental Consent Upload Configuration (PDF/Images only, max 5MB)
-const consentStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, CONSENTS_DIR);
-  },
-  filename: (req, file, cb) => {
-    const userId = req.user?.userId || 'unknown';
-    const cleanOrigName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `consent-user-${userId}-${uniqueSuffix}${path.extname(cleanOrigName)}`);
-  },
-});
-
-export const uploadParentalConsent = multer({
-  storage: consentStorage,
   fileFilter: evidenceFileFilter,
   limits: {
     fileSize: 5 * 1024 * 1024, // 5MB limit

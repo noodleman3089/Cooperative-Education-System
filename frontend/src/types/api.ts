@@ -237,7 +237,6 @@ export interface IntentForm {
   mentor_id?: number | null;
   start_date?: string | null;
   acceptance_evidence_path?: string | null;
-  parental_consent_path?: string | null;
   student_code?: string;
   student_name?: string;
   major_name_th?: string;
