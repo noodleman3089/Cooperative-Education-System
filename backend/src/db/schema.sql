@@ -278,6 +278,22 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     mentor_id INT REFERENCES mentors(mentor_id) ON DELETE SET NULL,
     start_date DATE,
     acceptance_evidence_path VARCHAR(255),
+    -- แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)
+    --
+    -- ลายเซ็นของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บน **กระดาษ** ไม่ใช่ในระบบ
+    -- (เจ้าของเคาะ 2026-08-26) นักศึกษาพิมพ์แบบคำร้องจากระบบ เอาไปให้เซ็นจริง
+    -- แล้วอัปโหลดกลับ · เจ้าหน้าที่เป็นคนเดียวที่กดผ่านในระบบ และกรอกชื่อผู้เซ็น
+    -- ทั้งสองคนจากกระดาษลงมาให้ระบบรู้ว่าใครเซ็นและเซ็นวันไหน
+    request_form_path VARCHAR(255),
+    advisor_signer_name VARCHAR(255),
+    advisor_signed_date DATE,
+    dept_head_signer_name VARCHAR(255),
+    dept_head_signed_date DATE,
+    -- เลขที่หนังสือออก — ช่อง "ส่วนของเจ้าหน้าที่" ท้ายกระดาษ เจ้าหน้าที่เป็นคนออก
+    -- ตอนรับคำร้อง และเลขนี้จะถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ที่ออกให้นักศึกษา
+    officer_document_no VARCHAR(100),
+    officer_approved_at TIMESTAMP WITH TIME ZONE,
+    officer_approved_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     -- Why the placement was turned down. Written by the company's rejection for
     -- now: the advisor and department head already mail their reason and record
     -- it in audit_log, but the company had nowhere at all to put one, so a

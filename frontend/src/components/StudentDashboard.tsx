@@ -624,6 +624,31 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </div>
 
+              {/* เอกสารหมายเลข 1 — พิมพ์ได้ทันทีที่ยื่นคำร้อง ไม่ต้องรอใครอนุมัติ
+                  เพราะลายเซ็นของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บนกระดาษใบนี้เอง
+                  เปิดแท็บใหม่แล้วให้ผู้ใช้กด Ctrl+P — หน้านั้นเป็น HTML ไม่ใช่ PDF */}
+              <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                <span className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)
+                </span>
+                <p className="text-xs text-gray-600 mb-2 leading-relaxed dark:text-gray-400">
+                  พิมพ์ออกมากรอกช่องที่เว้นไว้ด้วยปากกา แล้วนำไปให้อาจารย์ที่ปรึกษาและ
+                  หัวหน้าสาขาวิชาลงนาม
+                </p>
+                <a
+                  href={`${API_BASE_URL}/intents/${activeIntent.form_id}/request-form`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="print-request-form"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-blue px-3 py-2 text-xs font-bold text-brand-blue transition-all hover:bg-blue-50/10 dark:border-blue-800 dark:text-blue-400"
+                >
+                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  เปิดแบบคำร้องเพื่อสั่งพิมพ์
+                </a>
+              </div>
+
               {activeIntent.status === 'approved_by_dept_head' && (
                 <div className="border-t border-gray-100 pt-4 mt-4 dark:border-gray-800 space-y-4">
                   <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 dark:bg-blue-950/10 dark:border-blue-900/50">

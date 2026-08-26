@@ -62,5 +62,11 @@ router.patch(
   IntentFormController.updateIntentStatusByDeptHead
 );
 
+// Route: GET /api/intents/:id/request-form
+// แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1) — หน้า HTML สำหรับสั่งพิมพ์
+// ไม่ระบุ role ที่นี่โดยตั้งใจ: นักศึกษาเปิดของตัวเอง ส่วนบุคลากรใช้กติกาของ
+// `assertCanReviewStudentWork` ซึ่งตรวจถึงระดับ "นักศึกษาคนนี้อยู่ในความดูแลไหม"
+// การใส่ authorizeRoles เพิ่มตรงนี้จะกลายเป็นด่านที่หลวมกว่าด่านจริงและชวนเข้าใจผิด
+router.get('/:id/request-form', IntentFormController.getRequestForm);
 
 export default router;

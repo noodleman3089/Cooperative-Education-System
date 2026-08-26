@@ -4,7 +4,13 @@ import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
 import { query } from '../config/database';
 import { notifyStudentStatusChange } from '../utils/email';
-import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
+import {
+  assertCanAccessStudent,
+  assertCanReviewStudentWork,
+  resolveMajorScope,
+  sendAccessError,
+} from '../utils/access';
+import { renderRequestFormHtml, RequestFormData } from '../utils/requestFormHtml';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
@@ -555,5 +561,76 @@ export class IntentFormController {
     }
   }
 
-}
+  /**
+   * แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1) — หน้า HTML สำหรับสั่งพิมพ์
+   * Route: GET /api/intents/:id/request-form
+   * Access: นักศึกษาเจ้าของคำร้อง · advisor / dept_head / staff / dean ตาม SEC-06
+   *
+   * ตอบเป็น `text/html` ไม่ใช่ PDF โดยตั้งใจ — ปลายทางคือกระดาษที่เอาไปให้เซ็นด้วยปากกา
+   * ผู้ใช้กด Ctrl+P เอง · ไม่ต้องมีตัว render ฝั่งเซิร์ฟเวอร์
+   */
+  static async getRequestForm(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
 
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const result = await query(
+        `SELECT i.student_id, i.start_date,
+                s.student_code, s.first_name, s.last_name, s.year_level, s.phone, s.alt_email,
+                u.email AS university_email,
+                mj.major_name_th, f.faculty_name_th,
+                c.name_th AS company_name, c.address AS company_address,
+                c.district AS company_district, c.province AS company_province,
+                c.postal_code AS company_postal_code,
+                c.contact_person, c.contact_position,
+                c.phone AS company_phone, c.email AS company_email,
+                sem.academic_year, sem.semester
+           FROM intent_forms i
+           JOIN students s        ON i.student_id = s.student_id
+           JOIN users u           ON s.student_id = u.user_id
+           JOIN master_major mj   ON s.major_id = mj.major_id
+           JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
+           JOIN companies c       ON i.company_id = c.company_id
+           JOIN coop_semesters sem ON i.semester_id = sem.semester_id
+          WHERE i.form_id = $1`,
+        [formId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
+        return;
+      }
+
+      const row = result.rows[0];
+      const { userId, roles } = req.user;
+
+      // นักศึกษาเปิดได้เฉพาะของตัวเอง — บุคลากรใช้กติกาเดียวกับการตรวจงานนักศึกษา
+      // (SEC-06 fail closed: ไม่เข้าเงื่อนไขไหนเลย = ปฏิเสธ ไม่ใช่ปล่อยผ่าน)
+      if (roles.includes('student')) {
+        if (row.student_id !== userId) {
+          res.status(403).json({ message: 'คุณเปิดดูได้เฉพาะคำร้องของตัวเองเท่านั้น' });
+          return;
+        }
+      } else {
+        await assertCanReviewStudentWork(userId, roles, row.student_id);
+      }
+
+      // `pg` คืน DATE เป็นสตริง YYYY-MM-DD อยู่แล้ว — ห้าม new Date() (เลื่อนวัน)
+      const html = renderRequestFormHtml(row as RequestFormData);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(html);
+    } catch (error) {
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(res, error, 'Get Request Form Error', 'เกิดข้อผิดพลาดขณะสร้างแบบคำร้อง');
+    }
+  }
+
+}

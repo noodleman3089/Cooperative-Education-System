@@ -204,9 +204,17 @@ export class DocumentController {
 
           // Send email notification to student
           notifyStudentStatusChangeByDocId(parsedDocId, 'signed').catch(console.error);
-          
-          // Trigger onboarding email to company representative / mentor
-          await DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId);
+
+          // ⚠️ fire-and-forget เหมือนบรรทัดบน — **ห้ามใส่ await กลับ**
+          //
+          // ของเดิม `await` การส่งอีเมลไว้กลางลูปลงนาม คณบดีจึงต้องรอ SMTP ตอบ
+          // ต่อเอกสารหนึ่งใบก่อนที่หน้าจอจะขึ้นว่าลงนามสำเร็จ — ลงนาม 10 ใบก็รอ
+          // 10 รอบ ทั้งที่การลงนามในฐานข้อมูลเสร็จไปแล้ว
+          // อาการที่เห็นคือแถบ "ลงนามแบบกลุ่มสำเร็จ" ไม่ขึ้นภายใน 10 วินาที
+          // (coop-workflow Scenario 1 แดงเป็นครั้งคราวเพราะเหตุนี้)
+          DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId).catch(
+            console.error
+          );
         } catch (err) {
           console.error(`Error processing doc_id: ${docId}`, err);
           failedDocs.push({ doc_id: docId, error: getErrorMessage(err, 'Unknown error while signing.') });
