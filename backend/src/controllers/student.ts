@@ -407,7 +407,7 @@ export class StudentController {
         LEFT JOIN master_province p ON s.province_id = p.province_id
         LEFT JOIN users u_adv ON s.advisor_id = u_adv.user_id
         LEFT JOIN users u_sup ON s.supervisor_id = u_sup.user_id
-        LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')
+        LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
         LEFT JOIN companies c ON i.company_id = c.company_id
         WHERE 1=1
       `;

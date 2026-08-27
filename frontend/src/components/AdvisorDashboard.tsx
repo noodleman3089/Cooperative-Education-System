@@ -7,6 +7,7 @@ import { Users, FileText, CheckCircle, Search, Filter, ExternalLink, Calendar } 
 import WeeklyLogViewModal from './WeeklyLogViewModal';
 import AlertBanner from './ui/AlertBanner';
 import StatusBadge from './ui/StatusBadge';
+import { intentDisplayStatus } from '../utils/intentStatus';
 import { getErrorMessage } from '../utils/errors';
 import type { ReportOutlineRow, StudentRow } from '../types/api';
 import { Select } from './ui/Input';
@@ -138,8 +139,8 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   // ⚠️ handleApprove ถูกลบเมื่อ 2026-08-26 — การอนุมัติและการตีกลับของอาจารย์ที่ปรึกษา
   // ย้ายไปอยู่บนกระดาษ (แบบคำร้องเอกสารหมายเลข 1) ทั้งคู่: ช่อง "เห็นควรอนุญาต /
   // อื่น ๆ ระบุ" อยู่บนใบนั้นเอง ระบบจึงไม่ได้รอให้ใครกดปุ่มที่นี่อีกแล้ว
-  // · endpoint `PATCH /intents/:id/status` ยังอยู่ฝั่งเซิร์ฟเวอร์สำหรับใบเก่าที่ค้าง
-  //   ในเส้นทางเดิม แต่หน้าจอไม่เรียกอีกแล้ว
+  // · endpoint `PATCH /intents/:id/status` **ถูกลบทิ้งจากเซิร์ฟเวอร์แล้ว** เมื่อ
+  //   2026-08-27 พร้อมสถานะ `approved_by_advisor` — ไม่มีอะไรให้เรียกอีก
 
 
   const advisorModals = (
@@ -175,15 +176,22 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
 
   // Filter computations
   const pendingIntents = intents.filter(i => i.status === 'pending_advisor');
-  // The three statuses that mean "this form is dead" are the same three
-  // `models/intent.ts` uses. `rejected_by_dept_head` was missing here, so a form
-  // the department head had sent back was counted under "อนุมัติแล้ว" — the same
-  // slip found on the student job board in round 8. Keep this list in step with
-  // the server's.
-  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected', 'rejected_by_dept_head'];
+  // สถานะที่แปลว่า "ใบนี้ตายแล้ว" — ต้องตรงกับที่ `models/intent.ts` ใช้เสมอ
+  // · `rejected_by_dept_head` ถูกถอดออกจากลิสต์นี้เมื่อ 2026-08-27 พร้อมกับที่ลบ
+  //   endpoint ของหัวหน้าสาขา ไม่มีใบไหนไปถึงสถานะนั้นได้อีก
+  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected'];
   const approvedIntents = intents.filter(
     i => i.status !== 'pending_advisor' && !DEAD_INTENT_STATUSES.includes(i.status)
   );
+  /**
+   * ทุกใบที่ยังมีชีวิตอยู่ — ตารางด้านล่างใช้ตัวนี้ ไม่ใช่ `pendingIntents`
+   *
+   * ตั้งแต่การอนุมัติย้ายไปกระดาษ หน้านี้ประกาศตัวเองว่าเป็น "หน้าติดตาม" แต่ตาราง
+   * ยังกรองเฉพาะ `pending_advisor` ผลคือนักศึกษาที่เดินเรื่องไปไกลแล้วหายจากตาราง
+   * ทั้งที่การ์ดด้านบนนับอยู่ — อาจารย์เห็น "กำลังดำเนินการ 1 คน" คู่กับตารางที่ว่าง
+   * (เจอตอนเดินหน้าจอจริง 2026-08-27)
+   */
+  const trackedIntents = intents.filter(i => !DEAD_INTENT_STATUSES.includes(i.status));
 
   // Filter students based on search and selected options
   const filteredStudents = students.filter(student => {
@@ -318,7 +326,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                         <td className="p-4">
                           {studentIntent ? (
                             <div className="flex flex-col gap-1 items-start">
-                              <StatusBadge status={studentIntent.status} />
+                              <StatusBadge status={intentDisplayStatus(studentIntent.status, studentIntent.cover_letter_status)} domain="intent" />
                               <span className="text-xs text-gray-600 dark:text-gray-400 font-medium truncate max-w-[150px]">
                                 {studentIntent.company_name_th}
                               </span>
@@ -500,7 +508,8 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         {/* heading kept exactly as expected by E2E tests: ระบบตรวจสอบใบความจำนง (อาจารย์ที่ปรึกษา) */}
         <h2 className="text-xl font-bold text-gray-800 dark:text-white">ระบบตรวจสอบใบความจำนง (อาจารย์ที่ปรึกษา)</h2>
         <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-          พิจารณาอนุมัติคำขอฝึกงานของนักศึกษาในสาขาวิชาที่ดูแล พร้อมสถิติสรุปภาพรวมข้อมูล
+          ติดตามว่านักศึกษาในความดูแลยื่นคำร้องที่ไหนและไปถึงขั้นไหนแล้ว — การลงนามอนุมัติ
+          อยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น ไม่ใช่ในระบบ
         </p>
       </div>
 
@@ -528,7 +537,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
             <FileText className="h-6 w-6" />
           </div>
           <div>
-            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">คำร้องที่รอพิจารณาอนุมัติ</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">รอนำแบบคำร้องไปลงนาม</span>
             <h3 className="text-xl font-bold text-gray-800 dark:text-white mt-1">
               {pendingIntents.length} <span className="text-xs font-normal text-gray-500 dark:text-gray-400">คน</span>
             </h3>
@@ -553,7 +562,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
         <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
           <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-            ใบความจำนงของนักศึกษาในความดูแล ({pendingIntents.length} รายการ)
+            ใบความจำนงของนักศึกษาในความดูแล ({trackedIntents.length} รายการ)
           </span>
           {/* ⚠️ ตั้งแต่ 2026-08-26 การอนุมัติของอาจารย์ที่ปรึกษาอยู่บน **กระดาษ**
               (แบบคำร้องเอกสารหมายเลข 1) ระบบไม่ได้รอให้กดปุ่มที่นี่อีกแล้ว
@@ -565,7 +574,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
           </p>
         </div>
 
-        {pendingIntents.length > 0 ? (
+        {trackedIntents.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-xs">
               <thead>
@@ -573,11 +582,13 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                   <th className="p-4 font-semibold">นักศึกษา</th>
                   <th className="p-4 font-semibold">สถานประกอบการ</th>
                   <th className="p-4 font-semibold">ตำแหน่งงาน</th>
+                  {/* หน้านี้เป็นหน้าติดตาม สถานะจึงเป็นคอลัมน์ที่คนเปิดมาหา ไม่ใช่ของแถม */}
+                  <th className="p-4 font-semibold">สถานะ</th>
                   <th className="p-4 font-semibold text-right">การจัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {pendingIntents.map((intent) => {
+                {trackedIntents.map((intent) => {
                   return (
                     <tr key={intent.form_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                       <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
@@ -589,6 +600,11 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                       </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
                         {intent.job_title || 'ฝึกงานทั่วไป'}
+                      </td>
+                      <td className="p-4">
+                        {/* domain="intent" — `pending_advisor` ของใบความจำนงแปลว่า
+                            "นักศึกษาต้องเอากระดาษไปให้ลงนาม" ไม่ใช่ "รออาจารย์กดปุ่ม" */}
+                        <StatusBadge status={intentDisplayStatus(intent.status, intent.cover_letter_status)} domain="intent" />
                       </td>
                       <td className="p-4 text-right">
                         {/* The flex lived on the <td> itself, which drops the
@@ -613,7 +629,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
           </div>
         ) : (
           <div className="text-center py-12 text-gray-600 dark:text-gray-400 text-sm">
-            ไม่มีรายการใบความจำนงคำขอรอตรวจสอบในขณะนี้
+            ยังไม่มีนักศึกษาในความดูแลยื่นใบความจำนง
           </div>
         )}
       </div>

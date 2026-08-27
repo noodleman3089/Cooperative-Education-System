@@ -245,6 +245,14 @@ export interface IntentForm {
   advisor_signed_date?: string | null;
   dept_head_signer_name?: string | null;
   dept_head_signed_date?: string | null;
+  /**
+   * สถานะของ **หนังสือขาออก** ไม่ใช่ของใบความจำนง — `null` เมื่อยังไม่ออกหนังสือ
+   *
+   * ใบความจำนงหยุดที่ `approved_by_dept_head` ตั้งแต่เจ้าหน้าที่กดรับ ความคืบหน้า
+   * ที่เหลือ (`pending_sign` → `signed`) อยู่บนหนังสือ · หน้าจอที่แสดงสถานะให้
+   * บุคลากรดูต้องหยิบค่านี้มาแทนเมื่อมี ไม่งั้นจะค้างคำว่า "รอออกหนังสือ" ตลอดไป
+   */
+  cover_letter_status?: string | null;
   student_code?: string;
   student_name?: string;
   major_name_th?: string;

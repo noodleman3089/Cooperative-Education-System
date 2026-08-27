@@ -21,10 +21,6 @@ export const AuditAction = {
   USER_DELETED: 'user.deleted',
   USER_AUTO_DEACTIVATED: 'user.auto_deactivated',
   PASSWORD_RESET: 'user.password_reset',
-  INTENT_APPROVED_ADVISOR: 'intent.approved_by_advisor',
-  INTENT_REJECTED_ADVISOR: 'intent.rejected_by_advisor',
-  INTENT_APPROVED_DEPT_HEAD: 'intent.approved_by_dept_head',
-  INTENT_REJECTED_DEPT_HEAD: 'intent.rejected_by_dept_head',
   // เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดในระบบ
   // จึงเป็นจุดเดียวที่มีคนรับผิดชอบให้ตามย้อนได้ว่าใครปล่อยคำร้องใบไหนผ่าน
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',

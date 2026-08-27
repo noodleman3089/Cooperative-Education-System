@@ -9,8 +9,9 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
 import StatusBadge from './ui/StatusBadge';
+import { intentDisplayStatus } from '../utils/intentStatus';
 import Button from './ui/Button';
-import { CalendarDays, Pin, UserPen } from 'lucide-react';
+import { CalendarDays, Pin, Upload, UserPen } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input } from './ui/Input';
 import CoopCalendarModal from './CoopCalendarModal';
@@ -396,12 +397,33 @@ const StudentDashboard: React.FC = () => {
   const student = data.student;
   const documents = data.documents || [];
 
-  const step1_1Done = !!activeIntent;
-  const step1_2Done = activeIntent?.status === 'approved_by_dept_head' || activeIntent?.status === 'accepted' || activeIntent?.status === 'pending_officer_approval';
-  const step1_3Done = activeIntent?.status === 'accepted' || documents.some(d => d.type === 'cover_letter' || d.type === 'transfer_letter');
+  // ป้าย "สถานะการพิจารณา" ต้องอ่านจากหนังสือเมื่อออกหนังสือแล้ว — ตรรกะอยู่ที่
+  // `utils/intentStatus.ts` ที่เดียว เพราะหน้าที่ปรึกษาและหัวหน้าสาขาก็ใช้ตัวเดียวกัน
+  const coverLetter = documents.find(d => d.type === 'cover_letter');
 
-  const step2_1Done = step1_3Done && !!(student?.current_address || activeIntent?.status === 'accepted');
-  const step2_2Done = step1_3Done && activeIntent?.status === 'accepted';
+  /**
+   * ขั้นของเฟส 1 — **ต้องตรงกับเส้นทางเอกสารหมายเลข 1 ทีละขั้นจริงๆ**
+   *
+   * ⛔ ของเดิมยุบทุกอย่างเหลือสามขั้นแล้วผิดสองทาง:
+   *   1. **ไม่มีขั้นคณบดีลงนามเลย** ทั้งที่เป็นขั้นสุดท้ายของการออกหนังสือ
+   *   2. `step1_3Done` (= สถานประกอบการตอบรับ) ติ๊กเสร็จทันทีที่ **มีแถวหนังสือ**
+   *      → นักศึกษาที่เจ้าหน้าที่เพิ่งกดรับคำร้อง เห็นว่า "บริษัทตอบรับแล้ว ✓" และ
+   *      ไทม์ไลน์กระโดดไปเฟส 2 ทั้งที่ยังไม่มีบริษัทไหนตอบอะไร (เจอตอนเดินจริง 2026-08-27)
+   *
+   * `officer-reject` ล้าง `request_form_path` แล้วดันสถานะกลับ `pending_advisor`
+   * ขั้น 1.2 จึงย้อนกลับมาเป็น active เองอย่างถูกต้อง
+   */
+  const OFFICER_RECEIVED = ['approved_by_dept_head', 'pending_officer_approval', 'accepted'];
+  const intentStatus = activeIntent?.status ?? '';
+
+  const step1_1Done = !!activeIntent;
+  const step1_2Done = !!activeIntent?.request_form_path || OFFICER_RECEIVED.includes(intentStatus);
+  const step1_3Done = OFFICER_RECEIVED.includes(intentStatus);
+  const step1_4Done = coverLetter?.status === 'signed';
+  const step1_5Done = intentStatus === 'accepted';
+
+  const step2_1Done = step1_5Done && !!(student?.current_address || intentStatus === 'accepted');
+  const step2_2Done = step1_5Done && intentStatus === 'accepted';
 
   const step3_1Done = step2_2Done && false;
   const step3_2Done = step3_1Done && false;
@@ -412,7 +434,9 @@ const StudentDashboard: React.FC = () => {
   const step4_3Done = student?.is_eligible || false;
 
   let activePhaseId = 1;
-  if (step1_3Done) activePhaseId = 2;
+  // เฟส 2 คือ "สัปดาห์แรกของการทำงาน" — เข้าได้ต่อเมื่อ **สถานประกอบการตอบรับแล้ว**
+  // ไม่ใช่แค่ออกหนังสือเสร็จ (ของเดิมใช้ step1_3Done ที่ติ๊กตั้งแต่มีแถวหนังสือ)
+  if (step1_5Done) activePhaseId = 2;
   if (step2_1Done && step2_2Done) activePhaseId = 3;
   if (step3_3Done) activePhaseId = 4;
 
@@ -420,8 +444,8 @@ const StudentDashboard: React.FC = () => {
     {
       phaseId: 1,
       title: '1. ก่อนปฏิบัติงาน',
-      subtitle: 'สมัครงาน & บริษัทตอบรับ',
-      status: step1_3Done ? 'completed' : activePhaseId === 1 ? 'active' : 'pending',
+      subtitle: 'ยื่นคำร้อง → ออกหนังสือ → บริษัทตอบรับ',
+      status: step1_5Done ? 'completed' : activePhaseId === 1 ? 'active' : 'pending',
       subSteps: [
         {
           id: '1.1',
@@ -435,15 +459,30 @@ const StudentDashboard: React.FC = () => {
         },
         {
           id: '1.2',
-          title: '1.2 อาจารย์ & หัวหน้าสาขาอนุมัติ',
-          description: 'ผ่านการพิจารณาคุณสมบัติจากอาจารย์ที่ปรึกษาและหัวหน้าสาขา',
+          // ⛔ ขั้นนี้เกิดบน **กระดาษ** ไม่ใช่ในระบบ — ที่ปรึกษาและหัวหน้าสาขาลงนาม
+          //    บนแบบคำร้อง (เอกสารหมายเลข 1) แล้วนักศึกษาอัปโหลดกลับให้เจ้าหน้าที่
+          //    ข้อความเดิมทำให้นักศึกษานั่งรอให้อาจารย์กดปุ่มที่ไม่มีอยู่จริง
+          title: '1.2 ลงนามบนแบบคำร้อง & อัปโหลดกลับ',
+          description: 'พิมพ์แบบคำร้อง (เอกสารหมายเลข 1) ไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนามด้วยปากกา แล้วสแกนอัปโหลดกลับเข้าระบบ',
           status: step1_2Done ? 'completed' : step1_1Done ? 'active' : 'pending'
         },
         {
           id: '1.3',
-          title: '1.3 สถานประกอบการตอบรับเข้าทำงาน',
-          description: 'บริษัทตอบรับเข้าทำงาน หรือเจ้าหน้าที่ออกหนังสือส่งตัวเป็นทางการ',
+          title: '1.3 เจ้าหน้าที่รับคำร้อง & ออกเลขที่หนังสือ',
+          description: 'เจ้าหน้าที่ตรวจลายเซ็นบนกระดาษ กรอกชื่อผู้ลงนาม แล้วออกเลขที่หนังสือราชการ',
           status: step1_3Done ? 'completed' : step1_2Done ? 'active' : 'pending'
+        },
+        {
+          id: '1.4',
+          title: '1.4 คณบดีลงนามหนังสือขอความอนุเคราะห์',
+          description: 'ลงนามแล้วดาวน์โหลดหนังสือไปยื่นสถานประกอบการด้วยตนเอง',
+          status: step1_4Done ? 'completed' : step1_3Done ? 'active' : 'pending'
+        },
+        {
+          id: '1.5',
+          title: '1.5 สถานประกอบการตอบรับเข้าทำงาน',
+          description: 'เมื่อบริษัทตอบรับ ให้กรอกข้อมูลพี่เลี้ยงและอัปโหลดหลักฐานการตอบรับ',
+          status: step1_5Done ? 'completed' : step1_4Done ? 'active' : 'pending'
         }
       ]
     },
@@ -646,7 +685,7 @@ const StudentDashboard: React.FC = () => {
                   {/* domain="intent": `pending_advisor` ของใบความจำนงแปลว่า
                       "เอาแบบคำร้องไปให้ลงนาม" ไม่ใช่ "รออาจารย์กดปุ่ม" เหมือน
                       สหกิจ 01 กับโครงร่างรายงานที่ใช้ key เดียวกัน */}
-                  <StatusBadge status={activeIntent.status} domain="intent" />
+                  <StatusBadge status={intentDisplayStatus(activeIntent.status, coverLetter?.status)} domain="intent" />
                 </div>
               </div>
 
@@ -699,7 +738,13 @@ const StudentDashboard: React.FC = () => {
                         </a>
                       </div>
                     ) : (
-                      <label className="block">
+                      <label className={`block ${uploadingRequestForm ? '' : 'cursor-pointer'}`}>
+                        {/* ⛔ ปุ่มของ input type=file เป็นข้อความของเบราว์เซอร์
+                            ("Choose File / No file chosen") จัดธีมได้แต่ **แปลไม่ได้** —
+                            บนหน้าจอที่เป็นภาษาไทยทั้งหน้ามันโดดออกมาชัดมาก
+                            จึงซ่อน input ไว้แล้วให้ label เป็นปุ่มจริงแทน
+                            · ยังเป็น input ตัวเดิมที่มี data-testid เดิม — setInputFiles
+                              ของ Playwright ทำงานกับ input ที่ซ่อนอยู่ได้ตามปกติ */}
                         <span className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
                           ลงนามครบทั้งสองช่องแล้ว อัปโหลดไฟล์ที่สแกนหรือถ่ายรูปกลับเข้าระบบ
                           (PDF หรือรูปภาพ ไม่เกิน 10 MB)
@@ -710,8 +755,18 @@ const StudentDashboard: React.FC = () => {
                           disabled={uploadingRequestForm}
                           data-testid="upload-request-form"
                           onChange={(e) => handleRequestFormUpload(e, activeIntent.form_id)}
-                          className="block w-full cursor-pointer text-xs text-gray-500 file:mr-3 file:rounded-md file:border-0 file:bg-gray-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300"
+                          className="sr-only"
                         />
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                            uploadingRequestForm
+                              ? 'border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-600'
+                              : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          เลือกไฟล์แบบคำร้องที่ลงนามแล้ว
+                        </span>
                       </label>
                     )}
                     {uploadingRequestForm && (
@@ -872,7 +927,7 @@ const StudentDashboard: React.FC = () => {
 
         {/* Official Letter Status */}
         <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
-          <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">หนังสือส่งตัว & เอกสารทางการ</h3>
+          <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">หนังสือขอความอนุเคราะห์ & เอกสารทางการ</h3>
 
           {data.documents && data.documents.length > 0 ? (
             <div className="space-y-3">
@@ -901,7 +956,10 @@ const StudentDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-600 dark:text-gray-400 text-xs">
-              ยังไม่มีการออกจดหมายส่งตัวอย่างเป็นทางการในระบบ (เมื่อสถานประกอบการตอบรับ เจ้าหน้าที่จะดำเนินการเปิดจดหมายเพื่อส่งต่อให้คณบดีลงนาม)
+              {/* ⛔ ข้อความเดิมบอกว่าหนังสือจะออก "เมื่อสถานประกอบการตอบรับ" ซึ่งเป็น
+                  ลำดับของหนังสือส่งตัวที่ถูกถอดออกไปแล้ว · หนังสือขอความอนุเคราะห์ออก
+                  **ตอนเจ้าหน้าที่รับคำร้อง** ซึ่งเกิดก่อนบริษัทตอบรับ */}
+              ยังไม่มีหนังสือในระบบ — หนังสือขอความอนุเคราะห์จะออกให้เมื่อเจ้าหน้าที่รับแบบคำร้องที่ท่านอัปโหลดกลับ แล้วส่งเข้าคิวให้คณบดีลงนาม
             </div>
           )}
         </div>

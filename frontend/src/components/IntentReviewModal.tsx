@@ -3,14 +3,14 @@ import api, { API_BASE_URL } from '../services/api';
 import { Download, CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/StatusBadge';
-import { getErrorMessage } from '../utils/errors';
-import { Select, Textarea } from './ui/Input';
 
+/**
+ * ⛔ `currentRole` กับ `onSuccess` ถูกถอดออก 2026-08-27 — มันมีไว้ให้ปุ่มอนุมัติ/ตีกลับ
+ *    ซึ่งไม่มีอยู่แล้ว โมดัลนี้อ่านอย่างเดียว ไม่เปลี่ยนสถานะอะไรทั้งนั้น
+ */
 interface IntentReviewModalProps {
   intentId: number | null;
   onClose: () => void;
-  currentRole: string;
-  onSuccess: () => void;
 }
 
 /**
@@ -42,24 +42,15 @@ interface IntentDetail {
 const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
   intentId,
   onClose,
-  currentRole,
-  onSuccess,
 }) => {
   const [modalLoading, setModalLoading] = useState(false);
   const [intentDetail, setIntentDetail] = useState<IntentDetail | null>(null);
-  const [isRejecting, setIsRejecting] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
-  const [customReason, setCustomReason] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadIntentDetail = async () => {
       if (intentId === null) {
         setIntentDetail(null);
-        setIsRejecting(false);
-        setRejectReason('');
-        setCustomReason('');
         setModalError(null);
         return;
       }
@@ -80,30 +71,8 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
     loadIntentDetail();
   }, [intentId]);
 
-  const handleIntentAction = async (status: string, reasonText?: string) => {
-    if (!intentId) return;
-    setActionLoading(true);
-    setModalError(null);
-    try {
-      if (currentRole === 'advisor') {
-        await api.patch(`/intents/${intentId}/status`, {
-          status,
-          reason: reasonText,
-        });
-      } else if (currentRole === 'dept_head') {
-        const finalStatus = status === 'approved_by_advisor' ? 'approved_by_dept_head' : 'rejected_by_dept_head';
-        await api.patch(`/intents/${intentId}/dept-head-status`, {
-          status: finalStatus,
-          reason: reasonText,
-        });
-      }
-      onSuccess();
-    } catch (err) {
-      setModalError(getErrorMessage(err, 'การบันทึกสถานะล้มเหลว'));
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  // ⛔ `handleIntentAction` ถูกลบ 2026-08-27 — มันยิง PATCH /intents/:id/status
+  //    กับ /dept-head-status ซึ่งถูกถอดออกจาก backend แล้ว โมดัลนี้อ่านอย่างเดียว
 
   if (intentId === null) return null;
 
@@ -177,114 +146,23 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
               </div>
             </div>
 
-            {/* Rejection Input Section */}
-            {isRejecting ? (
-              <div className="p-4 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-xl space-y-4">
-                <h5 className="text-xs font-bold text-red-700 dark:text-red-400">ระบุสาเหตุที่ปฏิเสธ/ตีกลับคำร้อง</h5>
-                <div className="space-y-3">
-                  <div>
-                    <Select
-                      value={rejectReason}
-                      onChange={(e) => setRejectReason(e.target.value)} size="sm"
-                    >
-                      <option value="">-- กรุณาเลือกสาเหตุการปฏิเสธ --</option>
-                      <option value="ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน">ตำแหน่งงานไม่ตรงกับสาขาวิชาที่เรียน</option>
-                      <option value="สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร">สถานประกอบการไม่ผ่านเกณฑ์มาตรฐานของหลักสูตร</option>
-                      <option value="ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง">ข้อมูลประวัตินักศึกษาหรือเกรดไม่ถูกต้อง</option>
-                      <option value="other">ระบุเหตุผลอื่นๆ ด้วยตนเอง</option>
-                    </Select>
-                  </div>
-
-                  {rejectReason === 'other' && (
-                    <Textarea
-                      rows={2}
-                      placeholder="กรอกเหตุผลรายละเอียดที่จะตีกลับแจ้งไปยังนักศึกษา"
-                      value={customReason}
-                      onChange={(e) => setCustomReason(e.target.value)} size="sm"
-                    />
-                  )}
-
-                  <div className="flex justify-end gap-2 text-xs">
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() => setIsRejecting(false)}
-                      className="py-1.5 px-3 rounded-lg border border-gray-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 dark:border-gray-800"
-                    >
-                      ยกเลิก
-                    </button>
-                    <button
-                      type="button"
-                      disabled={actionLoading || (!rejectReason || (rejectReason === 'other' && !customReason))}
-                      onClick={() => handleIntentAction('rejected', rejectReason === 'other' ? customReason : rejectReason)}
-                      className="py-1.5 px-3 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold disabled:opacity-50"
-                    >
-                      {actionLoading ? 'กำลังบันทึก...' : 'ยืนยันปฏิเสธคำขอ'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="flex justify-between items-center border-t pt-4 dark:border-gray-800 text-xs">
-                <div>
-                  {intentDetail.status !== 'pending_advisor' && intentDetail.status !== 'approved_by_advisor' && (
-                    <span className="text-gray-600 dark:text-gray-400">สถานะปัจจุบัน: {statusText(intentDetail.status)} (ผ่านกระบวนการแล้ว)</span>
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={onClose}
-                    className="py-2 px-4 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-800"
-                  >
-                    ปิดหน้าต่าง
-                  </button>
-
-                  {/* Approval buttons depending on user role and intent status */}
-                  {currentRole === 'advisor' && intentDetail.status === 'pending_advisor' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setIsRejecting(true)}
-                        disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:text-red-400 font-bold border border-red-100"
-                      >
-                        ตีกลับคำขอ
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleIntentAction('approved_by_advisor')}
-                        disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-brand-blue hover:bg-blue-600 text-white font-bold"
-                      >
-                        อนุมัติคำขอ
-                      </button>
-                    </>
-                  )}
-
-                  {currentRole === 'dept_head' && intentDetail.status === 'approved_by_advisor' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setIsRejecting(true)}
-                        disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 dark:text-red-400 font-bold border border-red-100"
-                      >
-                        ตีกลับคำขอ (หัวหน้าภาค)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleIntentAction('approved_by_advisor')} // Triggers approved_by_dept_head in handleIntentAction
-                        disabled={actionLoading}
-                        className="py-2 px-4 rounded-lg bg-brand-blue hover:bg-blue-600 text-white font-bold"
-                      >
-                        อนุมัติคำขอ (หัวหน้าภาค)
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* ⛔ ปุ่ม อนุมัติ/ตีกลับ และแผงเลือกเหตุผล ถูกถอดออก 2026-08-27
+                — **ห้ามเอากลับมา** การลงนามของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บน
+                กระดาษ (แบบคำร้อง เอกสารหมายเลข 1) ตั้งแต่ 2026-08-26 และ route ที่
+                ปุ่มพวกนี้ยิง (`PATCH /intents/:id/status`, `/dept-head-status`) ถูกลบแล้ว
+                กดไปก็ได้ 404 · โมดัลนี้เหลือหน้าที่เดียวคืออ่านข้อมูลคำร้อง */}
+            <div className="flex flex-col gap-3 border-t pt-4 dark:border-gray-800 text-xs sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-gray-600 dark:text-gray-400">
+                สถานะปัจจุบัน: {statusText(intentDetail.status, 'intent')}
+              </span>
+              <button
+                type="button"
+                onClick={onClose}
+                className="py-2 px-4 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800 dark:border-gray-800 self-end sm:self-auto"
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
           </div>
         ) : null}
       </ModalBody>

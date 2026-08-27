@@ -163,10 +163,23 @@ export async function setupDatabase(quiet = false) {
         const majorRes = await client.query('SELECT major_id FROM master_major LIMIT 1');
         if ((majorRes.rowCount ?? 0) > 0) {
           const majorId = majorRes.rows[0].major_id;
+          // ⛔ ต้องมีชื่อ-นามสกุลเสมอ — ชื่อคณบดีถูก **พิมพ์ลงหนังสือราชการ** ใต้ลายเซ็น
+          //    ของเดิม insert แต่ personnel_id/major_id ทำให้หนังสือที่เซ็นจากฐาน dev
+          //    ออกมาเป็น "( ..................... )" วงเล็บเปล่า (เจอตอนเดินจริง 2026-08-27)
+          //    · `batchSignDocuments` ปฏิเสธการลงนามเมื่อโปรไฟล์ไม่มีชื่อแล้ว
+          const NAMES: Record<string, [string, string]> = {
+            dean: ['สมศักดิ์', 'คณบดีศรี'],
+            dept_head: ['สมหญิง', 'หัวหน้าสาขา'],
+            advisor: ['วิชัย', 'ที่ปรึกษาดี'],
+          };
+          const [firstName, lastName] = NAMES[u.role];
           await client.query(
-            `INSERT INTO personnel (personnel_id, major_id, status) VALUES ($1, $2, 'approved')
-             ON CONFLICT (personnel_id) DO NOTHING`,
-            [userId, majorId]
+            `INSERT INTO personnel (personnel_id, major_id, status, first_name, last_name)
+             VALUES ($1, $2, 'approved', $3, $4)
+             ON CONFLICT (personnel_id) DO UPDATE SET
+               first_name = COALESCE(personnel.first_name, EXCLUDED.first_name),
+               last_name  = COALESCE(personnel.last_name,  EXCLUDED.last_name)`,
+            [userId, majorId, firstName, lastName]
           );
           log(`Seeded personnel profile for role ${u.role}: ${u.email}`);
         }

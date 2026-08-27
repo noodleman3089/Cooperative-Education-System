@@ -11,7 +11,7 @@ import { sendMentorInviteEmail } from '../utils/email';
  * 'pending_advisor' — skipping the advisor, department head and dean entirely.
  *
  * The document pipeline moves a form through:
- *   pending_advisor -> approved_by_advisor -> approved_by_dept_head
+ *   pending_advisor -> pending_officer_request -> approved_by_dept_head
  *   -> pending_sign -> signed / pending_acceptance -> accepted
  * so only the last three are valid starting points for an acceptance.
  */
@@ -39,7 +39,6 @@ export const STUDENT_ACCEPT_FROM = ['approved_by_dept_head', 'pending_sign', 'si
 export const STUDENT_FAIL_FROM = [
   'pending_advisor',
   'pending_officer_request',
-  'approved_by_advisor',
   'approved_by_dept_head',
   'pending_sign',
   'signed',
@@ -55,8 +54,12 @@ export const STUDENT_FAIL_FROM = [
  *        ↓ เจ้าหน้าที่กดผ่าน (คนเดียวที่กดในระบบ)
  *   approved_by_dept_head      ← คงชื่อเดิมไว้ เพราะทุกอย่างท้ายน้ำอ่านค่านี้
  *
- * ⛔ `approved_by_advisor` ไม่มีใครไปถึงอีกแล้วในเส้นทางใหม่ แต่ **ห้ามลบออกจาก
- * allow-list** — ใบความจำนงเก่าในฐานจริงยังค้างอยู่ที่สถานะนั้นได้
+ * ⛔ `approved_by_advisor` และ `rejected_by_dept_head` **ถูกลบทิ้งทั้งเส้นแล้ว**
+ * เมื่อ 2026-08-27 (เจ้าของสั่ง) พร้อมกับ route `PATCH /:id/status`,
+ * `/dept-head-status` และเมธอด `approveByDeptHead` / `rejectByDeptHead*` /
+ * `rejectByAdvisor*` / `updateStatus` ที่ไม่มีใครเรียกแล้ว
+ * · ระบบยังไม่เคยขึ้น production จึงไม่มีใบเก่าค้างอยู่ที่สองสถานะนั้น
+ * · **ห้ามเอากลับมา** — ลายเซ็นที่ปรึกษาและหัวหน้าสาขาอยู่บนกระดาษ
  *
  * ⛔ ห้ามใช้ `pending_officer_approval` ซ้ำ มันเป็นคนละขั้น (นักศึกษาส่งหลักฐาน
  * การตอบรับจากสถานประกอบการ ซึ่งเกิดหลังจากนี้มาก) ชื่อคล้ายกันแต่คนละเรื่อง
@@ -118,7 +121,7 @@ export class IntentFormModel {
       const duplicateCheck = await client.query(
         `SELECT 1 FROM intent_forms 
          WHERE student_id = $1 AND semester_id = $2 
-         AND status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')`,
+         AND status NOT IN ('rejected', 'company_rejected')`,
         [intentData.student_id, intentData.semester_id]
       );
       if ((duplicateCheck.rowCount ?? 0) > 0) {
@@ -266,7 +269,7 @@ export class IntentFormModel {
       const duplicateCheck = await client.query(
         `SELECT 1 FROM intent_forms 
          WHERE student_id = $1 AND semester_id = $2 
-         AND status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')`,
+         AND status NOT IN ('rejected', 'company_rejected')`,
         [studentId, semesterId]
       );
       if ((duplicateCheck.rowCount ?? 0) > 0) {
@@ -512,17 +515,6 @@ export class IntentFormModel {
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as IntentForm;
-  }
-
-  /**
-   * Update the status of an intent form.
-   */
-  static async updateStatus(formId: number, status: string): Promise<boolean> {
-    const res = await query(
-      'UPDATE intent_forms SET status = $1 WHERE form_id = $2',
-      [status, formId]
-    );
-    return (res.rowCount ?? 0) > 0;
   }
 
   /**
@@ -927,183 +919,4 @@ export class IntentFormModel {
   /**
    * Update parental consent file path for an intent form.
    */
-  /**
-   * Dept Head approval logic — transitions from 'approved_by_advisor' to 'approved_by_dept_head'.
-   */
-  static async approveByDeptHead(formId: number, deptHeadUserId: number): Promise<boolean> {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // 1. Lock intent form FOR UPDATE
-      const intentRes = await client.query(
-        `SELECT form_id, student_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
-        [formId]
-      );
-
-      if ((intentRes.rowCount ?? 0) === 0) {
-        throw new Error('Intent form not found.');
-      }
-
-      const intent = intentRes.rows[0];
-
-      if (intent.status !== 'approved_by_advisor') {
-        throw new Error(`Can only approve intent forms in 'approved_by_advisor' status. Current: '${intent.status}'.`);
-      }
-
-      // 2. Validate dept head major matches student major
-      const deptHeadCheck = await client.query(
-        `SELECT major_id FROM personnel WHERE personnel_id = $1`,
-        [deptHeadUserId]
-      );
-      const studentCheck = await client.query(
-        `SELECT major_id FROM students WHERE student_id = $1`,
-        [intent.student_id]
-      );
-
-      if ((deptHeadCheck.rowCount ?? 0) === 0 || (studentCheck.rowCount ?? 0) === 0) {
-        throw new Error('Dept Head or student profile not found.');
-      }
-
-      if (deptHeadCheck.rows[0].major_id !== studentCheck.rows[0].major_id) {
-        throw new Error('Unauthorized. Dept Head major does not match student major.');
-      }
-
-      // 3. Update status
-      await client.query(
-        `UPDATE intent_forms SET status = 'approved_by_dept_head' WHERE form_id = $1`,
-        [formId]
-      );
-
-      await client.query('COMMIT');
-      return true;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * Dept Head rejection transaction logic (reverts applied count).
-   */
-  static async rejectByDeptHeadWithTransaction(formId: number, deptHeadUserId: number): Promise<boolean> {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // 1. Lock intent form FOR UPDATE
-      const intentRes = await client.query(
-        `SELECT form_id, student_id, job_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
-        [formId]
-      );
-
-      if ((intentRes.rowCount ?? 0) === 0) {
-        throw new Error('Intent form not found.');
-      }
-
-      const intent = intentRes.rows[0];
-
-      if (intent.status !== 'approved_by_advisor') {
-        throw new Error(`Can only reject intent forms in 'approved_by_advisor' status. Current: '${intent.status}'.`);
-      }
-
-      // 2. Validate dept head major matches student major
-      const deptHeadCheck = await client.query(
-        `SELECT major_id FROM personnel WHERE personnel_id = $1`,
-        [deptHeadUserId]
-      );
-      const studentCheck = await client.query(
-        `SELECT major_id FROM students WHERE student_id = $1`,
-        [intent.student_id]
-      );
-
-      if ((deptHeadCheck.rowCount ?? 0) === 0 || (studentCheck.rowCount ?? 0) === 0) {
-        throw new Error('Dept Head or student profile not found.');
-      }
-
-      if (deptHeadCheck.rows[0].major_id !== studentCheck.rows[0].major_id) {
-        throw new Error('Unauthorized. Dept Head major does not match student major.');
-      }
-
-      // 3. Decrement job applied count if job_id is associated
-      await releaseJobSeat(client, intent.job_id);
-
-      // 4. Update status to 'rejected_by_dept_head'
-      await client.query(
-        `UPDATE intent_forms SET status = 'rejected_by_dept_head' WHERE form_id = $1`,
-        [formId]
-      );
-
-      await client.query('COMMIT');
-      return true;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
-
-  /**
-   * Advisor rejection transaction logic (reverts applied count).
-   */
-  static async rejectByAdvisorWithTransaction(formId: number, advisorUserId: number): Promise<boolean> {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-
-      // 1. Lock intent form FOR UPDATE
-      const intentRes = await client.query(
-        `SELECT form_id, student_id, job_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
-        [formId]
-      );
-
-      if ((intentRes.rowCount ?? 0) === 0) {
-        throw new Error('Intent form not found.');
-      }
-
-      const intent = intentRes.rows[0];
-
-      if (intent.status !== 'pending_advisor') {
-        throw new Error('Can only reject intent forms in pending_advisor status.');
-      }
-
-      // 2. Validate advisor major matches student major
-      const advisorCheck = await client.query(
-        `SELECT major_id FROM personnel WHERE personnel_id = $1`,
-        [advisorUserId]
-      );
-      const studentCheck = await client.query(
-        `SELECT major_id FROM students WHERE student_id = $1`,
-        [intent.student_id]
-      );
-
-      if ((advisorCheck.rowCount ?? 0) === 0 || (studentCheck.rowCount ?? 0) === 0) {
-        throw new Error('Advisor or student profile not found.');
-      }
-
-      if (advisorCheck.rows[0].major_id !== studentCheck.rows[0].major_id) {
-        throw new Error('Unauthorized. Advisor major does not match student major.');
-      }
-
-      // 3. Decrement job applied count if job_id is associated
-      await releaseJobSeat(client, intent.job_id);
-
-      // 4. Update status to 'rejected'
-      await client.query(
-        `UPDATE intent_forms SET status = 'rejected' WHERE form_id = $1`,
-        [formId]
-      );
-
-      await client.query('COMMIT');
-      return true;
-    } catch (error) {
-      await client.query('ROLLBACK');
-      throw error;
-    } finally {
-      client.release();
-    }
-  }
 }

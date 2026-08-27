@@ -410,13 +410,9 @@ export const notifyStudentStatusChange = async (
 
     const jobInfo = job_title ? `ตำแหน่งงาน: ${esc(job_title)}` : 'สมัครงานทั่วไป';
 
-    if (status === 'approved_by_advisor') {
-      statusLabel = 'อาจารย์ที่ปรึกษาอนุมัติแล้ว';
-      detailsHtml = `
-        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้รับการพิจารณา<b>อนุมัติ</b>จากอาจารย์ที่ปรึกษาสหกิจศึกษาเรียบร้อยแล้ว</p>
-        <p>ขณะนี้ระบบได้ส่งคำขอต่อไปยังหัวหน้าสาขาวิชาเพื่อพิจารณาอนุมัติในขั้นตอนต่อไป</p>
-      `;
-    } else if (status === 'rejected') {
+    // ⛔ สาขา 'approved_by_advisor' และ 'rejected_by_dept_head' ถูกลบ 2026-08-27
+    //    — ไม่มีใบไหนไปถึงสองสถานะนั้นอีกแล้วตั้งแต่ลายเซ็นย้ายไปอยู่บนกระดาษ
+    if (status === 'rejected') {
       statusLabel = 'อาจารย์ที่ปรึกษาตีกลับใบคำร้อง';
       detailsHtml = `
         <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยอาจารย์ที่ปรึกษาสหกิจศึกษา</p>
@@ -424,17 +420,12 @@ export const notifyStudentStatusChange = async (
         <p>กรุณาเข้าระบบเพื่อตรวจสอบรายละเอียด ปรับปรุงข้อมูล หรือทำเรื่องเลือกสถานประกอบการอื่นใหม่</p>
       `;
     } else if (status === 'approved_by_dept_head') {
-      statusLabel = 'หัวหน้าสาขาวิชาอนุมัติแล้ว';
+      // ชื่อสถานะยังเป็น `approved_by_dept_head` เพราะทุกอย่างท้ายน้ำอ่านค่านี้ แต่
+      // **คนที่กดคือเจ้าหน้าที่** ลายเซ็นที่ปรึกษา/หัวหน้าสาขาอยู่บนกระดาษไปแล้ว
+      statusLabel = 'เจ้าหน้าที่รับคำร้องแล้ว';
       detailsHtml = `
-        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้รับการพิจารณา<b>อนุมัติ</b>จากหัวหน้าสาขาวิชาเรียบร้อยแล้ว</p>
-        <p>ขณะนี้คำร้องอยู่ในขั้นตอนเสนอเจ้าหน้าที่งานสหกิจเพื่อเตรียมดำเนินการออกจดหมายอย่างเป็นทางการเสนอคณบดีลงนามต่อไป</p>
-      `;
-    } else if (status === 'rejected_by_dept_head') {
-      statusLabel = 'หัวหน้าสาขาวิชาตีกลับใบคำร้อง';
-      detailsHtml = `
-        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยหัวหน้าสาขาวิชา</p>
-        ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลการตีกลับ: ${safeReason}</p>` : ''}
-        <p>กรุณาเข้าระบบเพื่อปรับปรุงข้อมูล หรือติดต่ออาจารย์ที่ปรึกษาเพื่อรับคำแนะนำ</p>
+        <p>เจ้าหน้าที่งานสหกิจศึกษาได้<b>รับแบบคำร้องที่ลงนามครบ</b>ของท่านสำหรับ <b>${safeCompanyName}</b> (${jobInfo}) และออกเลขที่หนังสือเรียบร้อยแล้ว</p>
+        <p>ขณะนี้หนังสือขอความอนุเคราะห์อยู่ในคิวรอคณบดีลงนาม เมื่อลงนามแล้วท่านจะดาวน์โหลดไปยื่นสถานประกอบการได้เอง</p>
       `;
     } else if (status === 'accepted') {
       statusLabel = 'ตอบรับเข้าปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว';
@@ -543,7 +534,7 @@ export const sendPersonnelAssignmentEmail = async (
         c.name_th as company_name
        FROM students s
        JOIN users u_s ON s.student_id = u_s.user_id
-       LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')
+       LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
        LEFT JOIN companies c ON i.company_id = c.company_id
        JOIN personnel a ON a.personnel_id = $2
        JOIN users u_a ON a.personnel_id = u_a.user_id

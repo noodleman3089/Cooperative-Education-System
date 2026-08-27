@@ -274,6 +274,26 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
   }
 });
 
+/**
+ * ฟอนต์ราชการสำหรับหน้าที่ต้องสั่งพิมพ์ (แบบคำร้อง เอกสารหมายเลข 1)
+ *
+ * ⛔ นี่คือ **ทางเดียว** ที่ไฟล์ใน `secure_private/` ถูกเปิดสาธารณะ และเปิดเฉพาะ
+ * โฟลเดอร์ `fonts/` เท่านั้น — TH Sarabun New เป็น GPL2 + font exception ของ
+ * DIP/SIPA แจกจ่ายได้อยู่แล้ว ไม่ใช่ความลับ (ต่างจาก `signatures/` กับ `documents/`
+ * ที่ห้ามเปิดเด็ดขาด) · ห้ามเลื่อน mount นี้ขึ้นไปที่ `secure_private` ตรงๆ
+ *
+ * เหตุผลที่ต้องมี: หน้าแบบคำร้องเดิมประกาศ `font-family: 'TH SarabunPSK', …`
+ * เฉยๆ แล้วหวังว่าเครื่องนักศึกษาจะมีฟอนต์ติดตั้งอยู่ ถ้าไม่มีจะตกไป Tahoma
+ * ซึ่งตัวโตกว่ามากจนแบบฟอร์มล้นหน้า (เจอตอนเดินหน้าจอจริง 2026-08-27)
+ */
+app.use(
+  '/assets/fonts',
+  express.static(path.join(process.cwd(), 'secure_private', 'fonts'), {
+    maxAge: '30d',
+    immutable: true,
+  })
+);
+
 // API Base Routing
 app.use('/api', apiRouter);
 

@@ -74,6 +74,11 @@ const ELIGIBLE_FALSE = ['false', '0', 'no', 'n', 'ไม่ผ่าน'];
  * shows them. `waitingOn` replaces what used to be the raw database value
  * printed under each figure: what a co-op officer needs from a queue is who it
  * is stuck behind, not the name of the column it lives in.
+ *
+ * ⛔ `approved_by_advisor` ถูกถอดออกจากแถบนี้ (2026-08-27) — ตั้งแต่ลายเซ็นที่ปรึกษา
+ * และหัวหน้าสาขาย้ายไปอยู่บนกระดาษ ไม่มีใบใหม่ไปถึงสถานะนั้นอีก การ์ดจึงขึ้น 0 ค้าง
+ * ตลอดกาลและบอกเจ้าหน้าที่ว่ามีคนรออาจารย์กดในระบบ ซึ่งไม่จริง
+ * ขั้นที่แทนเข้ามาคือ `pending_officer_request` ซึ่งเป็นคิวจริงที่เจ้าหน้าที่ต้องดู
  */
 const PIPELINE_STEPS: {
   status: string;
@@ -84,26 +89,26 @@ const PIPELINE_STEPS: {
 }[] = [
   {
     status: 'pending_advisor',
-    title: 'ยื่นใบความจำนงแล้ว',
-    waitingOn: 'รออาจารย์ที่ปรึกษาพิจารณา',
+    title: 'ยื่นคำร้องแล้ว',
+    waitingOn: 'รอนักศึกษานำแบบคำร้องไปให้ลงนามแล้วอัปโหลดกลับ',
     count: (s) => s.pending_advisor || 0,
   },
   {
-    status: 'approved_by_advisor',
-    title: 'ที่ปรึกษาอนุมัติแล้ว',
-    waitingOn: 'รอหัวหน้าสาขาวิชาพิจารณา',
-    count: (s) => s.approved_by_advisor || 0,
+    status: 'pending_officer_request',
+    title: 'อัปโหลดคำร้องที่ลงนามแล้ว',
+    waitingOn: 'รอเจ้าหน้าที่ตรวจรับ',
+    count: (s) => s.pending_officer_request || 0,
   },
   {
     status: 'approved_by_dept_head',
-    title: 'สาขาวิชาอนุมัติแล้ว',
-    waitingOn: 'รอเจ้าหน้าที่ออกหนังสือและคณบดีลงนาม',
+    title: 'เจ้าหน้าที่รับคำร้องแล้ว',
+    waitingOn: 'ออกเลขที่หนังสือแล้ว · รอคณบดีลงนาม',
     count: (s) => s.approved_by_dept_head || 0,
   },
   {
     status: 'accepted',
     title: 'สถานประกอบการตอบรับ',
-    waitingOn: 'ออกหนังสือส่งตัวได้ทันที',
+    waitingOn: 'ขึ้นทะเบียนพี่เลี้ยงและเริ่มปฏิบัติงานได้',
     done: true,
     count: (s) => s.dispatch_eligible || s.accepted || 0,
   },
@@ -204,7 +209,6 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
   const [pipelineSummary, setPipelineSummary] = useState<Record<string, number>>({
     pending_advisor: 0,
-    approved_by_advisor: 0,
     approved_by_dept_head: 0,
     accepted: 0,
     dispatch_eligible: 0,
@@ -927,7 +931,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             ? 'คิวตรวจอนุมัติประกาศรับสมัครงาน (Smart Job Board Queue)'
             : currentTab === 'announcements'
             ? 'จัดการข่าวสารและประกาศปักหมุดประชาสัมพันธ์ (PR Announcements)'
-            : 'ภาพรวมออกเอกสารจัดส่งตัว (Official Document Control)'}
+            : 'คำร้องขอหนังสือขอความอนุเคราะห์ & การออกเลขที่หนังสือ'}
         </h2>
         {/* gray-600, not gray-500 like the descriptions inside cards: this one
             sits on the page's gray background rather than on white, which costs
@@ -941,7 +945,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             ? 'ตรวจสอบตำแหน่งงานที่สถานประกอบการโพสต์เข้ามา และกดอนุมัติเผยแพร่ไปยังกระดานหางานของนักศึกษา'
             : currentTab === 'announcements'
             ? 'ลงประกาศข่าวสาร กำหนดการ และข่าวประชาสัมพันธ์สำคัญของคณะพร้อมการปักหมุดด่วน'
-            : 'ออกจดหมายนำส่งตัวนักศึกษาอย่างเป็นทางการเพื่อให้คณบดีเซ็นอนุมัติผ่านระบบลายเซ็นอิเล็กทรอนิกส์'}
+            : 'ตรวจแบบคำร้องที่นักศึกษาอัปโหลดกลับ กรอกชื่อผู้ลงนามจากกระดาษ แล้วออกเลขที่หนังสือส่งเข้าคิวคณบดี'}
         </p>
       </div>
 
@@ -2143,18 +2147,8 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             )}
           </div>
 
-          {/* ⛔ การ *ออกหนังสือ* ไปยังสถานประกอบการยังอยู่ระหว่างทำ (ก้อน 3 ของแผน)
-              ตรงนี้บอกตามจริงแทนการวางปุ่มที่กดแล้วไม่มีอะไรเกิดขึ้น */}
-          <AlertBanner
-            variant="info"
-            message={
-              <>
-                <strong>การออกหนังสือขอความอนุเคราะห์ยังอยู่ระหว่างพัฒนา</strong> — คำร้องที่
-                รับแล้วจะเข้าคิวรอคณบดีลงนามในขั้นถัดไป · เอกสารที่ออกไปแล้วยังเปิดดูและ
-                ติดตามสถานะได้ตามปกติที่ตารางด้านล่าง
-              </>
-            }
-          />
+          {/* แบนเนอร์ "ยังอยู่ระหว่างพัฒนา" ถูกถอดออก 2026-08-27 — การออกหนังสือทำเสร็จ
+              ตั้งแต่ก้อน 3 แล้ว ข้อความเดิมบอกเจ้าหน้าที่ว่าฟีเจอร์ยังไม่พร้อมใช้ */}
 
           {/* Generated Documents Log */}
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
@@ -2257,33 +2251,39 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                 </p>
               </div>
 
-              {reviewingRequest.request_form_path ? (
+              {/* ⛔ ลิงก์สองอันนี้เป็น `inline-flex` — วางเปล่าๆ ใน `space-y-4` แล้วมันจะ
+                  ไหลอยู่บรรทัดเดียวกันชนกันสนิท กลายเป็นข้อความขีดเส้นใต้ยาวพืดเดียว
+                  ที่แยกไม่ออกว่าเป็นสองลิงก์ (เจอตอนเดินหน้าจอจริง 2026-08-27)
+                  `space-y-*` เว้นระยะให้เฉพาะพี่น้องที่เป็น block เท่านั้น */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                {reviewingRequest.request_form_path ? (
+                  <a
+                    href={`${API_BASE_URL}/files/${reviewingRequest.request_form_path}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="open-uploaded-request-form"
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
+                  >
+                    เปิดไฟล์แบบคำร้องที่นักศึกษาอัปโหลด
+                  </a>
+                ) : (
+                  <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบคำร้องในระบบ" />
+                )}
+
+                {/* ตัวอย่างหนังสือขาออก — ด่านตรวจอยู่ **ก่อน** คณบดีลงนาม เพื่อไม่ให้
+                    ต้องรบกวนท่านกดใหม่เมื่อเจอข้อมูลผิดหลังเซ็นไปแล้ว
+                    เลขที่หนังสือในตัวอย่างจะยังว่างจนกว่าจะกดรับคำร้อง เพราะเลขเกิด
+                    ตอนนั้น — ที่เหลือหน้าตาเหมือนฉบับจริงทุกอย่าง */}
                 <a
-                  href={`${API_BASE_URL}/files/${reviewingRequest.request_form_path}`}
+                  href={`${API_BASE_URL}/intents/${reviewingRequest.form_id}/cover-letter/preview`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  data-testid="open-uploaded-request-form"
+                  data-testid="preview-cover-letter"
                   className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
                 >
-                  เปิดไฟล์แบบคำร้องที่นักศึกษาอัปโหลด
+                  ดูตัวอย่างหนังสือขอความอนุเคราะห์ที่จะออกให้
                 </a>
-              ) : (
-                <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบคำร้องในระบบ" />
-              )}
-
-              {/* ตัวอย่างหนังสือขาออก — ด่านตรวจอยู่ **ก่อน** คณบดีลงนาม เพื่อไม่ให้
-                  ต้องรบกวนท่านกดใหม่เมื่อเจอข้อมูลผิดหลังเซ็นไปแล้ว
-                  เลขที่หนังสือในตัวอย่างจะยังว่างจนกว่าจะกดรับคำร้อง เพราะเลขเกิด
-                  ตอนนั้น — ที่เหลือหน้าตาเหมือนฉบับจริงทุกอย่าง */}
-              <a
-                href={`${API_BASE_URL}/intents/${reviewingRequest.form_id}/cover-letter/preview`}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="preview-cover-letter"
-                className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
-              >
-                ดูตัวอย่างหนังสือขอความอนุเคราะห์ที่จะออกให้
-              </a>
+              </div>
 
               {rejectingRequest ? (
                 <div className="space-y-2">

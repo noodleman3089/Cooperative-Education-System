@@ -49,23 +49,12 @@ router.post(
   IntentFormController.submitIntent
 );
 
-// Route: PATCH /api/intents/:id/status (Advisor status update: approve/reject)
-router.patch(
-  '/:id/status',
-  authorizeRoles('advisor'),
-  IntentFormController.updateIntentStatus
-);
-
-// Route: PATCH /api/intents/:id/dept-head-status (Dept Head status update: approve/reject)
-router.patch(
-  '/:id/dept-head-status',
-  authorizeRoles('dept_head'),
-  IntentFormController.updateIntentStatusByDeptHead
-);
-
-// เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดผ่านในระบบ
-// (อาจารย์ที่ปรึกษา/หัวหน้าสาขายังมี PATCH ของตัวเองอยู่ด้านบนสำหรับใบเก่าที่ค้าง
-//  อยู่ในเส้นทางเดิม — ใบใหม่จะไม่มีทางไปถึงสถานะ approved_by_advisor อีก)
+// ⛔ ถอดออกเมื่อ 2026-08-27 — **ห้ามเอากลับมา**
+//    `PATCH /:id/status` (advisor) และ `PATCH /:id/dept-head-status` (dept_head)
+//    คือการอนุมัติของเส้นทางเดิม ซึ่งย้ายไปอยู่บนกระดาษ (แบบคำร้อง เอกสารหมายเลข 1)
+//    ตั้งแต่ 2026-08-26 · เจ้าหน้าที่เป็นคนเดียวที่กดผ่านในระบบ ผ่าน `/officer-approve`
+//    · สถานะ `approved_by_advisor` / `rejected_by_dept_head` ที่สองเส้นนี้เคยสร้าง
+//      จึงไม่มีทางเกิดขึ้นอีก
 
 // Route: POST /api/intents/:id/request-form (นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว)
 router.post(

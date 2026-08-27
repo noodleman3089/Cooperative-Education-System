@@ -120,12 +120,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
       </svg>
     ),
-    // 15. Dispatch Official Letters
-    dispatch: (
-      <svg className="h-4 w-4 shrink-0 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-      </svg>
-    ),
     // 15b. Company directory
     companies: (
       <svg className="h-4 w-4 shrink-0 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -205,7 +199,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     dept_head: [
       { id: 'dashboard', label: 'ภาพรวมสาขาวิชา', icon: icons.dashboard },
       { id: 'applications', label: 'อนุมัติใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
-      { id: 'approval', label: 'ตรวจสอบ/อนุมัติคำร้อง', icon: icons.approval },
+      // หัวหน้าสาขาไม่ได้ "อนุมัติ" ในระบบแล้ว — ลายเซ็นอยู่บนแบบคำร้อง (เอกสารหมายเลข 1)
+      // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
+      { id: 'approval', label: 'ติดตามคำร้อง', icon: icons.approval },
       { id: 'assignment', label: 'จัดสรรอาจารย์ที่ปรึกษา', icon: icons.assignment },
       { id: 'students', label: 'ตรวจสอบคุณสมบัตินักศึกษา', icon: icons.students },
       { id: 'final_progress', label: 'สรุปผลการประเมินสาขาวิชา', icon: icons.summary },
@@ -217,8 +213,11 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
     ],
     staff: [
-      { id: 'dashboard', label: 'แดชบอร์ดจัดส่งตัวนักศึกษา', icon: icons.dashboard },
-      { id: 'dispatch_letters', label: 'ออกหนังสือส่งตัวนักศึกษา', icon: icons.dispatch },
+      // ⛔ เมนู 'dispatch_letters' (ออกหนังสือส่งตัวนักศึกษา) ถูกถอดออก 2026-08-27
+      //    หน้านั้นถูกลบไปตั้งแต่ 2026-08-26 พร้อม POST /documents/generate-dispatch
+      //    แต่เมนูยังค้างอยู่ — กดแล้วเด้งกลับแดชบอร์ดเงียบๆ เพราะ StaffDashboard
+      //    ตีเมนูที่ไม่รู้จักเป็น 'dashboard' · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
+      { id: 'dashboard', label: 'คำร้องขอหนังสือ & การออกเลข', icon: icons.dashboard },
       { id: 'jobs', label: 'อนุมัติประกาศงาน', icon: icons.jobs },
       { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies },
       { id: 'announcements', label: 'จัดการข่าวประชาสัมพันธ์', icon: icons.announcements },

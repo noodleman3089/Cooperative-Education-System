@@ -33,7 +33,6 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   // `DOMAIN_OVERRIDES` ข้างล่างแทน (นี่คือกับดัก key ชนข้ามโดเมนที่ CLAUDE.md เตือนไว้)
   pending_advisor: { text: 'รออาจารย์ที่ปรึกษาพิจารณา', tone: 'waiting' },
   pending_officer_request: { text: 'ส่งคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ', tone: 'review' },
-  approved_by_advisor: { text: 'ที่ปรึกษาอนุมัติแล้ว · รอหัวหน้าสาขาวิชา', tone: 'waiting' },
   approved_by_dept_head: { text: 'สาขาวิชาอนุมัติแล้ว · รอออกหนังสือ', tone: 'waiting' },
   pending_sign: { text: 'ออกหนังสือแล้ว · รอคณบดีลงนาม', tone: 'waiting' },
   signed: { text: 'คณบดีลงนามแล้ว · รอสถานประกอบการตอบรับ', tone: 'progress' },
@@ -41,7 +40,6 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   pending_officer_approval: { text: 'ส่งหลักฐานแล้ว · รอเจ้าหน้าที่ตรวจสอบ', tone: 'review' },
   accepted: { text: 'สถานประกอบการตอบรับแล้ว', tone: 'done' },
   rejected: { text: 'อาจารย์ที่ปรึกษาตีกลับ', tone: 'rejected' },
-  rejected_by_dept_head: { text: 'หัวหน้าสาขาวิชาตีกลับ', tone: 'rejected' },
   company_rejected: { text: 'สถานประกอบการปฏิเสธ', tone: 'rejected' },
 
   // job posts
@@ -79,8 +77,19 @@ const DOMAIN_OVERRIDES: Record<StatusDomain, Record<string, { text: string; tone
       text: 'ยื่นคำร้องแล้ว · นำแบบคำร้องไปให้ลงนามแล้วอัปโหลดกลับ',
       tone: 'waiting',
     },
+    // ชื่อคอลัมน์ยังเป็น `approved_by_dept_head` เพราะทุกอย่างท้ายน้ำอ่านค่านี้ แต่
+    // **คนที่กดคือเจ้าหน้าที่** ไม่ใช่หัวหน้าสาขา (ลายเซ็นหัวหน้าสาขาอยู่บนกระดาษ)
+    // ข้อความกลางที่เขียนว่า "สาขาวิชาอนุมัติแล้ว" จึงบอกชื่อผิดคน
+    // · ใบที่ออกหนังสือแล้ว `StudentDashboard` จะส่งสถานะของหนังสือมาแทน ข้อความนี้
+    //   เหลือไว้สำหรับช่วงสั้นๆ ที่ยังไม่มีแถวเอกสาร
+    approved_by_dept_head: {
+      text: 'เจ้าหน้าที่รับคำร้องแล้ว · รอออกหนังสือ',
+      tone: 'waiting',
+    },
   },
 };
+
+// `intentDisplayStatus` ย้ายไป `utils/intentStatus.ts` — ดูเหตุผลในไฟล์นั้น
 
 const lookup = (status: string, domain?: StatusDomain) =>
   (domain ? DOMAIN_OVERRIDES[domain]?.[status] : undefined) ?? STATUS_LABELS[status];

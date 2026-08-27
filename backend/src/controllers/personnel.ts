@@ -145,7 +145,7 @@ export class PersonnelController {
             FROM weekly_work_plans w WHERE w.student_id = s.student_id), '[]'
           ) as weekly_plans
         FROM students s
-        JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head')
+        JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
         JOIN companies c ON i.company_id = c.company_id
         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
         LEFT JOIN accommodations a ON s.student_id = a.student_id

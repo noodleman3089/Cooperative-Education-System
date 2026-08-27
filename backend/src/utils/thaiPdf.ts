@@ -17,7 +17,7 @@ import fontkit from '@pdf-lib/fontkit';
  */
 
 const A4: [number, number] = [595.28, 841.89];
-const FONT_PATH = () => path.join(process.cwd(), 'secure_private', 'fonts', 'Srabun-Regular.ttf');
+const FONT_PATH = () => path.join(process.cwd(), 'secure_private', 'fonts', 'THSarabunNew.ttf');
 
 export interface ThaiPdfOptions {
   /** ระยะขอบซ้าย-ขวา (pt) */
@@ -51,7 +51,7 @@ export class ThaiPdf {
       // (pdf-lib จะ throw ตอน drawText ภาษาไทยด้วยฟอนต์มาตรฐานอยู่แล้ว — ข้อความนี้
       //  บอกสาเหตุจริงแทนที่จะเป็น 'WinAnsi cannot encode')
       throw new Error(
-        `ไม่พบฟอนต์ภาษาไทยสำหรับออกเอกสารที่ ${fontPath} — ตรวจว่าไฟล์ Srabun-Regular.ttf อยู่ครบ`
+        `ไม่พบฟอนต์ภาษาไทยสำหรับออกเอกสารที่ ${fontPath} — ตรวจว่าไฟล์ THSarabunNew.ttf อยู่ครบ`
       );
     }
     const font = await doc.embedFont(fs.readFileSync(fontPath));
@@ -103,8 +103,8 @@ export class ThaiPdf {
       color?: RGB;
     } = {}
   ): void {
-    const size = options.size ?? 15;
-    const gap = options.gap ?? size + 9;
+    const size = options.size ?? 16;
+    const gap = options.gap ?? size + 6;
     this.ensureSpace(gap);
 
     const width = this.font.widthOfTextAtSize(text, size);
@@ -131,7 +131,7 @@ export class ThaiPdf {
    * ดีกว่าตัดคำผิด (ข้อความในหนังสือราชการชุดนี้มีช่องว่างคั่นวลีอยู่แล้ว)
    */
   paragraph(text: string, options: { size?: number; indent?: number } = {}): void {
-    const size = options.size ?? 15;
+    const size = options.size ?? 16;
     const indent = options.indent ?? 0;
     const maxWidth = A4[0] - this.opts.margin * 2 - indent;
 

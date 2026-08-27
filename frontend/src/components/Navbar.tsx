@@ -89,10 +89,14 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         const res = await api.get('/intents?status=pending_advisor');
         setNotifications(res || []);
       } else if (currentRole === 'dept_head') {
-        const res = await api.get('/intents?status=approved_by_advisor');
+        // เดิม poll `approved_by_advisor` ซึ่งไม่มีใบไหนไปถึงอีกแล้วตั้งแต่ลายเซ็นย้าย
+        // ไปอยู่บนกระดาษ = กระดิ่งของหัวหน้าสาขาขึ้น 0 ตลอดกาล
+        const res = await api.get('/intents?status=pending_officer_request');
         setNotifications(res || []);
       } else if (currentRole === 'staff') {
-        const res = await api.get('/intents?status=approved_by_dept_head');
+        // คิวจริงของเจ้าหน้าที่คือคำร้องที่นักศึกษาอัปโหลดกลับมาแล้วรอตรวจรับ
+        // ไม่ใช่ `approved_by_dept_head` ซึ่งคือใบที่ตัวเองกดรับไปแล้ว
+        const res = await api.get('/intents?status=pending_officer_request');
         setNotifications(res || []);
       } else if (currentRole === 'dean') {
         const res = await api.get('/documents');
@@ -119,19 +123,16 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             let isSuccess = false;
 
             if (activeIntent.status === 'pending_advisor') {
-              desc = 'รออาจารย์ที่ปรึกษาพิจารณาคำร้องของคุณ';
-            } else if (activeIntent.status === 'approved_by_advisor') {
-              desc = 'อาจารย์ที่ปรึกษาอนุมัติแล้ว รอหัวหน้าสาขาวิชาพิจารณา';
-              isSuccess = true;
+              desc = 'พิมพ์แบบคำร้องไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนาม แล้วอัปโหลดกลับ';
+            } else if (activeIntent.status === 'pending_officer_request') {
+              desc = 'ส่งคำร้องที่ลงนามแล้ว รอเจ้าหน้าที่ตรวจรับ';
             } else if (activeIntent.status === 'approved_by_dept_head') {
-              desc = 'ผ่านการอนุมัติสาขาวิชาแล้ว รอเจ้าหน้าที่ออกจดหมายส่งตัวทางการ';
+              desc = 'เจ้าหน้าที่รับคำร้องและออกเลขที่หนังสือแล้ว รอคณบดีลงนาม';
               isSuccess = true;
             } else if (activeIntent.status === 'rejected') {
-              desc = 'อาจารย์ที่ปรึกษาตีกลับใบคำร้องของคุณ กรุณาตรวจสอบหรือทำรายการใหม่';
+              desc = 'ใบคำร้องของคุณถูกตีกลับ กรุณาตรวจสอบเหตุผลที่หน้าแรกแล้วดำเนินการใหม่';
               isWarning = true;
-            } else if (activeIntent.status === 'rejected_by_dept_head') {
-              desc = 'หัวหน้าสาขาวิชาตีกลับใบคำร้องของคุณ กรุณาตรวจสอบหรือทำรายการใหม่';
-              isWarning = true;
+              // สาขา 'rejected_by_dept_head' ถูกลบ 2026-08-27 — ไม่มีใบไหนไปถึงอีกแล้ว
             } else if (activeIntent.status === 'company_rejected') {
               desc = 'สถานประกอบการปฏิเสธการรับเข้าทำงาน ระบบปลดล็อกสิทธิ์ให้ยื่นสมัครที่ใหม่แล้ว';
               isWarning = true;
@@ -384,14 +385,10 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         </div>
       </nav>
 
+      {/* อ่านอย่างเดียว — ไม่มี onSuccess เพราะโมดัลนี้ไม่เปลี่ยนสถานะอะไรแล้ว */}
       <IntentReviewModal
         intentId={selectedIntentId}
         onClose={() => setSelectedIntentId(null)}
-        currentRole={currentRole}
-        onSuccess={() => {
-          window.dispatchEvent(new CustomEvent('intent-updated'));
-          setSelectedIntentId(null);
-        }}
       />
 
       <DeanSignModal

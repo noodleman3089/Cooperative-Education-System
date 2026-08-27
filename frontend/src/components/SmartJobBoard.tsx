@@ -98,7 +98,7 @@ const SmartJobBoard: React.FC = () => {
    * what happened to it. Reusing that as "you may not apply" would have locked
    * out exactly the students who need to apply again.
    */
-  const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected', 'rejected_by_dept_head'];
+  const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected'];
   const blockingIntent =
     currentIntent && !CLOSED_INTENT_STATUSES.includes(currentIntent.status) ? currentIntent : null;
 
@@ -323,7 +323,7 @@ const SmartJobBoard: React.FC = () => {
       };
 
       await api.post('/intents', payload);
-      setSubmitSuccess(`ส่งใบสมัครไปยัง ${job.company_name_th} เรียบร้อยแล้ว (รอการยืนยันจากอาจารย์)`);
+      setSubmitSuccess(`ส่งใบสมัครไปยัง ${job.company_name_th} เรียบร้อยแล้ว — พิมพ์แบบคำร้องไปให้ลงนาม แล้วอัปโหลดกลับที่หน้าแรก`);
       await loadData();
     } catch (err) {
       setError(getErrorMessage(err, 'การยื่นความจำนงสมัครงานล้มเหลว กรุณาลองใหม่อีกครั้ง'));
@@ -410,7 +410,7 @@ const SmartJobBoard: React.FC = () => {
               <p className="font-bold">คุณมีใบความจำนงที่ดำเนินการอยู่แล้ว</p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span>{blockingIntent.company_name_th || 'สถานประกอบการที่ยื่นไว้'}</span>
-                <StatusBadge status={blockingIntent.status} />
+                <StatusBadge status={blockingIntent.status} domain="intent" />
               </p>
               <p>
                 ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา หากต้องการเปลี่ยนที่ ต้องรอผลของใบนี้ก่อน

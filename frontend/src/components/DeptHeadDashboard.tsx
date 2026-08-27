@@ -7,7 +7,15 @@ import type { StudentProfile, IntentForm } from '../types/api';
 import AssignAdvisorModal from './AssignAdvisorModal';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
+import StatusBadge from './ui/StatusBadge';
+import { intentDisplayStatus } from '../utils/intentStatus';
 import { Select } from './ui/Input';
+
+/**
+ * สถานะที่แปลว่า "ใบนี้ตายแล้ว" — ต้องตรงกับที่ `models/intent.ts` ใช้
+ * (`AdvisorDashboard` มีลิสต์เดียวกันด้วยเหตุผลเดียวกัน)
+ */
+const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected'];
 
 interface Personnel {
   personnel_id: number;
@@ -64,12 +72,11 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       if (activeMenu === 'approval') {
         // ⚠️ เดิมกรอง `approved_by_advisor` ซึ่งเป็นสถานะของเส้นทางเก่าที่ไม่มีใบไหน
         // ไปถึงอีกแล้วตั้งแต่ 2026-08-26 (ลายเซ็นย้ายไปอยู่บนกระดาษ) หน้านี้จึงว่างเปล่า
-        // ตลอดกาล · ใบที่หัวหน้าสาขาต้องเห็นคือใบที่ยังเดินกระดาษอยู่ทั้งสองสถานะ
-        const [pending, waitingOfficer] = await Promise.all([
-          api.get('/intents?status=pending_advisor').catch(() => []),
-          api.get('/intents?status=pending_officer_request').catch(() => []),
-        ]);
-        setPendingIntents([...(pending || []), ...(waitingOfficer || [])]);
+        // ตลอดกาล · แก้ครั้งนั้นเป็นการดึงสองสถานะที่ยังเดินกระดาษอยู่ — ซึ่งยังไม่พอ
+        // เพราะพอเจ้าหน้าที่กดรับ ใบก็หายจากหน้า "ติดตาม" ทันที (เจอตอนเดินจริง
+        // 2026-08-27) · ตอนนี้ดึงทั้งสาขาแล้วคัดเฉพาะใบที่ยังมีชีวิตอยู่
+        const all = (await api.get('/intents').catch(() => [])) as IntentForm[] | null;
+        setPendingIntents((all || []).filter((i) => !DEAD_INTENT_STATUSES.includes(i.status)));
       } else {
         const [studentsRes, personnelRes] = await Promise.all([
           api.get('/students'),
@@ -91,7 +98,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   // ⚠️ handleApproveIntent / handleRejectIntent / closeRejectDialog ถูกลบเมื่อ
   // 2026-08-26 — หัวหน้าสาขาลงนามช่อง "อนุญาต / ไม่อนุญาต" บนแบบคำร้อง
   // (เอกสารหมายเลข 1) ด้วยปากกา · endpoint PATCH /intents/:id/dept-head-status
-  // ยังอยู่ฝั่งเซิร์ฟเวอร์สำหรับใบเก่าที่ค้างในเส้นทางเดิม แต่หน้าจอไม่เรียกแล้ว
+  // **ถูกลบทิ้งจากเซิร์ฟเวอร์แล้ว** เมื่อ 2026-08-27 พร้อมสถานะ rejected_by_dept_head
 
   /**
    * Select-all covers what is on screen, not the whole department. Ticking it
@@ -190,13 +197,13 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">
             {activeMenu === 'dashboard' && 'ภาพรวมนักศึกษาสหกิจสาขาวิชา'}
-            {activeMenu === 'approval' && 'ตรวจสอบและอนุมัติคำร้องใบความจำนง'}
+            {activeMenu === 'approval' && 'ติดตามคำร้องใบความจำนงของสาขาวิชา'}
             {activeMenu === 'assignment' && 'จัดสรรอาจารย์ที่ปรึกษาสหกิจศึกษา'}
             {activeMenu === 'students' && 'ตรวจสอบสถานะคุณสมบัติและสิทธิ์นักศึกษา'}
           </h2>
           <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {activeMenu === 'dashboard' && 'สถิติการดำเนินการสหกิจศึกษาและข่าวสารภาพรวมภายในภาควิชา'}
-            {activeMenu === 'approval' && 'พิจารณาอนุมัติคำขอฝึกงานที่ผ่านการตรวจสอบจากอาจารย์ที่ปรึกษาแล้ว'}
+            {activeMenu === 'approval' && 'การลงนามอนุมัติอยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น — หน้านี้ไว้ดูว่าคำร้องไปถึงขั้นไหนแล้ว'}
             {activeMenu === 'assignment' && 'กำหนดอาจารย์ที่ปรึกษาและอาจารย์นิเทศหลักรายกลุ่มและบุคคล'}
             {activeMenu === 'students' && 'ตรวจสอบความพร้อม สิทธิ์สะสม และข้อมูลการปฐมนิเทศของนักศึกษา'}
           </p>
@@ -573,6 +580,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                     <th className="p-4 font-semibold">นักศึกษา</th>
                     <th className="p-4 font-semibold">สถานประกอบการ</th>
                     <th className="p-4 font-semibold">ตำแหน่งงาน</th>
+                    {/* หน้านี้เป็นหน้าติดตามแล้ว สถานะจึงเป็นคอลัมน์ที่คนเปิดมาหา */}
+                    <th className="p-4 font-semibold">สถานะ</th>
                     <th className="p-4 font-semibold text-center">รายละเอียด</th>
                     <th className="p-4 font-semibold text-right">การจัดการ</th>
                   </tr>
@@ -590,6 +599,12 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
                           {intent.job_title || 'ฝึกงานทั่วไป'}
+                        </td>
+                        <td className="p-4">
+                          <StatusBadge
+                            status={intentDisplayStatus(intent.status, intent.cover_letter_status)}
+                            domain="intent"
+                          />
                         </td>
                         <td className="p-4 text-center">
                           <Button
@@ -622,17 +637,19 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   </svg>
                 </div>
                 <h4 className="text-base font-semibold text-gray-800 dark:text-white mb-1">
-                  ไม่มีรายการคำร้องใบความจำนงรอตรวจสอบในขณะนี้
+                  ยังไม่มีคำร้องใบความจำนงในสาขาวิชา
                 </h4>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 leading-relaxed">
-                  รายการจะปรากฏในหน้านี้เมื่อนักศึกษายื่นคำร้องและอาจารย์ที่ปรึกษาอนุมัติผ่านแล้ว
+                  รายการจะปรากฏเมื่อนักศึกษายื่นคำร้อง — ท่านลงนามบนกระดาษ ไม่ต้องกดอนุมัติในระบบ
                 </p>
+                {/* แถบเส้นทางนี้เคยเขียนว่า "อาจารย์อนุมัติ → รอหัวหน้าสาขาวิชา" ซึ่งเป็น
+                    เส้นทางเดิมที่ถูกยกไปอยู่บนกระดาษเมื่อ 2026-08-26 */}
                 <div className="inline-flex items-center gap-2 text-xs bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400">
                   <span>นักศึกษายื่นคำร้อง</span>
                   <span>→</span>
-                  <span className="font-semibold text-blue-600 dark:text-blue-400">อาจารย์อนุมัติ</span>
+                  <span className="font-semibold text-blue-600 dark:text-blue-400">ลงนามบนกระดาษ</span>
                   <span>→</span>
-                  <span className="font-bold text-emerald-700 dark:text-emerald-400">รอหัวหน้าสาขาวิชา</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-400">เจ้าหน้าที่รับคำร้อง</span>
                 </div>
               </div>
             </div>

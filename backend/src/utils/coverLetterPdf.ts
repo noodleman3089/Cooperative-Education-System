@@ -37,6 +37,17 @@ export interface CoverLetterData {
   dean_name?: string | null;
 }
 
+/**
+ * ตัดคำว่า "สาขาวิชา" ที่ติดมากับค่าในฐานออก
+ *
+ * `master_major.major_name_th` เก็บว่า "สาขาวิชาวิทยาการคอมพิวเตอร์" ส่วนประโยคใน
+ * หนังสือมีคำว่า "สาขาวิชา" นำอยู่แล้ว ปล่อยไว้จะได้ "สาขาวิชาสาขาวิชาวิทยาการ…"
+ * พิมพ์ลงหนังสือที่คณบดีเซ็น (เจอตอนอ่านฉบับจริง 2026-08-27 — แบบคำร้องขาเข้าก็เป็น
+ * แบบเดียวกัน ดู `requestFormHtml.ts`)
+ */
+const stripMajorPrefix = (name: string | null | undefined): string =>
+  (name ?? '').trim().replace(/^สาขาวิชา\s*/, '') || '-';
+
 const fullAddress = (d: CoverLetterData): string =>
   [d.company_address, d.company_district, d.company_province, d.company_postal_code]
     .map((p) => (p ?? '').trim())
@@ -57,22 +68,22 @@ export async function buildCoverLetterPdf(
   const pdf = await ThaiPdf.create();
   const studentName = [d.first_name, d.last_name].filter(Boolean).join(' ').trim() || '-';
 
-  pdf.line(`ที่ ${d.document_no ?? '..............................'}`, { size: 14 });
+  pdf.line(`ที่ ${d.document_no ?? '..............................'}`, { size: 16 });
   pdf.space(4);
-  pdf.line(d.faculty_name_th ?? 'คณะ', { size: 14, align: 'center' });
-  pdf.line('มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก', { size: 14, align: 'center' });
+  pdf.line(d.faculty_name_th ?? 'คณะ', { size: 16, align: 'center' });
+  pdf.line('มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก', { size: 16, align: 'center' });
   pdf.space(10);
 
   const today = options.signedDate ?? new Date();
   const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
     today.getDate()
   ).padStart(2, '0')}`;
-  pdf.line(`วันที่ ${formatThaiDate(iso)}`, { size: 14, x: 360 });
+  pdf.line(`วันที่ ${formatThaiDate(iso)}`, { size: 16, x: 360 });
   pdf.space(6);
 
-  pdf.line('เรื่อง  ขอความอนุเคราะห์รับนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา', { size: 15 });
-  pdf.line(`เรียน  ${d.contact_person ?? 'ผู้จัดการฝ่ายบุคคล'}`, { size: 15 });
-  if (d.company_name) pdf.line(`         ${d.company_name}`, { size: 15 });
+  pdf.line('เรื่อง  ขอความอนุเคราะห์รับนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา', { size: 16 });
+  pdf.line(`เรียน  ${d.contact_person ?? 'ผู้จัดการฝ่ายบุคคล'}`, { size: 16 });
+  if (d.company_name) pdf.line(`         ${d.company_name}`, { size: 16 });
   pdf.space(8);
 
   pdf.paragraph(
@@ -88,7 +99,7 @@ export async function buildCoverLetterPdf(
   pdf.paragraph(
     `ในการนี้ คณะจึงขอความอนุเคราะห์จากท่าน ในการรับ ${studentName} ` +
       `รหัสประจำตัวนักศึกษา ${d.student_code ?? '-'} ` +
-      `นักศึกษาชั้นปีที่ ${d.year_level ?? '-'} สาขาวิชา${d.major_name_th ?? '-'} ` +
+      `นักศึกษาชั้นปีที่ ${d.year_level ?? '-'} สาขาวิชา${stripMajorPrefix(d.major_name_th)} ` +
       `เข้าปฏิบัติงานสหกิจศึกษา ณ ${d.company_name ?? '-'} ` +
       `ที่ตั้ง ${fullAddress(d) || '-'}` +
       (d.start_date ? ` โดยกำหนดเริ่มปฏิบัติงานตั้งแต่วันที่ ${formatThaiDate(d.start_date)}` : ''),
@@ -108,7 +119,7 @@ export async function buildCoverLetterPdf(
   pdf.space(20);
 
   const signX = 330;
-  pdf.line('ขอแสดงความนับถือ', { size: 15, x: signX + 20 });
+  pdf.line('ขอแสดงความนับถือ', { size: 16, x: signX + 20 });
 
   if (options.signatureFile) {
     const sigPath = path.isAbsolute(options.signatureFile)
@@ -135,10 +146,10 @@ export async function buildCoverLetterPdf(
   }
 
   pdf.line(`( ${d.dean_name?.trim() || '.....................................................'} )`, {
-    size: 15,
+    size: 16,
     x: signX,
   });
-  pdf.line(`คณบดี${d.faculty_name_th ?? ''}`, { size: 15, x: signX });
+  pdf.line(`คณบดี${d.faculty_name_th ?? ''}`, { size: 16, x: signX });
 
   return pdf.save();
 }

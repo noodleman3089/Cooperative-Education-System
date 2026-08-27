@@ -2,8 +2,6 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { IntentFormModel, COMPANY_VISIBLE_STATUSES } from '../models/intent';
-import { StudentModel } from '../models/student';
-import { PersonnelModel } from '../models/personnel';
 import { query } from '../config/database';
 import { notifyStudentStatusChange } from '../utils/email';
 import {
@@ -127,112 +125,6 @@ export class IntentFormController {
   }
 
   /**
-   * Update student intent form status (Approve or Reject).
-   * Route: PATCH /api/intents/:id/status
-   * Access: advisor
-   */
-  static async updateIntentStatus(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const formId = parseInt(req.params.id, 10);
-      if (isNaN(formId)) {
-        res.status(400).json({ message: 'Invalid intent form ID format.' });
-        return;
-      }
-
-      const { status, reason } = req.body;
-      if (!status || !['approved_by_advisor', 'rejected'].includes(status)) {
-        res.status(400).json({ message: 'Required field: status must be either "approved_by_advisor" or "rejected".' });
-        return;
-      }
-
-      // Fetch intent form
-      const intentForm = await IntentFormModel.findById(formId);
-      if (!intentForm) {
-        res.status(404).json({ message: 'Intent form not found.' });
-        return;
-      }
-
-      // Check current status
-      if (intentForm.status !== 'pending_advisor') {
-        res.status(400).json({
-          message: `Cannot update intent status. Form must be in 'pending_advisor' status. Current status: '${intentForm.status}'.`,
-        });
-        return;
-      }
-
-      // Verify advisor major matches student major (MED-01)
-      const advisorId = req.user.userId;
-      const advisorProfile = await PersonnelModel.findByPersonnelId(advisorId);
-      const studentProfile = await StudentModel.findByStudentId(intentForm.student_id);
-
-      if (!advisorProfile) {
-        res.status(403).json({ message: 'Personnel profile not found for advisor.' });
-        return;
-      }
-
-      if (!studentProfile) {
-        res.status(404).json({ message: 'Student profile not found.' });
-        return;
-      }
-
-      if (advisorProfile.major_id !== studentProfile.major_id) {
-        res.status(403).json({ message: 'Forbidden. You cannot update intent forms for students outside your major.' });
-        return;
-      }
-
-      if (status === 'approved_by_advisor') {
-        const updated = await IntentFormModel.updateStatus(formId, 'approved_by_advisor');
-        if (!updated) {
-          res.status(400).json({ message: 'Failed to approve intent form.' });
-          return;
-        }
-
-        writeAudit({
-          action: AuditAction.INTENT_APPROVED_ADVISOR,
-          entityType: 'intent_form',
-          entityId: formId,
-          subjectId: intentForm.student_id,
-        }, req).catch(() => undefined);
-
-        // Send email notification to student
-        notifyStudentStatusChange(formId, 'approved_by_advisor').catch(console.error);
-
-        res.status(200).json({
-          message: "Intent form approved successfully. Status changed to 'approved_by_advisor'.",
-          form_id: formId,
-        });
-      } else {
-        // Status is 'rejected'
-        console.log(`Intent form ${formId} rejected by advisor ${advisorId}. Reason: ${reason || 'N/A'}`);
-        await IntentFormModel.rejectByAdvisorWithTransaction(formId, advisorId);
-
-        writeAudit({
-          action: AuditAction.INTENT_REJECTED_ADVISOR,
-          entityType: 'intent_form',
-          entityId: formId,
-          subjectId: intentForm.student_id,
-          detail: { reason: reason || null },
-        }, req).catch(() => undefined);
-
-        // Send email notification to student
-        notifyStudentStatusChange(formId, 'rejected', reason).catch(console.error);
-
-        res.status(200).json({
-          message: "Intent form rejected successfully. Status changed to 'rejected'.",
-          form_id: formId,
-        });
-      }
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Update Intent Status Error', 'An internal server error occurred while updating intent status.');
-    }
-  }
-
-  /**
    * Get intents submitted by the current student.
    * Route: GET /api/intents/me
    * Access: student
@@ -306,12 +198,31 @@ export class IntentFormController {
                i.dept_head_signer_name, i.dept_head_signed_date, i.officer_document_no,
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
-               i.start_date, i.reject_reason
+               i.start_date, i.reject_reason,
+               doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
         JOIN companies c ON i.company_id = c.company_id
         LEFT JOIN job_posts j ON i.job_id = j.job_id
+        -- ⛔ ห้ามใส่ backtick ในคอมเมนต์ก้อนนี้ — SQL ทั้งก้อนอยู่ใน template literal
+        --    ของ JS มันจะปิดสตริงกลางทาง (พลาดมาแล้วสองครั้ง 2026-08-27)
+        -- ใบความจำนงหยุดอยู่ที่ approved_by_dept_head ตั้งแต่เจ้าหน้าที่กดรับคำร้อง
+        -- ความคืบหน้าที่เหลือไปอยู่บนหนังสือขาออกแทน หน้าที่ปรึกษา/หัวหน้าสาขาจึงเคย
+        -- ค้างคำว่า "รอออกหนังสือ" ทั้งที่คณบดีเซ็นไปแล้ว (เจอตอนเดินจริง 2026-08-27)
+        -- · official_documents ไม่มี form_id จึงต้องจับคู่ด้วยสามค่าเหมือน
+        --   fetchCoverLetterDataByDoc — เลขที่หนังสือคือตัวที่กันไม่ให้ชนกันเอง
+        --   เมื่อนักศึกษาคนเดิมยื่นซ้ำ
+        LEFT JOIN LATERAL (
+          SELECT d.status
+            FROM official_documents d
+           WHERE d.student_id = i.student_id
+             AND d.company_id = i.company_id
+             AND d.type = 'cover_letter'
+             AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+           ORDER BY d.doc_id DESC
+           LIMIT 1
+        ) doc ON TRUE
         WHERE 1=1
       `;
       const queryParams: unknown[] = [];
@@ -461,73 +372,6 @@ export class IntentFormController {
 
 
   /**
-   * Update student intent form status by Dept Head (Approve or Reject).
-   * Route: PATCH /api/intents/:id/dept-head-status
-   * Access: dept_head
-   */
-  static async updateIntentStatusByDeptHead(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const formId = parseInt(req.params.id, 10);
-      if (isNaN(formId)) {
-        res.status(400).json({ message: 'Invalid intent form ID format.' });
-        return;
-      }
-
-      const { status, reason } = req.body;
-      if (!status || !['approved_by_dept_head', 'rejected_by_dept_head'].includes(status)) {
-        res.status(400).json({ message: 'Required field: status must be either "approved_by_dept_head" or "rejected_by_dept_head".' });
-        return;
-      }
-
-      const deptHeadId = req.user.userId;
-
-      if (status === 'approved_by_dept_head') {
-        await IntentFormModel.approveByDeptHead(formId, deptHeadId);
-
-        writeAudit({
-          action: AuditAction.INTENT_APPROVED_DEPT_HEAD,
-          entityType: 'intent_form',
-          entityId: formId,
-        }, req).catch(() => undefined);
-
-        // Send email notification to student
-        notifyStudentStatusChange(formId, 'approved_by_dept_head').catch(console.error);
-
-        res.status(200).json({
-          message: "Intent form approved by department head. Status changed to 'approved_by_dept_head'.",
-          form_id: formId,
-        });
-      } else {
-        // Status is 'rejected_by_dept_head'
-        console.log(`Intent form ${formId} rejected by dept_head ${deptHeadId}. Reason: ${reason || 'N/A'}`);
-        await IntentFormModel.rejectByDeptHeadWithTransaction(formId, deptHeadId);
-
-        writeAudit({
-          action: AuditAction.INTENT_REJECTED_DEPT_HEAD,
-          entityType: 'intent_form',
-          entityId: formId,
-          detail: { reason: reason || null },
-        }, req).catch(() => undefined);
-
-        // Send email notification to student
-        notifyStudentStatusChange(formId, 'rejected_by_dept_head', reason).catch(console.error);
-
-        res.status(200).json({
-          message: "Intent form rejected by department head. Status changed to 'rejected_by_dept_head'.",
-          form_id: formId,
-        });
-      }
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Update Intent Status By Dept Head Error', 'An internal server error occurred while updating intent status.');
-    }
-  }
-
-  /**
    * Get pipeline summary counts for all statuses.
    * Route: GET /api/intents/pipeline-summary
    */
@@ -539,14 +383,20 @@ export class IntentFormController {
         GROUP BY status
       `);
 
+      // ⛔ คีย์ในนี้คือ allow-list จริง — สถานะที่ไม่ได้อยู่ตรงนี้จะถูกทิ้งเงียบๆ ที่
+      //    ลูปข้างล่าง (`hasOwnProperty`) ไม่ใช่แค่ค่าเริ่มต้นสวยงาม
+      //    · `pending_officer_request` เพิ่มเมื่อ 2026-08-27 เพราะแถบขั้นตอนของเจ้าหน้าที่
+      //      อ่านค่านี้แล้วได้ 0 ตลอด ทั้งที่เป็นคิวจริงที่ต้องกด
+      //    · `approved_by_advisor` / `rejected_by_advisor` ถอดออก — ตัวแรกไม่มีใบใหม่ไปถึงอีก
+      //      ตั้งแต่ลายเซ็นย้ายไปกระดาษ ส่วนตัวหลัง **ไม่เคยเป็นสถานะจริง** (ของจริงคือ
+      //      `rejected`) จึงนับได้ 0 มาตลอดโดยไม่มีใครสังเกต
       const counts: Record<string, number> = {
         pending_advisor: 0,
-        approved_by_advisor: 0,
+        pending_officer_request: 0,
         approved_by_dept_head: 0,
         accepted: 0,
         pending_officer_approval: 0,
-        rejected_by_advisor: 0,
-        rejected_by_dept_head: 0,
+        rejected: 0,
         company_rejected: 0,
         dispatch_eligible: 0
       };

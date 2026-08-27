@@ -79,6 +79,15 @@ export class DocumentController {
         });
         return;
       }
+      // ชื่อคณบดีถูก **พิมพ์ลงหนังสือราชการ** ใต้ลายเซ็น ถ้าโปรไฟล์ไม่มีชื่อ หนังสือจะ
+      // ออกไปพร้อมวงเล็บที่มีแต่เส้นประ และย้อนกลับไม่ได้เพราะเลขที่หนังสือออกไปแล้ว
+      // — ด่านนี้คู่กับด่านลายมือชื่อด้านบน (เจอตอนเดินเส้นทางจริง 2026-08-27)
+      if (![deanProfile.first_name, deanProfile.last_name].filter(Boolean).join(' ').trim()) {
+        res.status(400).json({
+          message: 'โปรไฟล์ของท่านยังไม่มีชื่อ-นามสกุล ซึ่งต้องพิมพ์ลงในหนังสือ กรุณากรอกที่หน้าตั้งค่าโปรไฟล์ก่อนลงนาม',
+        });
+        return;
+      }
 
       const signedDocIds: number[] = [];
       const failedDocs: { doc_id: number; error: string }[] = [];

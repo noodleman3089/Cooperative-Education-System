@@ -230,7 +230,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
         await api.post('/intents', payload);
       }
 
-      onSuccess(`ลงทะเบียนและส่งใบสมัครไปยัง ${company_name_th} เรียบร้อยแล้ว (รอการยืนยันจากอาจารย์)`);
+      onSuccess(`ลงทะเบียนและส่งใบสมัครไปยัง ${company_name_th} เรียบร้อยแล้ว — พิมพ์แบบคำร้องไปให้ลงนาม แล้วอัปโหลดกลับที่หน้าแรก`);
     } catch (err) {
       setError(getErrorMessage(err, 'การส่งข้อมูลสถานที่ฝึกงานล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
@@ -430,7 +430,9 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               loading={isSubmitting}
               loadingLabel="กำลังส่งข้อมูล..."
             >
-              ส่งรายงานตัวเข้าปฏิบัติงาน
+              {/* ปุ่มนี้ยื่น "ใบความจำนง" ไม่ใช่ "รายงานตัวเข้าปฏิบัติงาน" ซึ่งเป็นคนละขั้น
+                  ที่เกิดหลังบริษัทตอบรับ — ชื่อเดิมชวนให้กดผิดขั้น */}
+              ยื่นใบความจำนงสหกิจศึกษา
             </Button>
           </div>
         </form>
