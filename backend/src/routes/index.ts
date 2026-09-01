@@ -21,6 +21,7 @@ import finalEvaluationRoutes from './finalEvaluation';
 import coopProgressRoutes from './coopProgress';
 import announcementRoutes from './announcement';
 import coopCalendarRoutes from './coopCalendar';
+import memoRoutes from './memo';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
@@ -52,6 +53,7 @@ router.use('/final-evaluations', finalEvaluationRoutes);
 router.use('/coop-progress', coopProgressRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/calendar', coopCalendarRoutes);
+router.use('/memos', memoRoutes);
 
 
 if (process.env.ENABLE_TEST_ROUTES === 'true') {

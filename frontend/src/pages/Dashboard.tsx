@@ -41,6 +41,7 @@ const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
+const StudentMemo = lazy(() => import('./Student/StudentMemo'));
 const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 
 /**
@@ -311,6 +312,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'weekly_log') return <WeeklyLog />;
         if (activeMenu === 'final_report') return <FinalReportSubmission />;
         if (activeMenu === 'evaluation_result') return <EvaluationResult />;
+        if (activeMenu === 'memos') return <StudentMemo />;
         return <StudentDashboard />;
         
       case 'advisor':

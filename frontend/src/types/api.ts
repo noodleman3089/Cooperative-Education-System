@@ -230,6 +230,32 @@ export interface Job {
   company_name_en?: string;
 }
 
+/**
+ * บันทึกข้อความของนักศึกษา — คำร้องกรณียกเว้นที่เสนอถึงคณบดี
+ * หัวข้อที่เลือกได้มาจาก `GET /api/memos/types` (backend/src/config/memoTypes.ts)
+ * ฝั่งนี้จึงจงใจไม่ประกาศรายการซ้ำ เพิ่มหัวข้อใหม่แล้ว dropdown ขึ้นเอง
+ */
+export interface MemoType {
+  key: string;
+  label: string;
+  subject: string;
+  intent: string;
+  hint: string;
+}
+
+export interface StudentMemo {
+  memo_id: number;
+  student_id: number;
+  memo_type: string;
+  intent_form_id: number | null;
+  reason: string;
+  created_at: string;
+  student_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  major_name_th?: string | null;
+}
+
 export interface IntentForm {
   form_id: number;
   student_id: number;
@@ -244,6 +270,9 @@ export interface IntentForm {
   request_form_path?: string | null;
   reject_reason?: string | null;
   officer_document_no?: string | null;
+  /** ยื่นในช่วงผ่อนผัน — บุคลากรเห็น แต่ `company` ถูกตัดออกตาม SEC-10 */
+  submitted_late?: boolean;
+  late_reason?: string | null;
   advisor_signer_name?: string | null;
   advisor_signed_date?: string | null;
   dept_head_signer_name?: string | null;

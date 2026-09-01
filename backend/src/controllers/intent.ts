@@ -371,6 +371,7 @@ export class IntentFormController {
       const { roles, userId } = req.user;
       
       let isAuthorized = false;
+      let isCompanyViewer = false;
 
       if (roles.some(r => ['staff', 'dean', 'advisor', 'dept_head'].includes(r))) {
         // SEC-06: personnel could previously open any intent detail regardless of
@@ -383,11 +384,45 @@ export class IntentFormController {
         const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);
         if ((companyQuery.rowCount ?? 0) > 0 && companyQuery.rows[0].company_id === row.company_id) {
           isAuthorized = true;
+          isCompanyViewer = true;
         }
       }
 
       if (!isAuthorized) {
         res.status(403).json({ message: 'Forbidden. You do not have access to view this intent form.' });
+        return;
+      }
+
+      // SEC-10: endpoint นี้เคยคืนทั้งแถวให้ทุก role ที่ผ่านด่าน — รวมถึงบริษัท
+      // ซึ่งได้ `cumulative_gpa` · อีเมลนักศึกษา · ผลคัดกรอง ไปด้วยเต็มๆ ทั้งที่
+      // `GET /intents` (หน้าจอเดียวกัน) ตัดฟิลด์ให้เหลือเท่า สหกิจ 04 มาตั้งแต่รอบ 39
+      //
+      // ที่นี่ใช้ allow-list เหมือนกัน ไม่ใช่ blocklist: ฟิลด์ใหม่ที่ใครเพิ่มลง SELECT
+      // ข้างบนวันหลัง จะ **ไม่** หลุดไปหาบริษัทเองโดยอัตโนมัติ
+      //
+      // สิ่งที่ให้ = ของที่บริษัทเป็นเจ้าของเอง (บริษัท · ประกาศงาน · พี่เลี้ยงที่ตัวเอง
+      // ลงทะเบียน) + เท่าที่ สหกิจ 04 ให้ (รหัสนักศึกษา · สาขา) + แฟ้มประวัติที่นักศึกษา
+      // เลือกแนบเอง (สหกิจ 03) · ⛔ ห้ามเพิ่มเกรด ผลคัดกรอง หรือช่องทางติดต่อส่วนตัว
+      if (isCompanyViewer) {
+        res.status(200).json({
+          form_id: row.form_id,
+          status: row.status,
+          start_date: row.start_date,
+          student_code: row.student_code,
+          major_name_th: row.major_name_th,
+          resume_file: row.resume_file,
+          company_id: row.company_id,
+          company_name_th: row.company_name_th,
+          job_id: row.job_id,
+          job_title: row.job_title,
+          job_description: row.job_description,
+          mentor_id: row.mentor_id,
+          mentor_name: row.mentor_name,
+          mentor_email: row.mentor_email,
+          mentor_phone: row.mentor_phone,
+          mentor_position: row.mentor_position,
+          mentor_department: row.mentor_department,
+        });
         return;
       }
 
