@@ -18,6 +18,13 @@ import { sendUnexpectedError } from '../utils/httpError';
  * หน้าจอจัดการปฏิทินของเจ้าหน้าที่ขึ้นแถบเตือนว่ากิจกรรมไหนยังไม่ได้ตั้งและ
  * ตอนนี้ยังไม่ล็อก — fail-open จึงไม่ใช่ความเงียบ แต่มีคนเห็น
  *
+ * ตั้งแต่ 2026-09-01 ด่านนี้มีสามทางออก ไม่ใช่สองอย่างเดิม:
+ *   open  → ผ่านเงียบๆ
+ *   late  → **ผ่าน** แต่ปั๊มธงไว้ให้ controller รู้ว่านี่คือการส่งช้า
+ *   ที่เหลือ → 403
+ * ตัวด่านไม่บังคับให้ชี้แจงเหตุผลเอง เพราะมันถูกใช้ร่วมกันหลาย endpoint และ
+ * แต่ละอันเก็บเหตุผลคนละที่ — คนที่บังคับคือ controller ที่รู้ว่าตัวเองเก็บที่ไหน
+ *
  * วางไว้ที่ไฟล์ route **ก่อน multer** สำหรับ endpoint ที่รับไฟล์ (outlines,
  * final-reports) เพื่อให้คำขอนอกช่วงถูกปฏิเสธก่อนไฟล์ถูกเขียนลงดิสก์
  * ถ้าย้ายไปเช็คใน controller จะได้ไฟล์กำพร้าทุกครั้งที่นักศึกษายิงตอนหมดช่วง
@@ -34,8 +41,19 @@ export const requireCalendarWindow =
         return;
       }
 
-      const status = calendarStatus(window.today, window.start_date, window.end_date);
+      const status = calendarStatus(
+        window.today,
+        window.start_date,
+        window.end_date,
+        window.late_end_date
+      );
       if (status === 'not_configured' || status === 'open') {
+        next();
+        return;
+      }
+
+      if (status === 'late') {
+        res.locals.calendarLate = true;
         next();
         return;
       }
@@ -50,9 +68,13 @@ export const requireCalendarWindow =
             )} ถึง ${formatThaiDate(
               window.end_date as string
             )} — ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด`
-          : `หมดช่วง "${label}" แล้ว (เปิดถึงวันที่ ${formatThaiDate(
-              window.end_date as string
-            )}) ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`;
+          : `หมดช่วง "${label}" แล้ว (${
+              window.late_end_date
+                ? `เปิดถึงวันที่ ${formatThaiDate(
+                    window.end_date as string
+                  )} และผ่อนผันถึงวันที่ ${formatThaiDate(window.late_end_date)}`
+                : `เปิดถึงวันที่ ${formatThaiDate(window.end_date as string)}`
+            }) ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`;
 
       res.status(403).json({ message });
     } catch (error) {
@@ -64,3 +86,14 @@ export const requireCalendarWindow =
       );
     }
   };
+
+/**
+ * ธงที่ `requireCalendarWindow` ปั๊มไว้เมื่อคำขอนี้อยู่ในช่วงผ่อนผัน
+ *
+ * controller ที่รับคำขอในช่วงนี้ **ต้องบังคับให้มีเหตุผลชี้แจง** และบันทึกไว้
+ * กับแถวข้อมูลของตัวเอง — ห้ามคำนวณย้อนหลังจากวันที่ในภายหลัง เพราะเจ้าหน้าที่
+ * แก้ปฏิทินได้ แล้วหลักฐานว่าใครส่งช้าจะหายไปเงียบๆ
+ */
+export function isLateWindow(res: Response): boolean {
+  return res.locals.calendarLate === true;
+}

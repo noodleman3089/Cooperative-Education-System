@@ -27,7 +27,7 @@ export interface Announcement {
  * รายการกิจกรรมตายตัวและชื่อไทยของมันมาจาก backend (`utils/coopCalendar.ts`)
  * ฝั่งนี้จึงจงใจไม่ประกาศรายการซ้ำ เพิ่มกิจกรรมใหม่แล้วหน้าจอขึ้นเอง
  */
-export type CalendarStatus = 'not_configured' | 'upcoming' | 'open' | 'closed';
+export type CalendarStatus = 'not_configured' | 'upcoming' | 'open' | 'late' | 'closed';
 
 /** กิจกรรมตายตัว — คืนมาครบทุกตัวเสมอ รวมอันที่ยังไม่ได้ตั้งช่วง */
 export interface CoopCalendarActivity {
@@ -36,6 +36,8 @@ export interface CoopCalendarActivity {
   event_id: number | null;
   start_date: string | null;
   end_date: string | null;
+  /** วันสุดท้ายที่ยังรับแบบส่งช้า · null = ไม่เปิดผ่อนผัน (ปิดจริงที่ end_date) */
+  late_end_date: string | null;
   note: string | null;
   status: CalendarStatus;
 }
@@ -46,6 +48,7 @@ export interface CoopCalendarCustomEvent {
   title: string;
   start_date: string;
   end_date: string;
+  late_end_date: string | null;
   note: string | null;
   status: CalendarStatus;
 }

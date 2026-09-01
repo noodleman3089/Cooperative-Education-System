@@ -33,6 +33,9 @@ interface RequestFormRow {
   company_name_th?: string;
   company_id: number;
   request_form_path?: string | null;
+  /** ยื่นในช่วงผ่อนผัน — เจ้าหน้าที่ต้องเห็นก่อนออกเลขหนังสือ */
+  submitted_late?: boolean;
+  late_reason?: string | null;
 }
 
 interface GeneratedDocument {
@@ -2239,6 +2242,19 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             <div className="space-y-4">
               {/* error ต้องอยู่ *ใน* modal ไม่ใช่แถบหลังกล่อง */}
               <AlertBanner variant="error" message={error} />
+
+              {reviewingRequest.submitted_late && (
+                <AlertBanner
+                  variant="warning"
+                  message={
+                    <>
+                      <span className="font-semibold">คำร้องนี้ยื่นในช่วงผ่อนผัน (ส่งช้า)</span>
+                      <br />
+                      เหตุผลที่นักศึกษาชี้แจง: {reviewingRequest.late_reason || "-"}
+                    </>
+                  }
+                />
+              )}
 
               <div className="rounded-lg bg-gray-50 p-3 text-xs dark:bg-gray-800">
                 <span className="text-gray-600 dark:text-gray-400">สถานประกอบการ: </span>

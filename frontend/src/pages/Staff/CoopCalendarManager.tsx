@@ -7,7 +7,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Input, Select } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
-import { formatThaiRange } from '../../utils/thaiDate';
+import { formatThaiDate, formatThaiRange } from '../../utils/thaiDate';
 import type {
   CalendarStatus,
   CoopCalendarActivity,
@@ -34,6 +34,7 @@ const STATUS_TEXT: Record<CalendarStatus, string> = {
   not_configured: 'ยังไม่ได้กำหนดช่วงเวลา (ระบบยังไม่ล็อก)',
   upcoming: 'ยังไม่ถึงกำหนด',
   open: 'เปิดให้ทำรายการอยู่ตอนนี้',
+  late: 'อยู่ในช่วงผ่อนผัน (รับแต่นับเป็นส่งช้า)',
   closed: 'หมดช่วงแล้ว',
 };
 
@@ -42,6 +43,7 @@ const STATUS_TONE: Record<CalendarStatus, string> = {
     'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
   upcoming: 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300',
   open: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+  late: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
   closed: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
 };
 
@@ -57,14 +59,16 @@ const StatusChip: React.FC<{ status: CalendarStatus }> = ({ status }) => (
 interface DraftRow {
   start_date: string;
   end_date: string;
+  late_end_date: string;
   note: string;
 }
 
-const emptyDraft = (): DraftRow => ({ start_date: '', end_date: '', note: '' });
+const emptyDraft = (): DraftRow => ({ start_date: '', end_date: '', late_end_date: '', note: '' });
 
 const draftOf = (a: CoopCalendarActivity): DraftRow => ({
   start_date: a.start_date ?? '',
   end_date: a.end_date ?? '',
+  late_end_date: a.late_end_date ?? '',
   note: a.note ?? '',
 });
 
@@ -144,6 +148,7 @@ const CoopCalendarManager: React.FC = () => {
         activity_key: activity.activity_key,
         start_date: draft.start_date,
         end_date: draft.end_date,
+        late_end_date: draft.late_end_date,
         note: draft.note,
       };
       if (activity.event_id) {
@@ -296,10 +301,16 @@ const CoopCalendarManager: React.FC = () => {
                     {activity.start_date && activity.end_date && (
                       <p className="text-sm text-gray-600 dark:text-gray-400">
                         ช่วงปัจจุบัน: {formatThaiRange(activity.start_date, activity.end_date)}
+                        {activity.late_end_date && (
+                          <span className="text-amber-700 dark:text-amber-400">
+                            {' '}
+                            · ผ่อนผันถึง {formatThaiDate(activity.late_end_date)}
+                          </span>
+                        )}
                       </p>
                     )}
 
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                       <div>
                         <label
                           htmlFor={`start-${activity.activity_key}`}
@@ -336,7 +347,29 @@ const CoopCalendarManager: React.FC = () => {
                           }
                         />
                       </div>
-                      <div className="sm:col-span-2">
+                      <div>
+                        <label
+                          htmlFor={`late-${activity.activity_key}`}
+                          className="block text-xs font-medium text-gray-600 dark:text-gray-400"
+                        >
+                          ผ่อนผันถึง (ถ้ามี)
+                        </label>
+                        <Input
+                          id={`late-${activity.activity_key}`}
+                          type="date"
+                          size="sm"
+                          className="mt-1"
+                          value={draft.late_end_date}
+                          onChange={(e) =>
+                            setDraft(activity.activity_key, { late_end_date: e.target.value })
+                          }
+                        />
+                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          ไม่กรอก = ปิดจริงตามวันสิ้นสุด · กรอกแล้วระบบยังรับถึงวันนี้
+                          แต่นับเป็นส่งช้าและบังคับให้ชี้แจงเหตุผล
+                        </p>
+                      </div>
+                      <div className="sm:col-span-2 lg:col-span-3">
                         <label
                           htmlFor={`note-${activity.activity_key}`}
                           className="block text-xs font-medium text-gray-600 dark:text-gray-400"

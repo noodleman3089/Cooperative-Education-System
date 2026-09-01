@@ -18,6 +18,8 @@ export interface CoopCalendarEventRow {
   /** `pg` ถูกตั้งให้คืน DATE (OID 1082) เป็นสตริง YYYY-MM-DD ดิบ ไม่ใช่ Date */
   start_date: string;
   end_date: string;
+  /** วันสุดท้ายที่ยังรับแบบส่งช้า · null = ไม่เปิดผ่อนผัน */
+  late_end_date: string | null;
   note: string | null;
 }
 
@@ -25,6 +27,7 @@ export interface CalendarWindowLookup {
   today: string;
   start_date: string | null;
   end_date: string | null;
+  late_end_date: string | null;
 }
 
 export class CoopCalendarModel {
@@ -46,7 +49,7 @@ export class CoopCalendarModel {
    */
   static async findActiveWindow(activityKey: string): Promise<CalendarWindowLookup | null> {
     const res = await query(
-      `SELECT e.start_date, e.end_date, ${TODAY_SQL} AS today
+      `SELECT e.start_date, e.end_date, e.late_end_date, ${TODAY_SQL} AS today
          FROM coop_semesters s
          LEFT JOIN coop_calendar_events e
            ON e.semester_id = s.semester_id AND e.activity_key = $1
@@ -76,7 +79,7 @@ export class CoopCalendarModel {
 
   static async listBySemester(semesterId: number): Promise<CoopCalendarEventRow[]> {
     const res = await query(
-      `SELECT event_id, semester_id, activity_key, title, start_date, end_date, note
+      `SELECT event_id, semester_id, activity_key, title, start_date, end_date, late_end_date, note
          FROM coop_calendar_events
         WHERE semester_id = $1
         ORDER BY start_date, event_id`,
@@ -87,7 +90,7 @@ export class CoopCalendarModel {
 
   static async findById(eventId: number): Promise<CoopCalendarEventRow | null> {
     const res = await query(
-      `SELECT event_id, semester_id, activity_key, title, start_date, end_date, note
+      `SELECT event_id, semester_id, activity_key, title, start_date, end_date, late_end_date, note
          FROM coop_calendar_events WHERE event_id = $1`,
       [eventId]
     );
@@ -101,20 +104,22 @@ export class CoopCalendarModel {
     title: string | null;
     start_date: string;
     end_date: string;
+    late_end_date: string | null;
     note: string | null;
     created_by: number;
   }): Promise<CoopCalendarEventRow> {
     const res = await query(
       `INSERT INTO coop_calendar_events
-         (semester_id, activity_key, title, start_date, end_date, note, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING event_id, semester_id, activity_key, title, start_date, end_date, note`,
+         (semester_id, activity_key, title, start_date, end_date, late_end_date, note, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING event_id, semester_id, activity_key, title, start_date, end_date, late_end_date, note`,
       [
         data.semester_id,
         data.activity_key,
         data.title,
         data.start_date,
         data.end_date,
+        data.late_end_date,
         data.note,
         data.created_by,
       ]
@@ -125,14 +130,20 @@ export class CoopCalendarModel {
   /** แก้ได้เฉพาะวัน ชื่อ และหมายเหตุ — `semester_id`/`activity_key` ย้ายไม่ได้ */
   static async update(
     eventId: number,
-    data: { title: string | null; start_date: string; end_date: string; note: string | null }
+    data: {
+      title: string | null;
+      start_date: string;
+      end_date: string;
+      late_end_date: string | null;
+      note: string | null;
+    }
   ): Promise<CoopCalendarEventRow | null> {
     const res = await query(
       `UPDATE coop_calendar_events
-          SET title = $2, start_date = $3, end_date = $4, note = $5
+          SET title = $2, start_date = $3, end_date = $4, late_end_date = $5, note = $6
         WHERE event_id = $1
-       RETURNING event_id, semester_id, activity_key, title, start_date, end_date, note`,
-      [eventId, data.title, data.start_date, data.end_date, data.note]
+       RETURNING event_id, semester_id, activity_key, title, start_date, end_date, late_end_date, note`,
+      [eventId, data.title, data.start_date, data.end_date, data.late_end_date, data.note]
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as CoopCalendarEventRow;

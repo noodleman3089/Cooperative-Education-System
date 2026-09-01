@@ -3,6 +3,8 @@ import PageSkeleton from './ui/Skeleton';
 import api from '../services/api';
 import type { Job, Company } from '../types/api';
 import SelfFoundJobModal from './SelfFoundJobModal';
+import LateReasonModal from './LateReasonModal';
+import useLateWindow from '../hooks/useLateWindow';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import StatusBadge from './ui/StatusBadge';
@@ -64,6 +66,8 @@ const SmartJobBoard: React.FC = () => {
   const [selectedProvince, setSelectedProvince] = useState('');
   const [showMap, setShowMap] = useState(false);
   const [submittingIntent, setSubmittingIntent] = useState<number | null>(null);
+  // งานที่กดยื่นไว้แล้วแต่ยังรอเหตุผลการส่งช้า — ค้างไว้จนกดยืนยันในกล่อง
+  const [pendingLateJob, setPendingLateJob] = useState<Job | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState<string | null>(null);
 
   // Self-found placement states
@@ -86,6 +90,7 @@ const SmartJobBoard: React.FC = () => {
   // The alert lives at the top of the page and the cards run well below the
   // fold, so on a long board the answer to a click could land off-screen.
   const alertRef = useRef<HTMLDivElement | null>(null);
+  const lateWindow = useLateWindow('intent_submission');
 
   /**
    * Mirrors the server's rule in models/intent.ts: a form in one of these three
@@ -307,8 +312,16 @@ const SmartJobBoard: React.FC = () => {
 
   }, [mapsLoaded, showMap, filteredJobs, companies]);
 
-  const handleApply = async (job: Job) => {
+  /**
+   * กระดานงานยื่นได้ด้วยการกดปุ่มเดียว ไม่มีฟอร์มให้แทรกช่องเหตุผล
+   * ถ้าอยู่ในช่วงผ่อนผันจึงถามผ่านกล่องก่อน แล้วค่อยยิงคำขอจริงพร้อมเหตุผล
+   */
+  const handleApply = async (job: Job, lateReason?: string) => {
     if (submittingIntent !== null || !canApply) return;
+    if (lateWindow.isLate && lateReason === undefined) {
+      setPendingLateJob(job);
+      return;
+    }
     setSubmittingIntent(job.job_id);
     setError(null);
     setSubmitSuccess(null);
@@ -319,10 +332,12 @@ const SmartJobBoard: React.FC = () => {
       const payload = {
         company_id: job.company_id,
         semester_id: activeSemester.semester_id,
-        job_id: job.job_id
+        job_id: job.job_id,
+        late_reason: lateReason
       };
 
       await api.post('/intents', payload);
+      setPendingLateJob(null);
       setSubmitSuccess(`ส่งใบสมัครไปยัง ${job.company_name_th} เรียบร้อยแล้ว — พิมพ์แบบคำร้องไปให้ลงนาม แล้วอัปโหลดกลับที่หน้าแรก`);
       await loadData();
     } catch (err) {
@@ -575,6 +590,15 @@ const SmartJobBoard: React.FC = () => {
         <div className="text-center py-12 bg-white rounded-2xl border border-gray-200 text-gray-600 dark:text-gray-400 text-sm dark:bg-gray-900 dark:border-gray-800">
           ไม่พบข้อมูลตำแหน่งงานที่สอดคล้องกับการคัดกรองในขณะนี้
         </div>
+      )}
+
+      {pendingLateJob && (
+        <LateReasonModal
+          lateEndDate={lateWindow.lateEndDate}
+          submitting={submittingIntent !== null}
+          onCancel={() => setPendingLateJob(null)}
+          onConfirm={(reason) => handleApply(pendingLateJob, reason)}
+        />
       )}
     </div>
   );

@@ -101,6 +101,17 @@ async function releaseJobSeat(client: PoolClient, jobId: number | null): Promise
   ]);
 }
 
+/**
+ * ตราประทับว่าใบนี้ยื่นในช่วงผ่อนผัน (ส่งช้า) หรือไม่
+ *
+ * ค่ามาจาก `isLateWindow(res)` ซึ่งอ่านผลของด่านปฏิทินเท่านั้น — **ไม่ใช่ค่าที่
+ * นักศึกษาส่งมาเอง** และไม่คำนวณย้อนหลัง เพราะเจ้าหน้าที่แก้ปฏิทินได้ทีหลัง
+ */
+export interface LateStamp {
+  submitted_late: boolean;
+  late_reason: string | null;
+}
+
 export class IntentFormModel {
   /**
    * Submit student intent and update job application count transactionally.
@@ -110,6 +121,7 @@ export class IntentFormModel {
     company_id: number;
     semester_id: number;
     job_id: number | null;
+    late: LateStamp;
   }): Promise<IntentForm> {
     const client = await pool.connect();
     
@@ -121,7 +133,7 @@ export class IntentFormModel {
       const duplicateCheck = await client.query(
         `SELECT 1 FROM intent_forms 
          WHERE student_id = $1 AND semester_id = $2 
-         AND status NOT IN ('rejected', 'company_rejected')`,
+         AND status NOT IN ('rejected', 'company_rejected', 'superseded')`,
         [intentData.student_id, intentData.semester_id]
       );
       if ((duplicateCheck.rowCount ?? 0) > 0) {
@@ -216,14 +228,18 @@ export class IntentFormModel {
 
       // 5. Insert Intent Form
       const insertRes = await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status)
-         VALUES ($1, $2, $3, $4, 'pending_advisor')
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status`,
+        `INSERT INTO intent_forms
+           (student_id, company_id, semester_id, job_id, status, submitted_late, late_reason)
+         VALUES ($1, $2, $3, $4, 'pending_advisor', $5, $6)
+         RETURNING form_id, student_id, company_id, semester_id, job_id, status,
+                   submitted_late, late_reason`,
         [
           intentData.student_id,
           intentData.company_id,
           intentData.semester_id,
           intentData.job_id,
+          intentData.late.submitted_late,
+          intentData.late.late_reason,
         ]
       );
 
@@ -258,7 +274,8 @@ export class IntentFormModel {
       contact_person?: string;
       contact_position?: string;
       email?: string;
-    }
+    },
+    late: LateStamp
   ): Promise<IntentForm> {
     const client = await pool.connect();
     
@@ -269,7 +286,7 @@ export class IntentFormModel {
       const duplicateCheck = await client.query(
         `SELECT 1 FROM intent_forms 
          WHERE student_id = $1 AND semester_id = $2 
-         AND status NOT IN ('rejected', 'company_rejected')`,
+         AND status NOT IN ('rejected', 'company_rejected', 'superseded')`,
         [studentId, semesterId]
       );
       if ((duplicateCheck.rowCount ?? 0) > 0) {
@@ -326,10 +343,12 @@ export class IntentFormModel {
 
       // 4. Create the intent form pointing to the new company
       const insertRes = await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status)
-         VALUES ($1, $2, $3, NULL, 'pending_advisor')
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status`,
-        [studentId, companyId, semesterId]
+        `INSERT INTO intent_forms
+           (student_id, company_id, semester_id, job_id, status, submitted_late, late_reason)
+         VALUES ($1, $2, $3, NULL, 'pending_advisor', $4, $5)
+         RETURNING form_id, student_id, company_id, semester_id, job_id, status,
+                   submitted_late, late_reason`,
+        [studentId, companyId, semesterId, late.submitted_late, late.late_reason]
       );
 
       await client.query('COMMIT');

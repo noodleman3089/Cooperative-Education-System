@@ -210,7 +210,11 @@ const Dashboard: React.FC = () => {
         locks[menuId] = {
           heading: 'หมดช่วงที่เปิดให้ทำรายการแล้ว',
           reason:
-            `หมดช่วง "${activity.label}" แล้ว (เปิดถึงวันที่ ${formatThaiDate(activity.end_date)}) ` +
+            `หมดช่วง "${activity.label}" แล้ว (เปิดถึงวันที่ ${formatThaiDate(activity.end_date)}` +
+            (activity.late_end_date
+              ? ` และผ่อนผันถึงวันที่ ${formatThaiDate(activity.late_end_date)}`
+              : ``) +
+            `) ` +
             `ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ` +
             `ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล ` +
             `อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`,

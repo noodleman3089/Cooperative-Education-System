@@ -4,7 +4,9 @@ import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody } from './ui/Modal';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
-import { Input, Select } from './ui/Input';
+import { Input, Select, Textarea } from './ui/Input';
+import useLateWindow from '../hooks/useLateWindow';
+import { formatThaiDate } from '../utils/thaiDate';
 
 import {
   googleMaps,
@@ -33,6 +35,11 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   provinceList,
   mapsLoaded,
 }) => {
+  // ยื่นหลังวันปิดปกติแต่ยังไม่เลยวันผ่อนผัน = รับได้ แต่ต้องชี้แจงเหตุผล
+  // ฟอร์มนี้เป็นฟอร์มยาวอยู่แล้ว จึงใส่ช่องเหตุผลไว้ในฟอร์มเลย ไม่เปิดกล่องซ้อน
+  const lateWindow = useLateWindow('intent_submission');
+  const [lateReason, setLateReason] = useState('');
+
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<PlacesAutocomplete | null>(null);
 
@@ -209,7 +216,8 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           is_self_found: false,
           company_id: targetCompanyId,
           semester_id: activeSemester.semester_id,
-          job_id: null
+          job_id: null,
+          late_reason: lateWindow.isLate ? lateReason.trim() : undefined
         };
         await api.post('/intents', payload);
       } else {
@@ -225,7 +233,8 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           contact_position: selfFoundForm.contact_position || undefined,
           contact_email: selfFoundForm.contact_email || undefined,
           is_self_found: true,
-          semester_id: activeSemester.semester_id
+          semester_id: activeSemester.semester_id,
+          late_reason: lateWindow.isLate ? lateReason.trim() : undefined
         };
         await api.post('/intents', payload);
       }
@@ -419,6 +428,36 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
               />
             </div>
           </div>
+
+          {lateWindow.isLate && (
+            <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <p className="text-xs font-bold text-amber-800 dark:text-amber-300">
+                การยื่นครั้งนี้เลยกำหนดปกติแล้ว จึงนับเป็นการส่งช้า
+              </p>
+              <p className="text-xs text-amber-800/90 dark:text-amber-200/80">
+                {lateWindow.lateEndDate
+                  ? `ระบบยังรับได้ถึงวันที่ ${formatThaiDate(lateWindow.lateEndDate)} `
+                  : 'ระบบยังรับได้ '}
+                และจะพิมพ์บันทึกข้อความชี้แจงให้พร้อมแบบคำร้อง
+                เพื่อนำไปเสนออาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาตามขั้นตอน
+              </p>
+              <label
+                htmlFor="self-found-late-reason"
+                className="block text-xs font-semibold text-gray-600 dark:text-gray-300"
+              >
+                เหตุผลที่ยื่นล่าช้า <span className="text-red-600 dark:text-red-400">*</span>
+              </label>
+              <Textarea
+                id="self-found-late-reason"
+                required
+                minLength={20}
+                rows={4}
+                placeholder="เขียนด้วยคำของตัวเอง ข้อความนี้จะถูกพิมพ์ลงบันทึกข้อความที่เสนอถึงคณบดี"
+                value={lateReason}
+                onChange={(e) => setLateReason(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-gray-100 dark:border-gray-800">
             <Button variant="secondary" size="sm" onClick={onClose}>

@@ -207,6 +207,9 @@ CREATE TABLE IF NOT EXISTS coop_calendar_events (
     title VARCHAR(255),
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
+    -- วันสุดท้ายที่ยังรับแบบ "ส่งช้า" — NULL = ไม่เปิดผ่อนผัน = ปิดจริงที่ end_date
+    -- ระบบเดาแทนคณะไม่ได้ว่าผ่อนผันถึงวันไหน จึงต้องมีคนกรอก ไม่มีค่าเริ่มต้น
+    late_end_date DATE,
     note TEXT,
     -- SET NULL rather than RESTRICT or CASCADE, on purpose: deleting a staff
     -- account must not fail because of the calendar (RESTRICT) and must not take
@@ -215,6 +218,7 @@ CREATE TABLE IF NOT EXISTS coop_calendar_events (
     created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT coop_calendar_events_range CHECK (end_date >= start_date),
+    CONSTRAINT coop_calendar_events_late_range CHECK (late_end_date IS NULL OR late_end_date >= end_date),
     CONSTRAINT coop_calendar_events_title_required CHECK (activity_key IS NOT NULL OR title IS NOT NULL)
 );
 
@@ -301,7 +305,16 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- rather than only in audit_log because the person who has to read it is the
     -- student, and audit_log has no read API by design (SEC-07) — the same
     -- reasoning as job_posts.reject_reason in round 17.
-    reject_reason TEXT
+    reject_reason TEXT,
+    -- ยื่นในช่วงผ่อนผัน (เลย end_date แต่ยังไม่เลย late_end_date)
+    -- ⛔ ปั๊มตอน INSERT เท่านั้น ห้ามคำนวณย้อนหลัง — เจ้าหน้าที่แก้ปฏิทินทีหลังได้
+    --    ถ้าคำนวณสด ใบที่เคยส่งช้าจะกลายเป็นส่งตรงเวลาทันทีที่ขยายวัน หลักฐานหาย
+    submitted_late BOOLEAN NOT NULL DEFAULT FALSE,
+    late_reason TEXT,
+    -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
+    -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
+    CONSTRAINT intent_forms_late_reason_required
+        CHECK (submitted_late = FALSE OR (late_reason IS NOT NULL AND btrim(late_reason) <> ''))
 );
 
 -- 8. Document Templates Table
@@ -362,7 +375,12 @@ CREATE TABLE IF NOT EXISTS personnel_preseed_list (
 -- Ensure only one active (non-rejected) intent form exists per student and semester
 CREATE UNIQUE INDEX IF NOT EXISTS uq_student_semester_active 
 ON intent_forms (student_id, semester_id) 
-WHERE status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head');
+--
+-- 'superseded' = ใบเดิมถูกแทนที่ตอนนักศึกษาเปลี่ยนสถานประกอบการ ถ้าไม่ยกเว้นไว้
+-- คนที่บริษัทตอบรับแล้วและต้องย้ายที่จะยื่นใบใหม่ไม่ได้เลย
+-- 'rejected_by_dept_head' เลิกใช้แล้ว (2026-08-27) แต่คงไว้เพราะฐานจริงอาจมีแถวเก่าค้าง
+-- ถอดออกเมื่อไหร่ แถวเก่าจะกลับมานับเป็นใบที่ยังใช้งานอยู่แล้ว index สร้างไม่ผ่าน
+WHERE status NOT IN ('rejected', 'company_rejected', 'rejected_by_dept_head', 'superseded');
 
 -- 12. Accommodations Table
 CREATE TABLE IF NOT EXISTS accommodations (

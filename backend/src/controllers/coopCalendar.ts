@@ -19,6 +19,7 @@ interface ActivitySlot {
   event_id: number | null;
   start_date: string | null;
   end_date: string | null;
+  late_end_date: string | null;
   note: string | null;
   status: CalendarStatus;
 }
@@ -28,6 +29,7 @@ interface CustomSlot {
   title: string;
   start_date: string;
   end_date: string;
+  late_end_date: string | null;
   note: string | null;
   status: CalendarStatus;
 }
@@ -36,6 +38,7 @@ interface ValidatedPayload {
   title: string | null;
   start_date: string;
   end_date: string;
+  late_end_date: string | null;
   note: string | null;
 }
 
@@ -69,6 +72,25 @@ function validatePayload(
     return { error: 'วันสิ้นสุดต้องไม่มาก่อนวันเริ่ม' };
   }
 
+  // วันผ่อนผัน: ไม่กรอก = ไม่เปิดผ่อนผันสำหรับกิจกรรมนี้ ไม่ใช่ผ่อนผันไม่จำกัด
+  const rawLate = typeof body.late_end_date === 'string' ? body.late_end_date.trim() : '';
+  let lateEnd: string | null = null;
+  if (rawLate) {
+    if (!ISO_DATE.test(rawLate)) {
+      return { error: 'กรุณาระบุวันสุดท้ายที่ผ่อนผันในรูปแบบ ปี-เดือน-วัน' };
+    }
+    const lateYear = Number(rawLate.slice(0, 4));
+    if (lateYear < 2000 || lateYear > 2200) {
+      return {
+        error: 'กรุณาระบุปีของวันผ่อนผันเป็น ค.ศ. (เช่น 2026) ระบบจะแปลงเป็น พ.ศ. ให้เองตอนแสดงผล',
+      };
+    }
+    if (rawLate < end) {
+      return { error: 'วันสุดท้ายที่ผ่อนผันต้องไม่มาก่อนวันสิ้นสุดปกติ' };
+    }
+    lateEnd = rawLate;
+  }
+
   const rawTitle = typeof body.title === 'string' ? body.title.trim() : '';
   if (!activityKey && !rawTitle) {
     return { error: 'กรุณาระบุชื่อกำหนดการสำหรับรายการที่เพิ่มเอง' };
@@ -83,6 +105,7 @@ function validatePayload(
       title: activityKey ? null : rawTitle,
       start_date: start,
       end_date: end,
+      late_end_date: lateEnd,
       note: rawNote || null,
     },
   };
@@ -102,8 +125,9 @@ function buildCalendar(rows: CoopCalendarEventRow[], today: string) {
         title: row.title ?? '',
         start_date: row.start_date,
         end_date: row.end_date,
+        late_end_date: row.late_end_date,
         note: row.note,
-        status: calendarStatus(today, row.start_date, row.end_date),
+        status: calendarStatus(today, row.start_date, row.end_date, row.late_end_date),
       });
     }
   }
@@ -118,8 +142,14 @@ function buildCalendar(rows: CoopCalendarEventRow[], today: string) {
       event_id: row?.event_id ?? null,
       start_date: row?.start_date ?? null,
       end_date: row?.end_date ?? null,
+      late_end_date: row?.late_end_date ?? null,
       note: row?.note ?? null,
-      status: calendarStatus(today, row?.start_date ?? null, row?.end_date ?? null),
+      status: calendarStatus(
+        today,
+        row?.start_date ?? null,
+        row?.end_date ?? null,
+        row?.late_end_date ?? null
+      ),
     };
   });
 
@@ -233,6 +263,7 @@ export class CoopCalendarController {
             title: created.title ?? activityLabel(created.activity_key ?? ''),
             start_date: created.start_date,
             end_date: created.end_date,
+            late_end_date: created.late_end_date,
           },
         },
         req
@@ -290,7 +321,12 @@ export class CoopCalendarController {
             title: updated.title ?? activityLabel(updated.activity_key ?? ''),
             start_date: updated.start_date,
             end_date: updated.end_date,
-            previous: { start_date: existing.start_date, end_date: existing.end_date },
+            late_end_date: updated.late_end_date,
+            previous: {
+              start_date: existing.start_date,
+              end_date: existing.end_date,
+              late_end_date: existing.late_end_date,
+            },
           },
         },
         req
@@ -338,6 +374,7 @@ export class CoopCalendarController {
             title: existing.title ?? activityLabel(existing.activity_key ?? ''),
             start_date: existing.start_date,
             end_date: existing.end_date,
+            late_end_date: existing.late_end_date,
           },
         },
         req

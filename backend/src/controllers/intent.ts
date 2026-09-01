@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { IntentFormModel, COMPANY_VISIBLE_STATUSES } from '../models/intent';
+import { IntentFormModel, COMPANY_VISIBLE_STATUSES, LateStamp } from '../models/intent';
+import { isLateWindow } from '../middlewares/calendarGate';
 import { query } from '../config/database';
 import { notifyStudentStatusChange } from '../utils/email';
 import {
@@ -20,6 +21,9 @@ import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
+
+/** ความยาวขั้นต่ำของเหตุผลการส่งช้า — กติกาหน้าจอ ไม่ใช่ข้อบังคับของฐาน */
+const LATE_REASON_MIN_LENGTH = 20;
 
 export class IntentFormController {
   /**
@@ -46,6 +50,27 @@ export class IntentFormController {
       if (isNaN(parsedSemesterId)) {
         res.status(400).json({ message: 'semester_id must be a valid integer.' });
         return;
+      }
+
+      // ยื่นในช่วงผ่อนผันต้องชี้แจงเหตุผล — บันทึกข้อความที่ระบบพิมพ์ให้เอาข้อความ
+      // ท่อนนี้ไปวางในบรรทัด "มีความประสงค์…เนื่องจาก…" ซึ่งคณบดีเป็นคนอ่านจริง
+      //
+      // ธงมาจากด่านปฏิทินเท่านั้น (`isLateWindow`) ไม่ใช่จาก body — นักศึกษาจึงทั้ง
+      // ประกาศตัวเองว่าส่งช้าไม่ได้ และหลบธงไม่ได้ (แนวเดียวกับ SEC-05)
+      const late: LateStamp = { submitted_late: false, late_reason: null };
+      if (isLateWindow(res)) {
+        const reason = typeof body.late_reason === 'string' ? body.late_reason.trim() : '';
+        if (reason.length < LATE_REASON_MIN_LENGTH) {
+          res.status(400).json({
+            message:
+              'การยื่นครั้งนี้เลยกำหนดปกติแล้ว แต่ยังอยู่ในช่วงผ่อนผัน ระบบจึงรับได้แต่นับเป็นการส่งช้า ' +
+              `กรุณาระบุเหตุผลอย่างน้อย ${LATE_REASON_MIN_LENGTH} ตัวอักษร ` +
+              'ระบบจะพิมพ์ลงบันทึกข้อความชี้แจงให้พร้อมแบบคำร้อง เพื่อนำไปเสนอตามขั้นตอน',
+          });
+          return;
+        }
+        late.submitted_late = true;
+        late.late_reason = reason;
       }
 
       let intentForm;
@@ -80,7 +105,7 @@ export class IntentFormController {
           contact_person,
           contact_position,
           email: contact_email
-        });
+        }, late);
       } else {
         const { company_id, job_id } = body;
         if (company_id === undefined) {
@@ -107,6 +132,7 @@ export class IntentFormController {
           company_id: parsedCompanyId,
           semester_id: parsedSemesterId,
           job_id: parsedJobId,
+          late,
         });
       }
 
@@ -139,7 +165,8 @@ export class IntentFormController {
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
                 i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path,
-                i.request_form_path, i.reject_reason, i.officer_document_no
+                i.request_form_path, i.reject_reason, i.officer_document_no,
+                i.submitted_late, i.late_reason
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
          LEFT JOIN job_posts j ON i.job_id = j.job_id
@@ -199,6 +226,7 @@ export class IntentFormController {
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason,
+               i.submitted_late, i.late_reason,
                doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
