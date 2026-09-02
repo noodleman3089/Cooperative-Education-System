@@ -167,7 +167,8 @@ export class IntentFormController {
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
                 i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path,
                 i.request_form_path, i.reject_reason, i.officer_document_no,
-                i.submitted_late, i.late_reason
+                i.submitted_late, i.late_reason,
+                i.acceptance_due_date, i.acceptance_submitted_late
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
          LEFT JOIN job_posts j ON i.job_id = j.job_id
@@ -228,6 +229,8 @@ export class IntentFormController {
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason,
                i.submitted_late, i.late_reason,
+               i.acceptance_due_date, i.acceptance_submitted_late,
+               i.acceptance_signer_name, i.acceptance_signer_position, i.acceptance_signed_date,
                doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id

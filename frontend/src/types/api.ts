@@ -273,6 +273,15 @@ export interface IntentForm {
   /** ยื่นในช่วงผ่อนผัน — บุคลากรเห็น แต่ `company` ถูกตัดออกตาม SEC-10 */
   submitted_late?: boolean;
   late_reason?: string | null;
+  /**
+   * เอกสารหมายเลข 2 — กำหนดตอบกลับ ๑๕ วันทำการ นับจากวันที่คณบดีลงนาม
+   * `null` = คณบดียังไม่ลงนาม = ยังส่งแบบตอบรับไม่ได้ (เซิร์ฟเวอร์ตอบ 409)
+   */
+  acceptance_due_date?: string | null;
+  acceptance_submitted_late?: boolean;
+  acceptance_signer_name?: string | null;
+  acceptance_signer_position?: string | null;
+  acceptance_signed_date?: string | null;
   advisor_signer_name?: string | null;
   advisor_signed_date?: string | null;
   dept_head_signer_name?: string | null;

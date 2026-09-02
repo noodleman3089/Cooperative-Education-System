@@ -753,7 +753,9 @@ export class IntentFormModel {
       department?: string;
     },
     startDate: string,
-    evidencePath: string
+    evidencePath: string,
+    /** ส่งกลับหลังพ้น ๑๕ วันทำการ — ผู้เรียกเป็นคนตัดสินโดยเทียบวันที่ฐาน */
+    submittedLate = false
   ): Promise<IntentForm> {
     const client = await pool.connect();
     try {
@@ -875,10 +877,12 @@ export class IntentFormModel {
       // 4. Update Intent Form status to pending_officer_approval
       const updateRes = await client.query(
         `UPDATE intent_forms 
-         SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2, acceptance_evidence_path = $3 
+         SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
+             acceptance_evidence_path = $3, acceptance_submitted_late = $5
          WHERE form_id = $4
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path`,
-        [mentorUserId, new Date(startDate), evidencePath, intentId]
+         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date,
+                   acceptance_evidence_path, acceptance_submitted_late`,
+        [mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate]
       );
 
       await client.query('COMMIT');

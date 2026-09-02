@@ -20,6 +20,8 @@ import {
 } from '../utils/email';
 import { createInviteLink } from '../utils/invite';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { CoopCalendarModel } from '../models/coopCalendar';
+import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from '../utils/workingDays';
 import { sendUnexpectedError } from '../utils/httpError';
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
@@ -131,6 +133,28 @@ export class DocumentController {
 
           await OfficialDocumentModel.updateFilePath(parsedDocId, relativePath);
           await OfficialDocumentModel.updateStatusAndSignature(parsedDocId, 'signed', new Date());
+
+          // นาทีที่คณบดีลงนามคือนาทีที่นักศึกษาได้หนังสือไปยื่น — ฟอร์มแบบตอบรับ
+          // เขียนว่าบริษัทต้องตอบ "ภายใน ๑๕ วันทำการ หลังจากได้รับหนังสือฯ"
+          // จึงเริ่มนับที่นี่ · "วันนี้" มาจาก Postgres ไม่ใช่นาฬิกาเครื่อง
+          //
+          // คอลัมน์นี้ทำหน้าที่สองอย่าง: กำหนดวันตอบกลับ **และ** เป็นด่านที่บอกว่า
+          // ลงนามแล้ว (NULL = ยังอัปโหลดแบบตอบรับไม่ได้)
+          if (doc.type === 'cover_letter') {
+            const today = await CoopCalendarModel.today();
+            await query(
+              `UPDATE intent_forms
+                  SET acceptance_due_date = $1
+                WHERE student_id = $2 AND company_id = $3
+                  AND acceptance_due_date IS NULL`,
+              [
+                addWorkingDays(today, ACCEPTANCE_WORKING_DAYS),
+                doc.student_id,
+                doc.company_id,
+              ]
+            );
+          }
+
           signedDocIds.push(parsedDocId);
 
           writeAudit(

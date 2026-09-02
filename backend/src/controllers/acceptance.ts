@@ -3,7 +3,7 @@ import { IntentFormModel } from '../models/intent';
 import { CompanyAcceptPayload, StudentAcceptPayload } from '../types';
 import { notifyStudentStatusChange, sendMentorInviteEmail } from '../utils/email';
 import { createInviteLink } from '../utils/invite';
-import pool from '../config/database';
+import pool, { query } from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 
@@ -153,19 +153,49 @@ export class AcceptanceController {
       const studentUserId = req.user.userId;
       const evidencePath = `acceptance_evidence/${req.file.filename}`;
 
+      // แบบตอบรับ (เอกสารหมายเลข 2) ตอบ **หนังสือขอความอนุเคราะห์** ที่คณบดีลงนาม
+      // ยังไม่ลงนาม = ยังไม่มีอะไรให้บริษัทตอบ · `acceptance_due_date` ถูกปั๊มตอนลงนาม
+      // จึงใช้เป็นด่านลำดับได้ในตัว ไม่ต้อง join หา official_documents ซ้ำ
+      const gate = await query(
+        `SELECT acceptance_due_date::text AS due,
+                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today
+           FROM intent_forms WHERE form_id = $1`,
+        [intentId]
+      );
+      if ((gate.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบใบแจ้งความจำนงที่ต้องการ' });
+        return;
+      }
+      const { due, today } = gate.rows[0] as { due: string | null; today: string };
+      if (!due) {
+        res.status(409).json({
+          message:
+            'ยังส่งแบบตอบรับไม่ได้ เพราะคณบดียังไม่ได้ลงนามหนังสือขอความอนุเคราะห์ — สถานประกอบการต้องได้รับหนังสือฉบับนั้นก่อนจึงจะตอบรับได้',
+        });
+        return;
+      }
+
+      // เลยกำหนดแล้ว **ยังรับ** แต่ติดธง — เจ้าหน้าที่ยืนยันเองว่าผ่อนผันเวลาได้
+      // เพราะบางบริษัทเซ็นช้า · เทียบสตริง YYYY-MM-DD ล้วน ห้าม new Date()
+      const submittedLate = today > due;
+
+
       const updatedIntent = await IntentFormModel.acceptByStudentWithTransaction(
         intentId,
         studentUserId,
         { name, email, phone, position, department },
         start_date,
-        evidencePath
+        evidencePath,
+        submittedLate
       );
 
       // Send email notification to student: waiting for officer review
       notifyStudentStatusChange(intentId, 'pending_officer_approval').catch(console.error);
 
       res.status(200).json({
-        message: 'อัปโหลดหลักฐานการตอบรับเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบเอกสาร',
+        message: submittedLate
+          ? 'อัปโหลดแบบตอบรับเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบ — ระบบบันทึกว่าส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ หากเจ้าหน้าที่ขอคำชี้แจง ให้ยื่นบันทึกข้อความจากเมนู "บันทึกข้อความถึงคณบดี"'
+          : 'อัปโหลดแบบตอบรับเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบเอกสาร',
         intentForm: updatedIntent,
       });
     } catch (error) {
@@ -242,7 +272,14 @@ export class AcceptanceController {
 
       // 1. Fetch and lock intent form
       const intentRes = await client.query(
-        `SELECT form_id, student_id, mentor_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        `SELECT i.form_id, i.student_id, i.mentor_id, i.status,
+                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
+                (SELECT d.dean_signature_date::date::text
+                   FROM official_documents d
+                  WHERE d.student_id = i.student_id AND d.company_id = i.company_id
+                    AND d.type = 'cover_letter' AND d.status = 'signed'
+                  ORDER BY d.doc_id DESC LIMIT 1) AS letter_signed_on
+           FROM intent_forms i WHERE i.form_id = $1 FOR UPDATE`,
         [intentId]
       );
 
@@ -257,10 +294,42 @@ export class AcceptanceController {
       }
 
       if (action === 'accepted') {
+        // ⛔ ก่อนหน้านี้ระบบรับไฟล์แบบตอบรับได้ แต่ไม่รู้ว่าในกระดาษเขียนว่าอะไร
+        //    สามช่องนี้คือสิ่งที่เจ้าหน้าที่อ่านจากใบจริงแล้วคีย์เข้ามา (กลไกเดียวกับ
+        //    ที่คีย์ชื่อผู้ลงนามจากเอกสารหมายเลข 1) — ไม่มีสามช่องนี้ก็ยังเป็นไฟล์ทึบเหมือนเดิม
+        const body = req.body as Record<string, unknown>;
+        const signerName = typeof body.signer_name === 'string' ? body.signer_name.trim() : '';
+        const signerPosition =
+          typeof body.signer_position === 'string' ? body.signer_position.trim() : '';
+        const signedDate = typeof body.signed_date === 'string' ? body.signed_date.trim() : '';
+
+        if (!signerName || !signerPosition || !signedDate) {
+          throw new Error(
+            'กรุณากรอกชื่อผู้อนุมัติ ตำแหน่ง และวันที่ ตามที่ปรากฏบนแบบตอบรับที่นักศึกษาส่งมา'
+          );
+        }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(signedDate)) {
+          throw new Error('รูปแบบวันที่บนแบบตอบรับไม่ถูกต้อง');
+        }
+        // เทียบสตริง YYYY-MM-DD ล้วน — ห้าม new Date() (เลื่อนวันตาม timezone)
+        if (signedDate > intent.today) {
+          throw new Error('วันที่บนแบบตอบรับเป็นวันในอนาคต กรุณาตรวจสอบกับกระดาษอีกครั้ง');
+        }
+        if (intent.letter_signed_on && signedDate < intent.letter_signed_on) {
+          throw new Error(
+            `วันที่บนแบบตอบรับ (${signedDate}) มาก่อนวันที่คณบดีลงนามหนังสือขอความอนุเคราะห์ (${intent.letter_signed_on}) ซึ่งเป็นไปไม่ได้ เพราะสถานประกอบการตอบรับหลังได้รับหนังสือฉบับนั้น`
+          );
+        }
+
         // 2. Update intent status to accepted
         await client.query(
-          `UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`,
-          [intentId]
+          `UPDATE intent_forms
+              SET status = 'accepted',
+                  acceptance_signer_name = $2,
+                  acceptance_signer_position = $3,
+                  acceptance_signed_date = $4
+            WHERE form_id = $1`,
+          [intentId, signerName, signerPosition, signedDate]
         );
 
         // 3. Activate mentor account if it's currently inactive
@@ -324,7 +393,12 @@ export class AcceptanceController {
           entityType: 'intent_form',
           entityId: intentId,
           subjectId: intent.student_id,
-          detail: { decision: 'accepted', mentor_id: intent.mentor_id },
+          detail: {
+            decision: 'accepted',
+            mentor_id: intent.mentor_id,
+            acceptance_signer_name: signerName,
+            acceptance_signed_date: signedDate,
+          },
         }, req, client);
 
         await client.query('COMMIT');

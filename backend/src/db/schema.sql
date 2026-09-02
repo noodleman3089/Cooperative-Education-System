@@ -312,6 +312,16 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     --    ถ้าคำนวณสด ใบที่เคยส่งช้าจะกลายเป็นส่งตรงเวลาทันทีที่ขยายวัน หลักฐานหาย
     submitted_late BOOLEAN NOT NULL DEFAULT FALSE,
     late_reason TEXT,
+    -- เอกสารหมายเลข 2 (แบบยืนยันแบบตอบรับ)
+    -- วันครบกำหนด ๑๕ วันทำการ ปั๊มตอนคณบดีลงนามหนังสือขอความอนุเคราะห์
+    -- NULL = ยังไม่ลงนาม = ยังอัปโหลดแบบตอบรับไม่ได้ (คอลัมน์นี้เป็นด่านลำดับในตัว)
+    acceptance_due_date DATE,
+    -- ⛔ ปั๊มตอนอัปโหลด ห้ามคำนวณย้อนหลัง (เหตุผลเดียวกับ submitted_late)
+    acceptance_submitted_late BOOLEAN NOT NULL DEFAULT FALSE,
+    -- สิ่งที่เจ้าหน้าที่อ่านจากกระดาษแบบตอบรับแล้วคีย์เข้าระบบ
+    acceptance_signer_name VARCHAR(255),
+    acceptance_signer_position VARCHAR(255),
+    acceptance_signed_date DATE,
     -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
     -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
     CONSTRAINT intent_forms_late_reason_required

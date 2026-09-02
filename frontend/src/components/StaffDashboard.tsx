@@ -8,6 +8,7 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import { Megaphone, Pin, BarChart3, ChevronRight, Check, Plus } from 'lucide-react';
 import Button from './ui/Button';
 import { getErrorMessage } from '../utils/errors';
+import { formatThaiDate } from '../utils/thaiDate';
 import { Input, Select, Textarea } from './ui/Input';
 import type {
   Announcement,
@@ -36,6 +37,23 @@ interface RequestFormRow {
   /** ยื่นในช่วงผ่อนผัน — เจ้าหน้าที่ต้องเห็นก่อนออกเลขหนังสือ */
   submitted_late?: boolean;
   late_reason?: string | null;
+}
+
+/**
+ * แถวในคิวแบบตอบรับรอตรวจ — จาก GET /intents?status=pending_officer_approval
+ *
+ * ⛔ ก่อนหน้านี้ **ไม่มีหน้าจอสำหรับขั้นนี้เลย** มีแต่ endpoint ที่เรียกได้จาก API
+ *    เท่านั้น นักศึกษาอัปโหลดแบบตอบรับแล้วใบค้างอยู่ตรงนี้ตลอดไป (เจอ 2026-09-02)
+ */
+interface AcceptanceRow {
+  form_id: number;
+  student_code?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name_th?: string;
+  acceptance_evidence_path?: string | null;
+  acceptance_due_date?: string | null;
+  acceptance_submitted_late?: boolean;
 }
 
 interface GeneratedDocument {
@@ -123,6 +141,16 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   // คิวคำร้องขอหนังสือ (เอกสารหมายเลข 1) ที่นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว
   const [requestQueue, setRequestQueue] = useState<RequestFormRow[]>([]);
+  const [acceptanceQueue, setAcceptanceQueue] = useState<AcceptanceRow[]>([]);
+  const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceRow | null>(null);
+  const [acceptanceForm, setAcceptanceForm] = useState({
+    signer_name: '',
+    signer_position: '',
+    signed_date: '',
+  });
+  const [acceptanceBusy, setAcceptanceBusy] = useState(false);
+  const [rejectingAcceptance, setRejectingAcceptance] = useState(false);
+  const [acceptanceRejectReason, setAcceptanceRejectReason] = useState('');
   const [reviewingRequest, setReviewingRequest] = useState<RequestFormRow | null>(null);
   const [officerForm, setOfficerForm] = useState({
     advisor_signer_name: '',
@@ -224,14 +252,16 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
       // แม่แบบเอกสารไม่มีให้โหลดแล้ว — `GET /documents/templates` ถูกถอดพร้อมกับ
       // การออกเอกสารเมื่อ 2026-08-26 · ประวัติเอกสารที่ออกไปแล้วยังโหลดตามปกติ
-      const [docsData, summaryData, requestData] = await Promise.all([
+      const [docsData, summaryData, requestData, acceptanceData] = await Promise.all([
         api.get('/documents'),
         api.get('/intents/pipeline-summary').catch(() => null),
-        api.get('/intents?status=pending_officer_request').catch(() => [])
+        api.get('/intents?status=pending_officer_request').catch(() => []),
+        api.get('/intents?status=pending_officer_approval').catch(() => [])
       ]);
 
       setDocuments(docsData || []);
       setRequestQueue(requestData || []);
+      setAcceptanceQueue(acceptanceData || []);
       if (summaryData) {
         setPipelineSummary(summaryData);
       }
@@ -810,6 +840,40 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
    * self-service route for an account that has never had a password.
    */
   /** เปิดคำร้องขึ้นมาตรวจ — ล้างฟอร์มทุกครั้ง ไม่ให้ค่าของคนก่อนหน้าค้าง */
+  const openAcceptanceReview = (row: AcceptanceRow) => {
+    setReviewingAcceptance(row);
+    setAcceptanceForm({ signer_name: '', signer_position: '', signed_date: '' });
+    setRejectingAcceptance(false);
+    setAcceptanceRejectReason('');
+    setError(null);
+  };
+
+  /** ส่งผลการตรวจแบบตอบรับ — `accepted` ต้องคีย์สิ่งที่อ่านจากกระดาษครบก่อน */
+  const submitAcceptanceDecision = async (action: 'accepted' | 'rejected') => {
+    if (!reviewingAcceptance) return;
+    setAcceptanceBusy(true);
+    setError(null);
+    try {
+      await api.put(`/acceptances/${reviewingAcceptance.form_id}/officer-approve`, {
+        action,
+        ...(action === 'accepted'
+          ? acceptanceForm
+          : { reason: acceptanceRejectReason.trim() }),
+      });
+      setSuccess(
+        action === 'accepted'
+          ? 'รับแบบตอบรับเรียบร้อยแล้ว นักศึกษาเข้าสู่ขั้นเตรียมปฏิบัติงาน'
+          : 'ตีกลับแบบตอบรับเรียบร้อยแล้ว'
+      );
+      setReviewingAcceptance(null);
+      await loadData(true);
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกผลการตรวจแบบตอบรับได้'));
+    } finally {
+      setAcceptanceBusy(false);
+    }
+  };
+
   const openRequestReview = (row: RequestFormRow) => {
     setReviewingRequest(row);
     setOfficerForm({
@@ -2150,6 +2214,60 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             )}
           </div>
 
+          {/* คิวแบบตอบรับ (เอกสารหมายเลข 2)
+              สถานประกอบการกรอกและลงนามบนกระดาษ นักศึกษาถือกลับมาอัปโหลด
+              เจ้าหน้าที่อ่านกระดาษแล้วคีย์ว่าใครเซ็น ตำแหน่งอะไร วันไหน — ไม่งั้น
+              ระบบมีแต่ไฟล์ที่เปิดดูได้ แต่ไม่รู้ว่าข้างในเขียนว่าอะไร */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                แบบตอบรับจากสถานประกอบการรอตรวจ ({acceptanceQueue.length} รายการ)
+              </span>
+              <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                เปิดไฟล์ที่นักศึกษาอัปโหลด ตรวจว่ามีลายเซ็นและตราประทับครบ
+                แล้วคีย์ชื่อผู้อนุมัติกับวันที่ตามที่ปรากฏบนกระดาษ
+              </p>
+            </div>
+
+            {acceptanceQueue.length > 0 ? (
+              <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+                {acceptanceQueue.map((row) => (
+                  <div
+                    key={row.form_id}
+                    className="flex items-center justify-between gap-3 p-4 text-xs hover:bg-gray-50/50 dark:hover:bg-gray-800/10"
+                  >
+                    <div>
+                      <span className="block font-bold text-gray-800 dark:text-gray-200">
+                        {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-gray-600 dark:text-gray-400">
+                        รหัส: {row.student_code} | สถานประกอบการ: {row.company_name_th}
+                      </span>
+                      {row.acceptance_submitted_late && (
+                        <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
+                          ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ
+                        </span>
+                      )}
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      data-testid={`review-acceptance-${row.form_id}`}
+                      onClick={() => openAcceptanceReview(row)}
+                      className="shrink-0 border-brand-blue text-brand-blue dark:border-blue-800 dark:text-blue-400"
+                    >
+                      ตรวจแบบตอบรับ
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-gray-600 dark:text-gray-400">
+                ไม่มีแบบตอบรับรอตรวจในขณะนี้
+              </div>
+            )}
+          </div>
+
           {/* แบนเนอร์ "ยังอยู่ระหว่างพัฒนา" ถูกถอดออก 2026-08-27 — การออกหนังสือทำเสร็จ
               ตั้งแต่ก้อน 3 แล้ว ข้อความเดิมบอกเจ้าหน้าที่ว่าฟีเจอร์ยังไม่พร้อมใช้ */}
 
@@ -2390,6 +2508,160 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   onClick={() => setConfirmingApprove(true)}
                 >
                   รับคำร้อง
+                </Button>
+              </>
+            )}
+          </ModalFooter>
+        </Modal>
+      )}
+
+      {/* ตรวจแบบตอบรับจากสถานประกอบการ (เอกสารหมายเลข 2) */}
+      {reviewingAcceptance && (
+        <Modal
+          onClose={() => setReviewingAcceptance(null)}
+          title={`ตรวจแบบตอบรับ — ${[reviewingAcceptance.first_name, reviewingAcceptance.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance.student_code || '-'})`}
+          size="lg"
+          closeOnBackdrop={false}
+        >
+          <ModalBody>
+            <div className="space-y-4">
+              <AlertBanner variant="error" message={error} />
+
+              {reviewingAcceptance.acceptance_submitted_late && (
+                <AlertBanner
+                  variant="warning"
+                  message={`แบบตอบรับนี้ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ${
+                    reviewingAcceptance.acceptance_due_date
+                      ? ` (ครบกำหนดวันที่ ${formatThaiDate(reviewingAcceptance.acceptance_due_date)})`
+                      : ''
+                  } — ผ่อนผันได้ แต่ระบบบันทึกไว้แล้วว่าเป็นเคสส่งช้า`}
+                />
+              )}
+
+              {reviewingAcceptance.acceptance_evidence_path ? (
+                <a
+                  href={`${API_BASE_URL}/files/${reviewingAcceptance.acceptance_evidence_path}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="open-acceptance-evidence"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
+                >
+                  เปิดไฟล์แบบตอบรับที่นักศึกษาอัปโหลด
+                </a>
+              ) : (
+                <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบตอบรับในระบบ" />
+              )}
+
+              {rejectingAcceptance ? (
+                <div>
+                  <label
+                    htmlFor="acceptance-reject-reason"
+                    className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    เหตุผลที่ตีกลับ (นักศึกษาจะเห็นข้อความนี้)
+                  </label>
+                  <Textarea
+                    id="acceptance-reject-reason"
+                    rows={3}
+                    data-testid="acceptance-reject-reason"
+                    value={acceptanceRejectReason}
+                    onChange={(e) => setAcceptanceRejectReason(e.target.value)}
+                    placeholder="เช่น ไม่มีตราประทับหรือลายเซ็นของผู้อนุมัติบนแบบตอบรับ"
+                  />
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
+                    กรอกตามที่ปรากฏบนกระดาษ — สามช่องนี้คือสิ่งที่ทำให้ระบบรู้ว่าใครเป็นผู้อนุมัติ
+                    ไม่ใช่แค่เก็บไฟล์ไว้เฉยๆ
+                  </p>
+                  <div>
+                    <label
+                      htmlFor="acceptance-signer-name"
+                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                    >
+                      ชื่อผู้อนุมัตินักศึกษา
+                    </label>
+                    <Input
+                      id="acceptance-signer-name"
+                      data-testid="acceptance-signer-name"
+                      value={acceptanceForm.signer_name}
+                      onChange={(e) =>
+                        setAcceptanceForm((f) => ({ ...f, signer_name: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="acceptance-signer-position"
+                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                    >
+                      ตำแหน่ง
+                    </label>
+                    <Input
+                      id="acceptance-signer-position"
+                      data-testid="acceptance-signer-position"
+                      value={acceptanceForm.signer_position}
+                      onChange={(e) =>
+                        setAcceptanceForm((f) => ({ ...f, signer_position: e.target.value }))
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="acceptance-signed-date"
+                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                    >
+                      วันที่บนแบบตอบรับ
+                    </label>
+                    <Input
+                      id="acceptance-signed-date"
+                      type="date"
+                      data-testid="acceptance-signed-date"
+                      value={acceptanceForm.signed_date}
+                      onChange={(e) =>
+                        setAcceptanceForm((f) => ({ ...f, signed_date: e.target.value }))
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            {rejectingAcceptance ? (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setRejectingAcceptance(false)}>
+                  ย้อนกลับ
+                </Button>
+                <Button
+                  variant="danger"
+                  size="sm"
+                  disabled={!acceptanceRejectReason.trim()}
+                  loading={acceptanceBusy}
+                  data-testid="acceptance-reject-submit"
+                  onClick={() => submitAcceptanceDecision('rejected')}
+                >
+                  ยืนยันตีกลับ
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="secondary" size="sm" onClick={() => setRejectingAcceptance(true)}>
+                  ตีกลับให้แก้ไข
+                </Button>
+                <Button
+                  size="sm"
+                  loading={acceptanceBusy}
+                  disabled={
+                    !acceptanceForm.signer_name.trim() ||
+                    !acceptanceForm.signer_position.trim() ||
+                    !acceptanceForm.signed_date
+                  }
+                  data-testid="acceptance-approve-submit"
+                  onClick={() => submitAcceptanceDecision('accepted')}
+                >
+                  รับแบบตอบรับ
                 </Button>
               </>
             )}

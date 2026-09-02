@@ -420,6 +420,26 @@ const StudentDashboard: React.FC = () => {
   const step1_2Done = !!activeIntent?.request_form_path || OFFICER_RECEIVED.includes(intentStatus);
   const step1_3Done = OFFICER_RECEIVED.includes(intentStatus);
   const step1_4Done = coverLetter?.status === 'signed';
+
+  /**
+   * กำหนดตอบกลับของแบบตอบรับ (เอกสารหมายเลข 2)
+   *
+   * วันครบกำหนดคิดที่เซิร์ฟเวอร์ตอนคณบดีลงนาม (๑๕ วันทำการ) ฝั่งนี้แค่เอามาแสดงและ
+   * นับถอยหลังเป็นวันปฏิทิน — **ไม่คำนวณวันทำการซ้ำ** เพราะจะกลายเป็นแหล่งความจริงที่สอง
+   * ที่วันหนึ่งจะไม่ตรงกับเซิร์ฟเวอร์ · ตัวตัดสินว่า "ส่งช้าไหม" อยู่ที่เซิร์ฟเวอร์เสมอ
+   */
+  const acceptanceDue = (() => {
+    // ⛔ ห้ามทำเป็น hook — โค้ดตรงนี้อยู่ **หลัง** early return (`if (loading)` และ
+    //    `if (error || !data)`) การใส่ useMemo จะทำให้จำนวน hook ต่างกันระหว่าง render
+    //    แล้ว React พังด้วย "Rendered more hooks than during the previous render"
+    const due = activeIntent?.acceptance_due_date;
+    if (!due) return null;
+    const today = new Date();
+    const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const [y, m, d] = due.slice(0, 10).split('-').map(Number);
+    const daysLeft = Math.round((Date.UTC(y, m - 1, d) - todayUtc) / 86400000);
+    return { due: due.slice(0, 10), daysLeft, overdue: daysLeft < 0 };
+  })();
   const step1_5Done = intentStatus === 'accepted';
 
   const step2_1Done = step1_5Done && !!(student?.current_address || intentStatus === 'accepted');
@@ -965,8 +985,11 @@ const StudentDashboard: React.FC = () => {
 
           {/* เอกสารหมายเลข 2 ออกคู่กับหนังสือขอความอนุเคราะห์ตามคู่มือข้อ 3 —
               คณะส่งคืนนักศึกษาทั้งสองใบ นักศึกษาถือไปยื่นสถานประกอบการเอง
-              ⛔ ขึ้นหลังคณบดีลงนามเท่านั้น เซิร์ฟเวอร์ก็ปฏิเสธ 409 ก่อนหน้านั้น */}
-          {step1_4Done && activeIntent && (
+              ⛔ ขึ้นหลังคณบดีลงนามเท่านั้น เซิร์ฟเวอร์ก็ปฏิเสธ 409 ก่อนหน้านั้น
+              · เงื่อนไขอ่านจาก `acceptance_due_date` ซึ่งถูกปั๊มตอนคณบดีลงนาม —
+                แหล่งเดียวกับที่เซิร์ฟเวอร์ใช้ตัดสิน จึงไม่มีทางที่หน้าจอกับ API
+                จะไม่ตรงกัน (ถ้าอ่านจาก `documents` จะเป็นแหล่งความจริงที่สอง) */}
+          {activeIntent?.acceptance_due_date && (
             <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
               <span className="block font-bold text-gray-700 dark:text-gray-300">
                 แบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2)
@@ -975,6 +998,27 @@ const StudentDashboard: React.FC = () => {
                 พิมพ์ไปพร้อมหนังสือขอความอนุเคราะห์ ให้สถานประกอบการกรอก ลงนามและประทับตรา
                 <span className="font-semibold"> ภายใน 15 วันทำการ</span> แล้วนำกลับมาอัปโหลดที่นี่
               </p>
+
+              {/* นับถอยหลังกำหนดตอบกลับ
+                  ⚠️ วันครบกำหนดคำนวณโดยข้ามเฉพาะเสาร์-อาทิตย์ ระบบไม่มีตารางวันหยุด
+                  นักขัตฤกษ์ จึงเรียกว่า "โดยประมาณ" ไม่ใช่เส้นตาย — และเลยกำหนดแล้ว
+                  ก็ยังอัปโหลดได้ เซิร์ฟเวอร์แค่ติดธงว่าส่งช้า ไม่ได้ปิดประตู */}
+              {acceptanceDue && (
+                <p
+                  data-testid="acceptance-due"
+                  className={`mt-2 font-semibold ${
+                    acceptanceDue.overdue
+                      ? 'text-red-700 dark:text-red-400'
+                      : acceptanceDue.daysLeft <= 3
+                        ? 'text-amber-700 dark:text-amber-400'
+                        : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  {acceptanceDue.overdue
+                    ? `เลยกำหนดตอบกลับมาแล้ว ${-acceptanceDue.daysLeft} วัน (ครบกำหนด ${formatThaiDate(acceptanceDue.due)}) — ยังส่งได้ แต่ระบบจะบันทึกว่าส่งช้า และควรยื่นบันทึกข้อความชี้แจง`
+                    : `ครบกำหนดตอบกลับโดยประมาณวันที่ ${formatThaiDate(acceptanceDue.due)} — เหลืออีก ${acceptanceDue.daysLeft} วัน`}
+                </p>
+              )}
               <a
                 href={`${API_BASE_URL}/intents/${activeIntent.form_id}/acceptance-form`}
                 target="_blank"
