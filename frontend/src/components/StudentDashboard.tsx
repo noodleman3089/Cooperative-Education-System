@@ -962,6 +962,30 @@ const StudentDashboard: React.FC = () => {
               ยังไม่มีหนังสือในระบบ — หนังสือขอความอนุเคราะห์จะออกให้เมื่อเจ้าหน้าที่รับแบบคำร้องที่ท่านอัปโหลดกลับ แล้วส่งเข้าคิวให้คณบดีลงนาม
             </div>
           )}
+
+          {/* เอกสารหมายเลข 2 ออกคู่กับหนังสือขอความอนุเคราะห์ตามคู่มือข้อ 3 —
+              คณะส่งคืนนักศึกษาทั้งสองใบ นักศึกษาถือไปยื่นสถานประกอบการเอง
+              ⛔ ขึ้นหลังคณบดีลงนามเท่านั้น เซิร์ฟเวอร์ก็ปฏิเสธ 409 ก่อนหน้านั้น */}
+          {step1_4Done && activeIntent && (
+            <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
+              <span className="block font-bold text-gray-700 dark:text-gray-300">
+                แบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2)
+              </span>
+              <p className="mt-0.5 text-gray-600 dark:text-gray-400">
+                พิมพ์ไปพร้อมหนังสือขอความอนุเคราะห์ ให้สถานประกอบการกรอก ลงนามและประทับตรา
+                <span className="font-semibold"> ภายใน 15 วันทำการ</span> แล้วนำกลับมาอัปโหลดที่นี่
+              </p>
+              <a
+                href={`${API_BASE_URL}/intents/${activeIntent.form_id}/acceptance-form`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="open-acceptance-form"
+                className="mt-2 inline-block rounded border border-gray-300 px-2 py-1 font-bold transition-all hover:border-brand-blue hover:text-brand-blue dark:border-gray-700 dark:hover:text-blue-400"
+              >
+                เปิดแบบตอบรับเพื่อสั่งพิมพ์
+              </a>
+            </div>
+          )}
         </div>
 
       </div>

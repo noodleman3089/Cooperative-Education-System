@@ -17,6 +17,7 @@ import {
   fetchCoverLetterData,
   toCoverLetterData,
 } from '../utils/coverLetterPdf';
+import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
@@ -739,6 +740,105 @@ export class IntentFormController {
    * ตอบเป็น `text/html` ไม่ใช่ PDF โดยตั้งใจ — ปลายทางคือกระดาษที่เอาไปให้เซ็นด้วยปากกา
    * ผู้ใช้กด Ctrl+P เอง · ไม่ต้องมีตัว render ฝั่งเซิร์ฟเวอร์
    */
+  /**
+   * เอกสารหมายเลข ๒ — แบบยืนยันแบบตอบรับ (สถานประกอบการเป็นผู้กรอก)
+   * Route: GET /api/intents/:id/acceptance-form
+   *
+   * ⛔ เปิดได้ต่อเมื่อ **คณบดีลงนามหนังสือขอความอนุเคราะห์แล้ว** เพราะคำชี้แจง
+   * บนฟอร์มเขียนว่าให้บริษัทตอบ "หลังจากได้รับหนังสือขอความอนุเคราะห์ฯ"
+   * — พิมพ์ก่อนหน้านั้นคือให้นักศึกษาถือใบตอบรับไปโดยไม่มีหนังสือที่ต้องตอบ
+   *
+   * วาดสดทุกครั้ง ไม่เก็บไฟล์ เพราะเป็นฟอร์มเปล่าที่คำนวณจากข้อมูลในฐานล้วนๆ
+   * (เหตุผลเดียวกับบันทึกข้อความ ต่างจากหนังสือขาออกที่มีลายเซ็นอยู่บนไฟล์)
+   */
+  static async getAcceptanceForm(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const result = await query(
+        `SELECT i.student_id, i.officer_document_no,
+                s.first_name, s.last_name,
+                mj.major_name_th, f.faculty_name_th,
+                c.name_th AS company_name,
+                doc.status AS cover_letter_status
+           FROM intent_forms i
+           JOIN students s        ON i.student_id = s.student_id
+           JOIN master_major mj   ON s.major_id = mj.major_id
+           JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
+           JOIN companies c       ON i.company_id = c.company_id
+           LEFT JOIN LATERAL (
+             SELECT d.status
+               FROM official_documents d
+              WHERE d.student_id = i.student_id
+                AND d.company_id = i.company_id
+                AND d.type = 'cover_letter'
+                AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+              ORDER BY d.doc_id DESC
+              LIMIT 1
+           ) doc ON TRUE
+          WHERE i.form_id = $1`,
+        [formId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
+        return;
+      }
+
+      const row = result.rows[0];
+      const { userId, roles } = req.user;
+
+      if (roles.includes('student')) {
+        if (row.student_id !== userId) {
+          res.status(403).json({ message: 'คุณเปิดดูได้เฉพาะเอกสารของตัวเองเท่านั้น' });
+          return;
+        }
+      } else {
+        await assertCanReviewStudentWork(userId, roles, row.student_id);
+      }
+
+      if (row.cover_letter_status !== 'signed') {
+        res.status(409).json({
+          message:
+            'แบบตอบรับจะออกให้เมื่อคณบดีลงนามหนังสือขอความอนุเคราะห์แล้ว เพราะสถานประกอบการต้องตอบรับหลังจากได้รับหนังสือฉบับนั้น',
+        });
+        return;
+      }
+
+      const pdf = await buildAcceptanceFormPdf({
+        faculty_name_th: row.faculty_name_th,
+        company_name: row.company_name,
+        first_name: row.first_name,
+        last_name: row.last_name,
+        major_name_th: row.major_name_th,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader(
+        'Content-Disposition',
+        `inline; filename="acceptance-form-${formId}.pdf"`
+      );
+      res.status(200).send(pdf);
+    } catch (error) {
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(
+        res,
+        error,
+        'Get Acceptance Form Error',
+        'เกิดข้อผิดพลาดขณะสร้างแบบตอบรับ'
+      );
+    }
+  }
+
   static async getRequestForm(req: Request, res: Response): Promise<void> {
     try {
       if (!req.user) {

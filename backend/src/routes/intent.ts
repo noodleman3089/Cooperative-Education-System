@@ -93,4 +93,9 @@ router.get(
 // การใส่ authorizeRoles เพิ่มตรงนี้จะกลายเป็นด่านที่หลวมกว่าด่านจริงและชวนเข้าใจผิด
 router.get('/:id/request-form', IntentFormController.getRequestForm);
 
+// Route: GET /api/intents/:id/acceptance-form
+// เอกสารหมายเลข 2 — แบบยืนยันแบบตอบรับที่สถานประกอบการเป็นผู้กรอก
+// ไม่ระบุ role ด้วยเหตุผลเดียวกับ request-form ด้านบน
+router.get('/:id/acceptance-form', IntentFormController.getAcceptanceForm);
+
 export default router;
