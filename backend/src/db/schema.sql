@@ -322,10 +322,19 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     acceptance_signer_name VARCHAR(255),
     acceptance_signer_position VARCHAR(255),
     acceptance_signed_date DATE,
+    -- หนังสือส่งตัว (ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ) — ออกหลังเจ้าหน้าที่รับแบบตอบรับแล้ว
+    -- ⛔ เลขนี้ต้องถูกพิมพ์กลับลงช่อง "ส่วนของเจ้าหน้าที่ฯ" ของเอกสารหมายเลข ๒
+    --    ซึ่งวาดสดจาก intent_forms ล้วน จึงเก็บที่นี่ด้วย ไม่ใช่แค่ official_documents
+    dispatch_document_no VARCHAR(100),
+    -- วันสิ้นสุดการปฏิบัติงาน — มีแต่หนังสือส่งตัวที่ใช้ ("ตั้งแต่วันที่ … ถึงวันที่ …")
+    -- ⛔ เจ้าหน้าที่คีย์จากที่ตกลงกับสถานประกอบการจริง ระบบไม่คำนวณให้เอง
+    end_date DATE,
     -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
     -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
     CONSTRAINT intent_forms_late_reason_required
-        CHECK (submitted_late = FALSE OR (late_reason IS NOT NULL AND btrim(late_reason) <> ''))
+        CHECK (submitted_late = FALSE OR (late_reason IS NOT NULL AND btrim(late_reason) <> '')),
+    CONSTRAINT intent_forms_work_period_order
+        CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
 
 -- 8. Document Templates Table

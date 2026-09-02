@@ -56,6 +56,39 @@ interface AcceptanceRow {
   acceptance_submitted_late?: boolean;
 }
 
+/**
+ * แถวในคิวรอออกหนังสือส่งตัว — จาก GET /intents?status=accepted
+ *
+ * หนังสือส่งตัวเป็นข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ · ออกหลังเจ้าหน้าที่รับแบบตอบรับแล้ว
+ * และเป็นคนละใบกับหนังสือขอความอนุเคราะห์ (ใบนั้นถามว่า "จะรับไหม" ออกก่อนตอบรับ)
+ */
+interface DispatchRow {
+  form_id: number;
+  student_code?: string;
+  first_name?: string | null;
+  last_name?: string | null;
+  company_name_th?: string;
+  start_date?: string | null;
+  end_date?: string | null;
+  mentor_name?: string | null;
+  acceptance_signer_name?: string | null;
+  acceptance_signer_position?: string | null;
+  acceptance_signed_date?: string | null;
+  dispatch_document_no?: string | null;
+}
+
+/** ระยะปฏิบัติงานขั้นต่ำตามระเบียบสหกิจศึกษา — ใช้เดาวันจบไว้ให้เจ้าหน้าที่แก้ ไม่ใช่บังคับ */
+const COOP_DEFAULT_DAYS = 111; // 16 สัปดาห์ นับรวมวันแรก
+
+/**
+ * บวกวันบนสตริง `YYYY-MM-DD` ด้วย `Date.UTC` ล้วน
+ * ⛔ ห้าม `new Date(iso)` แล้ว format กลับ — จะเลื่อนวันตาม timezone ของเบราว์เซอร์
+ */
+const addDays = (iso: string, days: number): string => {
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
+};
+
 interface GeneratedDocument {
   doc_id: number;
   type: string;
@@ -129,9 +162,18 @@ const PIPELINE_STEPS: {
   {
     status: 'accepted',
     title: 'สถานประกอบการตอบรับ',
-    waitingOn: 'ขึ้นทะเบียนพี่เลี้ยงและเริ่มปฏิบัติงานได้',
+    waitingOn: 'ขึ้นทะเบียนพี่เลี้ยงแล้ว',
+    count: (s) => s.accepted || 0,
+  },
+  // ⛔ ตัวเลขนี้เคยเท่ากับ 'สถานประกอบการตอบรับ' เป๊ะทุกครั้งเพราะฝั่งเซิร์ฟเวอร์นับ
+  //    เอกสารชนิด 'dispatch_letter' ที่ไม่มีอยู่จริง (ชนิดจริงคือ 'send_letter')
+  //    การ์ดเดิมจึงซ้อนกันสองใบด้วยเลขเดียวกัน · แก้ที่ getPipelineSummary แล้ว
+  {
+    status: 'dispatch_eligible',
+    title: 'รอออกหนังสือส่งตัว',
+    waitingOn: 'รอเจ้าหน้าที่ออกเลขที่หนังสือส่งตัว แล้วส่งเข้าคิวคณบดี',
     done: true,
-    count: (s) => s.dispatch_eligible || s.accepted || 0,
+    count: (s) => s.dispatch_eligible || 0,
   },
 ];
 
@@ -149,6 +191,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
     signed_date: '',
   });
   const [acceptanceBusy, setAcceptanceBusy] = useState(false);
+  const [dispatchQueue, setDispatchQueue] = useState<DispatchRow[]>([]);
+  const [reviewingDispatch, setReviewingDispatch] = useState<DispatchRow | null>(null);
+  const [dispatchForm, setDispatchForm] = useState({ document_no: '', end_date: '' });
+  const [dispatchBusy, setDispatchBusy] = useState(false);
+  const [confirmingDispatch, setConfirmingDispatch] = useState(false);
   const [rejectingAcceptance, setRejectingAcceptance] = useState(false);
   const [acceptanceRejectReason, setAcceptanceRejectReason] = useState('');
   const [reviewingRequest, setReviewingRequest] = useState<RequestFormRow | null>(null);
@@ -252,16 +299,22 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
       // แม่แบบเอกสารไม่มีให้โหลดแล้ว — `GET /documents/templates` ถูกถอดพร้อมกับ
       // การออกเอกสารเมื่อ 2026-08-26 · ประวัติเอกสารที่ออกไปแล้วยังโหลดตามปกติ
-      const [docsData, summaryData, requestData, acceptanceData] = await Promise.all([
+      const [docsData, summaryData, requestData, acceptanceData, dispatchData] = await Promise.all([
         api.get('/documents'),
         api.get('/intents/pipeline-summary').catch(() => null),
         api.get('/intents?status=pending_officer_request').catch(() => []),
-        api.get('/intents?status=pending_officer_approval').catch(() => [])
+        api.get('/intents?status=pending_officer_approval').catch(() => []),
+        api.get('/intents?status=accepted').catch(() => [])
       ]);
 
       setDocuments(docsData || []);
       setRequestQueue(requestData || []);
       setAcceptanceQueue(acceptanceData || []);
+      // ใบที่ตอบรับแล้วแต่ยังไม่มีเลขที่หนังสือส่งตัว · ด่านจริงอยู่ที่เซิร์ฟเวอร์
+      // (มันกันซ้ำที่การมีอยู่ของเอกสาร) ตรงนี้แค่ไม่ให้คิวรกด้วยใบที่ทำไปแล้ว
+      setDispatchQueue(
+        ((dispatchData || []) as DispatchRow[]).filter((row) => !row.dispatch_document_no)
+      );
       if (summaryData) {
         setPipelineSummary(summaryData);
       }
@@ -871,6 +924,43 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกผลการตรวจแบบตอบรับได้'));
     } finally {
       setAcceptanceBusy(false);
+    }
+  };
+
+  /**
+   * เปิดใบที่ตอบรับแล้วขึ้นมาออกหนังสือส่งตัว
+   *
+   * เดาวันจบให้เป็น "วันเริ่ม + ๑๖ สัปดาห์" ไว้ก่อน **เป็นค่าตั้งต้นให้แก้ ไม่ใช่คำตอบ** —
+   * ระยะจริงมาจากที่ตกลงกับสถานประกอบการ ซึ่งระบบไม่มีทางรู้
+   */
+  const openDispatchReview = (row: DispatchRow) => {
+    setReviewingDispatch(row);
+    setDispatchForm({
+      document_no: '',
+      end_date: row.end_date || (row.start_date ? addDays(row.start_date, COOP_DEFAULT_DAYS) : ''),
+    });
+    setConfirmingDispatch(false);
+    setError(null);
+    setSuccess(null);
+  };
+
+  const submitIssueDispatch = async () => {
+    if (!reviewingDispatch) return;
+    setDispatchBusy(true);
+    setError(null);
+    try {
+      await api.post(`/intents/${reviewingDispatch.form_id}/dispatch-letter`, dispatchForm);
+      setSuccess(
+        `ออกหนังสือส่งตัวของ ${reviewingDispatch.student_code || ''} แล้ว เลขที่ ${dispatchForm.document_no} · รอคณบดีลงนาม`
+      );
+      setConfirmingDispatch(false);
+      setReviewingDispatch(null);
+      await loadData(true);
+    } catch (err) {
+      setConfirmingDispatch(false);
+      setError(getErrorMessage(err, 'ไม่สามารถออกหนังสือส่งตัวได้'));
+    } finally {
+      setDispatchBusy(false);
     }
   };
 
@@ -2268,6 +2358,55 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
             )}
           </div>
 
+          {/* คิวหนังสือส่งตัว (ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ)
+              ออกหลังรับแบบตอบรับแล้ว · คนละใบกับหนังสือขอความอนุเคราะห์
+              ผู้รับหนังสือคือคนที่ลงนามอนุมัติในแบบตอบรับ ซึ่งเจ้าหน้าที่คีย์ไว้ตอนตรวจ */}
+          <div className="rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+            <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
+              <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                รอออกหนังสือส่งตัว ({dispatchQueue.length} รายการ)
+              </span>
+              <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                ตรวจข้อมูลที่จะถูกพิมพ์ลงหนังสือ แล้วออกเลขที่หนังสือส่งตัวและระบุวันสิ้นสุด
+                การปฏิบัติงาน — หนังสือจะเข้าคิวให้คณบดีลงนาม
+              </p>
+            </div>
+
+            {dispatchQueue.length > 0 ? (
+              <div className="max-h-[280px] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+                {dispatchQueue.map((row) => (
+                  <div
+                    key={row.form_id}
+                    className="flex items-center justify-between gap-3 p-4 text-xs hover:bg-gray-50/50 dark:hover:bg-gray-800/10"
+                  >
+                    <div>
+                      <span className="block font-bold text-gray-800 dark:text-gray-200">
+                        {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-gray-600 dark:text-gray-400">
+                        รหัส: {row.student_code} | สถานประกอบการ: {row.company_name_th}
+                        {row.start_date ? ` | เริ่ม ${formatThaiDate(row.start_date)}` : ''}
+                      </span>
+                    </div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      data-testid={`issue-dispatch-${row.form_id}`}
+                      onClick={() => openDispatchReview(row)}
+                      className="shrink-0 border-brand-blue text-brand-blue dark:border-blue-800 dark:text-blue-400"
+                    >
+                      ออกหนังสือส่งตัว
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-12 text-center text-xs text-gray-600 dark:text-gray-400">
+                ไม่มีใบที่รอออกหนังสือส่งตัวในขณะนี้
+              </div>
+            )}
+          </div>
+
           {/* แบนเนอร์ "ยังอยู่ระหว่างพัฒนา" ถูกถอดออก 2026-08-27 — การออกหนังสือทำเสร็จ
               ตั้งแต่ก้อน 3 แล้ว ข้อความเดิมบอกเจ้าหน้าที่ว่าฟีเจอร์ยังไม่พร้อมใช้ */}
 
@@ -2668,6 +2807,141 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
           </ModalFooter>
         </Modal>
       )}
+
+      {/* ออกหนังสือส่งตัว (ข้อ ๙ ของ ๑๓ ขั้นตอน) */}
+      {reviewingDispatch && (
+        <Modal
+          onClose={() => setReviewingDispatch(null)}
+          title={`ออกหนังสือส่งตัว — ${[reviewingDispatch.first_name, reviewingDispatch.last_name].filter(Boolean).join(' ')} (${reviewingDispatch.student_code || '-'})`}
+          size="lg"
+          closeOnBackdrop={false}
+        >
+          <ModalBody>
+            <div className="space-y-4">
+              <AlertBanner variant="error" message={error} />
+
+              {/* สิ่งที่จะถูกพิมพ์ลงหนังสือจริง — เจ้าหน้าที่ตรวจตรงนี้ก่อนออกเลข
+                  เพราะแก้ทีหลังไม่ได้ (หนังสือเข้าคิวคณบดีทันที) */}
+              <dl className="grid gap-2 rounded-xl bg-gray-50 p-4 text-xs dark:bg-gray-800/40 sm:grid-cols-2">
+                <div>
+                  <dt className="text-gray-500 dark:text-gray-400">สถานประกอบการ</dt>
+                  <dd className="font-bold text-gray-800 dark:text-gray-200">
+                    {reviewingDispatch.company_name_th || '-'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 dark:text-gray-400">เรียน (ผู้ลงนามในแบบตอบรับ)</dt>
+                  <dd
+                    className="font-bold text-gray-800 dark:text-gray-200"
+                    data-testid="dispatch-recipient"
+                  >
+                    {reviewingDispatch.acceptance_signer_name || '— ใช้ผู้ประสานงานของบริษัทแทน —'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 dark:text-gray-400">พนักงานที่ปรึกษา (พี่เลี้ยง)</dt>
+                  <dd className="font-bold text-gray-800 dark:text-gray-200">
+                    {reviewingDispatch.mentor_name || '— ยังไม่มีในระบบ —'}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500 dark:text-gray-400">วันเริ่มปฏิบัติงาน</dt>
+                  <dd className="font-bold text-gray-800 dark:text-gray-200">
+                    {reviewingDispatch.start_date
+                      ? formatThaiDate(reviewingDispatch.start_date)
+                      : '-'}
+                  </dd>
+                </div>
+              </dl>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="dispatch-document-no"
+                    className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    เลขที่หนังสือส่งตัว
+                  </label>
+                  <Input
+                    id="dispatch-document-no"
+                    data-testid="dispatch-document-no"
+                    value={dispatchForm.document_no}
+                    onChange={(e) =>
+                      setDispatchForm((f) => ({ ...f, document_no: e.target.value }))
+                    }
+                    placeholder="เช่น อว 0656.10/123"
+                  />
+                </div>
+                <div>
+                  <label
+                    htmlFor="dispatch-end-date"
+                    className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                  >
+                    วันสิ้นสุดการปฏิบัติงาน
+                  </label>
+                  <Input
+                    id="dispatch-end-date"
+                    type="date"
+                    data-testid="dispatch-end-date"
+                    min={reviewingDispatch.start_date || undefined}
+                    value={dispatchForm.end_date}
+                    onChange={(e) => setDispatchForm((f) => ({ ...f, end_date: e.target.value }))}
+                  />
+                </div>
+                <p className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
+                  ระบบเติมวันสิ้นสุดไว้ให้เป็น ๑๖ สัปดาห์นับจากวันเริ่ม
+                  <strong> เป็นค่าตั้งต้นเท่านั้น</strong> — แก้ให้ตรงกับที่ตกลงกับสถานประกอบการจริง
+                  เพราะช่วงเวลานี้จะถูกพิมพ์ลงหนังสือที่คณบดีลงนาม
+                </p>
+              </div>
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="secondary" size="sm" onClick={() => setReviewingDispatch(null)}>
+              ยกเลิก
+            </Button>
+            <Button
+              size="sm"
+              loading={dispatchBusy}
+              disabled={!dispatchForm.document_no.trim() || !dispatchForm.end_date}
+              data-testid="dispatch-submit"
+              onClick={() => setConfirmingDispatch(true)}
+            >
+              ออกหนังสือส่งตัว
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
+      <ConfirmDialog
+        open={confirmingDispatch}
+        title="ยืนยันการออกหนังสือส่งตัว"
+        message={
+          <>
+            ออกหนังสือส่งตัวของ{' '}
+            <strong>
+              {[reviewingDispatch?.first_name, reviewingDispatch?.last_name]
+                .filter(Boolean)
+                .join(' ')}
+            </strong>{' '}
+            ({reviewingDispatch?.student_code}) เลขที่{' '}
+            <strong>{dispatchForm.document_no}</strong>
+            <br />
+            ช่วงปฏิบัติงาน{' '}
+            <strong>
+              {reviewingDispatch?.start_date ? formatThaiDate(reviewingDispatch.start_date) : '-'}
+              {' – '}
+              {dispatchForm.end_date ? formatThaiDate(dispatchForm.end_date) : '-'}
+            </strong>
+            <br />
+            หนังสือจะเข้าคิวให้คณบดีลงนาม · เลขที่หนังสือที่ออกแล้วย้อนกลับไม่ได้
+          </>
+        }
+        confirmLabel="ออกเลขและส่งเข้าคิวคณบดี"
+        busy={dispatchBusy}
+        onConfirm={submitIssueDispatch}
+        onCancel={() => setConfirmingDispatch(false)}
+      />
 
       {/* ออกเลขที่หนังสือราชการแล้วย้อนไม่ได้ — ต้องยืนยันก่อน และต้องบอกว่าทำกับใคร */}
       <ConfirmDialog

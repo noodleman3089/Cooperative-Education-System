@@ -79,6 +79,14 @@ router.patch(
   IntentFormController.officerRejectRequest
 );
 
+// Route: POST /api/intents/:id/dispatch-letter (เจ้าหน้าที่สั่งออกหนังสือส่งตัว)
+// ⛔ ออกได้เมื่อใบอยู่สถานะ `accepted` แล้วเท่านั้น — ด่านอยู่ใน controller
+router.post(
+  '/:id/dispatch-letter',
+  authorizeRoles('staff'),
+  IntentFormController.issueDispatchLetter
+);
+
 // Route: GET /api/intents/:id/cover-letter/preview (เจ้าหน้าที่ดูตัวอย่างก่อนส่งคิวคณบดี)
 router.get(
   '/:id/cover-letter/preview',

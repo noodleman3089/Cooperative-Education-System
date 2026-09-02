@@ -952,7 +952,7 @@ const StudentDashboard: React.FC = () => {
           {data.documents && data.documents.length > 0 ? (
             <div className="space-y-3">
               {data.documents.map((doc) => (
-                <div key={doc.doc_id} className="flex justify-between items-center p-3 rounded-lg border border-gray-100 bg-gray-50 dark:bg-gray-800 dark:border-gray-800 text-xs">
+                <div key={doc.doc_id} data-testid={`student-doc-${doc.type}`} className="flex justify-between items-center p-3 rounded-lg border border-gray-100 bg-gray-50 dark:bg-gray-800 dark:border-gray-800 text-xs">
                   <div>
                     <span className="block font-bold text-gray-700 dark:text-gray-300">
                       {doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา'}

@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import { IntentFormModel, COMPANY_VISIBLE_STATUSES, LateStamp } from '../models/intent';
 import { isLateWindow } from '../middlewares/calendarGate';
-import { query } from '../config/database';
+import pool, { query } from '../config/database';
 import { notifyStudentStatusChange } from '../utils/email';
 import {
   assertCanAccessStudent,
@@ -18,6 +18,11 @@ import {
   toCoverLetterData,
 } from '../utils/coverLetterPdf';
 import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
+import {
+  buildDispatchLetterPdf,
+  fetchDispatchLetterData,
+  toDispatchLetterData,
+} from '../utils/dispatchLetterPdf';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
@@ -231,12 +236,16 @@ export class IntentFormController {
                i.submitted_late, i.late_reason,
                i.acceptance_due_date, i.acceptance_submitted_late,
                i.acceptance_signer_name, i.acceptance_signer_position, i.acceptance_signed_date,
+               i.dispatch_document_no, i.end_date, men.name AS mentor_name,
                doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
         JOIN companies c ON i.company_id = c.company_id
         LEFT JOIN job_posts j ON i.job_id = j.job_id
+        -- พี่เลี้ยงที่สถานประกอบการมอบหมาย — เจ้าหน้าที่ต้องเห็นตอนตรวจก่อนออกหนังสือส่งตัว
+        -- เพราะชื่อนี้ถูกพิมพ์ลงหนังสือฉบับที่คณบดีเซ็น (SEC-10: บริษัทถูกตัดฟิลด์ด้านล่างอยู่แล้ว)
+        LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
         -- ⛔ ห้ามใส่ backtick ในคอมเมนต์ก้อนนี้ — SQL ทั้งก้อนอยู่ใน template literal
         --    ของ JS มันจะปิดสตริงกลางทาง (พลาดมาแล้วสองครั้ง 2026-08-27)
         -- ใบความจำนงหยุดอยู่ที่ approved_by_dept_head ตั้งแต่เจ้าหน้าที่กดรับคำร้อง
@@ -474,12 +483,23 @@ export class IntentFormController {
         }
       });
 
-      // Count dispatch eligible (status = 'accepted' AND no dispatch_letter doc)
+      // ใบที่รอออกหนังสือส่งตัว = ตอบรับแล้ว และยังไม่มีหนังสือส่งตัวของบริษัทนั้น
+      //
+      // ⛔ ของเดิมเทียบ `d.type = 'dispatch_letter'` ซึ่ง **ไม่มีอยู่จริงในระบบ** (ชนิดจริง
+      //    คือ 'send_letter' ตามที่หน้าจอทั้งสองฝั่งแปลป้ายไว้) และ join ด้วย student_id
+      //    อย่างเดียว ตัวเลขจึงเท่ากับ "จำนวนใบที่ accepted" มาตลอดโดยไม่มีใครสังเกต
+      //    เพราะไม่เคยมีแถวชนิดนั้นให้ตัดออกเลย · ตอนนี้เทียบทั้งชนิดและสถานประกอบการ
+      //    เหมือนที่ `issueDispatchLetter` ใช้กันออกซ้ำ ทั้งสองที่จึงตอบตรงกันเสมอ
       const dispatchEligibleResult = await query(`
         SELECT COUNT(*)::int as count
         FROM intent_forms i
-        LEFT JOIN official_documents d ON d.student_id = i.student_id AND d.type = 'dispatch_letter'
-        WHERE i.status = 'accepted' AND d.doc_id IS NULL
+        WHERE i.status = 'accepted'
+          AND NOT EXISTS (
+            SELECT 1 FROM official_documents d
+             WHERE d.student_id = i.student_id
+               AND d.company_id = i.company_id
+               AND d.type = 'send_letter'
+          )
       `);
       counts.dispatch_eligible = Number(dispatchEligibleResult.rows[0]?.count || 0);
 
@@ -736,6 +756,166 @@ export class IntentFormController {
   }
 
   /**
+   * เจ้าหน้าที่สั่งออก **หนังสือส่งตัว** แล้วส่งเข้าคิวคณบดี
+   * Route: POST /api/intents/:id/dispatch-letter
+   * Access: staff
+   *
+   * เป็นขั้นที่ ๙ ของ ๑๓ ขั้นตอนในคู่มือ และเป็นจุดที่ผลการตอบรับที่เจ้าหน้าที่คีย์ไว้
+   * ตอนรับแบบตอบรับ (รอบ 53) **ถูกนำไปใช้จริง** — ชื่อผู้อนุมัติกลายเป็นผู้รับหนังสือ
+   * และวันที่บนแบบตอบรับกลายเป็นบรรทัด "อ้างถึง"
+   *
+   * ⛔ **ด่านลำดับคือสถานะ `accepted` เท่านั้น** — ก่อนหน้านั้นยังไม่มีอะไรให้ส่งตัวไป
+   * · เจ้าหน้าที่คีย์ **เลขที่หนังสือส่งตัว** และ **วันสิ้นสุดการปฏิบัติงาน** เอง
+   *   ระบบไม่ออกเลขให้และไม่คำนวณวันจบให้ ทั้งสองอย่างมาจากของจริงนอกระบบ
+   * · **กันออกซ้ำที่การมีอยู่ของเอกสาร ไม่ใช่ที่คอลัมน์เลขที่** เพื่อให้กดใหม่ได้จริง
+   *   เมื่อรอบก่อนล้มตอนเขียนไฟล์ (ฐานอัปเดตแล้วแต่ไม่มีเอกสาร = ตันถาวรถ้ากันที่คอลัมน์)
+   */
+  static async issueDispatchLetter(req: Request, res: Response): Promise<void> {
+    const client = await pool.connect();
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const documentNo =
+        typeof req.body?.document_no === 'string' ? req.body.document_no.trim() : '';
+      const endDate = typeof req.body?.end_date === 'string' ? req.body.end_date.trim() : '';
+
+      if (!documentNo || !endDate) {
+        res
+          .status(400)
+          .json({ message: 'กรุณากรอกเลขที่หนังสือส่งตัว และวันสิ้นสุดการปฏิบัติงาน' });
+        return;
+      }
+      // วันที่เป็นสตริง YYYY-MM-DD ล้วน — ห้าม new Date() แล้วส่งต่อ (เลื่อนวันตาม timezone)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        res.status(400).json({ message: 'รูปแบบวันสิ้นสุดการปฏิบัติงานต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
+        return;
+      }
+
+      await client.query('BEGIN');
+
+      const intentRes = await client.query(
+        `SELECT i.form_id, i.student_id, i.company_id, i.status, i.start_date::text AS start_date,
+                EXISTS (
+                  SELECT 1 FROM official_documents d
+                   WHERE d.student_id = i.student_id
+                     AND d.company_id = i.company_id
+                     AND d.type = 'send_letter'
+                ) AS already_issued
+           FROM intent_forms i
+          WHERE i.form_id = $1
+          FOR UPDATE`,
+        [formId]
+      );
+
+      if ((intentRes.rowCount ?? 0) === 0) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
+        return;
+      }
+
+      const intent = intentRes.rows[0];
+
+      if (intent.status !== 'accepted') {
+        await client.query('ROLLBACK');
+        res.status(409).json({
+          message:
+            'หนังสือส่งตัวออกได้เมื่อเจ้าหน้าที่รับแบบตอบรับจากสถานประกอบการเรียบร้อยแล้วเท่านั้น',
+        });
+        return;
+      }
+
+      if (intent.already_issued) {
+        await client.query('ROLLBACK');
+        res.status(409).json({ message: 'ใบนี้ออกหนังสือส่งตัวไปแล้ว' });
+        return;
+      }
+
+      if (!intent.start_date) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          message: 'ใบนี้ยังไม่มีวันเริ่มปฏิบัติงาน จึงพิมพ์ช่วงเวลาลงหนังสือส่งตัวไม่ได้',
+        });
+        return;
+      }
+      if (endDate < intent.start_date) {
+        await client.query('ROLLBACK');
+        res.status(400).json({
+          message: `วันสิ้นสุดการปฏิบัติงาน (${endDate}) มาก่อนวันเริ่มปฏิบัติงาน (${intent.start_date})`,
+        });
+        return;
+      }
+
+      await client.query(
+        `UPDATE intent_forms SET dispatch_document_no = $2, end_date = $3 WHERE form_id = $1`,
+        [formId, documentNo, endDate]
+      );
+
+      await client.query('COMMIT');
+
+      // วาดหนังสือ *หลัง* ทรานแซกชันจบ ด้วยเหตุผลเดียวกับหนังสือขอความอนุเคราะห์ —
+      // การเขียนไฟล์ลงดิสก์ย้อนกลับพร้อมฐานไม่ได้ · ล้มตรงนี้เจ้าหน้าที่กดใหม่ได้
+      // เพราะด่านกันซ้ำอยู่ที่การมีอยู่ของเอกสาร ไม่ใช่ที่เลขบนใบความจำนง
+      const letterRow = await fetchDispatchLetterData(formId);
+      if (!letterRow) {
+        res.status(500).json({ message: 'ไม่พบข้อมูลสำหรับวาดหนังสือส่งตัว' });
+        return;
+      }
+
+      const pdfBytes = await buildDispatchLetterPdf(toDispatchLetterData(letterRow));
+      const fileName = `dispatch_letter_${formId}_${Date.now()}.pdf`;
+      const relativePath = path.posix.join('secure_private', 'documents', fileName);
+      const absolutePath = path.join(process.cwd(), relativePath);
+      fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+      fs.writeFileSync(absolutePath, pdfBytes);
+
+      const doc = await OfficialDocumentModel.create({
+        document_number: documentNo,
+        type: 'send_letter',
+        student_id: intent.student_id,
+        company_id: intent.company_id,
+        generated_file_path: relativePath,
+        status: 'pending_sign',
+      });
+
+      writeAudit(
+        {
+          action: AuditAction.DOCUMENT_GENERATED,
+          entityType: 'official_document',
+          entityId: doc.doc_id,
+          subjectId: intent.student_id,
+          detail: { type: 'send_letter', document_no: documentNo, end_date: endDate },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: 'ออกหนังสือส่งตัวเรียบร้อยแล้ว รอคณบดีลงนาม',
+        form_id: formId,
+        doc_id: doc.doc_id,
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      sendUnexpectedError(
+        res,
+        error,
+        'Issue Dispatch Letter Error',
+        'ไม่สามารถออกหนังสือส่งตัวได้'
+      );
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
    * แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1) — หน้า HTML สำหรับสั่งพิมพ์
    * Route: GET /api/intents/:id/request-form
    * Access: นักศึกษาเจ้าของคำร้อง · advisor / dept_head / staff / dean ตาม SEC-06
@@ -768,7 +948,7 @@ export class IntentFormController {
       }
 
       const result = await query(
-        `SELECT i.student_id, i.officer_document_no,
+        `SELECT i.student_id, i.officer_document_no, i.dispatch_document_no,
                 s.first_name, s.last_name,
                 mj.major_name_th, f.faculty_name_th,
                 c.name_th AS company_name,
@@ -823,6 +1003,8 @@ export class IntentFormController {
         first_name: row.first_name,
         last_name: row.last_name,
         major_name_th: row.major_name_th,
+        // ว่างจนกว่าจะออกหนังสือส่งตัว — ตอนนักศึกษาพิมพ์ไปให้บริษัทยังไม่มีเลขนี้
+        dispatch_document_no: row.dispatch_document_no,
       });
 
       res.setHeader('Content-Type', 'application/pdf');

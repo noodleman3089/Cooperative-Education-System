@@ -22,8 +22,11 @@ import { ThaiPdf } from './thaiPdf';
  * ให้เพราะระบบรู้อยู่แล้ว เหลือให้บริษัททำแค่ติ๊ก รับ/ไม่รับ กรอกผู้ประสานงาน และลงนาม
  * — ความสามารถเท่าเดิม กลไกเบาลง (บรรทัดฐานเดียวกับเอกสารหมายเลข 1)
  *
- * ⛔ **ห้ามเติมช่อง "ส่วนของเจ้าหน้าที่ประจำมหาวิทยาลัยฯ"** — เลขที่หนังสือส่งตัว
- * ออกหลังจากได้แบบตอบรับใบนี้กลับมาแล้ว ตอนพิมพ์จึงยังไม่มีเลขให้เติม
+ * ⚠️ **ช่อง "ส่วนของเจ้าหน้าที่ประจำมหาวิทยาลัยฯ" เว้นว่างจนกว่าจะออกหนังสือส่งตัว**
+ * เลขที่หนังสือส่งตัวออก *หลัง* ได้ใบนี้กลับมาแล้ว ตอนที่นักศึกษาพิมพ์เอาไปให้บริษัท
+ * จึงยังไม่มีเลข · พอเจ้าหน้าที่ออกหนังสือส่งตัวแล้ว ใบนี้ถูกวาดสดใหม่พร้อมเลข
+ * (ใบนี้ไม่เก็บไฟล์ จึงไม่มีฉบับเก่าค้างที่ขัดกับฐาน)
+ * ⛔ **ช่อง "ลงชื่อ" ยังเว้นเสมอ** — เป็นลายมือชื่อเจ้าหน้าที่บนกระดาษ ระบบไม่มีสิทธิ์เติมให้
  */
 
 const SEAL_PATH = () =>
@@ -36,6 +39,8 @@ export interface AcceptanceFormData {
   first_name: string | null;
   last_name: string | null;
   major_name_th: string | null;
+  /** เลขที่หนังสือส่งตัว — มีค่าเมื่อเจ้าหน้าที่ออกหนังสือส่งตัวไปแล้วเท่านั้น */
+  dispatch_document_no?: string | null;
 }
 
 /** ตัดคำว่า "สาขาวิชา" ที่ติดมากับค่าในฐาน — เหตุผลเดียวกับใน `coverLetterPdf.ts` */
@@ -210,7 +215,7 @@ export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buf
 
   pdf.space(STAMP_H + 26);
 
-  // ── ส่วนของเจ้าหน้าที่ (เว้นว่างเสมอ — เลขหนังสือส่งตัวออกทีหลัง) ──────────────
+  // ── ส่วนของเจ้าหน้าที่ (ว่างจนกว่าจะออกหนังสือส่งตัว) ─────────────────────────
   const boxTop = pdf.cursorY;
   const BOX_X = LEFT + 190;
   const BOX_W = RIGHT - BOX_X;
@@ -225,7 +230,13 @@ export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buf
   });
   pdf.drawAt('ส่วนของเจ้าหน้าที่ประจำมหาวิทยาลัยฯ', BOX_X + 60, boxTop - 16, 13);
   const boxRight = BOX_X + BOX_W - 10;
-  pdf.drawAt(dotsTo(pdf, 'เลขที่หนังสือส่งตัว ', BOX_X + 10, boxRight, 13), BOX_X + 10, boxTop - 38, 13);
+  const dispatchNo = (d.dispatch_document_no ?? '').trim();
+  pdf.drawAt(
+    dotsTo(pdf, `เลขที่หนังสือส่งตัว ${dispatchNo}${dispatchNo ? ' ' : ''}`, BOX_X + 10, boxRight, 13),
+    BOX_X + 10,
+    boxTop - 38,
+    13
+  );
   pdf.drawAt(dotsTo(pdf, 'ลงชื่อ ', BOX_X + 10, boxRight, 13), BOX_X + 10, boxTop - 58, 13);
   pdf.drawAt(
     dotsTo(pdf, '( ', BOX_X + 30, boxRight - pdf.textWidth(' )', 13), 13) + ' )',

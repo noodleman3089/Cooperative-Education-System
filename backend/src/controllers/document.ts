@@ -12,6 +12,11 @@ import {
   fetchCoverLetterDataByDoc,
   toCoverLetterData,
 } from '../utils/coverLetterPdf';
+import {
+  buildDispatchLetterPdf,
+  fetchDispatchLetterDataByDoc,
+  toDispatchLetterData,
+} from '../utils/dispatchLetterPdf';
 import { BatchSignDocumentsBody } from '../types';
 import {
   notifyStudentStatusChangeByDocId,
@@ -114,18 +119,31 @@ export class DocumentController {
             continue;
           }
 
-          const letterRow = await fetchCoverLetterDataByDoc(parsedDocId);
+          // ⛔ คิวคณบดีมีหนังสือสองชนิด **ที่วาดคนละแบบ** — ขอความอนุเคราะห์ (ก่อนตอบรับ)
+          //    และส่งตัว (หลังตอบรับ) · ก่อนหน้านี้ที่นี่เรียกตัววาดขอความอนุเคราะห์
+          //    ตายตัว ถ้าปล่อยไว้ หนังสือส่งตัวจะถูก "ลงนาม" ด้วยการวาดทับเป็นหนังสือ
+          //    ขอความอนุเคราะห์ทั้งใบ — เนื้อหาผิดทั้งฉบับโดยที่สถานะขึ้นว่า signed
+          const isDispatch = doc.type === 'send_letter';
+          const signOptions = {
+            signatureFile: DocumentController.resolveDeanSignaturePath(deanProfile.e_signature_file),
+            signedDate: new Date(),
+          };
+
+          const letterRow = isDispatch
+            ? await fetchDispatchLetterDataByDoc(parsedDocId)
+            : await fetchCoverLetterDataByDoc(parsedDocId);
           if (!letterRow) {
             failedDocs.push({ doc_id: parsedDocId, error: 'ไม่พบข้อมูลคำร้องของเอกสารนี้' });
             continue;
           }
 
-          const signedBytes = await buildCoverLetterPdf(toCoverLetterData(letterRow), {
-            signatureFile: DocumentController.resolveDeanSignaturePath(deanProfile.e_signature_file),
-            signedDate: new Date(),
-          });
+          const signedBytes = isDispatch
+            ? await buildDispatchLetterPdf(toDispatchLetterData(letterRow), signOptions)
+            : await buildCoverLetterPdf(toCoverLetterData(letterRow), signOptions);
 
-          const fileName = `cover_letter_signed_${parsedDocId}_${Date.now()}.pdf`;
+          const fileName = `${
+            isDispatch ? 'dispatch_letter' : 'cover_letter'
+          }_signed_${parsedDocId}_${Date.now()}.pdf`;
           const relativePath = path.posix.join('secure_private', 'documents', fileName);
           const absolutePath = path.join(process.cwd(), relativePath);
           fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
