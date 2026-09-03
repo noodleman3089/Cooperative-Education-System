@@ -18,7 +18,8 @@ import { getErrorMessage } from '../../utils/errors';
  * ⛔ **เชื้อชาติ/ศาสนาเป็นข้อมูลอ่อนไหวพิเศษตาม PDPA ม.26** ต้องติ๊กยินยอมแยกต่างหาก
  * ไม่ใช่เหมารวมกับเงื่อนไขการใช้งานทั่วไป — ด่านจริงอยู่ที่เซิร์ฟเวอร์ ตรงนี้เป็นด่านคู่
  *
- * 🔴 ส่วนครอบครัว · การศึกษา · ฝึกอบรม · กิจกรรม **ยังไม่ได้ทำ** (ก้อนถัดไป)
+ * ประวัติที่เป็นตาราง (ครอบครัว · การศึกษา · ฝึกอบรม · กิจกรรม) เก็บเป็น JSONB
+ * — คีย์ของแต่ละตารางต้องตรงกับ allow-list ฝั่งเซิร์ฟเวอร์ (`coopApplicationHistory.ts`)
  */
 
 interface CoopApplication {
@@ -44,7 +45,47 @@ interface CoopApplication {
   has_ethnicity: boolean;
   has_religion: boolean;
   sensitive_data_consented_at: string | null;
+  career_objective: string | null;
+  family_info: FamilyInfo | null;
+  education_history: Row[] | null;
+  training_history: Row[] | null;
+  activity_history: Row[] | null;
 }
+
+/** แถวหนึ่งของตารางประวัติ — คีย์ที่เซิร์ฟเวอร์ยอมรับต่างกันไปตามตาราง */
+type Row = Record<string, string>;
+
+interface FamilyInfo {
+  father?: Row;
+  mother?: Row;
+  sibling_count?: string;
+  birth_order?: string;
+  siblings?: Row[];
+}
+
+/** คอลัมน์ของแต่ละตาราง — ต้องตรงกับ allow-list ฝั่งเซิร์ฟเวอร์ (`coopApplicationHistory.ts`) */
+const EDUCATION_COLS: { key: string; label: string }[] = [
+  { key: 'level', label: 'ระดับการศึกษา' },
+  { key: 'institution', label: 'สถานศึกษา' },
+  { key: 'start_year', label: 'ปีที่เริ่ม' },
+  { key: 'end_year', label: 'ปีที่จบ' },
+  { key: 'degree', label: 'วุฒิที่ได้รับ' },
+  { key: 'major', label: 'สาขาวิชา' },
+];
+const TRAINING_COLS: { key: string; label: string }[] = [
+  { key: 'period', label: 'ระยะเวลา' },
+  { key: 'institution', label: 'หน่วยงาน/สถาบัน' },
+  { key: 'topic', label: 'หลักสูตร/เรื่องที่อบรม' },
+];
+const ACTIVITY_COLS: { key: string; label: string }[] = [
+  { key: 'period', label: 'ระยะเวลา' },
+  { key: 'position', label: 'ตำแหน่ง' },
+  { key: 'duty', label: 'หน้าที่ที่รับผิดชอบ' },
+];
+const SIBLING_COLS: { key: string; label: string }[] = [
+  { key: 'name', label: 'ชื่อ-นามสกุล' },
+  { key: 'occupation', label: 'อาชีพ' },
+];
 
 const BLANK = {
   first_name_en: '',
@@ -62,7 +103,80 @@ const BLANK = {
   national_id: '',
   ethnicity: '',
   religion: '',
+  career_objective: '',
 };
+
+/**
+ * ตารางกรอกแบบเพิ่ม/ลบแถวได้ — ใช้ซ้ำทั้ง 4 ตารางของใบนี้
+ *
+ * ⛔ **แถวว่างไม่ถูกเก็บลงฐาน** — ตัวตรวจฝั่งเซิร์ฟเวอร์ตัดแถวที่ทุกช่องว่างทิ้งอยู่แล้ว
+ * ฟอร์มจึงปล่อยให้มีแถวว่างค้างได้โดยไม่ทำให้ข้อมูลสกปรก
+ */
+const RowTable: React.FC<{
+  testid: string;
+  label: string;
+  columns: { key: string; label: string }[];
+  rows: Row[];
+  onChange: (rows: Row[]) => void;
+}> = ({ testid, label, columns, rows, onChange }) => (
+  <div>
+    <div className="mb-2 flex items-center justify-between">
+      <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{label}</p>
+      <button
+        type="button"
+        data-testid={`ca-${testid}-add`}
+        onClick={() => onChange([...rows, {}])}
+        className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-brand-blue transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
+      >
+        + เพิ่มแถว
+      </button>
+    </div>
+
+    {rows.length === 0 ? (
+      <p className="rounded-xl border border-dashed border-gray-300 py-4 text-center text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
+        ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่มีก็ส่งใบสมัครได้)
+      </p>
+    ) : (
+      <div className="space-y-2">
+        {rows.map((row, index) => (
+          <div
+            key={index}
+            data-testid={`ca-${testid}-row`}
+            className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-800/30"
+          >
+            <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
+              {columns.map((col) => (
+                <Input
+                  key={col.key}
+                  size="sm"
+                  aria-label={`${label} ${col.label}`}
+                  data-testid={`ca-${testid}-${index}-${col.key}`}
+                  value={row[col.key] || ''}
+                  placeholder={col.label}
+                  onChange={(e) => {
+                    const next = rows.map((r, i) =>
+                      i === index ? { ...r, [col.key]: e.target.value } : r
+                    );
+                    onChange(next);
+                  }}
+                />
+              ))}
+            </div>
+            <button
+              type="button"
+              aria-label={`ลบแถวที่ ${index + 1} ของ${label}`}
+              data-testid={`ca-${testid}-${index}-remove`}
+              onClick={() => onChange(rows.filter((_, i) => i !== index))}
+              className="shrink-0 rounded-lg border border-red-200 px-2 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+            >
+              ลบ
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
+  </div>
+);
 
 const CoopJobApplication: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -73,6 +187,11 @@ const CoopJobApplication: React.FC = () => {
   const [server, setServer] = useState<CoopApplication | null>(null);
   const [form, setForm] = useState({ ...BLANK });
   const [consent, setConsent] = useState(false);
+
+  const [family, setFamily] = useState<FamilyInfo>({});
+  const [education, setEducation] = useState<Row[]>([]);
+  const [training, setTraining] = useState<Row[]>([]);
+  const [activities, setActivities] = useState<Row[]>([]);
 
   const consented = Boolean(server?.sensitive_data_consented_at);
 
@@ -103,7 +222,12 @@ const CoopJobApplication: React.FC = () => {
         national_id_expiry_date: data.national_id_expiry_date
           ? String(data.national_id_expiry_date).split('T')[0]
           : '',
+        career_objective: data.career_objective || '',
       });
+      setFamily(data.family_info || {});
+      setEducation(data.education_history || []);
+      setTraining(data.training_history || []);
+      setActivities(data.activity_history || []);
       setError(null);
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถดึงข้อมูลใบสมัครงานได้'));
@@ -135,6 +259,10 @@ const CoopJobApplication: React.FC = () => {
       const res = await api.put('/students/coop-application', {
         ...form,
         sensitive_data_consent: consent,
+        family_info: family,
+        education_history: education,
+        training_history: training,
+        activity_history: activities,
       });
       setSuccess(res.message || 'บันทึกเรียบร้อยแล้ว');
       setConsent(false);
@@ -465,11 +593,121 @@ const CoopJobApplication: React.FC = () => {
         </div>
       </section>
 
-      {/* ส่วนที่เหลือของใบยังไม่ได้ทำ — บอกตรงๆ ดีกว่าให้ผู้ใช้เดาว่าหายไปไหน */}
-      <AlertBanner
-        variant="info"
-        message="ส่วนประวัติครอบครัว การศึกษา ฝึกอบรม และกิจกรรม กำลังพัฒนา จะเปิดให้กรอกในลำดับถัดไป"
-      />
+      {/* ── ครอบครัว ── */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800 dark:text-white">
+          <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
+          ประวัติครอบครัว
+        </h3>
+
+        {(['father', 'mother'] as const).map((who) => (
+          <div key={who} className="mb-4">
+            <p className="mb-2 text-xs font-bold text-gray-700 dark:text-gray-300">
+              {who === 'father' ? 'บิดา' : 'มารดา'}
+            </p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              {(['name', 'age', 'occupation', 'phone'] as const).map((field) => (
+                <Input
+                  key={field}
+                  data-testid={`ca-${who}-${field}`}
+                  aria-label={`${who === 'father' ? 'บิดา' : 'มารดา'} ${field}`}
+                  value={family[who]?.[field] || ''}
+                  onChange={(e) =>
+                    setFamily((f) => ({ ...f, [who]: { ...(f[who] || {}), [field]: e.target.value } }))
+                  }
+                  placeholder={
+                    {
+                      name: 'ชื่อ-นามสกุล',
+                      age: 'อายุ',
+                      occupation: 'อาชีพ',
+                      phone: 'โทรศัพท์',
+                    }[field]
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <label htmlFor="ca-sibling-count" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
+              จำนวนพี่น้อง (รวมตัวเอง)
+            </label>
+            <Input
+              id="ca-sibling-count"
+              data-testid="ca-sibling-count"
+              value={family.sibling_count || ''}
+              onChange={(e) => setFamily((f) => ({ ...f, sibling_count: e.target.value }))}
+            />
+          </div>
+          <div>
+            <label htmlFor="ca-birth-order" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
+              เป็นบุตรคนที่
+            </label>
+            <Input
+              id="ca-birth-order"
+              data-testid="ca-birth-order"
+              value={family.birth_order || ''}
+              onChange={(e) => setFamily((f) => ({ ...f, birth_order: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <RowTable
+          testid="siblings"
+          label="พี่น้อง"
+          columns={SIBLING_COLS}
+          rows={family.siblings || []}
+          onChange={(rows) => setFamily((f) => ({ ...f, siblings: rows }))}
+        />
+      </section>
+
+      {/* ── การศึกษา / ฝึกอบรม / กิจกรรม ── */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="mb-4 flex items-center gap-2 text-lg font-bold text-gray-800 dark:text-white">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+          ประวัติการศึกษา ฝึกอบรม และกิจกรรม
+        </h3>
+
+        <div className="space-y-6">
+          <RowTable
+            testid="education"
+            label="ประวัติการศึกษา"
+            columns={EDUCATION_COLS}
+            rows={education}
+            onChange={setEducation}
+          />
+          <RowTable
+            testid="training"
+            label="ประวัติการฝึกอบรม / ปฏิบัติงาน"
+            columns={TRAINING_COLS}
+            rows={training}
+            onChange={setTraining}
+          />
+          <RowTable
+            testid="activity"
+            label="กิจกรรมที่เคยเข้าร่วม"
+            columns={ACTIVITY_COLS}
+            rows={activities}
+            onChange={setActivities}
+          />
+
+          <div>
+            <label htmlFor="ca-career" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
+              จุดมุ่งหมายในอาชีพ
+            </label>
+            <Textarea
+              id="ca-career"
+              data-testid="ca-career"
+              rows={4}
+              value={form.career_objective}
+              onChange={(e) => set('career_objective', e.target.value)}
+              placeholder="อยากทำงานด้านไหน ตั้งเป้าไว้อย่างไรหลังจบการศึกษา"
+            />
+          </div>
+        </div>
+      </section>
 
       <div className="flex justify-end gap-3 pb-6">
         <Button

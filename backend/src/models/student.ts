@@ -255,6 +255,19 @@ export class StudentModel {
       emergencyPhone: string | null;
       nationalIdIssuedDistrict: string | null;
       nationalIdExpiryDate: string | null;
+      careerObjective: string | null;
+    },
+    /**
+     * ประวัติที่เป็นตาราง (JSONB) — `null` แปลว่า **ไม่ได้ส่งมา = ไม่ได้แก้**
+     * ต่างจาก `[]` / `{}` ที่แปลว่า "ล้างทิ้ง" · จึงใช้ COALESCE เหมือนช่องอ่อนไหว
+     * ⛔ ต้อง `JSON.stringify` ก่อนส่งให้ `pg` — คอลัมน์ JSONB อีก 3 ตัวในระบบทำแบบนี้
+     *    ทั้งหมด และจุดที่เคยตกหล่นคือ `updateOptionalProfile` (ดูคอมเมนต์ที่นั่น)
+     */
+    history: {
+      familyInfo: unknown;
+      educationHistory: unknown;
+      trainingHistory: unknown;
+      activityHistory: unknown;
     },
     sensitive: {
       nationalId: { ciphertext: string; iv: string; authTag: string } | null;
@@ -270,6 +283,11 @@ export class StudentModel {
               emergency_contact_name = $8, emergency_relationship = $9,
               emergency_address = $10, emergency_phone = $11,
               national_id_issued_district = $12, national_id_expiry_date = $13,
+              career_objective = $24,
+              family_info       = COALESCE($25::jsonb, family_info),
+              education_history = COALESCE($26::jsonb, education_history),
+              training_history  = COALESCE($27::jsonb, training_history),
+              activity_history  = COALESCE($28::jsonb, activity_history),
               national_id_ciphertext = COALESCE($14, national_id_ciphertext),
               national_id_iv         = COALESCE($15, national_id_iv),
               national_id_tag        = COALESCE($16, national_id_tag),
@@ -306,6 +324,11 @@ export class StudentModel {
         sensitive.religion?.iv ?? null,
         sensitive.religion?.authTag ?? null,
         sensitive.consentAt,
+        fields.careerObjective,
+        history.familyInfo == null ? null : JSON.stringify(history.familyInfo),
+        history.educationHistory == null ? null : JSON.stringify(history.educationHistory),
+        history.trainingHistory == null ? null : JSON.stringify(history.trainingHistory),
+        history.activityHistory == null ? null : JSON.stringify(history.activityHistory),
       ]
     );
     if ((res.rowCount ?? 0) === 0) return null;

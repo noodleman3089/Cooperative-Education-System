@@ -166,10 +166,8 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
       // แบบคำร้อง (เอกสารหมายเลข 1) ที่ลงนามแล้ว — เจ้าหน้าที่ต้องเปิดดูก่อนกดผ่าน
       // และนักศึกษาต้องเปิดดูของตัวเองได้ว่าอัปไฟล์ไหนไป
       'request_forms',
-      // รูปโปรไฟล์นักศึกษา — เจ้าตัวกับบุคลากรเท่านั้น
-      // ⛔ **บริษัทยังเปิดไม่ได้** ถึงจะเป็นรูปที่จะไปอยู่บนใบสมัคร สหกิจ 03
-      //    ก็ตาม · SEC-10 ให้บริษัทเห็นเท่าที่ สหกิจ 04 ให้ การเปิดช่องนี้ต้องรอ
-      //    ตอนทำ สหกิจ 03 จริง แล้วตัดสินพร้อมกันทั้งใบ ไม่ใช่แง้มไว้ล่วงหน้า
+      // รูปโปรไฟล์นักศึกษา — เจ้าตัว · บุคลากร · และ**บริษัทที่นักศึกษาสมัครมา**
+      // (เปิดให้บริษัทเมื่อ 2026-09-03 พร้อมใบ สหกิจ 03 ซึ่งบนกระดาษมีรูปติดอยู่แล้ว)
       'avatars',
     ];
     if (!allowedCategories.includes(category)) {
@@ -194,8 +192,16 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     if (!isStaff) {
       let isAuthorizedPartner = false;
       
-      if (userRoles.includes('company') && category === 'resumes' && userId !== undefined) {
-        const match = safeName.match(/^resume-user-(\d+)-/);
+      // บริษัทเปิดได้สองอย่างของนักศึกษาที่สมัครมาที่ตน: **เรซูเม่** และ **รูปถ่าย**
+      // ⛔ รูปถ่ายเพิ่งเปิดเมื่อ 2026-09-03 พร้อมกับใบ สหกิจ 03 (ก้อน 4c) — บนกระดาษ
+      //    รูป 1 นิ้วติดอยู่บนใบสมัครที่นักศึกษายื่นให้บริษัทเอง การให้เห็นในระบบจึงไม่ใช่
+      //    การเปิดเกินกระดาษ · **ห้ามขยายไปหมวดอื่นโดยไม่ถามว่า "กระดาษใบไหนให้สิ่งนี้"**
+      const COMPANY_READABLE: Record<string, RegExp> = {
+        resumes: /^resume-user-(\d+)-/,
+        avatars: /^avatar-user-(\d+)-/,
+      };
+      if (userRoles.includes('company') && COMPANY_READABLE[category] && userId !== undefined) {
+        const match = safeName.match(COMPANY_READABLE[category]);
         const studentUserId = match ? parseInt(match[1], 10) : null;
         if (studentUserId) {
           const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);

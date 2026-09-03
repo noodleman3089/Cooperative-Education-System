@@ -31,6 +31,16 @@ router.put(
   StudentController.updateCoopApplication
 );
 
+// Route: GET /api/students/:id/coop-application/company-view (สหกิจ 03 — บริษัทอ่าน)
+// ⛔ ขยาย allow-list ของ SEC-10 — ด่านความสัมพันธ์และรายการฟิลด์อยู่ใน controller
+//    บริษัทเห็นได้เท่าที่ใบสมัครงานบนกระดาษให้ **แต่ห้ามเห็นชั้น C** (เลขบัตร ·
+//    เชื้อชาติ · ศาสนา) แม้แต่ในรูปมาสก์
+router.get(
+  '/:id/coop-application/company-view',
+  authorizeRoles('company'),
+  StudentController.getCoopApplicationForCompany
+);
+
 // Route: GET /api/students (Staff, Dept Head, Advisor only)
 router.get(
   '/',

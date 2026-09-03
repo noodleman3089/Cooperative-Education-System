@@ -135,6 +135,15 @@ CREATE TABLE IF NOT EXISTS students (
     emergency_relationship VARCHAR(100),
     emergency_address TEXT,
     emergency_phone VARCHAR(50),
+    -- สหกิจ 03 · ประวัติที่เป็น "ตาราง" — JSONB ไม่ใช่ตารางใหม่ 4 ตัว (migration 014)
+    -- ไม่เคยถูกค้นข้ามนักศึกษา และอ่านทีเดียวพร้อมโปรไฟล์เสมอ
+    family_info JSONB,
+    education_history JSONB,
+    training_history JSONB,
+    -- ⛔ คนละอย่างกับ `skills_and_activities` (TEXT ก้อนเดียวที่หน้าโปรไฟล์ใช้)
+    activity_history JSONB,
+    -- ⛔ คนละอย่างกับ `interested_job_types` (รายการประเภทงานสำหรับจับคู่ตำแหน่ง)
+    career_objective TEXT,
     -- SEC-12 · สหกิจ 03 — เข้ารหัสสองทาง (AES-256-GCM) เพราะต้องพิมพ์กลับลงใบสมัคร
     -- ห้าม hash (อ่านกลับไม่ได้) · ดู migration 012 และ utils/encryption.ts
     national_id_ciphertext TEXT,
