@@ -32,6 +32,7 @@ const CoopJobApplication = lazy(() => import('./Student/CoopJobApplication'));
 const ReportOutline = lazy(() => import('./Student/ReportOutline'));
 const WeeklyLog = lazy(() => import('./Student/WeeklyLog'));
 const SupervisionTracking = lazy(() => import('./Advisor/SupervisionTracking'));
+const SupervisionRecord = lazy(() => import('./Advisor/SupervisionRecord'));
 const AppointmentAudit = lazy(() => import('./Staff/AppointmentAudit'));
 const FinalReportSubmission = lazy(() => import('./Student/FinalReportSubmission'));
 const EvaluationResult = lazy(() => import('./Student/EvaluationResult'));
@@ -321,6 +322,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
+        if (activeMenu === 'supervision_record') return <SupervisionRecord />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
         return <AdvisorDashboard activeMenu={activeMenu} />;
         

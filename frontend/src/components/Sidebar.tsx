@@ -193,7 +193,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'applications', label: 'ตรวจใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'students', label: 'รายชื่อนักศึกษาในที่ปรึกษา', icon: icons.students },
       { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
-      { id: 'supervision', label: 'บันทึกการนิเทศงาน', icon: icons.supervision },
+      { id: 'supervision', label: 'นัดหมายและติดตามการนิเทศ', icon: icons.supervision },
+      // สหกิจ 13 — คนละหน้ากับ 'supervision' ด้านบน: ตัวนั้นคือการนัดและติดตาม
+      // ตัวนี้คือแบบฟอร์ม 37 ข้ออย่างเป็นทางการ
+      { id: 'supervision_record', label: 'แบบบันทึกการนิเทศ (สหกิจ 13)', icon: icons.evaluation },
       // อาจารย์ไม่ได้ประเมิน — ทั้ง สหกิจ 15 และ 16 เป็นของพนักงานที่ปรึกษาตามแบบฟอร์มจริง
       // หน้านี้คือการตรวจอนุมัติเล่มรายงาน (สหกิจ 14) + ดูผลประเมินอย่างเดียว
       // menu id คงเดิมโดยตั้งใจ: ผูกอยู่ 5 ที่รวม NavId ของ e2e การเปลี่ยนควรเป็น commit แยก

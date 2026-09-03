@@ -56,6 +56,9 @@ export const AuditAction = {
   // PDPA ม.26: ความยินยอมโดยชัดแจ้งให้เก็บเชื้อชาติ/ศาสนา — คอลัมน์บนแถวแก้ทับได้
   // แต่บรรทัดนี้แก้ไม่ได้ ตามย้อนได้ว่าให้ความยินยอมเมื่อไหร่จากเครื่องไหน
   SENSITIVE_DATA_CONSENT_GIVEN: 'student.sensitive_data_consent_given',
+  // สหกิจ 13: ลายเซ็น 3 คนบนกระดาษถูกแทนด้วย "อาจารย์นิเทศกดส่งคนเดียว"
+  // บรรทัดนี้คือสิ่งที่ทำหน้าที่แทนลายเซ็น — ตามย้อนได้ว่าใครส่ง เมื่อไหร่ จากเครื่องไหน
+  SUPERVISION_RECORD_SUBMITTED: 'supervision_record.submitted',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

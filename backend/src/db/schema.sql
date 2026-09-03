@@ -15,6 +15,7 @@ DROP TABLE IF EXISTS coop_calendar_events CASCADE;
 DROP TABLE IF EXISTS job_posts CASCADE;
 DROP TABLE IF EXISTS report_outline_versions CASCADE;
 DROP TABLE IF EXISTS report_outlines CASCADE;
+DROP TABLE IF EXISTS supervision_records CASCADE;
 DROP TABLE IF EXISTS supervision_logs CASCADE;
 DROP TABLE IF EXISTS supervision_appointments CASCADE;
 DROP TABLE IF EXISTS weekly_logs CASCADE;
@@ -583,6 +584,44 @@ CREATE TABLE IF NOT EXISTS supervision_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- 16b. Supervision Records (สหกิจ 13 — แบบบันทึกการนิเทศงาน)
+--
+-- ⛔ **คนละชั้นกับสองตารางด้านบน อย่าสับสน**
+--    `supervision_appointments` = การ **นัดหมาย** ไปนิเทศ (อาจารย์ ↔ นักศึกษา ↔ บริษัท)
+--    `supervision_logs`         = บันทึกย่อหลังนิเทศ ผูกกับนัดหมายหนึ่งครั้ง
+--    `supervision_records`      = **แบบฟอร์ม สหกิจ 13 อย่างเป็นทางการ 37 ข้อ**
+--                                 ผูกกับ *นักศึกษา + ครั้งที่นิเทศ* ไม่ใช่กับนัดหมาย
+--    เหตุที่ไม่ผูกกับ `appointment_id`: การนิเทศเกิดขึ้นได้แม้ไม่ได้นัดผ่านระบบ
+--    การบังคับให้มีนัดก่อนเท่ากับปิดทางบันทึกของจริง
+-- 🟡 หนี้ที่รู้ตัว: `supervision_logs.preliminary_score` ซ้อนความหมายกับข้อ 7 ของใบนี้
+--    (สรุปโดยรวมของนักศึกษา) — ยังไม่ยุบเพราะหน้าจอนัดหมายใช้อยู่ ยุบเมื่อไหร่ให้ย้ายมาทางนี้
+CREATE TABLE IF NOT EXISTS supervision_records (
+    record_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    -- ⛔ RESTRICT เพราะบันทึกนี้เป็นหลักฐาน ต้องรู้เสมอว่าใครเป็นคนนิเทศ
+    supervisor_id INT NOT NULL REFERENCES personnel(personnel_id) ON DELETE RESTRICT,
+    company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE RESTRICT,
+    -- "การนิเทศครั้งที่ __" บนหัวฟอร์ม — คู่มือกำหนดให้นิเทศ 2 ครั้ง
+    visit_number INT NOT NULL CHECK (visit_number IN (1, 2)),
+    visit_date DATE NOT NULL,
+    -- คีย์ตาม `config/supervisionRubric.ts` · ค่าเป็น 1-5 หรือ **null** เมื่ออาจารย์เลือก "-"
+    -- ⛔ null = "ไม่ประเมิน" ไม่ใช่ 0 — และใบนี้ **จงใจไม่มี total_score**
+    --    เพราะไม่ได้เอาไปตัดเกรด การรวมคะแนนที่มี null ปนให้ตัวเลขที่ตีความไม่ได้
+    scores JSONB NOT NULL,
+    -- ทุกข้อมีช่อง "หมายเหตุ" ของตัวเองบนกระดาษ
+    remarks JSONB,
+    -- checkbox 4 รายการ: เอกสารที่อาจารย์สั่งให้นักศึกษาส่ง (ไม่ใช่สถานะที่ระบบคำนวณ)
+    documents_required JSONB,
+    additional_notes TEXT,
+    submitted_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- นิเทศครั้งเดียวได้บันทึกเดียว · แก้ได้ด้วยการส่งทับ (UPSERT)
+    UNIQUE (student_id, visit_number)
+);
+
+-- อาจารย์เปิดหน้าจอแล้วดึง "บันทึกของนักศึกษาคนนี้" เป็นหลัก
+CREATE INDEX IF NOT EXISTS idx_supervision_records_student
+    ON supervision_records (student_id, visit_number);
 
 -- 17. Weekly Logs (Phase 3)
 CREATE TABLE IF NOT EXISTS weekly_logs (
