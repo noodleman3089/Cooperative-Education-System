@@ -228,4 +228,87 @@ export class StudentModel {
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as Student;
   }
+
+  /**
+   * สหกิจ 03 — ช่องตัวตน/ติดต่อ/ฉุกเฉิน + ข้อมูลอ่อนไหวที่เข้ารหัสแล้ว
+   *
+   * ⛔ **ช่องอ่อนไหวใช้ COALESCE ต่างจากช่องธรรมดา** — หน้าจอเห็นเลขบัตรเป็นมาสก์
+   * (`x-xxxx-xxxxx-xx-3`) เสมอ ไม่เคยเห็นค่าจริง ถ้าส่งกลับมาแล้วเขียนทับตรงๆ
+   * การกดบันทึกโดยไม่แตะช่องนั้นจะลบข้อมูลทิ้งเงียบๆ · ผู้เรียกส่ง `null` มาแปลว่า
+   * "ไม่ได้แก้" ส่วนการล้างค่าจริงมีทางเดียวคือกลไกลบอัตโนมัติของ SEC-12
+   *
+   * `sensitiveConsentAt` ส่งมาเมื่อเพิ่งติ๊กยินยอมเท่านั้น (PDPA ม.26) — ยินยอมแล้ว
+   * ไม่ต้องยินยอมซ้ำทุกครั้งที่บันทึก จึง COALESCE เหมือนกัน
+   */
+  static async updateCoopApplicationIdentity(
+    studentId: number,
+    fields: {
+      firstNameEn: string | null;
+      lastNameEn: string | null;
+      gender: string | null;
+      nationality: string | null;
+      mobilePhone: string | null;
+      fax: string | null;
+      emergencyContactName: string | null;
+      emergencyRelationship: string | null;
+      emergencyAddress: string | null;
+      emergencyPhone: string | null;
+      nationalIdIssuedDistrict: string | null;
+      nationalIdExpiryDate: string | null;
+    },
+    sensitive: {
+      nationalId: { ciphertext: string; iv: string; authTag: string } | null;
+      ethnicity: { ciphertext: string; iv: string; authTag: string } | null;
+      religion: { ciphertext: string; iv: string; authTag: string } | null;
+      consentAt: Date | null;
+    }
+  ): Promise<Student | null> {
+    const res = await query(
+      `UPDATE students
+          SET first_name_en = $2, last_name_en = $3, gender = $4, nationality = $5,
+              mobile_phone = $6, fax = $7,
+              emergency_contact_name = $8, emergency_relationship = $9,
+              emergency_address = $10, emergency_phone = $11,
+              national_id_issued_district = $12, national_id_expiry_date = $13,
+              national_id_ciphertext = COALESCE($14, national_id_ciphertext),
+              national_id_iv         = COALESCE($15, national_id_iv),
+              national_id_tag        = COALESCE($16, national_id_tag),
+              ethnicity_ciphertext   = COALESCE($17, ethnicity_ciphertext),
+              ethnicity_iv           = COALESCE($18, ethnicity_iv),
+              ethnicity_tag          = COALESCE($19, ethnicity_tag),
+              religion_ciphertext    = COALESCE($20, religion_ciphertext),
+              religion_iv            = COALESCE($21, religion_iv),
+              religion_tag           = COALESCE($22, religion_tag),
+              sensitive_data_consented_at = COALESCE($23, sensitive_data_consented_at)
+        WHERE student_id = $1
+        RETURNING *`,
+      [
+        studentId,
+        fields.firstNameEn,
+        fields.lastNameEn,
+        fields.gender,
+        fields.nationality,
+        fields.mobilePhone,
+        fields.fax,
+        fields.emergencyContactName,
+        fields.emergencyRelationship,
+        fields.emergencyAddress,
+        fields.emergencyPhone,
+        fields.nationalIdIssuedDistrict,
+        fields.nationalIdExpiryDate,
+        sensitive.nationalId?.ciphertext ?? null,
+        sensitive.nationalId?.iv ?? null,
+        sensitive.nationalId?.authTag ?? null,
+        sensitive.ethnicity?.ciphertext ?? null,
+        sensitive.ethnicity?.iv ?? null,
+        sensitive.ethnicity?.authTag ?? null,
+        sensitive.religion?.ciphertext ?? null,
+        sensitive.religion?.iv ?? null,
+        sensitive.religion?.authTag ?? null,
+        sensitive.consentAt,
+      ]
+    );
+    if ((res.rowCount ?? 0) === 0) return null;
+    return res.rows[0] as Student;
+  }
 }

@@ -28,6 +28,7 @@ const StaffDashboard = lazy(() => import('../components/StaffDashboard'));
 const CompanyDashboard = lazy(() => import('../components/CompanyDashboard'));
 const PersonnelProfile = lazy(() => import('../components/PersonnelProfile'));
 const AccommodationWorkPlan = lazy(() => import('./Student/AccommodationWorkPlan'));
+const CoopJobApplication = lazy(() => import('./Student/CoopJobApplication'));
 const ReportOutline = lazy(() => import('./Student/ReportOutline'));
 const WeeklyLog = lazy(() => import('./Student/WeeklyLog'));
 const SupervisionTracking = lazy(() => import('./Advisor/SupervisionTracking'));
@@ -307,6 +308,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'application') return <CoopApplicationForm />;
         if (activeMenu === 'jobs') return <SmartJobBoard />;
         if (activeMenu === 'profile') return <StudentProfile />;
+        if (activeMenu === 'job_application') return <CoopJobApplication />;
         if (activeMenu === 'accommodation_plan') return <AccommodationWorkPlan />;
         if (activeMenu === 'report_outline') return <ReportOutline />;
         if (activeMenu === 'weekly_log') return <WeeklyLog />;

@@ -53,6 +53,9 @@ export const AuditAction = {
   // เดิมไม่ได้อีกแล้ว เพื่อให้ยังสืบย้อนได้ว่า "แถวนี้เคยมีข้อมูลอ่อนไหว ถูกลบเมื่อไหร่"
   // แม้ audit_log จะไม่เก็บค่าจริงไว้เลยก็ตาม (SEC-07 — เขียนอย่างเดียว ไม่มี read API)
   STUDENT_SENSITIVE_DATA_PURGED: 'student.sensitive_data_purged',
+  // PDPA ม.26: ความยินยอมโดยชัดแจ้งให้เก็บเชื้อชาติ/ศาสนา — คอลัมน์บนแถวแก้ทับได้
+  // แต่บรรทัดนี้แก้ไม่ได้ ตามย้อนได้ว่าให้ความยินยอมเมื่อไหร่จากเครื่องไหน
+  SENSITIVE_DATA_CONSENT_GIVEN: 'student.sensitive_data_consent_given',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

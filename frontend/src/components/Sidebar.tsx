@@ -175,6 +175,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'dashboard', label: 'หน้าแรก / แดชบอร์ด', icon: icons.dashboard },
       { id: 'application', label: 'สมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'jobs', label: 'ตำแหน่งงาน / สมัครงาน', icon: icons.jobs },
+      { id: 'job_application', label: 'ใบสมัครงานสหกิจ (สหกิจ 03)', icon: icons.application },
       { id: 'accommodation_plan', label: 'รายละเอียดที่พัก & แผนงาน', icon: icons.accommodation },
       { id: 'report_outline', label: 'โครงร่างรายงานปฏิบัติงาน', icon: icons.report_outline },
       { id: 'weekly_log', label: 'บันทึกการทำงานรายสัปดาห์', icon: icons.weekly_log },

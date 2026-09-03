@@ -137,7 +137,7 @@ export class PersonnelController {
           a.subdistrict, a.district, a.province, a.postal_code, a.address_legacy,
           a.latitude as accommodation_lat, a.longitude as accommodation_lng,
           a.phone as accommodation_phone, a.mobile_phone as accommodation_mobile,
-          a.emergency_contact, a.emergency_relationship, a.emergency_phone,
+          s.emergency_contact_name AS emergency_contact, s.emergency_relationship, s.emergency_phone,
           COALESCE(
             (SELECT json_agg(json_build_object(
               'plan_id', w.plan_id,

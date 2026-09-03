@@ -24,6 +24,7 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   signature: 'split',
   accommodation_plan: 'form',
   weekly_log: 'form',
+  job_application: 'form',
   supervision: 'cards',
   report_outline: 'table',
   report_outlines: 'table',

@@ -16,6 +16,21 @@ router.get(
   StudentController.getStudentDashboard
 );
 
+// Route: GET|PUT /api/students/coop-application (สหกิจ 03 — นักศึกษาของตัวเองเท่านั้น)
+// ⛔ ไม่มี `:id` ในเส้นทางโดยตั้งใจ — ใบนี้มีข้อมูลอ่อนไหว (SEC-12) การรับ id
+//    จากผู้เรียกคือการเปิดช่อง IDOR ให้ตัวเองโดยไม่จำเป็น ใช้ userId จาก token พอ
+// ⚠️ **ต้องมาก่อน `/:id` ทุกเส้น** ไม่งั้น express จับ 'coop-application' เป็น id
+router.get(
+  '/coop-application',
+  authorizeRoles('student'),
+  StudentController.getCoopApplication
+);
+router.put(
+  '/coop-application',
+  authorizeRoles('student'),
+  StudentController.updateCoopApplication
+);
+
 // Route: GET /api/students (Staff, Dept Head, Advisor only)
 router.get(
   '/',

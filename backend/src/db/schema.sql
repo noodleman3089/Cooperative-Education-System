@@ -120,6 +120,21 @@ CREATE TABLE IF NOT EXISTS students (
     language_proficiency JSONB,
     preferred_work_region VARCHAR(255),
     interested_job_types JSONB,
+    -- สหกิจ 03 · ช่องตัวตน/ติดต่อ (migration 013)
+    -- ⛔ `nationality` (สัญชาติ) ≠ `ethnicity` (เชื้อชาติ) — ตัวหลังเป็นข้อมูลอ่อนไหว
+    --    พิเศษ PDPA ม.26 ที่ต้องเข้ารหัส+ยินยอมแยก อยู่ท้ายตารางนี้ อย่าเอามารวมกัน
+    first_name_en VARCHAR(255),
+    last_name_en VARCHAR(255),
+    gender VARCHAR(20),
+    nationality VARCHAR(100),
+    mobile_phone VARCHAR(50),
+    fax VARCHAR(50),
+    -- ⛔ ผู้ติดต่อฉุกเฉินเป็นของ **คน** ไม่ใช่ของ **ที่พัก** — ย้ายขึ้นมาจาก
+    --    `accommodations` เมื่อ 2026-09-03 เพราะทั้ง สหกิจ 03 และ 06 ถามช่องเดียวกัน
+    emergency_contact_name VARCHAR(255),
+    emergency_relationship VARCHAR(100),
+    emergency_address TEXT,
+    emergency_phone VARCHAR(50),
     -- SEC-12 · สหกิจ 03 — เข้ารหัสสองทาง (AES-256-GCM) เพราะต้องพิมพ์กลับลงใบสมัคร
     -- ห้าม hash (อ่านกลับไม่ได้) · ดู migration 012 และ utils/encryption.ts
     national_id_ciphertext TEXT,
@@ -491,9 +506,11 @@ CREATE TABLE IF NOT EXISTS accommodations (
     -- ⛔ เก็บพิกัดอย่างเดียว ฝั่งอาจารย์เป็น**ลิงก์**ออกไป Google Maps ไม่ฝังแผนที่
     latitude NUMERIC(10, 7),
     longitude NUMERIC(10, 7),
-    emergency_contact VARCHAR(255),
-    emergency_relationship VARCHAR(100),
-    emergency_phone VARCHAR(50)
+    -- ⛔ ค่าเก่าก่อนย้ายผู้ติดต่อฉุกเฉินไปอยู่บน `students` (migration 013)
+    --    **อ่านอย่างเดียว ห้ามเขียนเพิ่ม** — แหล่งความจริงคือโปรไฟล์นักศึกษาแล้ว
+    emergency_contact_legacy VARCHAR(255),
+    emergency_relationship_legacy VARCHAR(100),
+    emergency_phone_legacy VARCHAR(50)
 );
 
 -- 13. Weekly Work Plans Table

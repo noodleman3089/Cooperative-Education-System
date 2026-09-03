@@ -13,6 +13,7 @@ import { AuditAction, writeAudit } from '../utils/audit';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
+import { decryptSensitive, encryptSensitive, maskNationalId } from '../utils/encryption';
 
 export class StudentController {
   /**
@@ -200,6 +201,206 @@ export class StudentController {
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Update Optional Profile Error', 'An internal server error occurred while updating optional profile.');
+    }
+  }
+
+  /**
+   * สหกิจ 03 — อ่านข้อมูลใบสมัครงานของตัวเอง
+   * Route: GET /api/students/coop-application
+   * Access: student (ของตัวเองเสมอ — ใช้ userId จาก token ไม่รับ id จากผู้เรียก)
+   *
+   * ⛔ **เลขบัตร/เชื้อชาติ/ศาสนาไม่เคยถูกส่งกลับเป็นค่าจริง** (SEC-12 ข้อ 2)
+   * เลขบัตรส่งเป็นมาสก์ `x-xxxx-xxxxx-xx-3` ส่วนเชื้อชาติ/ศาสนาส่งแค่ธงว่า "กรอกแล้ว"
+   * — การถอดรหัสมีที่เดียวคือตอนวาดเอกสารจริง ไม่ใช่ตอนเปิดหน้าจอ
+   */
+  static async getCoopApplication(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      // ⛔ **ไม่ใช้ `StudentModel.findByStudentId`** — เมธอดนั้นมีรายชื่อคอลัมน์ตายตัว
+      //    และถูกใช้โดย `/profile/me` ด้วย · การไปเติมคอลัมน์ ciphertext เข้าไปที่นั่น
+      //    เท่ากับส่งข้อมูลเข้ารหัสไปโผล่ใน endpoint ที่ไม่ได้ต้องการมันเลย
+      const result = await query(
+        `SELECT first_name, last_name, student_code, phone, alt_email,
+                first_name_en, last_name_en, gender, nationality, mobile_phone, fax,
+                emergency_contact_name, emergency_relationship, emergency_address,
+                emergency_phone, national_id_issued_district,
+                national_id_expiry_date::text AS national_id_expiry_date,
+                national_id_ciphertext, national_id_iv, national_id_tag,
+                ethnicity_ciphertext, religion_ciphertext, sensitive_data_consented_at
+           FROM students WHERE student_id = $1`,
+        [req.user.userId]
+      );
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อน' });
+        return;
+      }
+
+      const row = result.rows[0] as Record<string, unknown>;
+      const hasCipher = (prefix: string) => Boolean(row[`${prefix}_ciphertext`]);
+
+      // มาสก์ต้องถอดรหัสก่อนจึงจะรู้หลักสุดท้าย — ล้มเหลว (กุญแจเปลี่ยน/ข้อมูลเสีย)
+      // ต้องไม่ทำให้ทั้งหน้าจอเปิดไม่ได้ ตกไปเป็นมาสก์กลางๆ แทน
+      let nationalIdMasked: string | null = null;
+      if (hasCipher('national_id')) {
+        try {
+          nationalIdMasked = maskNationalId(
+            decryptSensitive({
+              ciphertext: row.national_id_ciphertext as string,
+              iv: row.national_id_iv as string,
+              authTag: row.national_id_tag as string,
+            })
+          );
+        } catch {
+          nationalIdMasked = 'x-xxxx-xxxxx-xx-x';
+        }
+      }
+
+      res.status(200).json({
+        first_name: row.first_name ?? null,
+        last_name: row.last_name ?? null,
+        student_code: row.student_code ?? null,
+        first_name_en: row.first_name_en ?? null,
+        last_name_en: row.last_name_en ?? null,
+        gender: row.gender ?? null,
+        nationality: row.nationality ?? null,
+        phone: row.phone ?? null,
+        mobile_phone: row.mobile_phone ?? null,
+        fax: row.fax ?? null,
+        alt_email: row.alt_email ?? null,
+        emergency_contact_name: row.emergency_contact_name ?? null,
+        emergency_relationship: row.emergency_relationship ?? null,
+        emergency_address: row.emergency_address ?? null,
+        emergency_phone: row.emergency_phone ?? null,
+        national_id_issued_district: row.national_id_issued_district ?? null,
+        national_id_expiry_date: row.national_id_expiry_date ?? null,
+        // ⛔ มาสก์และธงเท่านั้น — ห้ามส่งค่าจริงออกจาก endpoint นี้ไม่ว่ากรณีใด
+        national_id_masked: nationalIdMasked,
+        has_ethnicity: hasCipher('ethnicity'),
+        has_religion: hasCipher('religion'),
+        sensitive_data_consented_at: row.sensitive_data_consented_at ?? null,
+      });
+    } catch (error) {
+      sendUnexpectedError(
+        res,
+        error,
+        'Get Coop Application Error',
+        'เกิดข้อผิดพลาดขณะดึงข้อมูลใบสมัครงานสหกิจศึกษา'
+      );
+    }
+  }
+
+  /**
+   * สหกิจ 03 — บันทึกข้อมูลใบสมัครงานของตัวเอง (ส่วนตัวตน/ติดต่อ/ฉุกเฉิน)
+   * Route: PUT /api/students/coop-application
+   * Access: student
+   *
+   * ⛔ **เชื้อชาติ/ศาสนาเขียนได้ต่อเมื่อยินยอมโดยชัดแจ้งแล้วเท่านั้น** (PDPA ม.26)
+   * ไม่ใช่ยินยอมรวมอยู่ในเงื่อนไขการใช้งานทั่วไป — ต้องติ๊กแยกและระบบบันทึกเวลาที่ติ๊ก
+   * ลง `audit_log` · ส่งสองช่องนี้มาโดยยังไม่เคยยินยอม = ปฏิเสธทั้งคำขอ ไม่ใช่เขียนเงียบๆ
+   */
+  static async updateCoopApplication(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const studentId = req.user.userId;
+      const existingRes = await query(
+        'SELECT sensitive_data_consented_at FROM students WHERE student_id = $1',
+        [studentId]
+      );
+      if ((existingRes.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อน' });
+        return;
+      }
+
+      const body = req.body ?? {};
+      const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+      const optional = (v: unknown): string | null => text(v) || null;
+
+      // เลขบัตรประชาชนไทยมี 13 หลัก — ยอมให้พิมพ์ขีดคั่นได้ แล้วเก็บเฉพาะตัวเลข
+      const nationalIdDigits = text(body.national_id).replace(/\D/g, '');
+      if (text(body.national_id) && nationalIdDigits.length !== 13) {
+        res.status(400).json({ message: 'เลขประจำตัวประชาชนต้องเป็นตัวเลข 13 หลัก' });
+        return;
+      }
+
+      const expiry = text(body.national_id_expiry_date);
+      if (expiry && !/^\d{4}-\d{2}-\d{2}$/.test(expiry)) {
+        res.status(400).json({ message: 'รูปแบบวันหมดอายุบัตรต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
+        return;
+      }
+
+      const ethnicity = text(body.ethnicity);
+      const religion = text(body.religion);
+      const alreadyConsented = Boolean(existingRes.rows[0].sensitive_data_consented_at);
+      const consentingNow = body.sensitive_data_consent === true;
+
+      if ((ethnicity || religion) && !alreadyConsented && !consentingNow) {
+        res.status(400).json({
+          message:
+            'เชื้อชาติและศาสนาเป็นข้อมูลอ่อนไหวตาม พ.ร.บ.คุ้มครองข้อมูลส่วนบุคคล มาตรา 26 — ต้องให้ความยินยอมก่อนจึงจะบันทึกได้',
+        });
+        return;
+      }
+
+      const updated = await StudentModel.updateCoopApplicationIdentity(
+        studentId,
+        {
+          firstNameEn: optional(body.first_name_en),
+          lastNameEn: optional(body.last_name_en),
+          gender: optional(body.gender),
+          nationality: optional(body.nationality),
+          mobilePhone: optional(body.mobile_phone),
+          fax: optional(body.fax),
+          emergencyContactName: optional(body.emergency_contact_name),
+          emergencyRelationship: optional(body.emergency_relationship),
+          emergencyAddress: optional(body.emergency_address),
+          emergencyPhone: optional(body.emergency_phone),
+          nationalIdIssuedDistrict: optional(body.national_id_issued_district),
+          nationalIdExpiryDate: expiry || null,
+        },
+        {
+          // ไม่ได้ส่งมา = ไม่ได้แก้ (หน้าจอเห็นแต่มาสก์) — โมเดลใช้ COALESCE รับไม้ต่อ
+          nationalId: nationalIdDigits ? encryptSensitive(nationalIdDigits) : null,
+          ethnicity: ethnicity ? encryptSensitive(ethnicity) : null,
+          religion: religion ? encryptSensitive(religion) : null,
+          consentAt: !alreadyConsented && consentingNow ? new Date() : null,
+        }
+      );
+
+      // เวลาที่ให้ความยินยอมต้องตามย้อนได้ว่าเกิดขึ้นจริงเมื่อไหร่ ไม่ใช่มีแต่คอลัมน์
+      // ที่แก้ทับได้ — `audit_log` เขียนอย่างเดียว (SEC-07)
+      if (!alreadyConsented && consentingNow) {
+        writeAudit(
+          {
+            action: AuditAction.SENSITIVE_DATA_CONSENT_GIVEN,
+            entityType: 'student',
+            entityId: studentId,
+            subjectId: studentId,
+            detail: { basis: 'PDPA_s26', fields: ['ethnicity', 'religion'] },
+          },
+          req
+        ).catch(() => undefined);
+      }
+
+      res.status(200).json({
+        message: 'บันทึกข้อมูลใบสมัครงานสหกิจศึกษาเรียบร้อยแล้ว',
+        sensitive_data_consented_at:
+          (updated as unknown as Record<string, unknown>)?.sensitive_data_consented_at ?? null,
+      });
+    } catch (error) {
+      sendUnexpectedError(
+        res,
+        error,
+        'Update Coop Application Error',
+        'เกิดข้อผิดพลาดขณะบันทึกข้อมูลใบสมัครงานสหกิจศึกษา'
+      );
     }
   }
 
@@ -672,6 +873,14 @@ export class StudentController {
 
       const accRes = await query('SELECT * FROM accommodations WHERE student_id = $1', [studentId]);
       const plansRes = await query('SELECT * FROM weekly_work_plans WHERE student_id = $1 ORDER BY week_number ASC', [studentId]);
+      // ⛔ ผู้ติดต่อฉุกเฉินอยู่บนโปรไฟล์นักศึกษาแล้ว ไม่ใช่บนแถวที่พัก (migration 013)
+      //    — มันเป็นคุณสมบัติของคน และทั้ง สหกิจ 03 กับ 06 ถามช่องเดียวกัน
+      const emgRes = await query(
+        `SELECT emergency_contact_name, emergency_relationship, emergency_phone
+           FROM students WHERE student_id = $1`,
+        [studentId]
+      );
+      const emg = emgRes.rows[0] ?? {};
 
       const accRow = accRes.rowCount && accRes.rowCount > 0 ? accRes.rows[0] : null;
 
@@ -679,7 +888,14 @@ export class StudentController {
         // `formatted_address` ประกอบจากช่องย่อยที่เซิร์ฟเวอร์ ไม่ให้ React ต่อสตริงเอง
         // — ไม่งั้นรูปแบบที่อยู่จะมีสองแหล่งความจริงทันที (ดู utils/accommodationAddress.ts)
         accommodation: accRow
-          ? { ...accRow, formatted_address: formatAccommodationAddress(accRow) }
+          ? {
+              ...accRow,
+              formatted_address: formatAccommodationAddress(accRow),
+              // ประกอบกลับให้หน้าจอเดิมใช้ชื่อคีย์เท่าเดิม — แหล่งความจริงคือโปรไฟล์
+              emergency_contact: emg.emergency_contact_name ?? null,
+              emergency_relationship: emg.emergency_relationship ?? null,
+              emergency_phone: emg.emergency_phone ?? null,
+            }
           : null,
         weekly_plans: plansRes.rows || []
       });
@@ -803,10 +1019,9 @@ export class StudentController {
           INSERT INTO accommodations (
             student_id, house_no, building, room_no, soi, road,
             subdistrict, district, province, postal_code,
-            phone, mobile_phone, fax, email, latitude, longitude,
-            emergency_contact, emergency_relationship, emergency_phone
+            phone, mobile_phone, fax, email, latitude, longitude
           )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
           ON CONFLICT (student_id) DO UPDATE SET
             house_no = EXCLUDED.house_no,
             building = EXCLUDED.building,
@@ -822,10 +1037,7 @@ export class StudentController {
             fax = EXCLUDED.fax,
             email = EXCLUDED.email,
             latitude = EXCLUDED.latitude,
-            longitude = EXCLUDED.longitude,
-            emergency_contact = EXCLUDED.emergency_contact,
-            emergency_relationship = EXCLUDED.emergency_relationship,
-            emergency_phone = EXCLUDED.emergency_phone
+            longitude = EXCLUDED.longitude
         `;
         const optional = (v: unknown): string | null => text(v) || null;
         await client.query(accQuery, [
@@ -845,10 +1057,24 @@ export class StudentController {
           optional(accommodation.email),
           hasCoords ? Number(accommodation.latitude) : null,
           hasCoords ? Number(accommodation.longitude) : null,
-          optional(accommodation.emergency_contact),
-          optional(accommodation.emergency_relationship),
-          optional(accommodation.emergency_phone),
         ]);
+
+        // ⛔ ผู้ติดต่อฉุกเฉินเขียนลง **โปรไฟล์นักศึกษา** ไม่ใช่แถวที่พัก (migration 013)
+        //    ทั้ง สหกิจ 03 และ 06 ถามช่องเดียวกัน เก็บสองที่คือเปิดช่องให้ข้อมูลขัดกันเอง
+        //    · เขียนในทรานแซกชันเดียวกับที่พัก — ล้มกลางทางต้องไม่เหลือครึ่งเดียว
+        await client.query(
+          `UPDATE students
+              SET emergency_contact_name = $2,
+                  emergency_relationship = $3,
+                  emergency_phone = $4
+            WHERE student_id = $1`,
+          [
+            studentId,
+            optional(accommodation.emergency_contact),
+            optional(accommodation.emergency_relationship),
+            optional(accommodation.emergency_phone),
+          ]
+        );
 
         // Handle weekly plans (delete old, insert new)
         await client.query('DELETE FROM weekly_work_plans WHERE student_id = $1', [studentId]);
