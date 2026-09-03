@@ -31,6 +31,8 @@ export interface Student {
   province_id: number | null;
   cumulative_gpa: number | null;
   resume_file: string | null;
+  /** path สัมพัทธ์ใต้ `uploads/` เหมือน resume_file — NULL = ยังไม่เคยอัปโหลด */
+  profile_image?: string | null;
   is_eligible: boolean;
   is_orientation_passed: boolean;
   first_name: string | null;

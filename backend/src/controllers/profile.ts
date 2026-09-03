@@ -516,4 +516,64 @@ export class ProfileController {
       );
     }
   }
+
+  /**
+   * นักศึกษาอัปโหลดรูปโปรไฟล์ของตัวเอง
+   * Route: POST /api/profile/student/avatar
+   * Access: student (ของตัวเองเสมอ — ใช้ userId จาก token ไม่รับ id จากผู้เรียก)
+   *
+   * ⛔ **แยกจาก `PUT /profile/student` โดยตั้งใจ** — เส้นนั้นตีความ `req.file`
+   * เป็นเรซูเม่เสมอ และ `StudentModel.updateStudent` เขียนทับทุกคอลัมน์ที่รับเข้ามา
+   * (ไม่มี COALESCE ยกเว้น `resume_file`) การยัดรูปเข้าไปด้วยแปลว่าการเปลี่ยนรูป
+   * ต้องส่งฟิลด์โปรไฟล์มาครบทั้งชุด ไม่งั้นสิ่งที่ไม่ได้ส่งกลายเป็น NULL เงียบๆ
+   *
+   * ⛔ **ระบบไม่ตรวจว่าเป็นรูปตามระเบียบ** (สัดส่วน · พื้นหลังฟ้า · หน้าตรง)
+   * เจ้าของเคาะ 2026-09-03 ว่าฐานรูปของมหาวิทยาลัยบังคับอยู่แล้ว — ที่ยังตรวจคือ
+   * ชนิดไฟล์จริงจาก magic bytes กับขนาด ซึ่งเป็นด่านเดียวกับทุกการอัปโหลดในระบบ
+   */
+  static async updateStudentAvatar(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+      if (!req.file) {
+        res.status(400).json({ message: 'กรุณาแนบไฟล์รูปโปรไฟล์' });
+        return;
+      }
+
+      const imagePath = `avatars/${req.file.filename}`;
+      const result = await StudentModel.updateProfileImage(req.user.userId, imagePath);
+
+      if (!result) {
+        // ไม่มีประวัตินักศึกษา = ยังตั้งโปรไฟล์ไม่เสร็จ · ลบไฟล์ที่เพิ่งรับมาทิ้ง
+        // ไม่งั้นดิสก์สะสมไฟล์ที่ไม่มีแถวไหนอ้างถึงตลอดไป
+        fs.promises
+          .unlink(path.join(process.cwd(), 'uploads', imagePath))
+          .catch(() => undefined);
+        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อน' });
+        return;
+      }
+
+      // รูปเก่าไม่มีใครอ้างถึงแล้ว — ลบแบบ fire-and-forget เพราะการลบไฟล์ล้มเหลว
+      // ไม่ควรทำให้การเปลี่ยนรูปที่บันทึกลงฐานไปแล้วรายงานว่าล้มเหลว
+      if (result.previousPath && result.previousPath !== imagePath) {
+        fs.promises
+          .unlink(path.join(process.cwd(), 'uploads', result.previousPath))
+          .catch(() => undefined);
+      }
+
+      res.status(200).json({
+        message: 'อัปโหลดรูปโปรไฟล์เรียบร้อยแล้ว',
+        profile_image: imagePath,
+      });
+    } catch (error) {
+      sendUnexpectedError(
+        res,
+        error,
+        'Update Student Avatar Error',
+        'เกิดข้อผิดพลาดระหว่างอัปโหลดรูปโปรไฟล์'
+      );
+    }
+  }
 }

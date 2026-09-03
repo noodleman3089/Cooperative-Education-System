@@ -31,7 +31,7 @@ export class StudentController {
 
       // 1. Fetch student profile with major, faculty, province, advisor email, and supervisor email
       const studentQuery = await query(
-        `SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.is_eligible, s.is_orientation_passed,
+        `SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.profile_image, s.is_eligible, s.is_orientation_passed,
                 s.major_id, m.major_name_th, m.major_code, f.faculty_name_th, s.province_id, p.province_name_th,
                 s.first_name, s.last_name,
                 s.advisor_id, u_adv.email as advisor_email, p_adv.first_name as advisor_first_name, p_adv.last_name as advisor_last_name,
@@ -135,6 +135,8 @@ export class StudentController {
           last_name: student.last_name,
           cumulative_gpa: parseFloat(student.cumulative_gpa),
           resume_file: student.resume_file,
+          // รูปโปรไฟล์ — หน้าแรกแสดงแทนตัวอักษรแรกของชื่อเมื่อมีค่า
+          profile_image: student.profile_image,
           is_eligible: student.is_eligible,
           is_orientation_passed: student.is_orientation_passed,
           major_id: student.major_id,

@@ -600,8 +600,20 @@ const StudentDashboard: React.FC = () => {
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-blue-50/50 dark:bg-blue-900/10 rounded-full blur-3xl pointer-events-none" />
           
           <div className="shrink-0">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-600 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white text-3xl font-bold uppercase ring-4 ring-white dark:ring-gray-900 z-10 relative">
-              {data.student.first_name ? data.student.first_name.charAt(0) : data.student.student_code.charAt(0)}
+            {/* วงกลมนี้เคยเป็นตัวอักษรแรกของชื่อเสมอ เพราะระบบไม่มีที่เก็บรูปเลย
+                — เปลี่ยนรูปในหน้าโปรไฟล์แล้วต้องเห็นที่นี่ด้วย ไม่งั้นผู้ใช้จะไม่แน่ใจ
+                ว่าอัปโหลดติดจริงไหม (`/files/…` ต้องล็อกอิน จึงอ่านได้เฉพาะเจ้าตัว) */}
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-600 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white text-3xl font-bold uppercase ring-4 ring-white dark:ring-gray-900 z-10 relative overflow-hidden">
+              {data.student.profile_image ? (
+                <img
+                  src={`${API_BASE_URL}/files/${data.student.profile_image}`}
+                  alt="รูปโปรไฟล์นักศึกษา"
+                  data-testid="dashboard-avatar-image"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                data.student.first_name ? data.student.first_name.charAt(0) : data.student.student_code.charAt(0)
+              )}
             </div>
           </div>
           

@@ -95,6 +95,12 @@ CREATE TABLE IF NOT EXISTS students (
     province_id INT REFERENCES master_province(province_id),
     cumulative_gpa NUMERIC(3, 2),
     resume_file VARCHAR(255),
+    -- รูปโปรไฟล์ — path สัมพัทธ์ใต้ `uploads/` แบบเดียวกับ `resume_file`
+    -- ⛔ ระบบ **ไม่ตรวจว่าเป็นรูปตามระเบียบ** (สัดส่วน · พื้นหลังฟ้า · หน้าตรง)
+    --    เจ้าของเคาะ 2026-09-03 ว่าฐานรูปของมหาวิทยาลัยบังคับอยู่แล้ว
+    --    ที่ยังตรวจคือชนิดไฟล์จริงจาก magic bytes กับขนาด ซึ่งเป็นด่านเดียวกับ
+    --    ทุกการอัปโหลดในระบบ ไม่ใช่เรื่องระเบียบรูปถ่าย
+    profile_image VARCHAR(255),
     is_eligible BOOLEAN NOT NULL DEFAULT FALSE,
     is_orientation_passed BOOLEAN NOT NULL DEFAULT FALSE,
     advisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,

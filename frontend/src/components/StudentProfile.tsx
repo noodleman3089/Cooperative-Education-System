@@ -183,6 +183,9 @@ const StudentProfile: React.FC = () => {
 
   // Profile Avatar & Resume File States
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
+  /** path ที่เก็บอยู่จริงในฐาน (`avatars/…`) — ตัวอย่างในเครื่องเป็นแค่ของชั่วคราว */
+  const [storedAvatar, setStoredAvatar] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
@@ -294,6 +297,7 @@ const StudentProfile: React.FC = () => {
 
       if (prof) {
         setStudentCode(prof.student_code || '');
+        setStoredAvatar(prof.profile_image || null);
         setSelectedMajorId(prof.major_id || '');
         setFirstName(prof.first_name || '');
         setLastName(prof.last_name || '');
@@ -332,8 +336,21 @@ const StudentProfile: React.FC = () => {
     loadProfile();
   }, []);
 
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * เลือกรูปแล้ว **อัปโหลดทันที** ไม่รอกดบันทึกโปรไฟล์
+   *
+   * ⛔ ของเดิมทำแค่ `URL.createObjectURL` โชว์ตัวอย่าง ไฟล์ไม่เคยถูกส่งไปไหน
+   *    ผลจริงคือกดอัปโหลด เห็นรูปเปลี่ยน แล้วรีเฟรชทีเดียวหาย โดยไม่มีอะไรบอก
+   *    · ที่ไปกับ `PUT /profile/student` ไม่ได้เพราะเส้นนั้นตีความ `req.file`
+   *      เป็นเรซูเม่เสมอ จึงมี endpoint ของตัวเอง
+   *
+   * ⛔ **ไม่ตรวจว่าเป็นรูปตามระเบียบ** (สัดส่วน 1 นิ้ว · พื้นหลังฟ้า · หน้าตรง)
+   *    เจ้าของเคาะ 2026-09-03 ว่าฐานรูปของมหาวิทยาลัยบังคับอยู่แล้ว ไม่ต้องเคร่งซ้ำ
+   */
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0] || null;
+    // ล้างค่า input ทันที เพื่อให้เลือกไฟล์ "ชื่อเดิม" ซ้ำแล้ว onChange ยังยิง
+    e.target.value = '';
     if (!selected) return;
 
     if (!selected.type.startsWith('image/')) {
@@ -346,8 +363,27 @@ const StudentProfile: React.FC = () => {
       return;
     }
 
-    setAvatarPreviewUrl(URL.createObjectURL(selected));
+    // โชว์ตัวอย่างก่อน แล้วค่อยอัปโหลด — ล้มเหลวเมื่อไหร่ค่อยถอยกลับไปรูปที่เก็บไว้จริง
+    const preview = URL.createObjectURL(selected);
+    setAvatarPreviewUrl(preview);
     setError(null);
+    setAvatarUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('avatar', selected);
+      const res = await api.post('/profile/student/avatar', formData);
+      setStoredAvatar(res.profile_image || null);
+      setSuccess('อัปโหลดรูปโปรไฟล์เรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถอัปโหลดรูปโปรไฟล์ได้'));
+    } finally {
+      // ทิ้งตัวอย่างในเครื่องเสมอ — สำเร็จก็ให้แสดงไฟล์จริงจากเซิร์ฟเวอร์แทน
+      // ล้มเหลวก็ต้องถอยกลับไปรูปเดิม ไม่ใช่ค้างรูปที่ไม่มีอยู่ในระบบ
+      setAvatarPreviewUrl(null);
+      URL.revokeObjectURL(preview);
+      setAvatarUploading(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -500,6 +536,12 @@ const StudentProfile: React.FC = () => {
     ? `${API_BASE_URL}/files/download/resumes/${resumeFileName}`
     : '';
 
+  // ตัวอย่างในเครื่องชนะระหว่างกำลังอัปโหลด แล้วค่อยตกไปที่ไฟล์จริงเมื่อบันทึกเสร็จ
+  // (endpoint นี้ต้องล็อกอิน จึงอ่านได้เฉพาะเจ้าตัวกับบุคลากร ตามด่านใน `index.ts`)
+  const avatarUrl =
+    avatarPreviewUrl ||
+    (storedAvatar ? `${API_BASE_URL}/files/${storedAvatar}` : null);
+
   return (
     <div className="max-w-7xl mx-auto space-y-6 page-enter">
       {/* Top Banner & Header */}
@@ -543,22 +585,39 @@ const StudentProfile: React.FC = () => {
           <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-xs text-center space-y-4">
             <div className="relative group inline-block">
               <div className="w-28 h-28 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white font-black text-2xl flex items-center justify-center shadow-lg shadow-blue-500/20 mx-auto border-4 border-white dark:border-gray-800 overflow-hidden relative">
-                {avatarPreviewUrl ? (
-                  <img src={avatarPreviewUrl} alt="Profile Photo" className="w-full h-full object-cover" />
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="รูปโปรไฟล์นักศึกษา"
+                    data-testid="profile-avatar-image"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   initialLetters.toUpperCase()
                 )}
 
-                {/* Hover Overlay to Change Profile Photo */}
-                <label className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer">
-                  <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                  <span className="text-xs font-bold">อัปโหลดรูปถ่าย</span>
+                {/* ปุ่มเปลี่ยนรูป
+                    ⛔ ของเดิมเป็น `opacity-0 group-hover:opacity-100` ล้วนๆ ซึ่ง
+                       **มองไม่เห็นเลยบนจอสัมผัส** (ยังกดได้ แต่ไม่มีใครรู้ว่ามี)
+                       ตอนที่ฟีเจอร์ยังไม่มีจริงจึงปล่อยไว้ · ตอนนี้มันทำงานแล้ว
+                       จึงให้เห็นจางๆ ตลอดเวลา แล้วเข้มขึ้นตอน hover */}
+                <label className="absolute inset-0 bg-black/50 text-white opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex flex-col items-center justify-center transition-all cursor-pointer">
+                  {avatarUploading ? (
+                    <span className="text-xs font-bold">กำลังอัปโหลด...</span>
+                  ) : (
+                    <>
+                      <svg className="w-6 h-6 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      <span className="text-xs font-bold">อัปโหลดรูปถ่าย</span>
+                    </>
+                  )}
                   <input
                     type="file"
                     accept="image/png, image/jpeg, image/jpg"
+                    data-testid="profile-avatar-input"
+                    disabled={avatarUploading}
                     onChange={handleAvatarChange}
                     className="hidden"
                   />

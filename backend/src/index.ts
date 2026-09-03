@@ -166,6 +166,11 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
       // แบบคำร้อง (เอกสารหมายเลข 1) ที่ลงนามแล้ว — เจ้าหน้าที่ต้องเปิดดูก่อนกดผ่าน
       // และนักศึกษาต้องเปิดดูของตัวเองได้ว่าอัปไฟล์ไหนไป
       'request_forms',
+      // รูปโปรไฟล์นักศึกษา — เจ้าตัวกับบุคลากรเท่านั้น
+      // ⛔ **บริษัทยังเปิดไม่ได้** ถึงจะเป็นรูปที่จะไปอยู่บนใบสมัคร สหกิจ 03
+      //    ก็ตาม · SEC-10 ให้บริษัทเห็นเท่าที่ สหกิจ 04 ให้ การเปิดช่องนี้ต้องรอ
+      //    ตอนทำ สหกิจ 03 จริง แล้วตัดสินพร้อมกันทั้งใบ ไม่ใช่แง้มไว้ล่วงหน้า
+      'avatars',
     ];
     if (!allowedCategories.includes(category)) {
       res.status(404).json({ message: 'Category not found.' });
@@ -238,12 +243,15 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
         // same shape as the other three.
         const reportPrefix = `finalreport-user-${userId}-`;
         const requestFormPrefix = `requestform-user-${userId}-`;
+        // รูปโปรไฟล์ — multer ตั้งชื่อ `avatar-user-<id>-…` รูปแบบเดียวกับที่เหลือ
+        const avatarPrefix = `avatar-user-${userId}-`;
 
         const isOwner =
           safeName.startsWith(filePrefix) ||
           safeName.startsWith(evidencePrefix) ||
           safeName.startsWith(reportPrefix) ||
-          safeName.startsWith(requestFormPrefix);
+          safeName.startsWith(requestFormPrefix) ||
+          safeName.startsWith(avatarPrefix);
         if (!isOwner) {
           res.status(403).json({ message: 'Forbidden. You do not have access to this file.' });
           return;
@@ -337,6 +345,22 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   // (เช่นส่งตัวอักษรให้คอลัมน์ตัวเลข) — ทั้งคู่คือคำขอที่ผิด ไม่ใช่เซิร์ฟเวอร์พัง
   if (pgCode === '22001' || pgCode === '22P02') {
     res.status(400).json({ message: 'ข้อมูลที่กรอกยาวเกินกำหนดหรือมีรูปแบบไม่ถูกต้อง' });
+    return;
+  }
+
+  // ไฟล์ที่ multer ปฏิเสธ — นามสกุลไม่ถูกต้อง (`fileFilter`) หรือใหญ่เกินกำหนด
+  //
+  // ⛔ ของพวกนี้เคยตกมาถึงบรรทัดล่างแล้วได้ **500 + "เกิดข้อผิดพลาดของระบบ"**
+  //    ทั้งที่เป็นคำขอที่ผิด ไม่ใช่เซิร์ฟเวอร์พัง — ขัดกับกฎที่เขียนไว้หัวไฟล์นี้เอง
+  //    และผู้ใช้ไม่มีทางรู้ว่าต้องแก้อะไร · ครอบทุกตัวอัปโหลดในระบบทีเดียว
+  //    (เจอตอนเพิ่มตัวอัปโหลดรูปโปรไฟล์ตัวที่ 8 เมื่อ 2026-09-03)
+  const isMulterError =
+    err.name === 'MulterError' || /^Invalid (file|image) type\./.test(err.message);
+  if (isMulterError) {
+    const tooLarge = (err as { code?: string }).code === 'LIMIT_FILE_SIZE';
+    res.status(tooLarge ? 413 : 400).json({
+      message: tooLarge ? 'ไฟล์มีขนาดใหญ่เกินกำหนด' : err.message,
+    });
     return;
   }
 

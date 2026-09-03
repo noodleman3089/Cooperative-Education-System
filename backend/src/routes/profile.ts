@@ -3,7 +3,12 @@ import { ProfileController } from '../controllers/profile';
 import { StudentController } from '../controllers/student';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { validateProfileSetup } from '../middlewares/validation';
-import { uploadResume, uploadSignature, validateUploadedFile } from '../middlewares/multer';
+import {
+  uploadAvatar,
+  uploadResume,
+  uploadSignature,
+  validateUploadedFile,
+} from '../middlewares/multer';
 
 const router = Router();
 
@@ -21,6 +26,18 @@ router.put(
   uploadResume.single('resume'),
   validateUploadedFile(['pdf', 'doc', 'docx']),
   ProfileController.updateStudentProfile
+);
+
+// Route: POST /api/profile/student/avatar (นักศึกษาอัปโหลดรูปโปรไฟล์ของตัวเอง)
+// ⛔ แยกจาก PUT /student เพราะเส้นนั้นตีความ req.file เป็นเรซูเม่เสมอ และ
+//    updateStudent เขียนทับทุกคอลัมน์ — ดูคอมเมนต์เต็มที่ ProfileController
+router.post(
+  '/student/avatar',
+  authenticateToken,
+  authorizeRoles('student'),
+  uploadAvatar.single('avatar'),
+  validateUploadedFile(['png', 'jpg']),
+  ProfileController.updateStudentAvatar
 );
 
 // Route: PUT /api/profile/student/optional (Update optional student profile fields)

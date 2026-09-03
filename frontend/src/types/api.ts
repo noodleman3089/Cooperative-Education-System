@@ -163,6 +163,8 @@ export interface StudentProfile {
   province_name_th?: string;
   cumulative_gpa?: number | null;
   resume_file: string | null;
+  /** path สัมพัทธ์ใต้ `uploads/` (เช่น `avatars/avatar-user-2-…jpg`) ไม่ใช่ URL เต็ม */
+  profile_image?: string | null;
   is_eligible: boolean;
   is_orientation_passed: boolean;
   advisor_id?: number | null;

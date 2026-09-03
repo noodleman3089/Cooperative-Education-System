@@ -293,3 +293,36 @@ export const uploadFinalReport = multer({
   },
 });
 
+
+// 8. Student Profile Photo (Images only, max 2MB)
+//
+// ⛔ **ระบบไม่ตรวจว่าเป็น "รูปตามระเบียบ" ของสหกิจศึกษา** (สัดส่วน 1 นิ้ว · พื้นหลังฟ้า
+//    · หน้าตรง · ชุดสุภาพ) — เจ้าของเคาะ 2026-09-03 ว่าฐานรูปของมหาวิทยาลัยบังคับ
+//    เรื่องนี้อยู่แล้ว ไม่ต้องเคร่งซ้ำ · ที่เหลือไว้คือ **ด่านเดียวกับทุกการอัปโหลด
+//    ในระบบ** คือนามสกุลที่ยอมรับ ขนาดไฟล์ และ magic bytes (`validateUploadedFile`)
+//    ซึ่งเป็นเรื่องความปลอดภัยของไฟล์ ไม่ใช่เรื่องระเบียบรูปถ่าย
+const AVATARS_DIR = path.join(UPLOADS_BASE_DIR, 'avatars');
+if (!fs.existsSync(AVATARS_DIR)) {
+  fs.mkdirSync(AVATARS_DIR, { recursive: true });
+}
+const avatarStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, AVATARS_DIR);
+  },
+  filename: (req, file, cb) => {
+    // ⛔ คำนำหน้า `avatar-user-<id>-` คือสิ่งที่ `/api/files/avatars/:filename`
+    //    ใช้ตัดสินว่าใครเป็นเจ้าของไฟล์ — เปลี่ยนรูปแบบนี้เมื่อไหร่ต้องแก้ที่นั่นด้วย
+    const userId = req.user?.userId || 'unknown';
+    const cleanOrigName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `avatar-user-${userId}-${uniqueSuffix}${path.extname(cleanOrigName)}`);
+  },
+});
+
+export const uploadAvatar = multer({
+  storage: avatarStorage,
+  fileFilter: signatureFileFilter,
+  limits: {
+    fileSize: 2 * 1024 * 1024, // 2MB limit
+  },
+});

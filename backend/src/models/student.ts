@@ -4,7 +4,7 @@ import { Student } from '../types';
 export class StudentModel {
   static async findByStudentId(studentId: number): Promise<Student | null> {
     const res = await query(
-      `SELECT student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, is_eligible, is_orientation_passed, advisor_id, supervisor_id,
+      `SELECT student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, profile_image, is_eligible, is_orientation_passed, advisor_id, supervisor_id,
               first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone, enrollment_year,
               skills_and_activities, language_proficiency, preferred_work_region, interested_job_types
        FROM students 
@@ -108,6 +108,32 @@ export class StudentModel {
       [studentId, studentCode, majorId, provinceId, cumulativeGpa, resumeFile, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear]
     );
     return res.rows[0] as Student;
+  }
+
+  /**
+   * ตั้งรูปโปรไฟล์ · คืน path เดิมมาให้ผู้เรียกไปลบไฟล์ที่ไม่มีใครอ้างถึงแล้ว
+   *
+   * แยกจาก `updateStudent` โดยตั้งใจ — ตัวนั้นเขียนทับทุกคอลัมน์ที่รับเข้ามา
+   * (ไม่มี COALESCE ยกเว้น `resume_file`) การยัดรูปเข้าไปด้วยแปลว่าการอัปโหลดรูป
+   * ต้องส่งฟิลด์โปรไฟล์มาครบทั้งชุด ไม่งั้นข้อมูลที่ไม่ได้ส่งกลายเป็น NULL
+   */
+  static async updateProfileImage(
+    studentId: number,
+    imagePath: string
+  ): Promise<{ previousPath: string | null } | null> {
+    // อ่านของเดิมก่อนเขียนทับ · **ห้ามใช้ sub-SELECT ใน RETURNING เพื่อเอาค่าเก่า**
+    // มันได้ค่าเก่าจริงเพราะกฎ snapshot ของ Postgres ซึ่งอ่านโค้ดแล้วไม่มีทางรู้
+    // — สองคำสั่งตรงไปตรงมาอ่านง่ายกว่า และไฟล์ค้างบนดิสก์ไม่ใช่เรื่องคอขาดบาดตาย
+    const current = await query('SELECT profile_image FROM students WHERE student_id = $1', [
+      studentId,
+    ]);
+    if ((current.rowCount ?? 0) === 0) return null;
+
+    await query('UPDATE students SET profile_image = $2 WHERE student_id = $1', [
+      studentId,
+      imagePath,
+    ]);
+    return { previousPath: (current.rows[0].profile_image as string) ?? null };
   }
 
   /**
