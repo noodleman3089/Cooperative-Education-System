@@ -67,6 +67,22 @@ export function checkEnvironment(env: Env = process.env): EnvCheckResult {
       warnings.push('GOOGLE_CLIENT_ID ยังไม่ได้ตั้งค่า — นักศึกษาและบุคลากรจะเข้าระบบไม่ได้');
     }
 
+    // SEC-12: เข้ารหัสเลขบัตรประชาชน/เชื้อชาติ/ศาสนาของ สหกิจ 03 — `utils/encryption.ts`
+    // ⛔ ยังเป็น**คำเตือน** ไม่ใช่ error เพราะฟีเจอร์ที่เรียกใช้ยังไม่มีในระบบ (รอก้อนหน้าจอ
+    // สหกิจ 03) วันที่ฟีเจอร์นั้นขึ้นจริง ให้ยกระดับเป็น error เหมือน JWT_SECRET ด้านบน —
+    // ไม่งั้นความล้มเหลวจะไปโผล่ตอนนักศึกษากดส่งฟอร์มแทนที่จะกันไว้ตั้งแต่สตาร์ท
+    if (!env.SENSITIVE_DATA_ENCRYPTION_KEY) {
+      warnings.push(
+        'SENSITIVE_DATA_ENCRYPTION_KEY ยังไม่ได้ตั้งค่า — เมื่อเปิดใช้ สหกิจ 03 ' +
+          'การเข้ารหัสเลขบัตรประชาชน/เชื้อชาติ/ศาสนาจะล้มเหลวทุกครั้ง'
+      );
+    } else if (!/^[0-9a-fA-F]{64}$/.test(env.SENSITIVE_DATA_ENCRYPTION_KEY)) {
+      warnings.push(
+        'SENSITIVE_DATA_ENCRYPTION_KEY รูปแบบไม่ถูกต้อง ต้องเป็นเลขฐานสิบหก 64 ตัวอักษร ' +
+          '(256 บิต) — สร้างด้วย: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"'
+      );
+    }
+
     // เตือนไม่ใช่ error ต่างจาก ALLOW_SIMULATED_SSO เพราะบางสภาพแวดล้อมจำเป็นต้องใช้จริง
     if (env.PUPPETEER_NO_SANDBOX === 'true') {
       warnings.push(

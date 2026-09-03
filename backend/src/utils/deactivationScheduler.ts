@@ -103,6 +103,59 @@ export async function runAutoDeactivation(): Promise<void> {
       console.log('[DeactivationScheduler] No retired teacher accounts to deactivate.');
     }
 
+    // 3. SEC-12: purge sensitive PDPA data (national ID, ethnicity, religion) once
+    //    the coop cycle is genuinely done being used — both mentor evaluations
+    //    (สหกิจ 15 + 16) submitted, plus a grace period so a grade dispute or a
+    //    reprinted document still has something to work from.
+    //
+    // ⛔ Automatic, not a button anyone clicks — the owner tried "wait for the
+    //    advisor or supervisor to close it" first, then reconsidered on their own:
+    //    a retention promise that depends on someone remembering to press a
+    //    button is not a retention promise. This mirrors sections 1-2 above,
+    //    which already deactivate accounts by date without a click.
+    //    See `.system_memory/design_stage3_forms.md` ❓ item 2 for the full trail.
+    const RETENTION_GRACE_DAYS = 90;
+    const purgedStudents = await query(
+      `WITH ready AS (
+         SELECT student_id, MAX(submitted_at) AS last_eval_at
+           FROM final_evaluations
+          WHERE evaluator_role = 'mentor' AND form_code IN ('sahatkit_15', 'sahatkit_16')
+          GROUP BY student_id
+         HAVING COUNT(DISTINCT form_code) = 2
+       )
+       UPDATE students s
+          SET national_id_ciphertext = NULL, national_id_iv = NULL, national_id_tag = NULL,
+              national_id_issued_district = NULL, national_id_expiry_date = NULL,
+              ethnicity_ciphertext = NULL, ethnicity_iv = NULL, ethnicity_tag = NULL,
+              religion_ciphertext = NULL, religion_iv = NULL, religion_tag = NULL,
+              sensitive_data_consented_at = NULL
+         FROM ready r
+        WHERE s.student_id = r.student_id
+          AND r.last_eval_at + ($1 || ' days')::interval <= NOW()
+          AND (s.national_id_ciphertext IS NOT NULL
+               OR s.ethnicity_ciphertext IS NOT NULL
+               OR s.religion_ciphertext IS NOT NULL)
+        RETURNING s.student_id`,
+      [RETENTION_GRACE_DAYS]
+    );
+
+    if ((purgedStudents.rowCount ?? 0) > 0) {
+      console.log(
+        `[DeactivationScheduler] Purged sensitive data for ${purgedStudents.rowCount} student(s) (SEC-12).`
+      );
+      for (const row of purgedStudents.rows as { student_id: number }[]) {
+        await writeAudit({
+          action: AuditAction.STUDENT_SENSITIVE_DATA_PURGED,
+          entityType: 'student',
+          entityId: row.student_id,
+          subjectId: row.student_id,
+          detail: { reason: 'retention_policy', grace_days: RETENTION_GRACE_DAYS },
+        });
+      }
+    } else {
+      console.log('[DeactivationScheduler] No sensitive data ready for retention purge.');
+    }
+
     console.log('[DeactivationScheduler] Automatic deactivation check complete.');
   } catch (error) {
     console.error('[DeactivationScheduler] Error running automatic deactivation:', error);

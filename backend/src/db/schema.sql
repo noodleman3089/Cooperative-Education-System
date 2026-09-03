@@ -119,7 +119,23 @@ CREATE TABLE IF NOT EXISTS students (
     skills_and_activities TEXT,
     language_proficiency JSONB,
     preferred_work_region VARCHAR(255),
-    interested_job_types JSONB
+    interested_job_types JSONB,
+    -- SEC-12 · สหกิจ 03 — เข้ารหัสสองทาง (AES-256-GCM) เพราะต้องพิมพ์กลับลงใบสมัคร
+    -- ห้าม hash (อ่านกลับไม่ได้) · ดู migration 012 และ utils/encryption.ts
+    national_id_ciphertext TEXT,
+    national_id_iv VARCHAR(64),
+    national_id_tag VARCHAR(64),
+    -- ไม่เข้ารหัส — ไม่ใช่ข้อมูลที่ระบุตัวบุคคลได้เท่าตัวเลขบัตร
+    national_id_issued_district VARCHAR(100),
+    national_id_expiry_date DATE,
+    -- เชื้อชาติ/ศาสนา = ข้อมูลอ่อนไหวพิเศษ PDPA ม.26 — ต้องมีความยินยอมแยกก่อนเขียน
+    ethnicity_ciphertext TEXT,
+    ethnicity_iv VARCHAR(64),
+    ethnicity_tag VARCHAR(64),
+    religion_ciphertext TEXT,
+    religion_iv VARCHAR(64),
+    religion_tag VARCHAR(64),
+    sensitive_data_consented_at TIMESTAMP WITH TIME ZONE
 );
 
 -- 4. Companies Table

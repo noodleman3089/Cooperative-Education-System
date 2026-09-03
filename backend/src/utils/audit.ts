@@ -48,6 +48,11 @@ export const AuditAction = {
   CALENDAR_EVENT_CREATED: 'coop_calendar.created',
   CALENDAR_EVENT_UPDATED: 'coop_calendar.updated',
   CALENDAR_EVENT_DELETED: 'coop_calendar.deleted',
+  // SEC-12: ลบเลขบัตรประชาชน/เชื้อชาติ/ศาสนาอัตโนมัติ ๙๐ วันหลังประเมินครบทั้งสองใบ
+  // (สหกิจ 15+16) — เขียนตอนที่ตัวจริงกำลังจะถูกลบ ก่อนคำสั่ง UPDATE จะทำให้อ่านค่า
+  // เดิมไม่ได้อีกแล้ว เพื่อให้ยังสืบย้อนได้ว่า "แถวนี้เคยมีข้อมูลอ่อนไหว ถูกลบเมื่อไหร่"
+  // แม้ audit_log จะไม่เก็บค่าจริงไว้เลยก็ตาม (SEC-07 — เขียนอย่างเดียว ไม่มี read API)
+  STUDENT_SENSITIVE_DATA_PURGED: 'student.sensitive_data_purged',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];
