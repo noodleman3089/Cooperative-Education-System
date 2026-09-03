@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { AuthContext } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -105,6 +105,12 @@ const AccommodationWorkPlan: React.FC = () => {
 
   const DRAFT_KEY = `accommodation_plan_draft_${auth?.user?.userId ?? 'anon'}`;
 
+  /** สิ่งที่ฝั่งเซิร์ฟเวอร์รู้แล้ว — ใช้เทียบว่านักศึกษาแก้อะไรจริงหรือยัง */
+  const savedSnapshot = useRef<string>('');
+
+  const snapshotOf = (a: Accommodation, plans: WeeklyPlan[], startDate: string) =>
+    JSON.stringify({ accommodation: a, weeklyPlans: plans, coopStartDate: startDate });
+
   useEffect(() => {
     loadData();
     loadThaiAddressData().then(setThaiAddress).catch(() => setThaiAddress([]));
@@ -186,14 +192,19 @@ const AccommodationWorkPlan: React.FC = () => {
    * was 48 fields with nothing behind them: one closed tab and the lot was
    * gone. Cleared on a successful submit, so a draft existing at all means
    * there are edits the server has not seen.
+   *
+   * ⛔ เงื่อนไขนั้นจะจริงได้ **ต้องเทียบกับสิ่งที่เซิร์ฟเวอร์ส่งมาก่อนเขียนทุกครั้ง** — ไม่ใช่
+   *    แค่ `!isLoading` เพราะ effect นี้ยิงทันทีที่ `loadData()` เสร็จ (และยิงสองรอบใน
+   *    StrictMode) แค่ *เปิดหน้า* ก็ได้ฉบับร่างที่เหมือนของบนเซิร์ฟเวอร์เป๊ะ แล้วรอบหน้า
+   *    ขึ้นแถบ "กู้คืนข้อมูลที่กรอกค้างไว้" ทั้งที่ไม่มีใครแก้อะไรเลย
    */
   useEffect(() => {
     if (isLoading) return;
+    const current = snapshotOf(accommodation, weeklyPlans, coopStartDate);
     try {
-      localStorage.setItem(
-        DRAFT_KEY,
-        JSON.stringify({ accommodation, weeklyPlans, coopStartDate })
-      );
+      // กลับมาเท่าของบนเซิร์ฟเวอร์ = ไม่มีอะไรค้างให้กู้คืนแล้ว
+      if (current === savedSnapshot.current) localStorage.removeItem(DRAFT_KEY);
+      else localStorage.setItem(DRAFT_KEY, current);
     } catch {
       /* private mode, or quota — the form still works, just without a net */
     }
@@ -254,6 +265,12 @@ const AccommodationWorkPlan: React.FC = () => {
     try {
       const raw = localStorage.getItem(DRAFT_KEY);
       if (!raw) return false;
+      // ฉบับร่างที่เหมือนของบนเซิร์ฟเวอร์เป๊ะ ไม่มีอะไรให้กู้คืน — เก็บกวาดของที่ build
+      // เก่าเคยเขียนทิ้งไว้ตอนเปิดหน้าเปล่าๆ ไปด้วย
+      if (raw === savedSnapshot.current) {
+        localStorage.removeItem(DRAFT_KEY);
+        return false;
+      }
       const draft = JSON.parse(raw);
       if (!draft?.weeklyPlans?.length) return false;
       setAccommodation(draft.accommodation);
@@ -278,12 +295,17 @@ const AccommodationWorkPlan: React.FC = () => {
 
   const loadData = async () => {
     setIsLoading(true);
+    // เก็บไว้เป็นตัวแปรก่อน เพราะต้องเอาไปทำ snapshot ด้วย — อ่านจาก state ตรงนี้ไม่ได้
+    // (setState ยังไม่มีผลจนกว่าจะ render รอบถัดไป)
+    let loadedAccommodation: Accommodation = BLANK_ACCOMMODATION;
+    let loadedLegacy = '';
+    let loadedPlans: WeeklyPlan[] = blankWeeks();
     try {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
 
       if (res.accommodation) {
         const a = res.accommodation;
-        setAccommodation({
+        loadedAccommodation = {
           house_no: a.house_no || '',
           building: a.building || '',
           room_no: a.room_no || '',
@@ -302,28 +324,31 @@ const AccommodationWorkPlan: React.FC = () => {
           emergency_contact: a.emergency_contact || '',
           emergency_relationship: a.emergency_relationship || '',
           emergency_phone: a.emergency_phone || ''
-        });
+        };
         // ⛔ แสดงของเก่าเมื่อ **ยังไม่มีใครกรอกช่องย่อย** เท่านั้น — ไม่งั้นแถวที่กรอกใหม่
         //    แล้วจะขึ้นกล่อง "ที่อยู่เดิม" ค้างตลอดไปโดยไม่มีอะไรให้ทำกับมัน
-        setLegacyAddress(a.house_no ? '' : a.address_legacy || '');
+        loadedLegacy = a.house_no ? '' : a.address_legacy || '';
       }
 
       if (res.weekly_plans && res.weekly_plans.length > 0) {
-        setWeeklyPlans(res.weekly_plans.map((p: WeeklyPlan) => ({
+        loadedPlans = res.weekly_plans.map((p: WeeklyPlan) => ({
           plan_id: p.plan_id,
           week_number: p.week_number,
           start_date: p.start_date ? new Date(p.start_date).toISOString().split('T')[0] : '',
           end_date: p.end_date ? new Date(p.end_date).toISOString().split('T')[0] : '',
           tasks: p.tasks || ''
-        })));
-      } else {
-        setWeeklyPlans(blankWeeks());
+        }));
       }
     } catch (err) {
       console.error('Failed to load accommodation and plan:', err);
-      // Just show default form if no data found
-      setWeeklyPlans(blankWeeks());
+      // Just show default form if no data found — ค่าตั้งต้นด้านบนคือฟอร์มเปล่าอยู่แล้ว
     } finally {
+      setAccommodation(loadedAccommodation);
+      setLegacyAddress(loadedLegacy);
+      setWeeklyPlans(loadedPlans);
+      // วันเริ่มปฏิบัติงานเป็นตัวช่วยคำนวณ ไม่ได้เก็บที่เซิร์ฟเวอร์ — โหลดใหม่ = เริ่มใหม่
+      setCoopStartDate('');
+      savedSnapshot.current = snapshotOf(loadedAccommodation, loadedPlans, '');
       // Unsaved edits from this browser take precedence over the stored record.
       applyDraftIfAny();
       setIsLoading(false);
@@ -404,6 +429,8 @@ const AccommodationWorkPlan: React.FC = () => {
         weekly_plans: weeklyPlans
       });
       setSuccessMsg('บันทึกข้อมูลที่พักและแผนปฏิบัติงานเรียบร้อยแล้ว ข้อมูลจะถูกส่งไปยังอาจารย์นิเทศ');
+      // สิ่งที่เพิ่งส่งไปคือของบนเซิร์ฟเวอร์แล้ว — ไม่งั้นแก้อะไรต่อทีเดียวได้ฉบับร่างทันที
+      savedSnapshot.current = snapshotOf(accommodation, weeklyPlans, coopStartDate);
       // On record now, so the local copy has nothing left to protect.
       try {
         localStorage.removeItem(DRAFT_KEY);
