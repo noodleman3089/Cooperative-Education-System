@@ -443,10 +443,32 @@ CREATE INDEX IF NOT EXISTS idx_student_memos_student ON student_memos (student_i
 CREATE INDEX IF NOT EXISTS idx_student_memos_semester ON student_memos (semester_id, memo_id DESC);
 
 -- 12. Accommodations Table
+-- สหกิจ 06 — แบบแจ้งรายละเอียดที่พัก · **ผู้กรอกคือนักศึกษา** เรียนหัวหน้าสหกิจศึกษาฯ
 CREATE TABLE IF NOT EXISTS accommodations (
     student_id INT PRIMARY KEY REFERENCES students(student_id) ON DELETE CASCADE,
-    address TEXT NOT NULL,
+    -- ⛔ ที่อยู่ก้อนเดียวของเดิม (ก่อน 2026-09-03) — **อ่านอย่างเดียว ห้ามเขียนเพิ่ม**
+    --    แยกอัตโนมัติไม่ได้เพราะชื่อสถานที่ไทยไม่มีตัวคั่นคำ เดาผิดแล้วเพี้ยนเงียบ
+    --    เก็บไว้ให้นักศึกษาเห็นตอนกรอกใหม่ครั้งเดียว (migration 010)
+    address_legacy TEXT,
+    -- ช่องที่อยู่ตามฟอร์มจริง
+    house_no VARCHAR(50),
+    building VARCHAR(255),
+    room_no VARCHAR(50),
+    soi VARCHAR(255),
+    road VARCHAR(255),
+    subdistrict VARCHAR(100),
+    district VARCHAR(100),
+    province VARCHAR(100),
+    postal_code VARCHAR(10),
+    -- `phone` = โทรศัพท์ของที่พัก (ของเดิม) · `mobile_phone` = มือถือนักศึกษา
     phone VARCHAR(50),
+    mobile_phone VARCHAR(50),
+    fax VARCHAR(50),
+    email VARCHAR(255),
+    -- "แผนที่แสดงตำแหน่งที่ตั้ง" บนฟอร์ม — มีไว้ให้อาจารย์ใช้ตอนออกนิเทศ
+    -- ⛔ เก็บพิกัดอย่างเดียว ฝั่งอาจารย์เป็น**ลิงก์**ออกไป Google Maps ไม่ฝังแผนที่
+    latitude NUMERIC(10, 7),
+    longitude NUMERIC(10, 7),
     emergency_contact VARCHAR(255),
     emergency_relationship VARCHAR(100),
     emergency_phone VARCHAR(50)

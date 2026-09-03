@@ -3,6 +3,7 @@ import { query } from '../config/database';
 import { PersonnelModel } from '../models/personnel';
 import { resolveMajorScope, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
+import { formatAccommodationAddress, mapsLinkFor } from '../utils/accommodationAddress';
 
 export class PersonnelController {
   /**
@@ -132,7 +133,11 @@ export class PersonnelController {
           s.advisor_id, s.supervisor_id,
           c.name_th as company_name, c.address as company_address, c.province as company_province, c.district as company_district, c.google_place_id,
           m.name as mentor_name, m.phone as mentor_phone,
-          a.address as accommodation_address, a.phone as accommodation_phone, a.emergency_contact, a.emergency_phone,
+          a.house_no, a.building, a.room_no, a.soi, a.road,
+          a.subdistrict, a.district, a.province, a.postal_code, a.address_legacy,
+          a.latitude as accommodation_lat, a.longitude as accommodation_lng,
+          a.phone as accommodation_phone, a.mobile_phone as accommodation_mobile,
+          a.emergency_contact, a.emergency_relationship, a.emergency_phone,
           COALESCE(
             (SELECT json_agg(json_build_object(
               'plan_id', w.plan_id,
@@ -153,7 +158,17 @@ export class PersonnelController {
       `;
       
       const result = await query(queryStr, [personnelId]);
-      res.status(200).json(result.rows);
+
+      // ที่อยู่ที่พักถูกประกอบที่เซิร์ฟเวอร์ **ที่เดียว** — หน้าจอไม่ต่อสตริงเอง
+      // (ตั้งแต่ 2026-09-03 ที่อยู่เป็นช่องย่อย 9 ช่อง ไม่ใช่ TEXT ก้อนเดียวแล้ว)
+      // · `accommodation_maps_link` มีค่าเมื่อนักศึกษาปักหมุดไว้ — อาจารย์กดเปิดตอนวางแผนเดินทาง
+      const rows = result.rows.map((row) => ({
+        ...row,
+        accommodation_address: formatAccommodationAddress(row),
+        accommodation_maps_link: mapsLinkFor(row.accommodation_lat, row.accommodation_lng),
+      }));
+
+      res.status(200).json(rows);
     } catch (error) {
       sendUnexpectedError(res, error, 'Get Supervised Students Error', 'An internal server error occurred while retrieving supervised students.');
     }

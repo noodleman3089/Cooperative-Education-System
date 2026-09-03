@@ -12,6 +12,7 @@ import {
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
+import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
 
 export class StudentController {
   /**
@@ -669,9 +670,15 @@ export class StudentController {
 
       const accRes = await query('SELECT * FROM accommodations WHERE student_id = $1', [studentId]);
       const plansRes = await query('SELECT * FROM weekly_work_plans WHERE student_id = $1 ORDER BY week_number ASC', [studentId]);
-      
+
+      const accRow = accRes.rowCount && accRes.rowCount > 0 ? accRes.rows[0] : null;
+
       res.status(200).json({
-        accommodation: accRes.rowCount && accRes.rowCount > 0 ? accRes.rows[0] : null,
+        // `formatted_address` ประกอบจากช่องย่อยที่เซิร์ฟเวอร์ ไม่ให้ React ต่อสตริงเอง
+        // — ไม่งั้นรูปแบบที่อยู่จะมีสองแหล่งความจริงทันที (ดู utils/accommodationAddress.ts)
+        accommodation: accRow
+          ? { ...accRow, formatted_address: formatAccommodationAddress(accRow) }
+          : null,
         weekly_plans: plansRes.rows || []
       });
     } catch (error) {
@@ -704,8 +711,46 @@ export class StudentController {
       }
       const { accommodation, weekly_plans } = req.body;
 
-      if (!accommodation || typeof accommodation !== 'object' || !accommodation.address) {
+      if (!accommodation || typeof accommodation !== 'object') {
         res.status(400).json({ message: 'กรุณากรอกข้อมูลที่พักระหว่างปฏิบัติงานให้ครบถ้วน' });
+        return;
+      }
+
+      // ⛔ ตั้งแต่ 2026-09-03 ที่อยู่เป็น **ช่องย่อยตามฟอร์ม สหกิจ 06** ไม่ใช่ก้อนเดียว
+      //    ห้าม fallback ไปรับ `address` ก้อนเดิม — ถ้ารับ ที่อยู่ครึ่งระบบจะกลับไป
+      //    เป็นข้อความอิสระที่พิมพ์ลงแบบฟอร์มไม่ได้ และไม่มีใครสังเกตจนกว่าจะพิมพ์จริง
+      const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
+      const missing = [
+        ['บ้านเลขที่', text(accommodation.house_no)],
+        ['ตำบล/แขวง', text(accommodation.subdistrict)],
+        ['อำเภอ/เขต', text(accommodation.district)],
+        ['จังหวัด', text(accommodation.province)],
+        ['รหัสไปรษณีย์', text(accommodation.postal_code)],
+      ]
+        .filter(([, value]) => !value)
+        .map(([label]) => label);
+
+      if (missing.length > 0) {
+        res.status(400).json({ message: `กรุณากรอกข้อมูลที่พักให้ครบ: ${missing.join(' · ')}` });
+        return;
+      }
+
+      if (!/^\d{5}$/.test(text(accommodation.postal_code))) {
+        res.status(400).json({ message: 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก' });
+        return;
+      }
+
+      // พิกัดเป็นของไม่บังคับ (หน้าจอโหลดแผนที่ไม่ได้ก็ยังต้องส่งฟอร์มได้) แต่ถ้าส่งมา
+      // ต้องเป็นพิกัดจริง — ค่าขยะที่หลุดเข้าฐานจะพาอาจารย์นิเทศไปผิดที่
+      const hasCoords =
+        accommodation.latitude !== undefined &&
+        accommodation.latitude !== null &&
+        accommodation.latitude !== '' &&
+        accommodation.longitude !== undefined &&
+        accommodation.longitude !== null &&
+        accommodation.longitude !== '';
+      if (hasCoords && !isValidCoordinate(accommodation.latitude, accommodation.longitude)) {
+        res.status(400).json({ message: 'พิกัดที่พักไม่ถูกต้อง กรุณาปักหมุดใหม่บนแผนที่' });
         return;
       }
 
@@ -750,23 +795,57 @@ export class StudentController {
         await client.query('BEGIN');
 
         // Upsert accommodation
+        // ⛔ `address_legacy` ไม่อยู่ในรายการนี้โดยตั้งใจ — เป็นค่าเก่าอ่านอย่างเดียว
+        //    กรอกใหม่แล้วช่องย่อยคือความจริง ของเก่าคงไว้เป็นหลักฐานว่าเคยกรอกอะไร
         const accQuery = `
-          INSERT INTO accommodations (student_id, address, phone, emergency_contact, emergency_relationship, emergency_phone)
-          VALUES ($1, $2, $3, $4, $5, $6)
+          INSERT INTO accommodations (
+            student_id, house_no, building, room_no, soi, road,
+            subdistrict, district, province, postal_code,
+            phone, mobile_phone, fax, email, latitude, longitude,
+            emergency_contact, emergency_relationship, emergency_phone
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
           ON CONFLICT (student_id) DO UPDATE SET
-            address = EXCLUDED.address,
+            house_no = EXCLUDED.house_no,
+            building = EXCLUDED.building,
+            room_no = EXCLUDED.room_no,
+            soi = EXCLUDED.soi,
+            road = EXCLUDED.road,
+            subdistrict = EXCLUDED.subdistrict,
+            district = EXCLUDED.district,
+            province = EXCLUDED.province,
+            postal_code = EXCLUDED.postal_code,
             phone = EXCLUDED.phone,
+            mobile_phone = EXCLUDED.mobile_phone,
+            fax = EXCLUDED.fax,
+            email = EXCLUDED.email,
+            latitude = EXCLUDED.latitude,
+            longitude = EXCLUDED.longitude,
             emergency_contact = EXCLUDED.emergency_contact,
             emergency_relationship = EXCLUDED.emergency_relationship,
             emergency_phone = EXCLUDED.emergency_phone
         `;
+        const optional = (v: unknown): string | null => text(v) || null;
         await client.query(accQuery, [
-          studentId, 
-          accommodation.address, 
-          accommodation.phone, 
-          accommodation.emergency_contact, 
-          accommodation.emergency_relationship, 
-          accommodation.emergency_phone
+          studentId,
+          text(accommodation.house_no),
+          optional(accommodation.building),
+          optional(accommodation.room_no),
+          optional(accommodation.soi),
+          optional(accommodation.road),
+          text(accommodation.subdistrict),
+          text(accommodation.district),
+          text(accommodation.province),
+          text(accommodation.postal_code),
+          optional(accommodation.phone),
+          optional(accommodation.mobile_phone),
+          optional(accommodation.fax),
+          optional(accommodation.email),
+          hasCoords ? Number(accommodation.latitude) : null,
+          hasCoords ? Number(accommodation.longitude) : null,
+          optional(accommodation.emergency_contact),
+          optional(accommodation.emergency_relationship),
+          optional(accommodation.emergency_phone),
         ]);
 
         // Handle weekly plans (delete old, insert new)

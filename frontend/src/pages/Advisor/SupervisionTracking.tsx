@@ -24,8 +24,12 @@ interface SupervisedStudent {
   company_province?: string | null;
   mentor_name?: string | null;
   mentor_phone?: string | null;
+  /** ประกอบจากช่องย่อยที่เซิร์ฟเวอร์ (utils/accommodationAddress.ts) — หน้าจอไม่ต่อเอง */
   accommodation_address?: string | null;
   accommodation_phone?: string | null;
+  accommodation_mobile?: string | null;
+  /** มีค่าเมื่อนักศึกษาปักหมุดที่พักไว้ — ใช้ตอนวางแผนเดินทางไปนิเทศ */
+  accommodation_maps_link?: string | null;
   emergency_contact?: string | null;
   emergency_phone?: string | null;
   weekly_plans?: WeeklyPlan[];
@@ -274,8 +278,22 @@ const SupervisionTracking: React.FC = () => {
                   {student.accommodation_address && (
                     <div className="mt-4 p-4 rounded-xl bg-gray-50 dark:bg-gray-900 border border-gray-100 dark:border-gray-800 text-xs space-y-1 text-gray-600 dark:text-gray-300">
                       <div className="font-bold text-gray-700 dark:text-gray-300">ข้อมูลที่พัก & ติดต่อฉุกเฉิน</div>
-                      <div>ที่พัก: {student.accommodation_address}</div>
+                      <div data-testid="supervision-accommodation">ที่พัก: {student.accommodation_address}</div>
+                      {/* ⛔ ลิงก์ ไม่ใช่แผนที่ฝัง — แผนที่ฝังกินโควตา API ทุกครั้งที่เปิดหน้า
+                          ทั้งที่อาจารย์ต้องดูจริงแค่ตอนวางแผนเดินทางไปนิเทศ */}
+                      {student.accommodation_maps_link && (
+                        <a
+                          href={student.accommodation_maps_link}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          data-testid="supervision-maps-link"
+                          className="inline-flex items-center gap-1 font-bold text-brand-blue underline dark:text-blue-400"
+                        >
+                          <MapPin className="w-3.5 h-3.5" /> เปิดตำแหน่งที่พักใน Google Maps
+                        </a>
+                      )}
                       <div>เบอร์ติดต่อที่พัก: {student.accommodation_phone || '-'}</div>
+                      <div>มือถือนักศึกษา: {student.accommodation_mobile || student.phone || '-'}</div>
                       <div>ผู้ติดต่อฉุกเฉิน: {student.emergency_contact || '-'} ({student.emergency_phone || '-'})</div>
                     </div>
                   )}

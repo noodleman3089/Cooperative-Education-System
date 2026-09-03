@@ -53,6 +53,7 @@ export interface GoogleMap {
   /** undefined ได้จริงเมื่อแผนที่ยังไม่ถูก render — ต้องเช็คก่อนใช้ */
   getZoom(): number | undefined;
   fitBounds(bounds: LatLngBounds): void;
+  addListener(event: string, handler: (e?: { latLng?: GoogleLatLng }) => void): unknown;
 }
 
 export interface LatLngBounds {
@@ -61,8 +62,11 @@ export interface LatLngBounds {
 }
 
 export interface MapMarker {
-  addListener(event: string, handler: () => void): unknown;
+  addListener(event: string, handler: (e?: { latLng?: GoogleLatLng }) => void): unknown;
   setMap(map: GoogleMap | null): void;
+  /** ย้ายหมุดไปพิกัดใหม่ — ใช้ตอนนักศึกษาคลิกบนแผนที่แทนการลากหมุด */
+  setPosition(position: LatLngLiteral | GoogleLatLng): void;
+  getPosition(): GoogleLatLng | undefined;
 }
 
 export interface InfoWindow {
@@ -72,8 +76,13 @@ export interface InfoWindow {
 }
 
 export interface Geocoder {
+  /**
+   * ค้นหาพิกัดจากที่อยู่ (`address`) หรือหาที่อยู่จากพิกัด (`location` — reverse geocoding)
+   * `location` เพิ่มเมื่อ 2026-09-03 ให้หน้าแจ้งที่พัก (สหกิจ 06) เติมตำบล/อำเภอ/จังหวัด
+   * จากหมุดที่นักศึกษาปักได้
+   */
   geocode(
-    request: { address: string },
+    request: { address: string } | { location: LatLngLiteral },
     callback: (results: GeocoderResult[] | null, status: string) => void
   ): void;
 }

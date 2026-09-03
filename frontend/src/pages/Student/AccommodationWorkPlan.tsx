@@ -6,15 +6,77 @@ import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy } from 'lucide-r
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
 import type { WeeklyPlan } from '../../types/api';
-import { Textarea } from '../../components/ui/Input';
+import { Input, Select, Textarea } from '../../components/ui/Input';
+import { loadThaiAddressData, type ProvinceItem } from '../../data/thaiAddress';
+import type { AddressComponent } from '../../types/googleMaps';
+import AccommodationMapPicker from './AccommodationMapPicker';
 
+/**
+ * ที่พักตามช่องของ **สหกิจ 06** (แบบแจ้งรายละเอียดที่พัก)
+ *
+ * ⛔ เดิมเป็น `address` ก้อนเดียว — พิมพ์ลงแบบฟอร์มที่มีช่องแยกไม่ได้ และอาจารย์
+ * นิเทศเอาไปหาทางต่อไม่ได้ · แตกเป็นช่องย่อยเมื่อ 2026-09-03 (migration 010)
+ */
 interface Accommodation {
-  address: string;
+  house_no: string;
+  building: string;
+  room_no: string;
+  soi: string;
+  road: string;
+  subdistrict: string;
+  district: string;
+  province: string;
+  postal_code: string;
   phone: string;
+  mobile_phone: string;
+  fax: string;
+  email: string;
+  latitude: string;
+  longitude: string;
   emergency_contact: string;
   emergency_relationship: string;
   emergency_phone: string;
 }
+
+const BLANK_ACCOMMODATION: Accommodation = {
+  house_no: '',
+  building: '',
+  room_no: '',
+  soi: '',
+  road: '',
+  subdistrict: '',
+  district: '',
+  province: '',
+  postal_code: '',
+  phone: '',
+  mobile_phone: '',
+  fax: '',
+  email: '',
+  latitude: '',
+  longitude: '',
+  emergency_contact: '',
+  emergency_relationship: '',
+  emergency_phone: '',
+};
+
+/**
+ * จับชื่อจังหวัด/อำเภอ/ตำบลที่ Google ส่งกลับมา เข้ากับชุดข้อมูลของโปรเจคเอง
+ *
+ * ⛔ **ไม่เชื่อชื่อจาก Google ตรงๆ** — Google สะกดไม่เหมือนกันทุกที่ (บางที่มี
+ * "ตำบล" นำ บางที่ไม่มี · เขตของ กทม. บางทีเป็น "Bang Rak") และค่าที่ไม่ตรงกับ
+ * dropdown จะทำให้ช่องนั้นว่างเงียบๆ ทั้งที่ผู้ใช้เห็นว่าปักหมุดสำเร็จแล้ว
+ * จึงยอมรับเฉพาะชื่อที่มีอยู่จริงในชุดข้อมูล ที่เหลือปล่อยให้เลือกเอง
+ */
+const matchName = (candidates: string[], names: string[]): string => {
+  const strip = (s: string) =>
+    s.replace(/^(จังหวัด|จ\.|อำเภอ|อ\.|เขต|ตำบล|ต\.|แขวง)\s*/, '').trim();
+  for (const raw of candidates) {
+    const bare = strip(raw);
+    const hit = names.find((n) => n === raw || n === bare || strip(n) === bare);
+    if (hit) return hit;
+  }
+  return '';
+};
 
 const AccommodationWorkPlan: React.FC = () => {
   const auth = useContext(AuthContext);
@@ -24,13 +86,12 @@ const AccommodationWorkPlan: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
-  const [accommodation, setAccommodation] = useState<Accommodation>({
-    address: '',
-    phone: '',
-    emergency_contact: '',
-    emergency_relationship: '',
-    emergency_phone: ''
-  });
+  const [accommodation, setAccommodation] = useState<Accommodation>(BLANK_ACCOMMODATION);
+  /** ที่อยู่ก้อนเดียวที่เคยกรอกไว้ก่อนแตกช่อง — แสดงเป็นตัวช่วยจำ ไม่ถูกส่งกลับ */
+  const [legacyAddress, setLegacyAddress] = useState('');
+  // 77 จังหวัด / 930 อำเภอ / 7,452 ตำบล — โหลดแบบ dynamic เมื่อฟอร์มต้องใช้จริง
+  // (ดูเหตุผลใน data/thaiAddress.ts) ว่างอยู่ชั่วครู่ระหว่างรอ ซึ่ง dropdown บอกเอง
+  const [thaiAddress, setThaiAddress] = useState<ProvinceItem[]>([]);
 
   const MIN_WEEKS = 16;
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([]);
@@ -46,7 +107,78 @@ const AccommodationWorkPlan: React.FC = () => {
 
   useEffect(() => {
     loadData();
+    loadThaiAddressData().then(setThaiAddress).catch(() => setThaiAddress([]));
   }, []);
+
+  const availableDistricts =
+    thaiAddress.find((p) => p.name === accommodation.province)?.districts || [];
+  const availableSubdistricts =
+    availableDistricts.find((d) => d.name === accommodation.district)?.subdistricts || [];
+
+  /**
+   * เลือกจังหวัด/อำเภอใหม่ต้องล้างระดับที่ต่ำกว่าเสมอ
+   * ไม่งั้นจะได้ "ตำบลบางพระ อำเภอเมือง จังหวัดเชียงใหม่" ซึ่งไม่มีอยู่จริง
+   */
+  const pickProvince = (name: string) =>
+    setAccommodation((a) => ({ ...a, province: name, district: '', subdistrict: '', postal_code: '' }));
+
+  const pickDistrict = (name: string) =>
+    setAccommodation((a) => ({ ...a, district: name, subdistrict: '', postal_code: '' }));
+
+  /** ตำบลรู้รหัสไปรษณีย์ของตัวเองอยู่แล้ว — ไม่ต้องให้นักศึกษาพิมพ์ */
+  const pickSubdistrict = (name: string) => {
+    const zip = availableSubdistricts.find((s) => s.name === name)?.zipcode || '';
+    setAccommodation((a) => ({ ...a, subdistrict: name, postal_code: zip || a.postal_code }));
+  };
+
+  /**
+   * หมุดถูกวาง — เก็บพิกัดเสมอ ส่วนตำบล/อำเภอ/จังหวัดเติมให้ **เฉพาะที่ตรงกับ
+   * ชุดข้อมูลของเราจริง** และเฉพาะช่องที่ยังว่าง เพื่อไม่ทับสิ่งที่นักศึกษาเลือกเอง
+   */
+  const handlePin = (lat: number, lng: number, components: AddressComponent[]) => {
+    const namesOfType = (type: string) =>
+      components.filter((c) => c.types.includes(type)).flatMap((c) => [c.long_name, c.short_name]);
+
+    setAccommodation((a) => {
+      const next = { ...a, latitude: String(lat), longitude: String(lng) };
+      if (thaiAddress.length === 0) return next;
+
+      const province =
+        a.province ||
+        matchName(namesOfType('administrative_area_level_1'), thaiAddress.map((p) => p.name));
+      if (!province) return next;
+      next.province = province;
+
+      const districts = thaiAddress.find((p) => p.name === province)?.districts || [];
+      const district =
+        (a.province === province && a.district) ||
+        matchName(
+          [...namesOfType('administrative_area_level_2'), ...namesOfType('locality')],
+          districts.map((d) => d.name)
+        );
+      if (!district) return { ...next, district: '', subdistrict: '', postal_code: '' };
+      next.district = district;
+
+      const subs = districts.find((d) => d.name === district)?.subdistricts || [];
+      const subdistrict =
+        (a.district === district && a.subdistrict) ||
+        matchName(
+          [
+            ...namesOfType('sublocality_level_1'),
+            ...namesOfType('sublocality'),
+            ...namesOfType('administrative_area_level_3'),
+          ],
+          subs.map((s) => s.name)
+        );
+      if (!subdistrict) return { ...next, subdistrict: '', postal_code: '' };
+      next.subdistrict = subdistrict;
+      next.postal_code =
+        subs.find((s) => s.name === subdistrict)?.zipcode ||
+        namesOfType('postal_code')[0] ||
+        next.postal_code;
+      return next;
+    });
+  };
 
   /**
    * Keep unsaved work in the browser. This form is agreed with the mentor, so
@@ -150,13 +282,30 @@ const AccommodationWorkPlan: React.FC = () => {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
 
       if (res.accommodation) {
+        const a = res.accommodation;
         setAccommodation({
-          address: res.accommodation.address || '',
-          phone: res.accommodation.phone || '',
-          emergency_contact: res.accommodation.emergency_contact || '',
-          emergency_relationship: res.accommodation.emergency_relationship || '',
-          emergency_phone: res.accommodation.emergency_phone || ''
+          house_no: a.house_no || '',
+          building: a.building || '',
+          room_no: a.room_no || '',
+          soi: a.soi || '',
+          road: a.road || '',
+          subdistrict: a.subdistrict || '',
+          district: a.district || '',
+          province: a.province || '',
+          postal_code: a.postal_code || '',
+          phone: a.phone || '',
+          mobile_phone: a.mobile_phone || '',
+          fax: a.fax || '',
+          email: a.email || '',
+          latitude: a.latitude === null || a.latitude === undefined ? '' : String(a.latitude),
+          longitude: a.longitude === null || a.longitude === undefined ? '' : String(a.longitude),
+          emergency_contact: a.emergency_contact || '',
+          emergency_relationship: a.emergency_relationship || '',
+          emergency_phone: a.emergency_phone || ''
         });
+        // ⛔ แสดงของเก่าเมื่อ **ยังไม่มีใครกรอกช่องย่อย** เท่านั้น — ไม่งั้นแถวที่กรอกใหม่
+        //    แล้วจะขึ้นกล่อง "ที่อยู่เดิม" ค้างตลอดไปโดยไม่มีอะไรให้ทำกับมัน
+        setLegacyAddress(a.house_no ? '' : a.address_legacy || '');
       }
 
       if (res.weekly_plans && res.weekly_plans.length > 0) {
@@ -182,9 +331,22 @@ const AccommodationWorkPlan: React.FC = () => {
   };
 
   const handleNextStep = () => {
-    // Validate step 1
-    if (!accommodation.address || !accommodation.emergency_contact || !accommodation.emergency_phone || !accommodation.emergency_relationship) {
-      setError('กรุณากรอกข้อมูลที่พักและข้อมูลผู้ติดต่อฉุกเฉินให้ครบถ้วน');
+    // ด่านฝั่งหน้าจอคู่กับด่านฝั่ง API — รายชื่อช่องบังคับต้องตรงกันทั้งสองที่
+    const missing = [
+      ['บ้านเลขที่', accommodation.house_no],
+      ['ตำบล/แขวง', accommodation.subdistrict],
+      ['อำเภอ/เขต', accommodation.district],
+      ['จังหวัด', accommodation.province],
+      ['รหัสไปรษณีย์', accommodation.postal_code],
+      ['ชื่อผู้ติดต่อฉุกเฉิน', accommodation.emergency_contact],
+      ['ความสัมพันธ์', accommodation.emergency_relationship],
+      ['เบอร์โทรฉุกเฉิน', accommodation.emergency_phone],
+    ]
+      .filter(([, value]) => !value.trim())
+      .map(([label]) => label);
+
+    if (missing.length > 0) {
+      setError(`กรุณากรอกให้ครบ: ${missing.join(' · ')}`);
       return;
     }
     setError(null);
@@ -327,28 +489,210 @@ const AccommodationWorkPlan: React.FC = () => {
                 ข้อมูลที่พักอาศัยปัจจุบัน (ระหว่างฝึกงาน)
               </h3>
               
-              <div className="space-y-4">
+              {/* ที่อยู่เดิมที่เคยกรอกเป็นก้อนเดียว — แยกอัตโนมัติไม่ได้ จึงโชว์ให้คัดลอก
+                  ครั้งเดียวแล้วหายไปเอง (ดู migration 010) */}
+              {legacyAddress && (
+                <div className="mb-4">
+                  <AlertBanner
+                    variant="info"
+                    message={
+                      <span>
+                        แบบฟอร์มเปลี่ยนเป็นช่องแยกตามใบ สหกิจ 06 แล้ว กรุณากรอกใหม่ครั้งเดียว ·
+                        ที่อยู่เดิมที่เคยบันทึกไว้คือ{' '}
+                        <strong data-testid="legacy-address">{legacyAddress}</strong>
+                      </span>
+                    }
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    ที่อยู่ครบถ้วน (บ้านเลขที่, ซอย, ถนน, ตำบล, อำเภอ, จังหวัด, รหัสไปรษณีย์) *
+                  <label htmlFor="acc-house-no" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    บ้านเลขที่ *
                   </label>
-                  <Textarea
-                    rows={3}
-                    value={accommodation.address}
-                    onChange={e => setAccommodation({...accommodation, address: e.target.value})}
-                    placeholder="กรอกที่อยู่ปัจจุบันให้ชัดเจน เพื่อประโยชน์ในการติดต่อ..."
+                  <Input
+                    id="acc-house-no"
+                    data-testid="acc-house-no"
+                    value={accommodation.house_no}
+                    onChange={e => setAccommodation({ ...accommodation, house_no: e.target.value })}
+                    placeholder="เช่น 123/45"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    เบอร์โทรศัพท์ที่พัก (ถ้ามี)
+                  <label htmlFor="acc-building" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    อาคาร / ชื่อหอพัก
                   </label>
-                  <input
-                    type="text"
+                  <Input
+                    id="acc-building"
+                    data-testid="acc-building"
+                    value={accommodation.building}
+                    onChange={e => setAccommodation({ ...accommodation, building: e.target.value })}
+                    placeholder="เช่น หอพักบ้านสวน อาคาร B"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="acc-room-no" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    ห้อง
+                  </label>
+                  <Input
+                    id="acc-room-no"
+                    data-testid="acc-room-no"
+                    value={accommodation.room_no}
+                    onChange={e => setAccommodation({ ...accommodation, room_no: e.target.value })}
+                    placeholder="เช่น 502"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="acc-soi" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    ซอย
+                  </label>
+                  <Input
+                    id="acc-soi"
+                    data-testid="acc-soi"
+                    value={accommodation.soi}
+                    onChange={e => setAccommodation({ ...accommodation, soi: e.target.value })}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label htmlFor="acc-road" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    ถนน
+                  </label>
+                  <Input
+                    id="acc-road"
+                    data-testid="acc-road"
+                    value={accommodation.road}
+                    onChange={e => setAccommodation({ ...accommodation, road: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor="acc-province" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    จังหวัด *
+                  </label>
+                  <Select
+                    id="acc-province"
+                    data-testid="acc-province"
+                    disabled={thaiAddress.length === 0}
+                    value={accommodation.province}
+                    onChange={e => pickProvince(e.target.value)}
+                  >
+                    <option value="">
+                      {thaiAddress.length === 0 ? 'กำลังโหลดข้อมูลจังหวัด...' : '-- เลือกจังหวัด --'}
+                    </option>
+                    {thaiAddress.map(p => (
+                      <option key={p.name} value={p.name}>{p.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label htmlFor="acc-district" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    อำเภอ / เขต *
+                  </label>
+                  <Select
+                    id="acc-district"
+                    data-testid="acc-district"
+                    disabled={!accommodation.province}
+                    value={accommodation.district}
+                    onChange={e => pickDistrict(e.target.value)}
+                  >
+                    <option value="">-- เลือกอำเภอ/เขต --</option>
+                    {availableDistricts.map(d => (
+                      <option key={d.name} value={d.name}>{d.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label htmlFor="acc-subdistrict" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    ตำบล / แขวง *
+                  </label>
+                  <Select
+                    id="acc-subdistrict"
+                    data-testid="acc-subdistrict"
+                    disabled={!accommodation.district}
+                    value={accommodation.subdistrict}
+                    onChange={e => pickSubdistrict(e.target.value)}
+                  >
+                    <option value="">-- เลือกตำบล/แขวง --</option>
+                    {availableSubdistricts.map(s => (
+                      <option key={s.name} value={s.name}>{s.name}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label htmlFor="acc-postal-code" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    รหัสไปรษณีย์ *
+                  </label>
+                  <Input
+                    id="acc-postal-code"
+                    data-testid="acc-postal-code"
+                    inputMode="numeric"
+                    maxLength={5}
+                    value={accommodation.postal_code}
+                    onChange={e => setAccommodation({ ...accommodation, postal_code: e.target.value.replace(/\D/g, '') })}
+                    placeholder="เติมให้อัตโนมัติเมื่อเลือกตำบล"
+                  />
+                </div>
+              </div>
+
+              {/* กรอบ "แผนที่แสดงตำแหน่งที่ตั้ง" ของฟอร์มจริง — ไม่บังคับ */}
+              <div className="mt-6 space-y-2">
+                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  แผนที่แสดงตำแหน่งที่ตั้งที่พัก (ไม่บังคับ)
+                </label>
+                <AccommodationMapPicker
+                  latitude={accommodation.latitude}
+                  longitude={accommodation.longitude}
+                  onPick={handlePin}
+                />
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="acc-phone" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    โทรศัพท์ที่พัก
+                  </label>
+                  <Input
+                    id="acc-phone"
+                    data-testid="acc-phone"
                     value={accommodation.phone}
-                    onChange={e => setAccommodation({...accommodation, phone: e.target.value})}
+                    onChange={e => setAccommodation({ ...accommodation, phone: e.target.value })}
                     placeholder="เช่น 02-123-4567 ต่อ 101"
-                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="acc-mobile" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    โทรศัพท์มือถือ
+                  </label>
+                  <Input
+                    id="acc-mobile"
+                    data-testid="acc-mobile"
+                    value={accommodation.mobile_phone}
+                    onChange={e => setAccommodation({ ...accommodation, mobile_phone: e.target.value })}
+                    placeholder="เช่น 089-123-4567"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="acc-fax" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    โทรสาร
+                  </label>
+                  <Input
+                    id="acc-fax"
+                    data-testid="acc-fax"
+                    value={accommodation.fax}
+                    onChange={e => setAccommodation({ ...accommodation, fax: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="acc-email" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    E-mail
+                  </label>
+                  <Input
+                    id="acc-email"
+                    data-testid="acc-email"
+                    type="email"
+                    value={accommodation.email}
+                    onChange={e => setAccommodation({ ...accommodation, email: e.target.value })}
                   />
                 </div>
               </div>
@@ -362,39 +706,39 @@ const AccommodationWorkPlan: React.FC = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="md:col-span-2">
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="acc-emg-name" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     ชื่อ-นามสกุล บุคคลติดต่อฉุกเฉิน *
                   </label>
-                  <input
-                    type="text"
+                  <Input
+                    id="acc-emg-name"
+                    data-testid="acc-emg-name"
                     value={accommodation.emergency_contact}
                     onChange={e => setAccommodation({...accommodation, emergency_contact: e.target.value})}
                     placeholder="เช่น นายสมชาย ใจดี"
-                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="acc-emg-relation" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     ความสัมพันธ์ *
                   </label>
-                  <input
-                    type="text"
+                  <Input
+                    id="acc-emg-relation"
+                    data-testid="acc-emg-relation"
                     value={accommodation.emergency_relationship}
                     onChange={e => setAccommodation({...accommodation, emergency_relationship: e.target.value})}
                     placeholder="เช่น บิดา, มารดา, พี่ชาย"
-                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="acc-emg-phone" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                     เบอร์โทรศัพท์ฉุกเฉิน *
                   </label>
-                  <input
-                    type="text"
+                  <Input
+                    id="acc-emg-phone"
+                    data-testid="acc-emg-phone"
                     value={accommodation.emergency_phone}
                     onChange={e => setAccommodation({...accommodation, emergency_phone: e.target.value})}
                     placeholder="เช่น 089-123-4567"
-                    className="w-full px-4 py-2 text-sm border border-gray-300 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-brand-blue focus:border-brand-blue outline-none transition-all"
                   />
                 </div>
               </div>

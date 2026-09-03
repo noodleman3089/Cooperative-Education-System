@@ -16,6 +16,7 @@ import {
   type GoogleMap,
   type MapMarker,
 } from '../types/googleMaps';
+import { loadGoogleMapsScript } from '../utils/googleMapsLoader';
 
 /**
  * ทางเข้า Google Maps ที่ TypeScript ตรวจได้ แทน `declare const google: any` เดิม
@@ -28,31 +29,6 @@ const google = {
     if (!maps) throw new Error('Google Maps API is not loaded');
     return maps;
   },
-};
-
-const loadGoogleMapsScript = (apiKey: string, onLoad: () => void, onError: () => void) => {
-  if (!apiKey) {
-    onError();
-    return;
-  }
-  if (googleMaps()) {
-    onLoad();
-    return;
-  }
-  const existingScript = document.getElementById('google-maps-script');
-  if (existingScript) {
-    const handleLoad = () => onLoad();
-    existingScript.addEventListener('load', handleLoad);
-    return;
-  }
-  const script = document.createElement('script');
-  script.id = 'google-maps-script';
-  script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&language=th`;
-  script.async = true;
-  script.defer = true;
-  script.onload = () => onLoad();
-  script.onerror = () => onError();
-  document.body.appendChild(script);
 };
 
 const SmartJobBoard: React.FC = () => {
