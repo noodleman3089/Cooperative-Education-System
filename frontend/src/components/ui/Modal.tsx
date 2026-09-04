@@ -51,8 +51,16 @@ export const Modal: React.FC<ModalProps> = ({
   const panelRef = useRef<HTMLDivElement>(null);
   // ponytail: hold onClose in a ref so inline arrow functions passed from callers
   // do not trigger useEffect re-runs on every keystroke, which was stealing focus via panelRef.focus()
+  //
+  // ⛔ อัปเดต ref **ใน effect ไม่ใช่ระหว่าง render** — การเขียน ref ตอน render
+  //    ผิดกฎ React (จับได้ด้วย lint `Cannot access refs during render`) เพราะ
+  //    render อาจถูกทิ้งหรือรันซ้ำได้ใน concurrent mode แล้ว ref จะค้างค่าที่ไม่เคยถูกใช้จริง
+  //    · effect ตัวนี้จงใจไม่มี dependency array ให้รันทุกครั้งหลัง render
+  //      ซึ่งไม่กระทบ effect ข้างล่างที่ผูก `[]` ไว้ — focus จึงยังไม่ถูกแย่ง
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
