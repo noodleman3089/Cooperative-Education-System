@@ -1087,7 +1087,30 @@ export class IntentFormController {
         await assertCanReviewStudentWork(userId, roles, row.student_id);
       }
 
-      // `pg` คืน DATE เป็นสตริง YYYY-MM-DD อยู่แล้ว — ห้าม new Date() (เลื่อนวัน)
+      // ponytail: ส่งแบบฟอร์มเปล่าเป็น PDF 2 หน้าตามไฟล์ต้นฉบับทางการของมหาวิทยาลัย
+      // (รองรับ ?format=html สำหรับกรณีที่ต้องการผลลัพธ์แบบ HTML เดิม)
+      if (req.query.format === 'html') {
+        const html = renderRequestFormHtml(row as RequestFormData);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+        return;
+      }
+
+      const templatePathCandidates = [
+        path.join(process.cwd(), 'secure_private', 'templates', 'request_form_template.pdf'),
+        path.join(process.cwd(), 'backend', 'secure_private', 'templates', 'request_form_template.pdf'),
+        path.resolve(__dirname, '../../secure_private/templates/request_form_template.pdf'),
+      ];
+      const templatePath = templatePathCandidates.find((p) => fs.existsSync(p));
+
+      if (templatePath) {
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'inline; filename="request_form_template.pdf"');
+        res.sendFile(templatePath);
+        return;
+      }
+
+      // Fallback กรณีหาไฟล์เทมเพลตไม่เจอ
       const html = renderRequestFormHtml(row as RequestFormData);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.status(200).send(html);
