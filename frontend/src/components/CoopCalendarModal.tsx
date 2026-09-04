@@ -3,7 +3,7 @@ import { AlertTriangle, Lock, LockOpen } from 'lucide-react';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import { formatThaiDate, formatThaiRange } from '../utils/thaiDate';
-import type { CalendarStatus, CoopCalendarResponse } from '../types/api';
+import type { CalendarDateKind, CalendarStatus, CoopCalendarResponse } from '../types/api';
 
 /**
  * ปฏิทินสหกิจศึกษาที่นักศึกษาเปิดดู
@@ -21,13 +21,37 @@ import type { CalendarStatus, CoopCalendarResponse } from '../types/api';
 interface CalendarLine {
   key: string;
   title: string;
-  start_date: string;
-  end_date: string;
+  date_kind: CalendarDateKind;
+  start_date: string | null;
+  end_date: string | null;
   late_end_date: string | null;
+  detail_text: string | null;
   note: string | null;
   status: CalendarStatus;
   /** true = กิจกรรมนี้ถูกปฏิทินคุมจริงที่เซิร์ฟเวอร์ ไม่ใช่แค่ข้อมูลประกอบ */
   locksSubmission: boolean;
+}
+
+/**
+ * บรรทัดวันที่ของแถวหนึ่ง — **คนละข้อความตามชนิด ไม่ใช่ช่วงเสมอ**
+ *
+ * เขียนว่า "5 มิ.ย. – 5 มิ.ย." ให้กับสิ่งที่กระดาษเขียนว่า "ภายในวันที่ 5 มิ.ย."
+ * คือการบอกนักศึกษาว่ามีวันเดียวให้ส่ง ทั้งที่ส่งได้ตั้งแต่ต้น
+ */
+function describeDates(line: CalendarLine): string {
+  switch (line.date_kind) {
+    case 'deadline':
+      return line.end_date ? `ภายในวันที่ ${formatThaiDate(line.end_date)}` : '';
+    case 'single':
+      return line.start_date ? formatThaiDate(line.start_date) : '';
+    case 'relative':
+    case 'external':
+      return line.detail_text ?? '';
+    default:
+      return line.start_date && line.end_date
+        ? formatThaiRange(line.start_date, line.end_date)
+        : '';
+  }
 }
 
 const GROUPS: { status: CalendarStatus; heading: string; dot: string }[] = [
@@ -37,6 +61,13 @@ const GROUPS: { status: CalendarStatus; heading: string; dot: string }[] = [
   { status: 'late', heading: 'เลยกำหนดปกติแล้ว — ยังส่งได้ในช่วงผ่อนผัน', dot: 'bg-amber-500' },
   { status: 'upcoming', heading: 'ที่กำลังจะถึง', dot: 'bg-blue-500' },
   { status: 'closed', heading: 'ผ่านไปแล้ว', dot: 'bg-gray-400 dark:bg-gray-600' },
+  // แถวที่กระดาษไม่ได้ให้วันตายตัว ("ภายใน 3 วันทำการหลังส่งเอกสาร" ·
+  // "ให้เป็นไปตามสาขาวิชากำหนด") — ไม่มีวันจึงจัดกลุ่มตามเวลาไม่ได้ แต่ต้องเห็น
+  {
+    status: 'not_configured',
+    heading: 'ไม่มีกำหนดวันตายตัว',
+    dot: 'bg-gray-300 dark:bg-gray-700',
+  },
 ];
 
 /**
@@ -87,30 +118,38 @@ const CoopCalendarModal: React.FC<{ data: CoopCalendarResponse; onClose: () => v
   onClose,
 }) => {
   const lines: CalendarLine[] = [
-    // กิจกรรมที่เจ้าหน้าที่ยังไม่ตั้งช่วงจะไม่โผล่ — ยังไม่มีวันให้บอก
+    // กิจกรรมที่เจ้าหน้าที่ยังไม่ตั้งจะไม่โผล่ — ยังไม่มีอะไรให้บอก
+    // ⛔ เกณฑ์คือ "มีวันปิด **หรือ** มีข้อความ" ไม่ใช่ "มีวันเริ่มและวันปิด" —
+    //    ชนิดเส้นตายไม่มีวันเริ่ม และชนิดข้อความไม่มีวันเลยทั้งคู่
     ...data.activities
-      .filter((a) => a.start_date && a.end_date)
+      .filter((a) => a.end_date || a.detail_text)
       .map((a) => ({
         key: `a-${a.activity_key}`,
         title: a.label,
-        start_date: a.start_date as string,
-        end_date: a.end_date as string,
+        date_kind: a.date_kind,
+        start_date: a.start_date,
+        end_date: a.end_date,
         late_end_date: a.late_end_date,
+        detail_text: a.detail_text,
         note: a.note,
         status: a.status,
-        locksSubmission: true,
+        locksSubmission: a.locks,
       })),
     ...data.custom_events.map((c) => ({
       key: `c-${c.event_id}`,
       title: c.title,
+      date_kind: c.date_kind,
       start_date: c.start_date,
       end_date: c.end_date,
       late_end_date: c.late_end_date,
+      detail_text: c.detail_text,
       note: c.note,
       status: c.status,
       locksSubmission: false,
     })),
-  ].sort((a, b) => a.start_date.localeCompare(b.start_date));
+    // เรียงตามวัน แล้วดันแถวที่ไม่มีวันไปท้ายสุด — ปฏิทินคณะเรียงตามเลขรายการ
+    // แต่ฝั่งนักศึกษาถามว่า "อะไรก่อนหลัง" การเรียงตามวันจึงตรงคำถามกว่า
+  ].sort((a, b) => (a.start_date ?? a.end_date ?? '9999').localeCompare(b.start_date ?? b.end_date ?? '9999'));
 
   return (
     <Modal onClose={onClose} size="lg" title="ปฏิทินสหกิจศึกษา">
@@ -151,7 +190,7 @@ const CoopCalendarModal: React.FC<{ data: CoopCalendarResponse; onClose: () => v
                             {line.title}
                           </p>
                           <p className="text-sm text-gray-600 dark:text-gray-400">
-                            {formatThaiRange(line.start_date, line.end_date)}
+                            {describeDates(line)}
                             {line.status === 'late' && line.late_end_date && (
                               <> · ผ่อนผันถึง {formatThaiDate(line.late_end_date)}</>
                             )}

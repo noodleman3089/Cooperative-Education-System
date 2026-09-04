@@ -29,15 +29,34 @@ export interface Announcement {
  */
 export type CalendarStatus = 'not_configured' | 'upcoming' | 'open' | 'late' | 'closed';
 
+/**
+ * ชนิดเซลล์วันที่ตามที่พิมพ์บนปฏิทินคณะ — กระดาษจริงมี 5 แบบ ไม่ใช่แบบเดียว
+ * ความหมายและกติกาการกรอกอยู่ที่ `backend/src/utils/coopCalendar.ts` ที่เดียว
+ */
+export type CalendarDateKind = 'range' | 'deadline' | 'single' | 'relative' | 'external';
+
 /** กิจกรรมตายตัว — คืนมาครบทุกตัวเสมอ รวมอันที่ยังไม่ได้ตั้งช่วง */
 export interface CoopCalendarActivity {
   activity_key: string;
   label: string;
+  date_kind: CalendarDateKind;
+  /** true = นอกช่วงแล้วเซิร์ฟเวอร์ปฏิเสธจริง · false = หมุดบอกเวลาเฉยๆ */
+  locks: boolean;
+  /** true = เจ้าหน้าที่กรอกเองไม่ได้ ช่วงคำนวณจากกิจกรรมอื่น */
+  derived: boolean;
+  /** true = มีช่อง "ผ่อนผันถึง" ให้กรอก (วันปิดของกิจกรรมนี้ถูกใช้ล็อกจริง) */
+  allow_late: boolean;
+  /** แถวบนปฏิทินคณะที่ตรงกับกิจกรรมนี้ · null = ไม่มีบนกระดาษ (สาขากำหนดเอง) */
+  paper_row: string | null;
+  /** คำอธิบายใต้ช่องกรอกในหน้าจอเจ้าหน้าที่ */
+  hint: string | null;
   event_id: number | null;
   start_date: string | null;
   end_date: string | null;
   /** วันสุดท้ายที่ยังรับแบบส่งช้า · null = ไม่เปิดผ่อนผัน (ปิดจริงที่ end_date) */
   late_end_date: string | null;
+  /** ข้อความแทนวันที่ สำหรับชนิด relative/external */
+  detail_text: string | null;
   note: string | null;
   status: CalendarStatus;
 }
@@ -46,9 +65,12 @@ export interface CoopCalendarActivity {
 export interface CoopCalendarCustomEvent {
   event_id: number;
   title: string;
-  start_date: string;
-  end_date: string;
+  date_kind: CalendarDateKind;
+  start_date: string | null;
+  end_date: string | null;
   late_end_date: string | null;
+  detail_text: string | null;
+  sort_order: number;
   note: string | null;
   status: CalendarStatus;
 }

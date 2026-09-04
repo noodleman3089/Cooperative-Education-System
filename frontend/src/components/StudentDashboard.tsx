@@ -246,28 +246,36 @@ const StudentDashboard: React.FC = () => {
 
     // ยุบสองแหล่ง (กิจกรรมตายตัว + รายการอิสระ) ให้เป็นรูปเดียวก่อน
     // แถบนี้ไม่สนว่าอันไหนล็อกอะไร สนแค่ชื่อกับวัน
-    const items = [
+    // แถบนี้พูดถึงแค่ของที่มีวันจริง — แถวชนิดข้อความ ("ภายใน 3 วันทำการ" ·
+    // "ให้เป็นไปตามสาขาวิชากำหนด") ไม่มีวันให้บอกว่ากำลังอยู่ในช่วงหรือยัง
+    // จึงถูกกรองออกด้วย end_date และไปโผล่ในกล่องปฏิทินเต็มแทน
+    const items: { name: string; start_date: string | null; end_date: string; status: string }[] = [
       ...calendar.activities
-        .filter((a) => a.start_date && a.end_date)
+        .filter((a) => a.end_date)
         .map((a) => ({
           name: a.label,
-          start_date: a.start_date as string,
+          start_date: a.start_date,
           end_date: a.end_date as string,
-          status: a.status,
+          status: a.status as string,
         })),
-      ...calendar.custom_events.map((c) => ({
-        name: c.title,
-        start_date: c.start_date,
-        end_date: c.end_date,
-        status: c.status,
-      })),
+      ...calendar.custom_events
+        .filter((c) => c.end_date)
+        .map((c) => ({
+          name: c.title,
+          start_date: c.start_date,
+          end_date: c.end_date as string,
+          status: c.status as string,
+        })),
     ];
 
     if (items.length === 0) return null;
 
     const openNow = items.filter((i) => i.status === 'open');
+    // upcoming เกิดได้เฉพาะเมื่อมีวันเริ่ม (ดู calendarStatus) — กรองซ้ำเพื่อให้ TS แคบชนิดให้
     const upcoming = items
-      .filter((i) => i.status === 'upcoming')
+      .filter((i): i is (typeof items)[number] & { start_date: string } =>
+        Boolean(i.status === 'upcoming' && i.start_date)
+      )
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
 
     return (

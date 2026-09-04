@@ -1,6 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { CoopCalendarModel } from '../models/coopCalendar';
-import { CoopActivityKey, activityLabel, calendarStatus } from '../utils/coopCalendar';
+import {
+  CoopActivityKey,
+  activityByKey,
+  activityLabel,
+  calendarStatus,
+} from '../utils/coopCalendar';
 import { formatThaiDate } from '../utils/thaiDate';
 import { sendUnexpectedError } from '../utils/httpError';
 
@@ -59,6 +64,12 @@ export const requireCalendarWindow =
       }
 
       const label = activityLabel(activityKey) ?? activityKey;
+      // ชนิด deadline ("ภายในวันที่ …") ไม่มีวันเริ่ม จึงห้ามพูดว่า "เปิดถึงวันที่"
+      // เหมือนช่วงปกติ — คนอ่านจะนึกว่ามีวันเริ่มที่ตัวเองพลาดไป
+      const isDeadline = activityByKey(activityKey)?.dateKind === 'deadline';
+      const closedOn = isDeadline
+        ? `กำหนดส่งคือภายในวันที่ ${formatThaiDate(window.end_date as string)}`
+        : `เปิดถึงวันที่ ${formatThaiDate(window.end_date as string)}`;
 
       // ข้อความบอกสองอย่างเสมอตามแนวทางของโปรเจค: ไปถึงไหนแล้ว + ตอนนี้ต้องทำอะไรต่อ
       const message =
@@ -70,10 +81,8 @@ export const requireCalendarWindow =
             )} — ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด`
           : `หมดช่วง "${label}" แล้ว (${
               window.late_end_date
-                ? `เปิดถึงวันที่ ${formatThaiDate(
-                    window.end_date as string
-                  )} และผ่อนผันถึงวันที่ ${formatThaiDate(window.late_end_date)}`
-                : `เปิดถึงวันที่ ${formatThaiDate(window.end_date as string)}`
+                ? `${closedOn} และผ่อนผันถึงวันที่ ${formatThaiDate(window.late_end_date)}`
+                : closedOn
             }) ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`;
 
       res.status(403).json({ message });

@@ -197,11 +197,24 @@ const Dashboard: React.FC = () => {
     const locks: Record<string, { heading: string; reason: string }> = {};
     for (const activity of calendar.activities) {
       const menuId = CALENDAR_LOCKED_MENU_BY_ACTIVITY[activity.activity_key];
-      // not_configured = เจ้าหน้าที่ยังไม่ตั้ง = ยังไม่มีกฎ ต้องไม่ล็อก (fail-open
+      // `locks: false` = หมุดบอกเวลา (วันเริ่ม/วันสิ้นสุด/วันสอบ) ไม่ใช่ด่าน —
+      // เซิร์ฟเวอร์ไม่ปฏิเสธอะไรจากมัน หน้าจอจึงต้องไม่แขวนกุญแจให้เหมือนกัน
+      if (!menuId || !activity.locks) continue;
+      // ไม่มีวันปิด = เจ้าหน้าที่ยังไม่ตั้ง = ยังไม่มีกฎ ต้องไม่ล็อก (fail-open
       // ตรงกับ middlewares/calendarGate.ts ฝั่งเซิร์ฟเวอร์)
-      if (!menuId || !activity.start_date || !activity.end_date) continue;
+      // ⛔ เช็ค end_date อย่างเดียว ไม่เช็ค start_date — ชนิด "ภายในวันที่" ไม่มีวันเริ่ม
+      //    โดยตั้งใจ การเช็ค start ด้วยจะทำให้เส้นตายไม่ล็อกอะไรเลยเงียบๆ
+      if (!activity.end_date) continue;
 
-      if (activity.status === 'upcoming') {
+      // ชนิด "ภายในวันที่" ไม่มีวันเริ่ม จึงพูดว่า "เปิดถึงวันที่" ไม่ได้ —
+      // คนอ่านจะนึกว่ามีวันเริ่มที่ตัวเองพลาดไป (กติกาเดียวกับ calendarGate.ts)
+      const closedOn =
+        activity.date_kind === 'deadline'
+          ? `กำหนดส่งคือภายในวันที่ ${formatThaiDate(activity.end_date)}`
+          : `เปิดถึงวันที่ ${formatThaiDate(activity.end_date)}`;
+
+      // สถานะ upcoming เกิดได้เฉพาะเมื่อมีวันเริ่ม (ดู calendarStatus) — เช็คซ้ำให้ TS สบายใจ
+      if (activity.status === 'upcoming' && activity.start_date) {
         locks[menuId] = {
           heading: 'ยังไม่ถึงช่วงที่เปิดให้ทำรายการ',
           reason:
@@ -213,7 +226,7 @@ const Dashboard: React.FC = () => {
         locks[menuId] = {
           heading: 'หมดช่วงที่เปิดให้ทำรายการแล้ว',
           reason:
-            `หมดช่วง "${activity.label}" แล้ว (เปิดถึงวันที่ ${formatThaiDate(activity.end_date)}` +
+            `หมดช่วง "${activity.label}" แล้ว (${closedOn}` +
             (activity.late_end_date
               ? ` และผ่อนผันถึงวันที่ ${formatThaiDate(activity.late_end_date)}`
               : ``) +

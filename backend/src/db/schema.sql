@@ -256,11 +256,26 @@ CREATE TABLE IF NOT EXISTS coop_calendar_events (
     semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE CASCADE,
     activity_key VARCHAR(50),
     title VARCHAR(255),
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
+    -- ชนิดเซลล์วันที่ตามที่พิมพ์อยู่บนปฏิทินคณะ — กระดาษมี 5 แบบ ไม่ใช่แบบเดียว
+    -- ⛔ "ภายในวันที่ 5 มิ.ย." (deadline) **ไม่เท่ากับ** "5 มิ.ย. – 5 มิ.ย." (range)
+    --    บังคับให้ทุกอย่างเป็นช่วงสองช่อง = เจ้าหน้าที่กรอกวันเดียวกันลงทั้งคู่
+    --    แล้วระบบเปิดวันเดียวและปฏิเสธทุกวันก่อนหน้า ซึ่งกลับหัวจากกระดาษ
+    -- เหตุผลเต็มและรายการทั้ง 5 แบบอยู่ที่ `utils/coopCalendar.ts`
+    date_kind VARCHAR(20) NOT NULL DEFAULT 'range'
+        CHECK (date_kind IN ('range', 'deadline', 'single', 'relative', 'external')),
+    -- NULL ได้แล้วตั้งแต่ 2026-09-04 — ชนิด deadline ไม่มีวันเริ่ม และ
+    -- relative/external ไม่มีวันจริงทั้งคู่ ตัว CHECK ข้างล่างบังคับตามชนิด
+    start_date DATE,
+    end_date DATE,
     -- วันสุดท้ายที่ยังรับแบบ "ส่งช้า" — NULL = ไม่เปิดผ่อนผัน = ปิดจริงที่ end_date
     -- ระบบเดาแทนคณะไม่ได้ว่าผ่อนผันถึงวันไหน จึงต้องมีคนกรอก ไม่มีค่าเริ่มต้น
     late_end_date DATE,
+    -- ข้อความแทนวันที่ สำหรับแถวที่กระดาษไม่ได้ให้วันตายตัว เช่น
+    -- "ภายใน 3 วันทำการหลังส่ง สหกิจ 03/06/13/15" · "ให้เป็นไปตามสาขาวิชากำหนด"
+    detail_text TEXT,
+    -- กระดาษเรียงตาม "เลขรายการ" ไม่ใช่ตามวัน และ 12 ใน 22 เซลล์ไม่มีวันเลย
+    -- การเรียงด้วย start_date อย่างเดียวจึงไม่มีที่ยืนให้แถวพวกนั้น
+    sort_order INT NOT NULL DEFAULT 0,
     note TEXT,
     -- SET NULL rather than RESTRICT or CASCADE, on purpose: deleting a staff
     -- account must not fail because of the calendar (RESTRICT) and must not take
@@ -268,8 +283,22 @@ CREATE TABLE IF NOT EXISTS coop_calendar_events (
     -- `announcements` does). Who set what lives in `audit_log` per SEC-07.
     created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT coop_calendar_events_range CHECK (end_date >= start_date),
-    CONSTRAINT coop_calendar_events_late_range CHECK (late_end_date IS NULL OR late_end_date >= end_date),
+    -- วันที่ต้องครบ/ว่างตามชนิด — ด่านนี้คือสิ่งที่กัน "เส้นตายถูกกรอกเป็นช่วงวันเดียว"
+    CONSTRAINT coop_calendar_events_dates_by_kind CHECK (
+           (date_kind = 'range'    AND start_date IS NOT NULL AND end_date IS NOT NULL AND end_date >= start_date)
+        OR (date_kind = 'deadline' AND start_date IS NULL     AND end_date IS NOT NULL)
+        OR (date_kind = 'single'   AND start_date IS NOT NULL AND end_date = start_date)
+        OR (date_kind IN ('relative', 'external') AND start_date IS NULL AND end_date IS NULL)
+    ),
+    -- เขียน `end_date IS NOT NULL AND ...` ให้ครบ ไม่ใช่ `late_end_date >= end_date` เฉยๆ
+    -- เพราะการเทียบกับ NULL ได้ผลเป็น NULL ซึ่ง CHECK ถือว่า "ผ่าน" → แถว relative
+    -- จะแอบมีวันผ่อนผันได้ทั้งที่ไม่มีวันปิด
+    CONSTRAINT coop_calendar_events_late_range CHECK (
+        late_end_date IS NULL OR (end_date IS NOT NULL AND late_end_date >= end_date)
+    ),
+    CONSTRAINT coop_calendar_events_detail_required CHECK (
+        date_kind NOT IN ('relative', 'external') OR detail_text IS NOT NULL
+    ),
     CONSTRAINT coop_calendar_events_title_required CHECK (activity_key IS NOT NULL OR title IS NOT NULL)
 );
 
@@ -280,9 +309,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_coop_calendar_activity_once
     ON coop_calendar_events (semester_id, activity_key)
     WHERE activity_key IS NOT NULL;
 
--- The only index with a real caller: fetch a whole semester in date order for
--- the calendar screen. The gate already rides the unique index above.
-CREATE INDEX IF NOT EXISTS idx_coop_calendar_semester ON coop_calendar_events (semester_id, start_date);
+-- The only index with a real caller: fetch a whole semester in the order the
+-- paper calendar prints it. Ordered by sort_order rather than start_date since
+-- 2026-09-04 — over half the rows on the real calendar carry no date at all,
+-- and those have no place in a date ordering. The gate already rides the
+-- unique index above.
+CREATE INDEX IF NOT EXISTS idx_coop_calendar_semester_order ON coop_calendar_events (semester_id, sort_order);
 
 -- 6.5. Coop Applications Table (System 1)
 CREATE TABLE IF NOT EXISTS coop_applications (

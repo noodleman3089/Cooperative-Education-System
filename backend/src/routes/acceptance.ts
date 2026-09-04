@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { AcceptanceController } from '../controllers/acceptance';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { uploadEvidence, validateUploadedFile } from '../middlewares/multer';
+import { requireCalendarWindow } from '../middlewares/calendarGate';
 
 const router = Router();
 
@@ -16,9 +17,13 @@ router.patch(
 );
 
 // Student Manual Acceptance Routes
+// นี่คือ "เอกสารหมายเลข 2" บนปฏิทินคณะ ซึ่งเขียนว่า **ภายในวันที่ …** จึงถูกคุม
+// ด้วยกิจกรรม `acceptance_form` ที่เป็นชนิด deadline (เปิดตั้งแต่ต้นจนถึงวันนั้น)
+// ⛔ ด่านต้องอยู่**ก่อน multer** ไม่งั้นคำขอนอกช่วงจะเขียนไฟล์ลงดิสก์ก่อนถูกปฏิเสธ
 router.post(
   '/student/:intent_id/upload-proof',
   authorizeRoles('student'),
+  requireCalendarWindow('acceptance_form'),
   uploadEvidence.single('evidence'),
   validateUploadedFile(['pdf', 'png', 'jpg']),
   AcceptanceController.acceptByStudent
