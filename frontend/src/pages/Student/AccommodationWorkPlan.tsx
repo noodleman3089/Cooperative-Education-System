@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { AuthContext } from '../../context/AuthContext';
-import api from '../../services/api';
-import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy } from 'lucide-react';
+import api, { API_BASE_URL } from '../../services/api';
+import { Home, Calendar, Plus, Trash2, Check, ChevronDown, Copy, Printer } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
 import type { WeeklyPlan } from '../../types/api';
@@ -18,6 +18,12 @@ import AccommodationMapPicker from './AccommodationMapPicker';
  * นิเทศเอาไปหาทางต่อไม่ได้ · แตกเป็นช่องย่อยเมื่อ 2026-09-03 (migration 010)
  */
 interface Accommodation {
+  /**
+   * "ห้อง" บนหัวใบ สหกิจ 06 = **ห้องเรียน** (อยู่ข้าง "ชั้นปีที่") ไม่ใช่เลขห้องพัก
+   * เลขห้องพักคือ `room_no` ด้านล่าง · เก็บบน `students` แบบเดียวกับผู้ติดต่อฉุกเฉิน
+   * แต่ส่งมาในก้อนเดียวกับที่พักเพราะหน้าจอเดียวกันเป็นคนกรอก
+   */
+  section: string;
   house_no: string;
   building: string;
   room_no: string;
@@ -39,6 +45,7 @@ interface Accommodation {
 }
 
 const BLANK_ACCOMMODATION: Accommodation = {
+  section: '',
   house_no: '',
   building: '',
   room_no: '',
@@ -303,9 +310,15 @@ const AccommodationWorkPlan: React.FC = () => {
     try {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
 
+      // `section` เป็นคอลัมน์ของ `students` เซิร์ฟเวอร์จึงส่งไว้ระดับบนสุด ไม่ใช่ใน accommodation
+      // ⛔ ต้องอ่าน **นอก** เงื่อนไข `res.accommodation` — นักศึกษาที่ยังไม่เคยกรอกที่พัก
+      //    ก็อาจมี "ห้อง" อยู่แล้ว การอ่านในเงื่อนไขจะทำให้ค่าที่มีอยู่หายตอนเปิดหน้า
+      const loadedSection: string = res.section || '';
+
       if (res.accommodation) {
         const a = res.accommodation;
         loadedAccommodation = {
+          section: loadedSection,
           house_no: a.house_no || '',
           building: a.building || '',
           room_no: a.room_no || '',
@@ -328,6 +341,8 @@ const AccommodationWorkPlan: React.FC = () => {
         // ⛔ แสดงของเก่าเมื่อ **ยังไม่มีใครกรอกช่องย่อย** เท่านั้น — ไม่งั้นแถวที่กรอกใหม่
         //    แล้วจะขึ้นกล่อง "ที่อยู่เดิม" ค้างตลอดไปโดยไม่มีอะไรให้ทำกับมัน
         loadedLegacy = a.house_no ? '' : a.address_legacy || '';
+      } else {
+        loadedAccommodation = { ...BLANK_ACCOMMODATION, section: loadedSection };
       }
 
       if (res.weekly_plans && res.weekly_plans.length > 0) {
@@ -510,6 +525,22 @@ const AccommodationWorkPlan: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden">
         {step === 1 ? (
           <div className="p-6 md:p-8 space-y-6">
+            {/* หัวใบ สหกิจ 06 ถามห้องเรียนไว้ข้าง "ชั้นปีที่" — ที่เหลือบนหัวใบ
+                (ชื่อ · รหัส · สาขา · ชั้นปี · ชื่อสถานประกอบการ) ระบบรู้อยู่แล้ว */}
+            <div>
+              <label htmlFor="acc-section" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                ห้องเรียน (ตามหัวใบ สหกิจ 06)
+              </label>
+              <Input
+                id="acc-section"
+                data-testid="acc-section"
+                value={accommodation.section}
+                onChange={e => setAccommodation({ ...accommodation, section: e.target.value })}
+                placeholder="เช่น 4/1"
+                className="sm:max-w-xs"
+              />
+            </div>
+
             <div>
               <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-4 flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
@@ -975,6 +1006,31 @@ const AccommodationWorkPlan: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* ── พิมพ์แบบแจ้งที่พัก ─────────────────────────────────────────────
+          ⛔ ไม่ใช่ขั้นตอนบังคับ — อาจารย์นิเทศเปิดที่พักและหมุดในระบบได้อยู่แล้ว
+          ปุ่มนี้มีไว้ให้ใบกระดาษที่ต้องยื่นหัวหน้าสหกิจฯ พร้อมลายเซ็นจริง */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-800 dark:text-white">
+          <Printer className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          พิมพ์แบบแจ้งที่พัก (สหกิจ 06)
+        </h3>
+        <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
+          พิมพ์แล้ว<strong>ลงชื่อด้วยมือ</strong>ก่อนยื่นหัวหน้าสหกิจศึกษาฯ ประจำคณะ ·
+          ถ้าปักหมุดที่พักไว้แล้ว กรอบแผนที่บนใบจะมี<strong>คิวอาร์โค้ด</strong>ให้อาจารย์นิเทศ
+          สแกนเปิดตำแหน่งได้ทันที
+        </p>
+        <a
+          href={`${API_BASE_URL}/students/${auth?.user?.userId}/accommodation-plan/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="acc-print"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:border-brand-blue hover:text-brand-blue dark:border-gray-700 dark:text-gray-200 dark:hover:text-blue-400"
+        >
+          <Printer className="h-4 w-4" />
+          เปิดแบบแจ้งที่พักเพื่อสั่งพิมพ์
+        </a>
       </div>
     </div>
   );

@@ -268,6 +268,8 @@ export class StudentModel {
       educationHistory: unknown;
       trainingHistory: unknown;
       activityHistory: unknown;
+      /** ⛔ คอลัมน์เดียวกับที่หน้าโปรไฟล์แก้ — ดู `LANGUAGE_KEYS` ว่าทำไมจึงรับสองรูปแบบ */
+      languageProficiency: unknown;
     },
     sensitive: {
       nationalId: { ciphertext: string; iv: string; authTag: string } | null;
@@ -288,6 +290,7 @@ export class StudentModel {
               education_history = COALESCE($26::jsonb, education_history),
               training_history  = COALESCE($27::jsonb, training_history),
               activity_history  = COALESCE($28::jsonb, activity_history),
+              language_proficiency = COALESCE($29::jsonb, language_proficiency),
               national_id_ciphertext = COALESCE($14, national_id_ciphertext),
               national_id_iv         = COALESCE($15, national_id_iv),
               national_id_tag        = COALESCE($16, national_id_tag),
@@ -329,6 +332,7 @@ export class StudentModel {
         history.educationHistory == null ? null : JSON.stringify(history.educationHistory),
         history.trainingHistory == null ? null : JSON.stringify(history.trainingHistory),
         history.activityHistory == null ? null : JSON.stringify(history.activityHistory),
+        history.languageProficiency == null ? null : JSON.stringify(history.languageProficiency),
       ]
     );
     if ((res.rowCount ?? 0) === 0) return null;

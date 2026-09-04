@@ -56,13 +56,27 @@ export function sanitizeRows(
 export const EDUCATION_KEYS = ['level', 'institution', 'start_year', 'end_year', 'degree', 'major'] as const;
 export const TRAINING_KEYS = ['period', 'institution', 'topic'] as const;
 export const ACTIVITY_KEYS = ['period', 'position', 'duty'] as const;
-export const SIBLING_KEYS = ['name', 'occupation'] as const;
+// `age` เพิ่มเมื่อ 2026-09-04 หลังได้ `.docx` ตัวจริง — ตารางพี่น้องบนฟอร์มมี 3 ช่อง
+// (ชื่อ-นามสกุล · อายุ · อาชีพ) ไม่ใช่ 2 ช่องอย่างที่เดาไว้ตอนไม่มีไฟล์
+export const SIBLING_KEYS = ['name', 'age', 'occupation'] as const;
 const PARENT_KEYS = ['name', 'age', 'occupation', 'phone'] as const;
+
+/**
+ * ความสามารถพิเศษทางภาษา — เขียนลงคอลัมน์ `language_proficiency` ที่มีอยู่ก่อนแล้ว
+ *
+ * ⛔ **คอลัมน์นี้มีผู้แก้สองหน้าจอ** — `StudentProfileExtra` (ของเดิม ใช้ `language`
+ * + `level` ก้อนเดียว) กับหน้าใบ สหกิจ 03 (ใช้ `reading`/`speaking`/`writing`
+ * ตามสามคอลัมน์บนฟอร์มจริง) · allow-list จึงรับทั้งสองรูปแบบในแถวเดียวกัน
+ * และหน้าจอฝั่งโปรไฟล์ต้อง **คงคีย์ที่ตัวเองไม่รู้จักไว้ตอนบันทึก** ไม่งั้นการแก้
+ * ที่หน้าหนึ่งจะลบของอีกหน้าหายเงียบๆ
+ */
+export const LANGUAGE_KEYS = ['language', 'level', 'reading', 'speaking', 'writing'] as const;
 
 export const MAX_EDUCATION_ROWS = 10;
 export const MAX_TRAINING_ROWS = 20;
 export const MAX_ACTIVITY_ROWS = 20;
 export const MAX_SIBLING_ROWS = 20;
+export const MAX_LANGUAGE_ROWS = 10;
 
 export interface FamilyInfo {
   father?: Record<string, string>;

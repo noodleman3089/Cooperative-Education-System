@@ -59,6 +59,9 @@ export const AuditAction = {
   // สหกิจ 13: ลายเซ็น 3 คนบนกระดาษถูกแทนด้วย "อาจารย์นิเทศกดส่งคนเดียว"
   // บรรทัดนี้คือสิ่งที่ทำหน้าที่แทนลายเซ็น — ตามย้อนได้ว่าใครส่ง เมื่อไหร่ จากเครื่องไหน
   SUPERVISION_RECORD_SUBMITTED: 'supervision_record.submitted',
+  // สหกิจ 03: การพิมพ์ใบสมัครเป็นครั้งเดียวที่ระบบถอดรหัสเลขบัตร/เชื้อชาติ/ศาสนา
+  // ออกมาเป็นค่าจริง (SEC-12) — ต้องรู้เสมอว่าค่าจริงถูกเปิดออกมาเมื่อไหร่ จากเครื่องไหน
+  COOP_APPLICATION_PRINTED: 'student.coop_application_printed',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

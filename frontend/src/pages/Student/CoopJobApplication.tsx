@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Lock } from 'lucide-react';
+import { ShieldCheck, Lock, Printer } from 'lucide-react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import { getErrorMessage } from '../../utils/errors';
 
 /**
@@ -50,6 +50,7 @@ interface CoopApplication {
   education_history: Row[] | null;
   training_history: Row[] | null;
   activity_history: Row[] | null;
+  language_proficiency: Row[] | null;
 }
 
 /** แถวหนึ่งของตารางประวัติ — คีย์ที่เซิร์ฟเวอร์ยอมรับต่างกันไปตามตาราง */
@@ -84,7 +85,21 @@ const ACTIVITY_COLS: { key: string; label: string }[] = [
 ];
 const SIBLING_COLS: { key: string; label: string }[] = [
   { key: 'name', label: 'ชื่อ-นามสกุล' },
+  { key: 'age', label: 'อายุ' },
   { key: 'occupation', label: 'อาชีพ' },
+];
+/**
+ * ⛔ เขียนลงคอลัมน์ `language_proficiency` **ตัวเดียวกับที่หน้า "ข้อมูลส่วนตัว & เรซูเม่" แก้**
+ * หน้านั้นใช้ `language` + `level` ก้อนเดียว ส่วนใบนี้ใช้สามช่องตามฟอร์มจริง
+ * · แถวเดียวกันถือคีย์ของทั้งสองหน้าได้ และหน้าโปรไฟล์แก้แถวโดยไม่สร้าง object ใหม่
+ *   คีย์ที่มันไม่รู้จักจึงไม่หาย — ถ้าวันหนึ่งไปเขียนใหม่เป็น `map(l => ({...}))` ตรงนั้น
+ *   ข้อมูลสามช่องนี้จะหายเงียบๆ ทันที
+ */
+const LANGUAGE_COLS: { key: string; label: string }[] = [
+  { key: 'language', label: 'ภาษา' },
+  { key: 'reading', label: 'อ่าน' },
+  { key: 'speaking', label: 'พูด' },
+  { key: 'writing', label: 'เขียน' },
 ];
 
 const BLANK = {
@@ -192,6 +207,7 @@ const CoopJobApplication: React.FC = () => {
   const [education, setEducation] = useState<Row[]>([]);
   const [training, setTraining] = useState<Row[]>([]);
   const [activities, setActivities] = useState<Row[]>([]);
+  const [languages, setLanguages] = useState<Row[]>([]);
 
   const consented = Boolean(server?.sensitive_data_consented_at);
 
@@ -228,6 +244,7 @@ const CoopJobApplication: React.FC = () => {
       setEducation(data.education_history || []);
       setTraining(data.training_history || []);
       setActivities(data.activity_history || []);
+      setLanguages(data.language_proficiency || []);
       setError(null);
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถดึงข้อมูลใบสมัครงานได้'));
@@ -263,6 +280,7 @@ const CoopJobApplication: React.FC = () => {
         education_history: education,
         training_history: training,
         activity_history: activities,
+        language_proficiency: languages,
       });
       setSuccess(res.message || 'บันทึกเรียบร้อยแล้ว');
       setConsent(false);
@@ -692,6 +710,13 @@ const CoopJobApplication: React.FC = () => {
             rows={activities}
             onChange={setActivities}
           />
+          <RowTable
+            testid="language"
+            label='ความสามารถพิเศษทางภาษา (ใช้ร่วมกับหน้า "ข้อมูลส่วนตัว & เรซูเม่")'
+            columns={LANGUAGE_COLS}
+            rows={languages}
+            onChange={setLanguages}
+          />
 
           <div>
             <label htmlFor="ca-career" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -707,6 +732,33 @@ const CoopJobApplication: React.FC = () => {
             />
           </div>
         </div>
+      </section>
+
+      {/* ── พิมพ์ใบสมัคร ────────────────────────────────────────────────── */}
+      <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
+        <h3 className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-800 dark:text-white">
+          <Printer className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+          พิมพ์ใบสมัครงาน (สหกิจ 03)
+        </h3>
+        <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
+          สถานประกอบการที่มีบัญชีในระบบอ่านใบสมัครได้เลย ไม่ต้องพิมพ์ ·
+          ปุ่มนี้มีไว้สำหรับที่ที่ยังไม่มีบัญชี — พิมพ์แล้ว<strong>เซ็นชื่อด้วยมือ</strong>
+          ก่อนยื่นให้สถานประกอบการ
+        </p>
+        <p className="mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
+          ไฟล์ที่ได้จะมี<strong>เลขบัตรประชาชน เชื้อชาติ และศาสนาเป็นค่าจริง</strong>
+          (เป็นครั้งเดียวที่ระบบเปิดค่าเหล่านี้ออกมา และมีการบันทึกไว้ทุกครั้ง) — โปรดเก็บไฟล์ให้ดี
+        </p>
+        <a
+          href={`${API_BASE_URL}/students/coop-application/print`}
+          target="_blank"
+          rel="noopener noreferrer"
+          data-testid="ca-print"
+          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:border-brand-blue hover:text-brand-blue dark:border-gray-700 dark:text-gray-200 dark:hover:text-blue-400"
+        >
+          <Printer className="h-4 w-4" />
+          เปิดใบสมัครเพื่อสั่งพิมพ์
+        </a>
       </section>
 
       <div className="flex justify-end gap-3 pb-6">

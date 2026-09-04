@@ -76,11 +76,22 @@ export class ThaiPdf {
     return A4[0];
   }
 
+  /**
+   * ขึ้นหน้าใหม่ทันทีโดยไม่สนว่าที่เหลือพอหรือไม่
+   *
+   * มีไว้สำหรับ**แบบฟอร์มที่ต้นฉบับกำหนดจำนวนหน้าไว้แล้ว** (ใบ สหกิจ 03 พิมพ์
+   * "หน้าที่ ๑/๓" ไว้ท้ายกระดาษ) — หน้าต้องขึ้นตรงที่ฟอร์มบอก ไม่ใช่ตรงที่เนื้อหาเต็ม
+   * ⛔ อย่าใช้กับหนังสือที่เนื้อหายืดหดได้ ตรงนั้นปล่อยให้ `ensureSpace` ตัดสิน
+   */
+  newPage(): void {
+    this.page = this.doc.addPage(A4);
+    this.y = A4[1] - this.opts.top;
+  }
+
   /** ขึ้นหน้าใหม่เมื่อพื้นที่ที่ต้องใช้ไม่พอ — เรียกก่อนบล็อกที่ห้ามขาดกลาง */
   ensureSpace(needed: number): void {
     if (this.y - needed < this.opts.bottom) {
-      this.page = this.doc.addPage(A4);
-      this.y = A4[1] - this.opts.top;
+      this.newPage();
     }
   }
 

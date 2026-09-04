@@ -110,6 +110,9 @@ CREATE TABLE IF NOT EXISTS students (
     last_name VARCHAR(255),
     nickname VARCHAR(100),
     year_level INT,
+    -- "ห้อง" บนหัวใบ สหกิจ 06 (ข้าง "ชั้นปีที่") = ห้องเรียน ไม่ใช่ห้องพัก (migration 016)
+    -- ⛔ อย่าสับกับ `accommodations.room_no` ซึ่งเป็นเลขห้องของหอพัก คนละความหมาย
+    section VARCHAR(50),
     birth_date DATE,
     alt_email VARCHAR(255),
     phone VARCHAR(50),
