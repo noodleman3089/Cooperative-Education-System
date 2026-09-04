@@ -1,4 +1,5 @@
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+// ponytail: Defaults to relative '/api' so Vite proxy forwards to backend across localhost, LAN IP, and port forwarding
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api').replace(/\/$/, '');
 
 /**
  * ตัว body ที่ส่งเข้ามาเป็นอะไรก็ได้ที่ JSON.stringify รับได้ หรือเป็น FormData
