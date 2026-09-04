@@ -186,20 +186,6 @@ export async function setupDatabase(quiet = false) {
       }
     }
 
-    // Seed default sample PR Announcement
-    const staffRes = await client.query("SELECT user_id FROM users WHERE email = 'staff1@test.com'");
-    if ((staffRes.rowCount ?? 0) > 0) {
-      const staffId = staffRes.rows[0].user_id;
-      const annCheck = await client.query('SELECT COUNT(*) FROM announcements');
-      if (parseInt(annCheck.rows[0].count, 10) === 0) {
-        await client.query(`
-          INSERT INTO announcements (title, content, is_pinned, created_by)
-          VALUES ('📢 กำหนดการยื่นสมัครสหกิจศึกษา ปีการศึกษา 2026', 'ขอให้นักศึกษาทุกคนส่งแบบสมัครสหกิจศึกษาพร้อมใบรายงานผลการเรียน (Transcript) ภายในวันที่ 30 กันยายนนี้', TRUE, $1)
-        `, [staffId]);
-        log('Seeded default PR announcement.');
-      }
-    }
-
     client.release();
 
     // ponytail: generate mock PDF templates and signature images directly during db:setup
