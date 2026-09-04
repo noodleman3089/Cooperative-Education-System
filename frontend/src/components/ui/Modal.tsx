@@ -49,10 +49,14 @@ export const Modal: React.FC<ModalProps> = ({
   closeOnBackdrop = true,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  // ponytail: hold onClose in a ref so inline arrow functions passed from callers
+  // do not trigger useEffect re-runs on every keystroke, which was stealing focus via panelRef.focus()
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKeyDown);
 
@@ -69,7 +73,7 @@ export const Modal: React.FC<ModalProps> = ({
       if (openModalCount === 0) document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div
