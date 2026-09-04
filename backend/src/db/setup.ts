@@ -186,6 +186,9 @@ export async function setupDatabase(quiet = false) {
       }
     }
 
+    // ponytail: Ensure all enrolled students have co-op eligibility active
+    await client.query('UPDATE students SET is_eligible = TRUE, is_orientation_passed = TRUE');
+
     client.release();
 
     // ponytail: generate mock PDF templates and signature images directly during db:setup

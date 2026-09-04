@@ -173,7 +173,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   const menuConfig: Record<string, MenuItem[]> = {
     student: [
       { id: 'dashboard', label: 'หน้าแรก / แดชบอร์ด', icon: icons.dashboard },
-      { id: 'application', label: 'สมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'jobs', label: 'ตำแหน่งงาน / สมัครงาน', icon: icons.jobs },
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ (สหกิจ 03)', icon: icons.application },
       { id: 'accommodation_plan', label: 'รายละเอียดที่พัก & แผนงาน', icon: icons.accommodation },
@@ -190,7 +189,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     advisor: [
       { id: 'dashboard', label: 'แดชบอร์ดที่ปรึกษา', icon: icons.dashboard },
-      { id: 'applications', label: 'ตรวจใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       { id: 'students', label: 'รายชื่อนักศึกษาในที่ปรึกษา', icon: icons.students },
       { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
       { id: 'supervision', label: 'นัดหมายและติดตามการนิเทศ', icon: icons.supervision },
@@ -205,7 +203,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     dept_head: [
       { id: 'dashboard', label: 'ภาพรวมสาขาวิชา', icon: icons.dashboard },
-      { id: 'applications', label: 'อนุมัติใบสมัครเข้าโครงการ (สหกิจ 01)', icon: icons.application },
       // หัวหน้าสาขาไม่ได้ "อนุมัติ" ในระบบแล้ว — ลายเซ็นอยู่บนแบบคำร้อง (เอกสารหมายเลข 1)
       // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
       { id: 'approval', label: 'ติดตามคำร้อง', icon: icons.approval },

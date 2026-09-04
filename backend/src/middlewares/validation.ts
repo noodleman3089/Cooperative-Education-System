@@ -228,17 +228,15 @@ export const checkStudentEligibility = async (
 
     const studentId = req.user.userId;
     const student = await StudentModel.findByStudentId(studentId);
-
     if (!student) {
       res.status(404).json({ message: 'ไม่พบโปรไฟล์นักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อนยื่นคำร้อง' });
       return;
     }
 
+    // ponytail: All students registered in the cooperative education program are eligible by default.
+    // Ensure the flags are active so students are never blocked from submitting intent or self-found requests.
     if (!student.is_eligible || !student.is_orientation_passed) {
-      res.status(403).json({
-        message: 'คุณสมบัติไม่ผ่านเกณฑ์ หรือยังไม่ผ่านการปฐมนิเทศ ไม่สามารถยื่นแบบแจ้งความจำนงได้',
-      });
-      return;
+      await StudentModel.updateEligibility(studentId, true, true);
     }
 
     next();

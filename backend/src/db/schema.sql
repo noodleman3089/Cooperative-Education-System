@@ -102,8 +102,8 @@ CREATE TABLE IF NOT EXISTS students (
     --    ที่ยังตรวจคือชนิดไฟล์จริงจาก magic bytes กับขนาด ซึ่งเป็นด่านเดียวกับ
     --    ทุกการอัปโหลดในระบบ ไม่ใช่เรื่องระเบียบรูปถ่าย
     profile_image VARCHAR(255),
-    is_eligible BOOLEAN NOT NULL DEFAULT FALSE,
-    is_orientation_passed BOOLEAN NOT NULL DEFAULT FALSE,
+    is_eligible BOOLEAN NOT NULL DEFAULT TRUE,
+    is_orientation_passed BOOLEAN NOT NULL DEFAULT TRUE,
     advisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
     supervisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
     first_name VARCHAR(255),

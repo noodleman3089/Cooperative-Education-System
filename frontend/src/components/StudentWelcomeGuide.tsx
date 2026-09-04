@@ -1,5 +1,5 @@
 import React from 'react';
-import { UserPen, ClipboardCheck, Briefcase, Info, X, ChevronRight } from 'lucide-react';
+import { UserPen, Briefcase, Info, X, ChevronRight } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import Button from './ui/Button';
 
@@ -44,21 +44,11 @@ const STEPS: Step[] = [
   },
   {
     number: 2,
-    title: 'สมัครเข้าโครงการสหกิจศึกษา (สหกิจ 01)',
+    title: 'เลือกสถานประกอบการและยื่นแบบแจ้งความจำนง',
     description:
-      'ยื่นใบสมัครเข้าร่วมโครงการสหกิจศึกษา เพื่อให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาพิจารณาคุณสมบัติ',
-    menuId: 'application',
-    actionLabel: 'ไปหน้าสมัครโครงการ',
-    icon: ClipboardCheck,
-    accentColor: 'rose',
-  },
-  {
-    number: 3,
-    title: 'เลือกตำแหน่งงานและยื่นใบความจำนง',
-    description:
-      'ค้นหาตำแหน่งงานที่เปิดรับ เลือกสถานประกอบการ แล้วยื่นแบบแจ้งความจำนงเพื่อเข้ารับการพิจารณา',
+      'ค้นหาตำแหน่งงานที่เปิดรับ หรือยื่นสถานที่ฝึกงานที่หาเอง เพื่อออกหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)',
     menuId: 'jobs',
-    actionLabel: 'ดูตำแหน่งงาน',
+    actionLabel: 'ดูตำแหน่งงานและยื่นคำร้อง',
     icon: Briefcase,
     accentColor: 'amber',
   },

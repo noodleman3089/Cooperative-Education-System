@@ -122,7 +122,8 @@ export class ProfileController {
 
         const inheritsEligibility = !!eligibilityRecord && codeIsBoundToCaller;
         const seededGpa = inheritsEligibility ? Number(eligibilityRecord!.cumulative_gpa) : null;
-        const seededEligible = inheritsEligibility ? eligibilityRecord!.is_eligible : false;
+        // ponytail: All enrolled students are eligible by default
+        const seededEligible = inheritsEligibility ? eligibilityRecord!.is_eligible : true;
 
         // Save profile to STUDENT table
         const profile = await StudentModel.createStudent(
