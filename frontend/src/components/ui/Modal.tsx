@@ -85,7 +85,7 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className={`w-full ${SIZES[size]} max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none animate-scale-in ${className}`.trim()}
+        className={`w-full ${SIZES[size]} max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-hidden animate-scale-in ${className}`.trim()}
       >
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
@@ -115,7 +115,11 @@ export const Modal: React.FC<ModalProps> = ({
 export const ModalBody: React.FC<{ children: ReactNode; className?: string }> = ({
   children,
   className = '',
-}) => <div className={`px-6 py-5 overflow-y-auto ${className}`.trim()}>{children}</div>;
+}) => (
+  <div className={`px-6 py-5 overflow-y-auto flex-1 min-h-0 ${className}`.trim()}>
+    {children}
+  </div>
+);
 
 /** Actions row. Always the last child, always right-aligned. */
 export const ModalFooter: React.FC<{ children: ReactNode; className?: string }> = ({

@@ -252,7 +252,8 @@ const ApplicationReview: React.FC = () => {
           closeOnBackdrop={false}
           title={isDeptHead ? 'สรุปผลการพิจารณา' : 'ประเมินความพร้อมของนักศึกษา'}
         >
-          <form onSubmit={handleSubmit}>
+          {/* ponytail: flex-col with min-h-0 ensures ModalBody scrolls within 90vh without pushing ModalFooter off-screen */}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <ModalBody>
               <div className="mb-5 rounded-xl bg-gray-50 p-4 text-sm dark:bg-gray-800/50">
                 <p className="font-medium text-gray-800 dark:text-gray-100">

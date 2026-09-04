@@ -450,11 +450,12 @@ const CompanyDirectory: React.FC = () => {
       {showForm && (
         <Modal
           onClose={() => setShowForm(false)}
-          size="lg"
+          size="xl"
           closeOnBackdrop={false}
           title={editing ? `แก้ไขข้อมูล ${editing.name_th}` : 'เพิ่มสถานประกอบการเข้าทำเนียบ'}
         >
-          <form onSubmit={handleSubmit}>
+          {/* ponytail: flex-col with min-h-0 ensures ModalBody scrolls within 90vh without pushing ModalFooter off-screen */}
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <ModalBody>
               <AlertBanner variant="error" message={formError} className="mb-4" />
 
