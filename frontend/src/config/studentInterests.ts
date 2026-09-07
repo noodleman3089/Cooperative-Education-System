@@ -13,13 +13,19 @@
 
 export const JOB_TYPE_OPTIONS = [
   'งานไอทีและโปรแกรมมิ่ง (IT/Programming)',
+  'งานวิศวกรรม (Engineering)',
   'งานออกแบบ (Design)',
   'งานวิจัยและพัฒนา (R&D)',
   'งานห้องปฏิบัติการ (Lab)',
   'งานภาคสนาม (Fieldwork)',
   'งานการตลาดและการขาย (Marketing & Sales)',
   'งานโรงงานและฝ่ายผลิต (Production)',
+  'งานโลจิสติกส์และซัพพลายเชน (Logistics & Supply Chain)',
+  'งานบัญชีและการเงิน (Accounting & Finance)',
+  'งานทรัพยากรบุคคลและการจัดการ (HR & Management)',
   'งานเอกสารและธุรการ (Admin)',
+  'งานเกษตร เทคโนโลยีอาหาร และสิ่งแวดล้อม (Agri & Food Science)',
+  'งานการโรงแรมและการท่องเที่ยว (Hospitality & Tourism)',
 ] as const;
 
 export const WORK_REGION_OPTIONS = [
