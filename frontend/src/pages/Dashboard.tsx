@@ -1,4 +1,5 @@
-import React, { useContext, useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import React, { useCallback, useContext, useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
@@ -109,7 +110,45 @@ const Dashboard: React.FC = () => {
    * there is nothing to wait for. The effect stays for the role switcher.
    */
   const [currentRole, setCurrentRole] = useState<string>(auth?.user?.roles?.[0] ?? 'student');
-  const [activeMenu, setActiveMenu] = useState<string>('dashboard');
+
+  /**
+   * หน้าจอที่เปิดอยู่ — **เก็บใน URL ไม่ใช่ `useState`**
+   *
+   * เดิมทั้งแอปหลังล็อกอินอยู่ที่ `/dashboard` อันเดียว แล้วเมนูเป็น state ในหน่วยความจำ
+   * ซึ่งแปลว่า:
+   *   · กด F5 กลางงาน = เด้งกลับหน้าแรกทุกครั้ง
+   *   · ปุ่ม Back ของเบราว์เซอร์ = ออกจากแอป ไม่ใช่ย้อนหน้า
+   *   · บุ๊กมาร์กหน้าที่ทำค้างไม่ได้ · ส่งลิงก์ให้กันดูหน้าเดียวกันไม่ได้
+   *   · อีเมลแจ้งเตือนพาไปหน้าที่ต้องการไม่ได้ ทำได้แค่พาไปหน้าแรก
+   *
+   * ⛔ ใช้ query `?menu=` ไม่ใช่ `/dashboard/:menu` โดยตั้งใจ — `AppRoutes.tsx` ไม่ต้องขยับ
+   *    เส้นทาง `*` ที่ redirect กลับ `/dashboard` ยังทำงานเหมือนเดิม และ E2E ทุกตัวที่
+   *    `goto('/dashboard')` ยังผ่านโดยไม่ต้องแก้ · ยกระดับเป็น path ทีหลังได้โดยไม่ต้องรื้อ
+   *
+   * ⛔ **นี่ไม่ใช่ด่านสิทธิ์** — เมนูที่ role ปัจจุบันไม่มี จะตกไปที่แดชบอร์ดของ role ตัวเอง
+   *    เพราะ `renderDashboardContent` แยกด้วย `currentRole` ก่อนเสมอ การพิมพ์ `?menu=users`
+   *    เองจึงเปิดหน้าของเจ้าหน้าที่ไม่ได้ · สิทธิ์จริงยังบังคับที่ backend (SEC-06)
+   */
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeMenu = searchParams.get('menu') || 'dashboard';
+
+  const setActiveMenu = useCallback(
+    (menu: string) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          // หน้าแรกไม่ต้องมีพารามิเตอร์ ให้ `/dashboard` เปล่าๆ ยังเป็น URL ของหน้าแรก
+          if (menu === 'dashboard') next.delete('menu');
+          else next.set('menu', menu);
+          return next;
+        },
+        // ตั้งใจให้ push เข้าประวัติ ไม่ใช่ replace — ปุ่ม Back ต้องย้อนเมนูได้
+        { replace: false }
+      );
+    },
+    [setSearchParams]
+  );
+
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -260,7 +299,9 @@ const Dashboard: React.FC = () => {
     };
     window.addEventListener('navigate', handleNavigation);
     return () => window.removeEventListener('navigate', handleNavigation);
-  }, []);
+    // `setActiveMenu` ผูกกับ `setSearchParams` ซึ่งเปลี่ยนตัวได้เมื่อ location เปลี่ยน
+    // — ต้องอยู่ใน deps ไม่งั้น listener ค้างอยู่กับ setter ของหน้าเก่า
+  }, [setActiveMenu]);
 
   if (!auth || !auth.user) {
     return (
