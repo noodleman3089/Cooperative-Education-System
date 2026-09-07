@@ -6,6 +6,7 @@ import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile, IntentForm, OfficialDocument } from '../types/api';
 import CoopStepperBar, { type PhaseGroup } from './CoopStepperBar';
 import CoopNowCard from './CoopNowCard';
+import CoopJourneyBar from './CoopJourneyBar';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
@@ -602,29 +603,6 @@ const StudentDashboard: React.FC = () => {
       {calendarBanner}
 
       {/*
-        "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
-
-        หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
-        *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
-        คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
-
-        การ์ดอ่าน `phases` ชุดเดียวกับ CoopStepperBar ด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
-      */}
-      <CoopNowCard
-        phases={phases}
-        deadline={
-          acceptanceDue
-            ? {
-                label: 'กำหนดส่งหลักฐานตอบรับ',
-                date: formatThaiDate(acceptanceDue.due),
-                daysLeft: acceptanceDue.daysLeft,
-                overdue: acceptanceDue.overdue,
-              }
-            : null
-        }
-      />
-
-      {/*
         แถบตัวตนแบบบรรทัดเดียว แทนแบนเนอร์โปรไฟล์เดิม (2026-09-07)
 
         ของเดิมเป็น bento สามช่องสูงเกือบครึ่งจอ: รูปใหญ่ 96px วงกลมเบลอตกแต่ง ป้าย
@@ -680,6 +658,29 @@ const StudentDashboard: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {/*
+        "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
+
+        หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
+        *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
+        คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
+
+        การ์ดอ่าน `phases` ชุดเดียวกับ CoopStepperBar ด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
+      */}
+      <CoopNowCard
+        phases={phases}
+        deadline={
+          acceptanceDue
+            ? {
+                label: 'กำหนดส่งหลักฐานตอบรับ',
+                date: formatThaiDate(acceptanceDue.due),
+                daysLeft: acceptanceDue.daysLeft,
+                overdue: acceptanceDue.overdue,
+              }
+            : null
+        }
+      />
 
       {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -737,8 +738,37 @@ const StudentDashboard: React.FC = () => {
         </section>
       </div>
 
-      {/* Milestone Progress Tracker */}
-      <CoopStepperBar phases={phases} activePhaseId={activePhaseId} />
+      {/*
+        เส้นทางสหกิจแบบย่อ — 7 ขั้นที่นักศึกษาพูดถึงจริง ไม่ใช่ 13 ขั้นย่อยตามเอกสาร
+        การจับคู่อยู่ตรงนี้ ติดกับ `phases` ที่เป็นแหล่งความจริง ไม่ได้แยกไปไฟล์อื่น
+        เพิ่ม/ลดขั้นในเฟสเมื่อไหร่ จะเห็นทันทีว่าต้องมาแก้การจับคู่ตรงนี้ด้วย
+      */}
+      <CoopJourneyBar
+        phases={phases}
+        steps={[
+          // มาถึงหน้านี้ได้แปลว่ามีแถวใน students แล้วเสมอ — ไม่มีแถว แดชบอร์ดตอบ 404
+          { label: 'กรอกประวัติ', subStepIds: [], state: 'completed' as const },
+          { label: 'เลือกสถานประกอบการ', subStepIds: ['1.1'] },
+          { label: 'ขอหนังสือขอความอนุเคราะห์', subStepIds: ['1.2', '1.3'], pendingLabel: 'รอเจ้าหน้าที่' },
+          { label: 'รอหนังสือตอบรับ', subStepIds: ['1.4', '1.5'], pendingLabel: 'รอสถานประกอบการ' },
+          { label: 'แจ้งที่พักและแผนงาน', subStepIds: ['2.1', '2.2'] },
+          { label: 'ปฏิบัติงานและส่งบันทึก', subStepIds: ['3.1', '3.2', '3.3'] },
+          { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
+        ]}
+      />
+
+      {/*
+        ตัวเต็มยังอยู่ ไม่ได้ลบ — ขั้นย่อยบางอันมีปุ่มลงมือของตัวเอง (เช่น 2.1 กรอก
+        รายละเอียดที่พัก) การตัดทิ้งเท่ากับตัดความสามารถ แค่ไม่ต้องกางค้างไว้ตลอด
+      */}
+      <details className="group rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <summary className="cursor-pointer list-none px-6 py-4 text-xs font-semibold text-gray-600 marker:content-none hover:text-brand-blue dark:text-gray-400 dark:hover:text-blue-400">
+          ดูรายละเอียดทุกขั้นตอน
+        </summary>
+        <div className="border-t border-gray-100 p-2 dark:border-gray-800">
+          <CoopStepperBar phases={phases} activePhaseId={activePhaseId} />
+        </div>
+      </details>
 
       {/* Main Content Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
