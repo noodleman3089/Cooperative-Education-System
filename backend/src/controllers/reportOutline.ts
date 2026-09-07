@@ -18,8 +18,11 @@ export class ReportOutlineController {
         return;
       }
 
-      if (!req.file) {
-        res.status(400).json({ message: 'Required file upload: outline.' });
+      const { report_title, outline_text } = req.body;
+      const filePath = req.file ? `report_outlines/${req.file.filename}` : (req.body.file_path || null);
+
+      if (!report_title || !report_title.trim()) {
+        res.status(400).json({ message: 'กรุณาระบุหัวข้อรายงาน' });
         return;
       }
 
@@ -37,7 +40,6 @@ export class ReportOutlineController {
       }
 
       const companyId = intentRes.rows[0].company_id;
-      const filePath = `report_outlines/${req.file.filename}`;
 
       // Check if an outline already exists for this student
       const existingRes = await query(
@@ -64,14 +66,15 @@ export class ReportOutlineController {
 
       // Add a new version
       await query(
-        `INSERT INTO report_outline_versions (outline_id, file_path, status) VALUES ($1, $2, 'submitted')`,
-        [outlineId, filePath]
+        `INSERT INTO report_outline_versions (outline_id, file_path, report_title, outline_text, status)
+         VALUES ($1, $2, $3, $4, 'submitted')`,
+        [outlineId, filePath, report_title.trim(), outline_text || null]
       );
 
       res.status(201).json({
         success: true,
-        message: 'Report outline uploaded successfully.',
-        data: { outline_id: outlineId, file_path: filePath }
+        message: 'Report outline submitted successfully.',
+        data: { outline_id: outlineId, file_path: filePath, report_title: report_title.trim() }
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Upload Outline Error', 'An internal server error occurred.');
@@ -277,22 +280,49 @@ export class ReportOutlineController {
         await assertCanReviewStudentWork(userId, roles, studentId);
       }
 
+      const metaRes = await query(
+        `SELECT i.start_date, i.end_date,
+                m.name as mentor_name,
+                p.first_name as advisor_first_name, p.last_name as advisor_last_name
+         FROM students s
+         LEFT JOIN personnel p ON s.advisor_id = p.personnel_id
+         LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status = 'accepted'
+         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
+         WHERE s.student_id = $1
+         ORDER BY i.form_id DESC LIMIT 1`,
+        [studentId]
+      );
+      const studentMeta = metaRes.rows[0] || null;
+
       const outlineRes = await query(
         `SELECT outline_id, status, created_at, updated_at FROM report_outlines WHERE student_id = $1`,
         [studentId]
       );
 
       if ((outlineRes.rowCount ?? 0) === 0) {
-        res.status(200).json({ success: true, data: null });
+        res.status(200).json({
+          success: true,
+          data: {
+            outline_id: null,
+            status: 'draft',
+            meta: studentMeta,
+            versions: [],
+          },
+        });
         return;
       }
 
       const outline = outlineRes.rows[0];
 
       const versionsRes = await query(
-        `SELECT v.version_id, v.file_path, v.submitted_at, v.rejection_comment, v.status, u.email as reviewer_email
+        `SELECT v.version_id, v.file_path, v.report_title, v.outline_text, v.submitted_at,
+                v.rejection_comment, v.status, u.email as reviewer_email,
+                p.first_name as reviewer_first_name, p.last_name as reviewer_last_name,
+                m.name as reviewer_mentor_name
          FROM report_outline_versions v
          LEFT JOIN users u ON v.reviewed_by = u.user_id
+         LEFT JOIN personnel p ON v.reviewed_by = p.personnel_id
+         LEFT JOIN mentors m ON v.reviewed_by = m.mentor_id
          WHERE v.outline_id = $1
          ORDER BY v.submitted_at DESC`,
         [outline.outline_id]
@@ -302,8 +332,9 @@ export class ReportOutlineController {
         success: true,
         data: {
           ...outline,
-          versions: versionsRes.rows
-        }
+          meta: studentMeta,
+          versions: versionsRes.rows,
+        },
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;

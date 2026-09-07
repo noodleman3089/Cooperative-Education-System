@@ -18,6 +18,7 @@ DROP TABLE IF EXISTS report_outlines CASCADE;
 DROP TABLE IF EXISTS supervision_records CASCADE;
 DROP TABLE IF EXISTS supervision_logs CASCADE;
 DROP TABLE IF EXISTS supervision_appointments CASCADE;
+DROP TABLE IF EXISTS monthly_logs CASCADE;
 DROP TABLE IF EXISTS weekly_logs CASCADE;
 DROP TABLE IF EXISTS coop_semesters CASCADE;
 DROP TABLE IF EXISTS companies CASCADE;
@@ -416,6 +417,8 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- วันสิ้นสุดการปฏิบัติงาน — มีแต่หนังสือส่งตัวที่ใช้ ("ตั้งแต่วันที่ … ถึงวันที่ …")
     -- ⛔ เจ้าหน้าที่คีย์จากที่ตกลงกับสถานประกอบการจริง ระบบไม่คำนวณให้เอง
     end_date DATE,
+    -- นักศึกษาเลือกใช้แบบฟอร์มบันทึกการทำงานของสถานประกอบการแทนแบบฟอร์มกลาง (สหกิจ ๐๙, ๑๐)
+    uses_company_log_form BOOLEAN NOT NULL DEFAULT FALSE,
     -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
     -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
     CONSTRAINT intent_forms_late_reason_required
@@ -589,7 +592,9 @@ CREATE TABLE IF NOT EXISTS report_outlines (
 CREATE TABLE IF NOT EXISTS report_outline_versions (
     version_id SERIAL PRIMARY KEY,
     outline_id INT NOT NULL REFERENCES report_outlines(outline_id) ON DELETE CASCADE,
-    file_path VARCHAR(255) NOT NULL,
+    file_path VARCHAR(255),
+    report_title VARCHAR(500),
+    outline_text TEXT,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     rejection_comment TEXT,
     reviewed_by INT REFERENCES users(user_id) ON DELETE SET NULL, -- Who rejected/approved it
@@ -668,9 +673,45 @@ CREATE TABLE IF NOT EXISTS weekly_logs (
     weekly_log_id SERIAL PRIMARY KEY,
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     week_number INT NOT NULL,
-    achievements TEXT NOT NULL,
+    assigned_work TEXT,
+    methods TEXT,
+    tools_used TEXT,
+    achievements TEXT,
     problems TEXT,
-    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    start_date DATE,
+    end_date DATE,
+    external_file_path VARCHAR(255),
+    summary TEXT,
+    mentor_certified_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    mentor_certified_at TIMESTAMPTZ,
+    returned_comment TEXT,
+    submitted_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT weekly_logs_student_week_key UNIQUE (student_id, week_number)
+);
+
+-- 17.1 Monthly Logs (สหกิจ 10)
+CREATE TABLE IF NOT EXISTS monthly_logs (
+    monthly_log_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    year INT NOT NULL,
+    month INT NOT NULL,
+    work_summary TEXT,
+    effectiveness TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+    start_date DATE,
+    end_date DATE,
+    external_file_path VARCHAR(255),
+    summary TEXT,
+    mentor_certified_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    mentor_certified_at TIMESTAMPTZ,
+    returned_comment TEXT,
+    submitted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT idx_monthly_logs_student_month UNIQUE (student_id, year, month)
 );
 
 -- 18. Final Reports (Phase 4)

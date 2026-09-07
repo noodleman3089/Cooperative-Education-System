@@ -196,7 +196,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
       { id: 'accommodation_plan', label: 'ที่พักและแผนงาน', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
-      { id: 'weekly_log', label: 'บันทึกรายสัปดาห์', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
+      { id: 'weekly_log', label: 'บันทึกการปฏิบัติงาน', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
       { id: 'report_outline', label: 'โครงร่างรายงาน', icon: icons.report_outline, group: 'ระหว่างฝึก' },
       // บันทึกข้อความกรณียกเว้น — ไม่ล็อกตามขั้นตอนหรือปฏิทิน เพราะเหตุจำเป็น
       // เกิดได้ทุกช่วง และการปิดเมนูนี้เท่ากับปิดทางออกเดียวของคนที่ตกกรณียกเว้น

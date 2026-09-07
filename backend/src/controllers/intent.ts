@@ -170,7 +170,7 @@ export class IntentFormController {
       const studentId = req.user.userId;
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.acceptance_evidence_path,
+                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
                 i.request_form_path, i.reject_reason, i.officer_document_no,
                 i.submitted_late, i.late_reason,
                 i.acceptance_due_date, i.acceptance_submitted_late
@@ -1143,6 +1143,52 @@ export class IntentFormController {
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Get Request Form Error', 'เกิดข้อผิดพลาดขณะสร้างแบบคำร้อง');
+    }
+  }
+
+  /**
+   * Student toggles uses_company_log_form
+   * Route: PATCH /api/intents/:id/company-log-form
+   * Access: student
+   */
+  static async updateCompanyLogForm(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+      const studentId = req.user.userId;
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+      const { uses_company_log_form } = req.body;
+      if (typeof uses_company_log_form !== 'boolean') {
+        res.status(400).json({ message: 'uses_company_log_form must be a boolean.' });
+        return;
+      }
+
+      const result = await query(
+        `UPDATE intent_forms
+         SET uses_company_log_form = $1
+         WHERE form_id = $2 AND student_id = $3
+         RETURNING form_id, uses_company_log_form`,
+        [uses_company_log_form, formId, studentId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'Intent form not found or not owned by you.' });
+        return;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Company log form setting updated.',
+        data: result.rows[0],
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Update Company Log Form Error', 'An internal server error occurred.');
     }
   }
 

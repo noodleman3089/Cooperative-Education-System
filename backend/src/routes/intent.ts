@@ -106,4 +106,12 @@ router.get('/:id/request-form', IntentFormController.getRequestForm);
 // ไม่ระบุ role ด้วยเหตุผลเดียวกับ request-form ด้านบน
 router.get('/:id/acceptance-form', IntentFormController.getAcceptanceForm);
 
+// Route: PATCH /api/intents/:id/company-log-form (นักศึกษาเปิด/ปิดสวิตช์ใช้แบบฟอร์มของบริษัท)
+router.patch(
+  '/:id/company-log-form',
+  authorizeRoles('student'),
+  IntentFormController.updateCompanyLogForm
+);
+
 export default router;
+

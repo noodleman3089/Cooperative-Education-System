@@ -16,6 +16,7 @@ import appointmentRoutes from './appointment';
 import supervisionLogRoutes from './supervisionLog';
 import supervisionRecordRoutes from './supervisionRecord';
 import weeklyLogRoutes from './weeklyLog';
+import monthlyLogRoutes from './monthlyLog';
 import applicationRoutes from './application';
 import finalReportRoutes from './finalReport';
 import finalEvaluationRoutes from './finalEvaluation';
@@ -48,7 +49,9 @@ router.use('/supervision-logs', supervisionLogRoutes);
 // สหกิจ 13 — แบบบันทึกการนิเทศงาน (คนละชั้นกับ supervision-logs ดูคอมเมนต์ใน schema.sql)
 router.use('/supervision-records', supervisionRecordRoutes);
 router.use('/weekly-logs', weeklyLogRoutes);
+router.use('/monthly-logs', monthlyLogRoutes);
 router.use('/applications', applicationRoutes);
+
 
 // Phase 4 Routes
 router.use('/final-reports', finalReportRoutes);

@@ -326,3 +326,39 @@ export const uploadAvatar = multer({
     fileSize: 2 * 1024 * 1024, // 2MB limit
   },
 });
+
+// 9. Work Log Attachments (PDF/Word/Images, max 10MB)
+const WORK_LOGS_DIR = path.join(UPLOADS_BASE_DIR, 'work_logs');
+if (!fs.existsSync(WORK_LOGS_DIR)) {
+  fs.mkdirSync(WORK_LOGS_DIR, { recursive: true });
+}
+const workLogStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, WORK_LOGS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const userId = req.user?.userId || 'unknown';
+    const cleanOrigName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, `worklog-user-${userId}-${uniqueSuffix}${path.extname(cleanOrigName)}`);
+  },
+});
+
+const workLogFileFilter: FileFilter = (_req, file, cb) => {
+  const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.doc', '.docx'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedExtensions.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, Word (.doc, .docx), and Images (PNG, JPG) are allowed.'));
+  }
+};
+
+export const uploadWorkLogAttachment = multer({
+  storage: workLogStorage,
+  fileFilter: workLogFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+});
+

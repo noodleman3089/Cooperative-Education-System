@@ -4,10 +4,10 @@ import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
 import { writeAudit } from '../utils/audit';
 
-export class WeeklyLogController {
+export class MonthlyLogController {
   /**
-   * Student submits or saves draft for weekly log (สหกิจ 09)
-   * Route: POST /api/weekly-logs
+   * Student submits or saves draft for monthly log (สหกิจ 10)
+   * Route: POST /api/monthly-logs
    * Access: student
    */
   static async submitLog(req: Request, res: Response): Promise<void> {
@@ -19,26 +19,26 @@ export class WeeklyLogController {
 
       const studentId = req.user.userId;
       const {
-        week_number,
-        assigned_work,
-        methods,
-        tools_used,
-        achievements,
-        problems,
+        year,
+        month,
+        work_summary,
+        effectiveness,
         status = 'draft',
         start_date,
         end_date,
         summary,
       } = req.body;
 
-      if (week_number === undefined) {
-        res.status(400).json({ message: 'Missing required field: week_number.' });
+      if (year === undefined || month === undefined) {
+        res.status(400).json({ message: 'Missing required fields: year, month.' });
         return;
       }
 
-      const weekNum = parseInt(week_number, 10);
-      if (isNaN(weekNum) || weekNum < 1) {
-        res.status(400).json({ message: 'Week number must be at least 1.' });
+      const parsedYear = parseInt(year, 10);
+      const parsedMonth = parseInt(month, 10);
+
+      if (isNaN(parsedYear) || isNaN(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) {
+        res.status(400).json({ message: 'Invalid year or month.' });
         return;
       }
 
@@ -70,55 +70,49 @@ export class WeeklyLogController {
             return;
           }
         } else {
-          if (!assigned_work || !methods || !tools_used || !achievements) {
+          if (!work_summary || !effectiveness) {
             res.status(400).json({
-              message: 'กรุณากรอกข้อมูลให้ครบทั้ง 4 หัวข้อหลัก (งานที่ได้รับมอบหมาย, วิธีการ, เครื่องมือ, ผลการปฏิบัติงาน)',
+              message: 'กรุณากรอกข้อมูลให้ครบทั้ง 2 หัวข้อหลัก (สรุปผลการปฏิบัติงาน, ประสิทธิภาพและประสิทธิผลของงาน)',
             });
             return;
           }
         }
       }
 
-      // Check existing weekly log
+      // Check existing monthly log
       const existingRes = await query(
-        `SELECT weekly_log_id, mentor_certified_at, mentor_certified_by
-         FROM weekly_logs
-         WHERE student_id = $1 AND week_number = $2`,
-        [studentId, weekNum]
+        `SELECT monthly_log_id, mentor_certified_at, mentor_certified_by
+         FROM monthly_logs
+         WHERE student_id = $1 AND year = $2 AND month = $3`,
+        [studentId, parsedYear, parsedMonth]
       );
 
       let logId: number;
 
       if ((existingRes.rowCount ?? 0) > 0) {
         const existing = existingRes.rows[0];
-        logId = existing.weekly_log_id;
+        logId = existing.monthly_log_id;
 
         const wasCertified = existing.mentor_certified_at !== null;
 
         await query(
-          `UPDATE weekly_logs
-           SET assigned_work = $1,
-               methods = $2,
-               tools_used = $3,
-               achievements = $4,
-               problems = $5,
-               status = $6,
-               start_date = $7,
-               end_date = $8,
-               external_file_path = $9,
-               summary = $10,
+          `UPDATE monthly_logs
+           SET work_summary = $1,
+               effectiveness = $2,
+               status = $3,
+               start_date = $4,
+               end_date = $5,
+               external_file_path = $6,
+               summary = $7,
                mentor_certified_by = NULL,
                mentor_certified_at = NULL,
-               returned_comment = CASE WHEN $6 = 'submitted' THEN NULL ELSE returned_comment END,
-               submitted_at = CASE WHEN $6 = 'submitted' THEN CURRENT_TIMESTAMP ELSE submitted_at END,
+               returned_comment = CASE WHEN $3 = 'submitted' THEN NULL ELSE returned_comment END,
+               submitted_at = CASE WHEN $3 = 'submitted' THEN CURRENT_TIMESTAMP ELSE submitted_at END,
                updated_at = CURRENT_TIMESTAMP
-           WHERE weekly_log_id = $11`,
+           WHERE monthly_log_id = $8`,
           [
-            assigned_work || null,
-            methods || null,
-            tools_used || null,
-            achievements || null,
-            problems || null,
+            work_summary || null,
+            effectiveness || null,
             status,
             start_date || null,
             end_date || null,
@@ -132,31 +126,28 @@ export class WeeklyLogController {
           await writeAudit(
             {
               action: 'work_log.mentor_certification_cleared',
-              entityType: 'weekly_logs',
+              entityType: 'monthly_logs',
               entityId: logId,
               subjectId: studentId,
-              detail: { week_number: weekNum, reason: 'Student updated certified weekly log' },
+              detail: { year: parsedYear, month: parsedMonth, reason: 'Student updated certified monthly log' },
             },
             req
           );
         }
       } else {
         const insertRes = await query(
-          `INSERT INTO weekly_logs (
-             student_id, week_number, assigned_work, methods, tools_used,
-             achievements, problems, status, start_date, end_date,
-             external_file_path, summary, submitted_at
-           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-             CASE WHEN $8 = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END
-           ) RETURNING weekly_log_id`,
+          `INSERT INTO monthly_logs (
+             student_id, year, month, work_summary, effectiveness,
+             status, start_date, end_date, external_file_path, summary, submitted_at
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+             CASE WHEN $6 = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END
+           ) RETURNING monthly_log_id`,
           [
             studentId,
-            weekNum,
-            assigned_work || null,
-            methods || null,
-            tools_used || null,
-            achievements || null,
-            problems || null,
+            parsedYear,
+            parsedMonth,
+            work_summary || null,
+            effectiveness || null,
             status,
             start_date || null,
             end_date || null,
@@ -164,22 +155,22 @@ export class WeeklyLogController {
             summary || null,
           ]
         );
-        logId = insertRes.rows[0].weekly_log_id;
+        logId = insertRes.rows[0].monthly_log_id;
       }
 
       res.status(201).json({
         success: true,
-        message: status === 'submitted' ? 'ส่งบันทึกการปฏิบัติงานรายสัปดาห์เรียบร้อยแล้ว' : 'บันทึกร่างเรียบร้อยแล้ว',
-        data: { weekly_log_id: logId, external_file_path: filePath },
+        message: status === 'submitted' ? 'ส่งบันทึกการปฏิบัติงานประจำเดือนเรียบร้อยแล้ว' : 'บันทึกร่างเรียบร้อยแล้ว',
+        data: { monthly_log_id: logId, external_file_path: filePath },
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Submit Weekly Log Error', 'An internal server error occurred.');
+      sendUnexpectedError(res, error, 'Submit Monthly Log Error', 'An internal server error occurred.');
     }
   }
 
   /**
-   * Student gets all own weekly logs + intent metadata + current DB date
-   * Route: GET /api/weekly-logs/me
+   * Student gets own monthly logs
+   * Route: GET /api/monthly-logs/me
    * Access: student
    */
   static async getMyLogs(req: Request, res: Response): Promise<void> {
@@ -191,51 +182,31 @@ export class WeeklyLogController {
 
       const studentId = req.user.userId;
 
-      // Intent & company & mentor info
-      const intentRes = await query(
-        `SELECT i.form_id, i.start_date, i.end_date, i.uses_company_log_form,
-                c.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                m.mentor_id, m.name as mentor_name
-         FROM intent_forms i
-         JOIN companies c ON i.company_id = c.company_id
-         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
-         WHERE i.student_id = $1 AND i.status = 'accepted'
-         ORDER BY i.form_id DESC LIMIT 1`,
-        [studentId]
-      );
-
-      const todayRes = await query(`SELECT (NOW() AT TIME ZONE 'Asia/Bangkok')::date as today`);
-      const today = todayRes.rows[0]?.today;
-
       const logsRes = await query(
-        `SELECT w.weekly_log_id, w.student_id, w.week_number, w.assigned_work, w.methods,
-                w.tools_used, w.achievements, w.problems, w.status, w.start_date, w.end_date,
-                w.external_file_path, w.summary, w.mentor_certified_by, w.mentor_certified_at,
-                w.returned_comment, w.submitted_at, w.created_at, w.updated_at,
-                m.name as mentor_certified_name
-         FROM weekly_logs w
-         LEFT JOIN mentors m ON w.mentor_certified_by = m.mentor_id
-         WHERE w.student_id = $1
-         ORDER BY w.week_number ASC`,
+        `SELECT m.monthly_log_id, m.student_id, m.year, m.month, m.work_summary,
+                m.effectiveness, m.status, m.start_date, m.end_date,
+                m.external_file_path, m.summary, m.mentor_certified_by, m.mentor_certified_at,
+                m.returned_comment, m.submitted_at, m.created_at, m.updated_at,
+                men.name as mentor_certified_name
+         FROM monthly_logs m
+         LEFT JOIN mentors men ON m.mentor_certified_by = men.mentor_id
+         WHERE m.student_id = $1
+         ORDER BY m.year ASC, m.month ASC`,
         [studentId]
       );
 
       res.status(200).json({
         success: true,
-        data: {
-          intent: intentRes.rows[0] || null,
-          today,
-          logs: logsRes.rows,
-        },
+        data: logsRes.rows,
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Get My Weekly Logs Error', 'An internal server error occurred.');
+      sendUnexpectedError(res, error, 'Get My Monthly Logs Error', 'An internal server error occurred.');
     }
   }
 
   /**
-   * Mentor certifies a weekly log
-   * Route: PATCH /api/weekly-logs/:id/certify
+   * Mentor certifies a monthly log
+   * Route: PATCH /api/monthly-logs/:id/certify
    * Access: mentor
    */
   static async certifyLog(req: Request, res: Response): Promise<void> {
@@ -253,12 +224,11 @@ export class WeeklyLogController {
 
       const mentorUserId = req.user.userId;
 
-      // Verify mentor is assigned to this student's active intent
       const checkRes = await query(
-        `SELECT w.weekly_log_id, w.student_id, w.week_number
-         FROM weekly_logs w
-         JOIN intent_forms i ON w.student_id = i.student_id
-         WHERE w.weekly_log_id = $1 AND i.mentor_id = $2 AND i.status = 'accepted'`,
+        `SELECT m.monthly_log_id, m.student_id, m.year, m.month
+         FROM monthly_logs m
+         JOIN intent_forms i ON m.student_id = i.student_id
+         WHERE m.monthly_log_id = $1 AND i.mentor_id = $2 AND i.status = 'accepted'`,
         [logId, mentorUserId]
       );
 
@@ -270,38 +240,38 @@ export class WeeklyLogController {
       const log = checkRes.rows[0];
 
       await query(
-        `UPDATE weekly_logs
+        `UPDATE monthly_logs
          SET mentor_certified_by = $1,
              mentor_certified_at = CURRENT_TIMESTAMP,
              returned_comment = NULL,
              updated_at = CURRENT_TIMESTAMP
-         WHERE weekly_log_id = $2`,
+         WHERE monthly_log_id = $2`,
         [mentorUserId, logId]
       );
 
       await writeAudit(
         {
           action: 'work_log.certified',
-          entityType: 'weekly_logs',
+          entityType: 'monthly_logs',
           entityId: logId,
           subjectId: log.student_id,
-          detail: { week_number: log.week_number },
+          detail: { year: log.year, month: log.month },
         },
         req
       );
 
       res.status(200).json({
         success: true,
-        message: 'รับรองบันทึกการปฏิบัติงานเรียบร้อยแล้ว',
+        message: 'รับรองบันทึกการปฏิบัติงานประจำเดือนเรียบร้อยแล้ว',
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Certify Weekly Log Error', 'An internal server error occurred.');
+      sendUnexpectedError(res, error, 'Certify Monthly Log Error', 'An internal server error occurred.');
     }
   }
 
   /**
-   * Mentor returns a weekly log for revision
-   * Route: PATCH /api/weekly-logs/:id/return
+   * Mentor returns a monthly log for revision
+   * Route: PATCH /api/monthly-logs/:id/return
    * Access: mentor
    */
   static async returnLog(req: Request, res: Response): Promise<void> {
@@ -326,10 +296,10 @@ export class WeeklyLogController {
       const mentorUserId = req.user.userId;
 
       const checkRes = await query(
-        `SELECT w.weekly_log_id, w.student_id, w.week_number
-         FROM weekly_logs w
-         JOIN intent_forms i ON w.student_id = i.student_id
-         WHERE w.weekly_log_id = $1 AND i.mentor_id = $2 AND i.status = 'accepted'`,
+        `SELECT m.monthly_log_id, m.student_id, m.year, m.month
+         FROM monthly_logs m
+         JOIN intent_forms i ON m.student_id = i.student_id
+         WHERE m.monthly_log_id = $1 AND i.mentor_id = $2 AND i.status = 'accepted'`,
         [logId, mentorUserId]
       );
 
@@ -341,23 +311,23 @@ export class WeeklyLogController {
       const log = checkRes.rows[0];
 
       await query(
-        `UPDATE weekly_logs
+        `UPDATE monthly_logs
          SET status = 'returned',
              returned_comment = $1,
              mentor_certified_by = NULL,
              mentor_certified_at = NULL,
              updated_at = CURRENT_TIMESTAMP
-         WHERE weekly_log_id = $2`,
+         WHERE monthly_log_id = $2`,
         [returned_comment.trim(), logId]
       );
 
       await writeAudit(
         {
           action: 'work_log.returned',
-          entityType: 'weekly_logs',
+          entityType: 'monthly_logs',
           entityId: logId,
           subjectId: log.student_id,
-          detail: { week_number: log.week_number, comment: returned_comment.trim() },
+          detail: { year: log.year, month: log.month, comment: returned_comment.trim() },
         },
         req
       );
@@ -367,13 +337,13 @@ export class WeeklyLogController {
         message: 'ส่งกลับบันทึกการปฏิบัติงานให้นักศึกษาแก้ไขเรียบร้อยแล้ว',
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Return Weekly Log Error', 'An internal server error occurred.');
+      sendUnexpectedError(res, error, 'Return Monthly Log Error', 'An internal server error occurred.');
     }
   }
 
   /**
    * Fetch logs for Mentor/Advisor/Student
-   * Route: GET /api/weekly-logs/student/:id
+   * Route: GET /api/monthly-logs/student/:id
    * Access: student, mentor, advisor, dept_head
    */
   static async getStudentLogs(req: Request, res: Response): Promise<void> {
@@ -391,7 +361,6 @@ export class WeeklyLogController {
 
       const { roles, userId } = req.user;
 
-      // Access control
       if (roles.includes('student') && userId !== targetStudentId) {
         res.status(403).json({ message: 'Forbidden. You can only view your own logs.' });
         return;
@@ -414,15 +383,15 @@ export class WeeklyLogController {
       }
 
       const logsRes = await query(
-        `SELECT w.weekly_log_id, w.student_id, w.week_number, w.assigned_work, w.methods,
-                w.tools_used, w.achievements, w.problems, w.status, w.start_date, w.end_date,
-                w.external_file_path, w.summary, w.mentor_certified_by, w.mentor_certified_at,
-                w.returned_comment, w.submitted_at, w.created_at, w.updated_at,
-                m.name as mentor_certified_name
-         FROM weekly_logs w
-         LEFT JOIN mentors m ON w.mentor_certified_by = m.mentor_id
-         WHERE w.student_id = $1 
-         ORDER BY w.week_number ASC`,
+        `SELECT m.monthly_log_id, m.student_id, m.year, m.month, m.work_summary,
+                m.effectiveness, m.status, m.start_date, m.end_date,
+                m.external_file_path, m.summary, m.mentor_certified_by, m.mentor_certified_at,
+                m.returned_comment, m.submitted_at, m.created_at, m.updated_at,
+                men.name as mentor_certified_name
+         FROM monthly_logs m
+         LEFT JOIN mentors men ON m.mentor_certified_by = men.mentor_id
+         WHERE m.student_id = $1 
+         ORDER BY m.year ASC, m.month ASC`,
         [targetStudentId]
       );
 
@@ -432,7 +401,7 @@ export class WeeklyLogController {
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
-      sendUnexpectedError(res, error, 'Get Weekly Logs Error', 'An internal server error occurred.');
+      sendUnexpectedError(res, error, 'Get Monthly Logs Error', 'An internal server error occurred.');
     }
   }
 }

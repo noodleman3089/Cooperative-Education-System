@@ -1,21 +1,21 @@
 import { Router } from 'express';
-import { WeeklyLogController } from '../controllers/weeklyLog';
+import { MonthlyLogController } from '../controllers/monthlyLog';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
 import { uploadWorkLogAttachment, validateUploadedFile } from '../middlewares/multer';
 
 const router = Router();
 
-// GET /api/weekly-logs/me (Student gets own logs + intent)
+// GET /api/monthly-logs/me (Student gets own logs)
 router.get(
   '/me',
   authenticateToken,
   authorizeRoles('student'),
-  WeeklyLogController.getMyLogs
+  MonthlyLogController.getMyLogs
 );
 
-// POST /api/weekly-logs (Student submits or drafts log)
-// ⛔ requireCalendarWindow ต้องอยู่ก่อน multer เสมอ (SEC rule / Calendar Gate)
+// POST /api/monthly-logs (Student submits or drafts monthly log)
+// ⛔ requireCalendarWindow('weekly_log') ต้องอยู่ก่อน multer เสมอ (SEC rule / Calendar Gate)
 router.post(
   '/',
   authenticateToken,
@@ -23,31 +23,31 @@ router.post(
   requireCalendarWindow('weekly_log'),
   uploadWorkLogAttachment.single('file'),
   validateUploadedFile(['pdf', 'jpg', 'png', 'doc', 'docx']),
-  WeeklyLogController.submitLog
+  MonthlyLogController.submitLog
 );
 
-// PATCH /api/weekly-logs/:id/certify (Mentor certifies log)
+// PATCH /api/monthly-logs/:id/certify (Mentor certifies log)
 router.patch(
   '/:id/certify',
   authenticateToken,
   authorizeRoles('mentor'),
-  WeeklyLogController.certifyLog
+  MonthlyLogController.certifyLog
 );
 
-// PATCH /api/weekly-logs/:id/return (Mentor returns log for revision)
+// PATCH /api/monthly-logs/:id/return (Mentor returns log for revision)
 router.patch(
   '/:id/return',
   authenticateToken,
   authorizeRoles('mentor'),
-  WeeklyLogController.returnLog
+  MonthlyLogController.returnLog
 );
 
-// GET /api/weekly-logs/student/:id (Fetch logs for Mentor/Advisor/Student)
+// GET /api/monthly-logs/student/:id (Fetch logs for Mentor/Advisor/Student)
 router.get(
   '/student/:id',
   authenticateToken,
   authorizeRoles('student', 'mentor', 'advisor', 'dept_head'),
-  WeeklyLogController.getStudentLogs
+  MonthlyLogController.getStudentLogs
 );
 
 export default router;
