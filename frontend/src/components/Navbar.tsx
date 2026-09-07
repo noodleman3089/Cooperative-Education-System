@@ -5,7 +5,6 @@ import api, { API_BASE_URL } from '../services/api';
 import { Bell, FileText, LogOut } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
 import DeanSignModal from './DeanSignModal';
-import { Select } from './ui/Input';
 
 /**
  * กระดิ่งแจ้งเตือนใช้ร่วมกันทุกบทบาท แต่แหล่งข้อมูลต่างกัน:
@@ -288,22 +287,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           <h1 className="text-base sm:text-lg font-bold text-brand-navy dark:text-white truncate">
             ระบบสหกิจศึกษา RMUTTO
           </h1>
-          {auth?.user && auth.user.roles.length > 1 && (
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-1 rounded-lg border border-gray-200 dark:bg-gray-800 dark:border-gray-700">
-              <span className="text-xs text-gray-500 dark:text-gray-400">บทบาท:</span>
-              <Select
-                value={currentRole}
-                onChange={(e) => onRoleChange(e.target.value)}
-                className="font-semibold bg-transparent text-brand-blue cursor-pointer" size="sm"
-              >
-                {auth.user.roles.map((r) => (
-                  <option key={r} value={r} className="bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200">
-                    {getRoleLabel(r)}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -421,6 +404,30 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           )}
 
           {/* Dark Mode Toggle */}
+          {/* สลับบทบาท (มินิมอล) — แสดงเฉพาะเมื่อบัญชีมีมากกว่า 1 บทบาท */}
+          {auth?.user && auth.user.roles.length > 1 && (
+            <div className="relative flex items-center">
+              <select
+                data-testid="role-switch"
+                value={currentRole}
+                onChange={(e) => onRoleChange(e.target.value)}
+                aria-label="สลับบทบาท"
+                className="cursor-pointer appearance-none rounded-lg border border-gray-200 bg-gray-50/80 py-1 pl-2.5 pr-6 text-xs font-semibold text-brand-navy hover:bg-gray-100 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                {auth.user.roles.map((r) => (
+                  <option key={r} value={r} className="bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                    {getRoleLabel(r)}
+                  </option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute right-1.5 flex items-center text-gray-400 dark:text-gray-500">
+                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={toggleDarkMode}

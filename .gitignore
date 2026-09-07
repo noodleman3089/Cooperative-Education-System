@@ -27,6 +27,9 @@ CLAUDE.md
 .claude/
 
 # Dev / Workspace Documents
+# scratch/ = สคริปต์ใส่ข้อมูลจำลองและของเล่นระหว่างพัฒนา อยู่นอก backend/ และ frontend/
+# จึงไม่ใช่ของที่ repo นี้เก็บ (กติกาเดียวกับ e2e/ และ .system_memory/)
+scratch/
 dev_accounts.txt
 implementation_plan.md
 system_testing_manual.md

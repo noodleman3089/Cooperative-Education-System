@@ -47,6 +47,9 @@ const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
 const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
+const Form07Company = lazy(() => import('./Company/Form07Company'));
+const MentorHome = lazy(() => import('./Company/MentorHome'));
+const MentorCertify = lazy(() => import('./Company/MentorCertify'));
 
 /**
  * The four student screens that belong to the co-op itself rather than to
@@ -100,37 +103,35 @@ const Dashboard: React.FC = () => {
   const auth = useContext(AuthContext);
   
   /**
-   * Starts at the signed-in user's own role, not at 'student'.
-   *
-   * It used to open on 'student' and correct itself in the effect below, so
-   * every other role watched StudentDashboard flash past on each page load —
-   * and that screen fires /students/dashboard, which answered 403 and logged an
-   * error for a request nobody wanted. `ProtectedRoute` already waits for
-   * `isLoading` before mounting this, so `auth.user` is populated by now and
-   * there is nothing to wait for. The effect stays for the role switcher.
-   */
-  const [currentRole, setCurrentRole] = useState<string>(auth?.user?.roles?.[0] ?? 'student');
-
-  /**
-   * หน้าจอที่เปิดอยู่ — **เก็บใน URL ไม่ใช่ `useState`**
-   *
-   * เดิมทั้งแอปหลังล็อกอินอยู่ที่ `/dashboard` อันเดียว แล้วเมนูเป็น state ในหน่วยความจำ
-   * ซึ่งแปลว่า:
-   *   · กด F5 กลางงาน = เด้งกลับหน้าแรกทุกครั้ง
-   *   · ปุ่ม Back ของเบราว์เซอร์ = ออกจากแอป ไม่ใช่ย้อนหน้า
-   *   · บุ๊กมาร์กหน้าที่ทำค้างไม่ได้ · ส่งลิงก์ให้กันดูหน้าเดียวกันไม่ได้
-   *   · อีเมลแจ้งเตือนพาไปหน้าที่ต้องการไม่ได้ ทำได้แค่พาไปหน้าแรก
-   *
-   * ⛔ ใช้ query `?menu=` ไม่ใช่ `/dashboard/:menu` โดยตั้งใจ — `AppRoutes.tsx` ไม่ต้องขยับ
-   *    เส้นทาง `*` ที่ redirect กลับ `/dashboard` ยังทำงานเหมือนเดิม และ E2E ทุกตัวที่
-   *    `goto('/dashboard')` ยังผ่านโดยไม่ต้องแก้ · ยกระดับเป็น path ทีหลังได้โดยไม่ต้องรื้อ
-   *
-   * ⛔ **นี่ไม่ใช่ด่านสิทธิ์** — เมนูที่ role ปัจจุบันไม่มี จะตกไปที่แดชบอร์ดของ role ตัวเอง
-   *    เพราะ `renderDashboardContent` แยกด้วย `currentRole` ก่อนเสมอ การพิมพ์ `?menu=users`
-   *    เองจึงเปิดหน้าของเจ้าหน้าที่ไม่ได้ · สิทธิ์จริงยังบังคับที่ backend (SEC-06)
+   * รองรับ ?role= ตามสเปก D ข้อ 14.5
+   * อ่าน ?role= ก่อน ถ้าไม่มีหรือไม่ใช่ role ที่ผู้ใช้ถือจริง → ใช้ roles[0] เหมือนเดิม
+   * พฤติกรรมเดิมทั้งหมดจึงไม่เปลี่ยน และ E2E ที่ไม่ส่ง ?role= ยังผ่านเหมือนเดิม
    */
   const [searchParams, setSearchParams] = useSearchParams();
   const activeMenu = searchParams.get('menu') || 'dashboard';
+  const roleParam = searchParams.get('role');
+
+  const currentRole = useMemo(() => {
+    if (roleParam && auth?.user?.roles?.includes(roleParam)) {
+      return roleParam;
+    }
+    return auth?.user?.roles?.[0] ?? 'student';
+  }, [roleParam, auth?.user?.roles]);
+
+  const handleRoleChange = useCallback(
+    (role: string) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          next.set('role', role);
+          next.delete('menu'); // รีเซ็ต menu เป็นหน้าแรกเมื่อสลับบทบาท (พฤติกรรมเดิม)
+          return next;
+        },
+        { replace: false }
+      );
+    },
+    [setSearchParams]
+  );
 
   const setActiveMenu = useCallback(
     (menu: string) => {
@@ -150,12 +151,6 @@ const Dashboard: React.FC = () => {
   );
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (auth?.user && auth.user.roles.length > 0) {
-      setCurrentRole(auth.user.roles[0]);
-    }
-  }, [auth?.user]);
 
   // How far through the co-op this student is, purely to decide which menus are
   // usable yet. Only the two facts the gate needs are kept.
@@ -392,18 +387,20 @@ const Dashboard: React.FC = () => {
         
       case 'company':
         if (activeMenu === 'jobs') return <CompanyDashboard activeMenu="jobs" />;
+        if (activeMenu === 'form07') return <Form07Company />;
         if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
         if (activeMenu === 'profile') return <CompanyDashboard activeMenu="profile" />;
         return <CompanyDashboard activeMenu="dashboard" />;
 
       case 'mentor':
+        if (activeMenu === 'certify') return <MentorCertify />;
         if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
         // Not PersonnelProfile: a mentor is not university staff and has no row
         // in `personnel`, so that screen could only ever show them an error.
         if (activeMenu === 'profile') return <MentorProfile />;
-        return <MentorEvaluation />;
+        return <MentorHome />;
         
       default:
         if (activeMenu === 'profile') return (
@@ -445,10 +442,7 @@ const Dashboard: React.FC = () => {
       <div className="flex-1 flex flex-col overflow-hidden w-full">
         <Navbar 
           currentRole={currentRole} 
-          onRoleChange={(role) => {
-            setCurrentRole(role);
-            setActiveMenu('dashboard'); // Reset to home dashboard on role swap
-          }} 
+          onRoleChange={handleRoleChange} 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         />
         

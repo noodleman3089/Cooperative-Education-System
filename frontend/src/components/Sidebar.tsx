@@ -175,6 +175,18 @@ const Sidebar: React.FC<SidebarProps> = ({
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
       </svg>
+    ),
+    // 22. Form 07 (ตำแหน่งงานและพี่เลี้ยง)
+    form07: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 3H8a2 2 0 00-2 2v14l6-3 6 3V5a2 2 0 00-2-2Z" />
+      </svg>
+    ),
+    // 23. Certify (รับรองงานนักศึกษา)
+    certify: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+      </svg>
     )
   };
 
@@ -255,16 +267,18 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
     ],
     company: [
-      { id: 'dashboard', label: 'แดชบอร์ดผู้สมัครงาน', icon: icons.dashboard },
-      { id: 'jobs', label: 'ตำแหน่งงานว่างของบริษัท', icon: icons.jobs },
-      { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
-      { id: 'final_evaluation', label: 'ประเมินผลนักศึกษา', icon: icons.evaluation },
-      { id: 'profile', label: 'ข้อมูลและประวัติบริษัท', icon: icons.profile }
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'jobs', label: 'แบบเสนองาน (สหกิจ 02)', icon: icons.jobs, group: 'สิ่งที่มหาวิทยาลัยขอ' },
+      { id: 'form07', label: 'ตำแหน่งงานและพี่เลี้ยง (สหกิจ 07)', icon: icons.form07, group: 'สิ่งที่มหาวิทยาลัยขอ' },
+      { id: 'report_outlines', label: 'โครงร่างรายงานนักศึกษา', icon: icons.report_outline, group: 'งานของพี่เลี้ยง' },
+      { id: 'final_evaluation', label: 'แบบประเมินนักศึกษา', icon: icons.evaluation, group: 'งานของพี่เลี้ยง' },
+      { id: 'profile', label: 'ข้อมูลสถานประกอบการ', icon: icons.profile, group: 'บัญชีของท่าน' }
     ],
     mentor: [
-      { id: 'dashboard', label: 'รายชื่อนักศึกษาประเมิน', icon: icons.dashboard },
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'certify', label: 'รับรองงานนักศึกษา', icon: icons.certify },
       { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
-      { id: 'final_evaluation', label: 'ประเมินผลนักศึกษา', icon: icons.evaluation },
+      { id: 'final_evaluation', label: 'แบบประเมินนักศึกษา', icon: icons.evaluation },
       { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile }
     ]
   };
