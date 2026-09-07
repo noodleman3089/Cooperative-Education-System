@@ -4,7 +4,7 @@ import PageSkeleton from './ui/Skeleton';
 import { useDashboardData } from '../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile, IntentForm, OfficialDocument } from '../types/api';
-import CoopStepperBar, { type PhaseGroup } from './CoopStepperBar';
+import { type PhaseGroup } from './CoopStepperBar';
 import CoopNowCard from './CoopNowCard';
 import CoopJourneyBar from './CoopJourneyBar';
 import AlertBanner from './ui/AlertBanner';
@@ -603,70 +603,13 @@ const StudentDashboard: React.FC = () => {
       {calendarBanner}
 
       {/*
-        แถบตัวตนแบบบรรทัดเดียว แทนแบนเนอร์โปรไฟล์เดิม (2026-09-07)
-
-        ของเดิมเป็น bento สามช่องสูงเกือบครึ่งจอ: รูปใหญ่ 96px วงกลมเบลอตกแต่ง ป้าย
-        "STUDENT PROFILE" หัวเรื่องขนาด 3xl แล้วต่อด้วยการ์ดสถิติอีกสามใบ ทั้งหมดนั้น
-        ตอบว่า *คุณคือใคร* ซึ่งเป็นข้อมูลที่เจ้าตัวรู้อยู่แล้ว และมันเบียดสิ่งที่ต้องทำ
-        ตกไปอยู่ใต้เส้นพับ
-
-        ข้อมูลเดิมยังอยู่ครบทุกตัว — รูป ชื่อ รหัส สาขา สิทธิ์ เกรด ที่ปรึกษา
-        เปลี่ยนแค่พื้นที่ที่มันกิน · **ห้ามตัดตัวไหนออก** โดยเฉพาะรูป: `student-avatar`
-        คุมไว้ว่าอัปโหลดในหน้าโปรไฟล์แล้วต้องเห็นที่หน้าแรกด้วย
-      */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-brand-blue text-lg font-bold uppercase text-white">
-          {data.student.profile_image ? (
-            <img
-              src={`${API_BASE_URL}/files/${data.student.profile_image}`}
-              alt="รูปโปรไฟล์นักศึกษา"
-              data-testid="dashboard-avatar-image"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <span className="flex h-full w-full items-center justify-center">
-              {data.student.first_name
-                ? data.student.first_name.charAt(0)
-                : data.student.student_code.charAt(0)}
-            </span>
-          )}
-        </div>
-
-        <div className="min-w-0">
-          <h2 className="truncate text-lg font-bold text-gray-900 dark:text-white">
-            {data.student.first_name && data.student.last_name
-              ? `${data.student.first_name} ${data.student.last_name}`
-              : 'ไม่ระบุชื่อ'}
-          </h2>
-          <p className="truncate text-xs text-gray-600 dark:text-gray-400">
-            {data.student.student_code} · {data.student.major_name_th || 'ไม่ระบุสาขาวิชา'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-          <span
-            className={`rounded-full border px-3 py-1 text-xs font-bold ${
-              data.student.is_eligible
-                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-400'
-                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400'
-            }`}
-          >
-            {data.student.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ยังไม่ผ่านเกณฑ์สหกิจ'}
-          </span>
-          <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
-            เกรดเฉลี่ย {data.student.cumulative_gpa ? data.student.cumulative_gpa.toFixed(2) : 'ยังไม่มี'}
-          </span>
-        </div>
-      </div>
-
-      {/*
         "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
 
         หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
         *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
         คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
 
-        การ์ดอ่าน `phases` ชุดเดียวกับ CoopStepperBar ด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
+        การ์ดอ่าน `phases` ชุดเดียวกับแถบเส้นทางด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
       */}
       <CoopNowCard
         phases={phases}
@@ -756,19 +699,6 @@ const StudentDashboard: React.FC = () => {
           { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
         ]}
       />
-
-      {/*
-        ตัวเต็มยังอยู่ ไม่ได้ลบ — ขั้นย่อยบางอันมีปุ่มลงมือของตัวเอง (เช่น 2.1 กรอก
-        รายละเอียดที่พัก) การตัดทิ้งเท่ากับตัดความสามารถ แค่ไม่ต้องกางค้างไว้ตลอด
-      */}
-      <details className="group rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <summary className="cursor-pointer list-none px-6 py-4 text-xs font-semibold text-gray-600 marker:content-none hover:text-brand-blue dark:text-gray-400 dark:hover:text-blue-400">
-          ดูรายละเอียดทุกขั้นตอน
-        </summary>
-        <div className="border-t border-gray-100 p-2 dark:border-gray-800">
-          <CoopStepperBar phases={phases} activePhaseId={activePhaseId} />
-        </div>
-      </details>
 
       {/* Main Content Sections */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

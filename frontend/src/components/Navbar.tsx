@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
 import { Bell, FileText, LogOut } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
 import DeanSignModal from './DeanSignModal';
@@ -33,6 +33,16 @@ interface NotificationItem {
   status?: string;
 }
 
+/** ส่วนของ `/profile/me` ที่แถบบนใช้ — ฟิลด์นักศึกษาเป็น optional เพราะบุคลากรไม่มี */
+interface MyProfile {
+  first_name?: string | null;
+  last_name?: string | null;
+  profile_image?: string | null;
+  student_code?: string | null;
+  cumulative_gpa?: number | string | null;
+  is_eligible?: boolean | null;
+}
+
 interface NavbarProps {
   currentRole: string;
   onRoleChange: (role: string) => void;
@@ -52,8 +62,17 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
-  /** ชื่อจริงของผู้ใช้ — null จนกว่า /profile/me จะตอบ แล้วตกกลับไปใช้อีเมล */
-  const [displayName, setDisplayName] = useState<string | null>(null);
+  /**
+   * โปรไฟล์ของผู้ใช้ที่ล็อกอินอยู่ — null จนกว่า `/profile/me` จะตอบ
+   *
+   * ⛔ ข้อมูลชุดนี้เคยแสดงเป็น "แถบตัวตน" อยู่กลางหน้าแรกนักศึกษา ซึ่งซ้ำกับชื่อ
+   * บนแถบบนที่เพิ่งใส่ไป · เจ้าของสั่งให้เอาแถบนั้นออกแล้วดึงข้อมูลมาไว้ตรงนี้แทน
+   * (2026-09-07) ทุกค่ายังอยู่ครบ ไม่ได้ตัดอะไร แค่ย้ายที่
+   * · `major_name_th` ไม่มีใน `/profile/me` (คืนมาแค่ `major_id`) จึงยังอยู่ที่หน้าโปรไฟล์
+   */
+  const [profile, setProfile] = useState<MyProfile | null>(null);
+  const displayName =
+    [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || null;
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
 
@@ -240,9 +259,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
       .get('/profile/me')
       .then((res) => {
         if (cancelled) return;
-        const p = (res?.profile ?? {}) as { first_name?: string | null; last_name?: string | null };
-        const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
-        setDisplayName(full || null);
+        setProfile((res?.profile ?? null) as MyProfile | null);
       })
       .catch(() => {
         /* ยังไม่มีโปรไฟล์ หรือ role นี้ไม่มี endpoint — ใช้อีเมลแทน */
@@ -433,8 +450,20 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                 aria-expanded={showUserMenu}
                 aria-label="เมนูบัญชีผู้ใช้"
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
-                  {(displayName ?? auth.user.email).slice(0, 2)}
+                {/* รูปจริงถ้ามี ไม่งั้นใช้อักษรย่อ — `dashboard-avatar-image` ย้ายมาจาก
+                    หน้าแรกนักศึกษาพร้อมกับแถบตัวตน แถบบนอยู่บนหน้าแรกเหมือนกัน
+                    การอัปโหลดรูปในหน้าโปรไฟล์แล้วเห็นผลที่หน้าแรกจึงยังเป็นจริง */}
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-50 text-xs font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
+                  {profile?.profile_image ? (
+                    <img
+                      src={`${API_BASE_URL}/files/${profile.profile_image}`}
+                      alt="รูปโปรไฟล์"
+                      data-testid="dashboard-avatar-image"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    (displayName ?? auth.user.email).slice(0, 2)
+                  )}
                 </span>
                 <span className="hidden text-sm font-semibold text-gray-900 sm:block dark:text-white">
                   {displayName ?? auth.user.email}
@@ -451,7 +480,29 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-400">
                         {getRoleLabel(currentRole)}
+                        {profile?.student_code ? ` · ${profile.student_code}` : ''}
                       </p>
+
+                      {/* สิทธิ์กับเกรด — ย้ายมาจากแถบตัวตนกลางหน้าแรก ไม่ได้ตัดทิ้ง */}
+                      {currentRole === 'student' && profile && (
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-xs font-bold ${
+                              profile.is_eligible
+                                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-400'
+                                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400'
+                            }`}
+                          >
+                            {profile.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ยังไม่ผ่านเกณฑ์'}
+                          </span>
+                          <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs font-bold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+                            เกรดเฉลี่ย{' '}
+                            {profile.cumulative_gpa != null
+                              ? Number(profile.cumulative_gpa).toFixed(2)
+                              : 'ยังไม่มี'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     {/* ⛔ ปุ่มนี้ย้ายมาจากท้ายแถบเมนู (ร่างไม่มีอะไรตรงนั้น) — ย้าย ไม่ใช่ลบ
                         `data-testid="logout"` ต้องคงไว้ เพราะ helper `logout(page)` ใช้เดินทั้งชุด */}
