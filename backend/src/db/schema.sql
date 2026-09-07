@@ -187,7 +187,32 @@ CREATE TABLE IF NOT EXISTS companies (
     created_by INT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
     contact_person VARCHAR(255),
     contact_position VARCHAR(255),
-    email VARCHAR(255)
+    email VARCHAR(255),
+    -- ช่องที่ **แบบเสนองานสหกิจ (สหกิจ 02) หน้า 1 บังคับ** แต่ทะเบียนเดิมไม่มี
+    --
+    -- อยู่ที่ระดับบริษัทไม่ใช่ระดับใบสำรวจ เพราะเป็นข้อเท็จจริงของบริษัทที่ใช้ซ้ำทุกภาคเรียน
+    -- (ของจริงเจ้าหน้าที่ส่งฟอร์มเดิมทุกปีและบริษัทกรอกเรื่องเดิมทุกปี) การเก็บที่ใบสำรวจ
+    -- จะทำให้ปุ่ม "ใช้คำตอบเดิมของภาคที่แล้ว" ต้องก๊อปข้อมูลบริษัทตามไปด้วยทุกครั้ง
+    --
+    -- ⛔ บัญชีบริษัทเขียนได้เฉพาะกลุ่มนี้ **ห้ามเขียน name_th/name_en/address/province/
+    --    district/postal_code/is_verified** ซึ่งเป็นตัวตนที่เจ้าหน้าที่รับรองและถูกพิมพ์
+    --    ลงหนังสือราชการที่คณบดีลงนาม (ดู spec-D ข้อ 3.2)
+    fax VARCHAR(50),
+    business_type VARCHAR(255),          -- ผลิตภัณฑ์ / ลักษณะการดำเนินงาน
+    employee_count INT,                  -- จำนวนพนักงานรวม
+    manager_name VARCHAR(255),           -- ผู้จัดการสถานประกอบการ / หัวหน้าหน่วยงาน
+    manager_position VARCHAR(255),
+    manager_department VARCHAR(255),
+    manager_phone VARCHAR(50),
+    manager_fax VARCHAR(50),
+    -- ช่องติ๊กบนกระดาษ: ติดต่อผู้จัดการโดยตรง หรือ ติดต่อผู้ที่ได้รับมอบหมาย
+    -- ค่าเริ่มต้นเป็น delegate เพราะ contact_person/contact_position ที่มีอยู่เดิม
+    -- คือ "ผู้ประสานงานที่ได้รับมอบหมาย" อยู่แล้ว การตั้ง manager จะเปลี่ยนความหมายของแถวเก่า
+    contact_mode VARCHAR(10) NOT NULL DEFAULT 'delegate'
+        CONSTRAINT companies_contact_mode_check CHECK (contact_mode IN ('manager', 'delegate')),
+    contact_department VARCHAR(255),
+    contact_phone VARCHAR(50),
+    contact_fax VARCHAR(50)
 );
 
 -- Mentors Table (Profile for Company Supervisors)
@@ -197,7 +222,10 @@ CREATE TABLE IF NOT EXISTS mentors (
     name VARCHAR(255) NOT NULL,
     position VARCHAR(255),
     department VARCHAR(255),
-    phone VARCHAR(50) NOT NULL
+    phone VARCHAR(50) NOT NULL,
+    -- ช่องโทรสารของ "พนักงานที่ปรึกษา (Job Supervisor)" บน สหกิจ 07 หน้า 2
+    -- อีเมลไม่ต้องเก็บซ้ำที่นี่ — อยู่ที่ users.email ของบัญชีพี่เลี้ยงคนนั้นแล้ว
+    fax VARCHAR(50)
 );
 
 -- 5. Coop Semesters Table
@@ -208,7 +236,68 @@ CREATE TABLE IF NOT EXISTS coop_semesters (
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- 6. Job Posts Table
+-- 5.1 แบบเสนองานสหกิจศึกษา (สหกิจ 02) — "ใบสำรวจ" หนึ่งใบต่อหนึ่งบริษัทต่อหนึ่งภาคเรียน
+--
+-- ⛔ ในระบบนี้ไม่มีคำว่า "ประกาศรับสมัครงาน" — ตามคู่มือ งานสหกิจศึกษาประจำคณะเป็นฝ่าย
+--    ส่งแบบเสนองานไปถามสถานประกอบการ **ล่วงหน้าประมาณ 1 ภาคการศึกษา** เพื่อสำรวจ
+--    ความต้องการรับนักศึกษา · ตารางนี้คือ "ใบที่ส่งไปถาม" และคำตอบที่ได้กลับมา
+--    ส่วน job_posts คือ "รายการตำแหน่ง" ที่อยู่ข้างในใบนั้น (กระดาษหน้า 2 หนึ่งแผ่นต่อหนึ่งรายการ)
+--
+-- ⛔ บริษัทสร้างใบเองไม่ได้ — เจ้าหน้าที่เป็นคนเปิดใบพร้อมกับตอนส่งแบบสำรวจ
+--    (POST /api/job-offers/send) ซึ่งตรงกับความจริงว่ามหาวิทยาลัยเป็นฝ่ายเริ่มเสมอ
+CREATE TABLE IF NOT EXISTS coop_job_offers (
+    offer_id SERIAL PRIMARY KEY,
+    company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
+    -- draft     บริษัทกรอกค้างไว้ (หรือเจ้าหน้าที่เพิ่งส่งไปถาม ยังไม่มีใครตอบ)
+    -- submitted ตอบกลับแล้ว รอเจ้าหน้าที่ตรวจ
+    -- reviewed  เจ้าหน้าที่ตรวจแล้ว รายการข้างในถูกเปิดให้นักศึกษาเห็น
+    -- declined  บริษัทตอบว่า "ภาคเรียนนี้ยังไม่รับ"
+    --           ⛔ ไม่ใช่การลบใบ — การตอบว่าไม่รับก็เป็นคำตอบที่ต้องเก็บไว้
+    status VARCHAR(20) NOT NULL DEFAULT 'draft'
+        CONSTRAINT coop_job_offers_status_check
+        CHECK (status IN ('draft', 'submitted', 'reviewed', 'declined')),
+    -- "กรุณาส่งเอกสารฉบับนี้กลับมา ... ก่อนวันที่ ......" ท้ายหน้า 2 ของกระดาษ
+    -- เจ้าหน้าที่เป็นคนกำหนดตอนกดส่งแบบสำรวจ
+    due_date DATE,
+    submitted_at TIMESTAMPTZ,
+    submitted_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    -- ช่อง "ลงชื่อผู้ให้ข้อมูล / ตำแหน่ง" ท้ายหน้า 2
+    informant_name VARCHAR(255),
+    informant_position VARCHAR(255),
+    decline_reason TEXT,
+    reject_reason TEXT,                  -- เจ้าหน้าที่ตีกลับทั้งใบ
+    -- ใบของภาคที่แล้วที่ถูกก๊อปมาเป็นค่าตั้งต้น (ปุ่ม "ใช้คำตอบเดิม")
+    -- เก็บไว้เพื่อให้หน้าจอบอกได้ว่าค่าที่เห็นมาจากไหน และตรวจย้อนได้ว่าใครตอบซ้ำของใคร
+    copied_from_offer_id INT REFERENCES coop_job_offers(offer_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT coop_job_offers_company_semester_key UNIQUE (company_id, semester_id)
+);
+
+-- 5.2 ลิงก์ตอบแบบสำรวจทางอีเมล — **อายุ 24 ชั่วโมง ใช้ได้ครั้งเดียว**
+--
+-- ⛔ token นี้เปิดได้ **หน้าเดียวคือแบบเสนองาน สหกิจ 02** ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย
+--    ทุกหน้าที่มีข้อมูลนักศึกษา (ใบสมัคร 03 · แบบประเมิน 15/16 · บันทึกการปฏิบัติงาน)
+--    ต้องล็อกอินเต็มเสมอ **ห้ามเปิดด้วย token เด็ดขาด**
+-- ⛔ ห้ามให้ระบบต่ออายุเองเงียบ ๆ — หมดอายุแล้วต้องกดขอลิงก์ใหม่ ซึ่งส่งไปที่อีเมล
+--    ในทะเบียนเท่านั้น (ห้ามให้พิมพ์อีเมลปลายทางเอง ไม่งั้นใครก็ดึงลิงก์ของบริษัทอื่นได้)
+-- token เก็บเป็นค่าดิบแบบเดียวกับลิงก์เชิญใน utils/invite.ts โดยตั้งใจ — ให้ทั้งระบบ
+-- มีแบบแผนเดียว และ token นี้ไม่ได้ให้ session หรือสิทธิ์ใด ๆ นอกจากใบสำรวจใบเดียว
+CREATE TABLE IF NOT EXISTS job_offer_tokens (
+    token_id SERIAL PRIMARY KEY,
+    token VARCHAR(64) NOT NULL UNIQUE,
+    offer_id INT NOT NULL REFERENCES coop_job_offers(offer_id) ON DELETE CASCADE,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_job_offer_tokens_offer ON job_offer_tokens(offer_id);
+
+-- 6. Job Posts Table — **หนึ่งแถวคือหนึ่งรายการตำแหน่งในแบบเสนองาน (สหกิจ 02 หน้า 2)**
 CREATE TABLE IF NOT EXISTS job_posts (
     job_id SERIAL PRIMARY KEY,
     company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
@@ -217,14 +306,61 @@ CREATE TABLE IF NOT EXISTS job_posts (
     image_path VARCHAR(255),
     created_by INT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
     quota INT NOT NULL,
+    -- "จำนวนงานที่เสนอนักศึกษา" คู่กับ quota บนกระดาษ — บนหน้าจออ่านว่า
+    -- "รับแล้วกี่คนจากที่เสนอ" ไม่ใช่ "จำนวนผู้สมัคร"
+    -- ⛔ ห้ามตัดคอลัมน์นี้ทิ้ง — ตรรกะโควตาเต็มใน controllers/acceptance.ts และ
+    --    models/intent.ts อ่านค่านี้อยู่
     applied_count INT NOT NULL DEFAULT 0,
+    -- เดิมหมายถึง "วันที่ประกาศหมดอายุ" · ตอนนี้คือ **กำหนดส่งแบบสำรวจกลับ**
+    -- ซึ่งสืบค่ามาจาก coop_job_offers.due_date ของใบที่รายการนี้สังกัด
     expire_date TIMESTAMP NOT NULL,
     -- 'rejected' is distinct from 'closed' on purpose: closed means the posting
     -- ran its course, rejected means staff turned it down. Reusing 'closed' for
     -- both would have told the company its advert expired when in fact it was
     -- refused, and left nowhere to put the reason.
     status VARCHAR(50) NOT NULL DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'published', 'closed', 'rejected')),
-    reject_reason TEXT
+    reject_reason TEXT,
+    -- ใบสำรวจที่รายการนี้สังกัด · NULL ได้เพราะแถวที่มีอยู่ก่อนระบบใบสำรวจยังต้องใช้งานได้
+    -- ⛔ ของใหม่ที่สร้างจากหน้าจอต้องมีค่าเสมอ — ห้ามปล่อยให้เกิดรายการลอยที่ไม่มีใบสังกัด
+    offer_id INT REFERENCES coop_job_offers(offer_id) ON DELETE CASCADE,
+    -- ⛔ หลักฐานว่าต้องมี: กระดาษหน้า 2 มีช่อง "ระยะเวลาที่ต้องการให้นักศึกษาไปปฏิบัติงาน"
+    --    ถ้าไม่มีคอลัมน์นี้ ระบบไม่รู้ว่าตำแหน่งนี้เป็นการเสนอของภาคเรียนไหน และปุ่ม
+    --    "ใช้คำตอบเดิมของภาคที่แล้ว" ทำไม่ได้เลย
+    semester_id INT REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
+    -- ช่องติ๊กสามข้อบนกระดาษ · full_year = นักศึกษาคนนั้นอยู่ยาวถึงภาคเรียนที่ 2
+    -- ⛔ **ไม่ได้แปลว่ารายการนี้ไปโผล่ในแบบสำรวจของสองภาค** — หนึ่งรายการสังกัดภาคเดียว
+    --    คือภาคที่เริ่มปฏิบัติงาน · ภาคหน้าใช้ปุ่ม "ใช้คำตอบเดิม" ซึ่งเป็นการกดของคน
+    --    (ถ้าระบบก๊อปเอง บริษัทจะถูกนับว่ารับนักศึกษาทั้งที่ไม่เคยตอบอะไรในภาคนั้น)
+    duration_term VARCHAR(10)
+        CONSTRAINT job_posts_duration_term_check
+        CHECK (duration_term IS NULL OR duration_term IN ('term1', 'term2', 'full_year')),
+    skills_required TEXT,                -- ความสามารถทางวิชาการหรือทักษะที่นักศึกษาควรมี
+    other_requirements TEXT,             -- ข้อกำหนดอื่น ๆ (อุปกรณ์ · สถานที่ปฏิบัติงานจริง)
+    -- สวัสดิการอยู่ที่ระดับ **รายการ** ไม่ใช่ระดับใบ เพราะกระดาษวางไว้หน้าเดียวกับตำแหน่ง
+    -- และของจริงตำแหน่งต่างกันอาจให้ค่าตอบแทนต่างกัน
+    -- pay_amount IS NULL = ช่อง "( ) ไม่มี" · หน่วยบนกระดาษมีสองแบบ ห้ามยุบเป็นข้อความเดียว
+    pay_amount NUMERIC(10, 2),
+    pay_unit VARCHAR(10)
+        CONSTRAINT job_posts_pay_unit_check
+        CHECK (pay_unit IS NULL OR pay_unit IN ('day', 'month')),
+    accommodation VARCHAR(20)
+        CONSTRAINT job_posts_accommodation_check
+        CHECK (accommodation IS NULL OR accommodation IN ('none', 'free', 'paid')),
+    accommodation_cost VARCHAR(100),     -- "1,200 ต่อเดือน" — กระดาษเขียน "ต่อเดือน / วัน"
+    welfare_other TEXT
+);
+
+-- 6.0.1 สาขาที่ตำแหน่งหนึ่งต้องการ — หนึ่งรายการรับได้หลายสาขา
+--
+-- กระดาษเขียนว่า "หากต้องการมากกว่า 1 สาขาวิชา กรุณาทำสำเนาเฉพาะแผ่นนี้และเขียนแยก
+-- สาขาวิชาละ 1 แผ่น" ซึ่งเป็นข้อจำกัดของกระดาษที่เขียนได้บรรทัดเดียว ไม่ใช่กติกาของงาน
+-- ถ้าบังคับให้แยกรายการตามนั้น บริษัทที่บอกว่า "IT หรือ วิศวะซอฟต์แวร์ก็ได้ 2 คน"
+-- จะถูกนับโควตาเป็น 4 ซึ่งผิด · ตอนพิมพ์ยังเป็นหนึ่งแผ่นต่อหนึ่งรายการเหมือนเดิม
+-- แค่พิมพ์ชื่อสาขาหลายชื่อในบรรทัดเดียว
+CREATE TABLE IF NOT EXISTS job_post_majors (
+    job_id INT NOT NULL REFERENCES job_posts(job_id) ON DELETE CASCADE,
+    major_id INT NOT NULL REFERENCES master_major(major_id) ON DELETE RESTRICT,
+    CONSTRAINT job_post_majors_pkey PRIMARY KEY (job_id, major_id)
 );
 
 -- 6.1. PR Announcements Table (Staff PR & News System)
@@ -419,6 +555,20 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     end_date DATE,
     -- นักศึกษาเลือกใช้แบบฟอร์มบันทึกการทำงานของสถานประกอบการแทนแบบฟอร์มกลาง (สหกิจ ๐๙, ๑๐)
     uses_company_log_form BOOLEAN NOT NULL DEFAULT FALSE,
+    -- ต้องบันทึกรายวัน (สหกิจ ๐๘) หรือไม่ — **พี่เลี้ยงเป็นคนเปิด/ปิด**
+    --
+    -- อยู่ที่นี่ไม่ใช่ที่ students เพราะเป็นข้อตกลงของ **การไปฝึกครั้งนี้** ไม่ใช่คุณสมบัติ
+    -- ถาวรของตัวนักศึกษา · แถวนี้คือแถวที่ผูกนักศึกษากับพี่เลี้ยง (mentor_id) อยู่แล้ว
+    -- ⛔ นักศึกษาปิดเองไม่ได้ · ปิดอยู่ = แท็บรายวันยังแสดงแต่บอกว่าพี่เลี้ยงยังไม่เปิด
+    --    (ห้ามซ่อนเงียบ ๆ) และ POST /api/daily-logs ต้องตอบ 403
+    -- ⛔ เปิดกลางเทอมมีผล **ตั้งแต่สัปดาห์ปัจจุบันเป็นต้นไป ห้ามย้อนหลัง** — ไม่งั้น
+    --    สัปดาห์ที่ผ่านมากลายเป็น "ขาดส่ง" จากการตัดสินใจของคนอื่น (spec-D ข้อ 14.8)
+    daily_log_required BOOLEAN NOT NULL DEFAULT FALSE,
+    -- งานที่มอบหมายนักศึกษา — ตารางกลางหน้า 2 ของ สหกิจ 07 (สถานประกอบการกรอก)
+    -- อยู่ที่นี่เพราะเป็นงานของการไปฝึกครั้งนั้น ไม่ใช่ของตำแหน่งที่ประกาศไว้
+    -- (job_posts.title/description คือตำแหน่งที่ "เสนอ" ส่วนนี่คือสิ่งที่ "ได้ทำจริง")
+    job_position VARCHAR(255),
+    job_description TEXT,
     -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
     -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
     CONSTRAINT intent_forms_late_reason_required
@@ -668,6 +818,38 @@ CREATE TABLE IF NOT EXISTS supervision_records (
 CREATE INDEX IF NOT EXISTS idx_supervision_records_student
     ON supervision_records (student_id, visit_number);
 
+-- 16.9 Daily Logs (สหกิจ 08 แบบรายงานการปฏิบัติงานประจำวัน)
+--
+-- คู่มือไม่ได้บังคับให้ทุกคนทำ — ให้ตกลงกันเองตามลักษณะงาน สวิตช์จึงอยู่ที่
+-- intent_forms.daily_log_required และ **พี่เลี้ยงเป็นคนเปิด** (นักศึกษาปิดเองไม่ได้
+-- เพราะนั่นคือการยกเลิกภาระงานของตัวเอง)
+--
+-- ⛔ **ส่งและรับรองเป็นชุดทั้งสัปดาห์ ไม่ใช่ทีละวัน** — ถ้ารับรองรายวัน พี่เลี้ยงต้องกด
+--    ~90 ครั้งต่อนักศึกษาหนึ่งคน ซึ่งจะไม่มีใครทำ · week_number จึงต้องมีในแถว
+--    ไม่ใช่คำนวณสดจาก log_date ตอน query
+-- คอลัมน์ชุดสถานะ/การรับรองเหมือน weekly_logs และ monthly_logs ทุกประการโดยตั้งใจ
+-- หน้าจอและตรรกะการรับรองจะได้เป็นชุดเดียวกันทั้งสามใบ
+CREATE TABLE IF NOT EXISTS daily_logs (
+    daily_log_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    week_number INT NOT NULL,
+    log_date DATE NOT NULL,
+    work_detail TEXT,
+    -- คอลัมน์ "หมายเหตุ" ที่อยู่ท้ายตารางบนกระดาษ สหกิจ 08
+    remark TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'draft',   -- draft | submitted | returned
+    external_file_path VARCHAR(255),
+    summary TEXT,
+    mentor_certified_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    mentor_certified_at TIMESTAMPTZ,               -- NULL = ยังไม่รับรอง
+    returned_comment TEXT,
+    submitted_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT daily_logs_student_date_key UNIQUE (student_id, log_date)
+);
+CREATE INDEX IF NOT EXISTS idx_daily_logs_student_week ON daily_logs (student_id, week_number);
+
 -- 17. Weekly Logs (Phase 3)
 CREATE TABLE IF NOT EXISTS weekly_logs (
     weekly_log_id SERIAL PRIMARY KEY,
@@ -800,6 +982,13 @@ CREATE TABLE IF NOT EXISTS mentor_notifications (
 );
 
 -- 22. Monthly Work Plans (สหกิจ 07 หน้า 3 แผนปฏิบัติงานรายเดือน)
+--
+-- ⛔ **เลิกใช้แล้ว — ของจริงย้ายไปที่ work_plan_topics ข้างล่าง (ข้อ 22.1)**
+--    ตารางนี้เก็บ "หนึ่งหัวข้อต่อหนึ่งเดือน" (UNIQUE student_id, month_index)
+--    แต่กระดาษ สหกิจ 07 หน้า 3 เป็น **เมทริกซ์ หัวข้องาน × เดือน** คือหนึ่งหัวข้องาน
+--    กินได้หลายเดือน (แบบ Gantt อย่างง่าย) โครงเดิมจึงเก็บของจริงไม่ได้
+--    ยังไม่ลบทิ้งในรอบนี้โดยตั้งใจ เพื่อให้ฐานที่ migrate แล้วยังมีข้อมูลเดิมให้ย้อนดูได้
+--    หนึ่งรอบ · ลบเมื่อยืนยันว่าไม่มีโค้ดไหนอ่านมันแล้ว
 CREATE TABLE IF NOT EXISTS monthly_work_plans (
     plan_id SERIAL PRIMARY KEY,
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
@@ -808,6 +997,29 @@ CREATE TABLE IF NOT EXISTS monthly_work_plans (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE (student_id, month_index)
+);
+
+-- 22.1 Work Plan Topics — **แผนปฏิบัติงานตัวจริงตาม สหกิจ 07 หน้า 3**
+--
+-- กระดาษเป็นตารางเมทริกซ์: แถวคือหัวข้องาน คอลัมน์คือเดือน · งานหนึ่งชิ้นติ๊กได้หลายเดือน
+--
+--   | หัวข้องาน | เดือนที่ 1 | เดือนที่ 2 | เดือนที่ 3 | เดือนที่ 4 |
+--
+-- ⛔ **months เป็น INT[] ไม่ใช่คอลัมน์ month_1..month_4** — ช่วงปฏิบัติงานจริงคร่อมได้
+--    5 เดือน (เช่น 1 พ.ย. – 20 มี.ค.) คอลัมน์ตายตัว 4 ช่องจะไม่มีที่ลงให้เดือนสุดท้าย
+--    ซึ่งขัดกับกฎ "ห้ามฮาร์ดโค้ด 4 เดือน" ที่ตั้งไว้เอง · จำนวนคอลัมน์บนหน้าจอคำนวณ
+--    จาก intent_forms.start_date – end_date เสมอ
+-- ผู้ให้ข้อมูลคือ **นักศึกษาร่วมกับพนักงานที่ปรึกษา** และลงนามสองฝ่าย
+-- สถานะการลงนามอยู่ที่ work_plan_approvals (ข้อ 23) ไม่ซ้ำที่นี่
+CREATE TABLE IF NOT EXISTS work_plan_topics (
+    topic_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    seq INT NOT NULL,                    -- ลำดับแถวบนกระดาษ
+    topic TEXT NOT NULL,
+    months INT[] NOT NULL DEFAULT '{}',  -- เดือนที่งานนี้กิน เช่น {2,3}
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT work_plan_topics_student_seq_key UNIQUE (student_id, seq)
 );
 
 -- 23. Work Plan Approvals (สายการรับรองแผนงาน 3 ฝ่าย)
