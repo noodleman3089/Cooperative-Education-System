@@ -11,6 +11,8 @@ import StatusBadge from './ui/StatusBadge';
 import { getErrorMessage } from '../utils/errors';
 import { Input, Select, Textarea } from './ui/Input';
 import ReportOutlineReviewModal from './ReportOutlineReviewModal';
+import JobOffer02 from '../pages/Company/JobOffer02';
+import CompanyHome from '../pages/Company/CompanyHome';
 
 interface CompanyDashboardProps {
   activeMenu?: string;
@@ -129,6 +131,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
   // company-only. Which of the two is looking decides what may be requested.
   const auth = useContext(AuthContext);
   const isCompanyRep = auth?.user?.roles?.includes('company') ?? false;
+  const hasMentorRole = auth?.user?.roles?.includes('mentor') ?? false;
 
   const [companyProfile, setCompanyProfile] = useState<CompanyProfile | null>(null);
   const [applicants, setApplicants] = useState<ApplicantIntent[]>([]);
@@ -347,6 +350,23 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       setIsUpdatingProfile(false);
     }
   };
+
+  if (currentTab === 'jobs') {
+    return <JobOffer02 />;
+  }
+
+  if (currentTab === 'dashboard') {
+    return (
+      <CompanyHome
+        onNavigate={(menu) => {
+          const url = new URL(window.location.href);
+          url.searchParams.set('menu', menu);
+          window.history.pushState(null, '', url.toString());
+          window.dispatchEvent(new Event('popstate'));
+        }}
+      />
+    );
+  }
 
   if (loading) {
     return (
@@ -676,13 +696,15 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
 
                         <Button
                           size="sm"
-                          variant={item.status === 'pending_mentor' ? 'primary' : 'secondary'}
+                          variant={item.status === 'pending_mentor' && hasMentorRole ? 'primary' : 'secondary'}
                           onClick={() => {
                             setReviewingOutline(item);
                             setReviewComment(item.latest_rejection_comment || '');
                           }}
                         >
-                          {item.status === 'pending_mentor' ? 'ตรวจอนุมัติ' : 'ดูรายละเอียด/ผลตรวจ'}
+                          {item.status === 'pending_mentor'
+                            ? (hasMentorRole ? 'ตรวจอนุมัติ' : 'รอพนักงานที่ปรึกษาเป็นผู้พิจารณา')
+                            : 'ดูรายละเอียด/ผลตรวจ'}
                         </Button>
                       </td>
                     </tr>
@@ -793,6 +815,7 @@ const CompanyDashboard: React.FC<CompanyDashboardProps> = ({ activeMenu = 'dashb
       <ReportOutlineReviewModal
         outline={reviewingOutline}
         reviewer="mentor"
+        readOnly={!hasMentorRole}
         comment={reviewComment}
         onCommentChange={setReviewComment}
         onClose={() => setReviewingOutline(null)}

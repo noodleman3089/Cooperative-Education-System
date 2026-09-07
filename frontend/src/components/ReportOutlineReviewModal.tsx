@@ -39,6 +39,7 @@ interface ReportOutlineReviewModalProps {
   onClose: () => void;
   onDecision: (decision: 'approve' | 'reject') => void;
   submitting: boolean;
+  readOnly?: boolean;
 }
 
 /**
@@ -62,11 +63,12 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
   onClose,
   onDecision,
   submitting,
+  readOnly = false,
 }) => {
   if (!outline) return null;
 
   const isMentor = reviewer === 'mentor';
-  const canReview = isMentor ? outline.status === 'pending_mentor' : true;
+  const canReview = !readOnly && (isMentor ? outline.status === 'pending_mentor' : true);
 
   const studentLabel =
     outline.first_name || outline.last_name
@@ -121,7 +123,11 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
         {!canReview && (
           <AlertBanner
             variant="info"
-            message={mentorStatusMessage[outline.status ?? ''] ?? 'โครงร่างฉบับนี้ไม่ได้อยู่ในขั้นตอนที่ท่านพิจารณาได้'}
+            message={
+              readOnly && outline.status === 'pending_mentor'
+                ? 'รอพนักงานที่ปรึกษาเป็นผู้พิจารณาโครงร่างรายงานฉบับนี้'
+                : (mentorStatusMessage[outline.status ?? ''] ?? 'โครงร่างฉบับนี้ไม่ได้อยู่ในขั้นตอนที่ท่านพิจารณาได้')
+            }
           />
         )}
 

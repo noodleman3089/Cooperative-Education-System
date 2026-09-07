@@ -50,6 +50,8 @@ const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 const Form07Company = lazy(() => import('./Company/Form07Company'));
 const MentorHome = lazy(() => import('./Company/MentorHome'));
 const MentorCertify = lazy(() => import('./Company/MentorCertify'));
+const CompanyHome = lazy(() => import('./Company/CompanyHome'));
+const JobOffer02 = lazy(() => import('./Company/JobOffer02'));
 
 /**
  * The four student screens that belong to the co-op itself rather than to
@@ -160,8 +162,6 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     if (currentRole !== 'student') {
-      setStage(null);
-      setCalendar(null);
       return;
     }
 
@@ -386,12 +386,12 @@ const Dashboard: React.FC = () => {
         return <StaffDashboard activeMenu="dashboard" />;
         
       case 'company':
-        if (activeMenu === 'jobs') return <CompanyDashboard activeMenu="jobs" />;
+        if (activeMenu === 'jobs') return <JobOffer02 />;
         if (activeMenu === 'form07') return <Form07Company />;
         if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
         if (activeMenu === 'profile') return <CompanyDashboard activeMenu="profile" />;
-        return <CompanyDashboard activeMenu="dashboard" />;
+        return <CompanyHome onNavigate={(menu) => setActiveMenu(menu)} />;
 
       case 'mentor':
         if (activeMenu === 'certify') return <MentorCertify />;
