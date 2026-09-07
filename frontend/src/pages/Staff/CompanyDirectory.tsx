@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import api from '../../services/api';
 import {
   Building2,
@@ -17,6 +17,9 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Select } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
+import DataTable, { type Column } from '../../components/ui/DataTable';
+import EmptyState from '../../components/ui/EmptyState';
+import useResource from '../../hooks/useResource';
 import { getErrorMessage } from '../../utils/errors';
 import type { Company } from '../../types/api';
 
@@ -79,10 +82,22 @@ const toForm = (company: Company): CompanyForm => ({
 const contactIsIncomplete = (c: Company) => !c.contact_person || !c.email;
 
 const CompanyDirectory: React.FC = () => {
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [loading, setLoading] = useState(true);
+  /**
+   * ไม่ส่ง is_verified ไปเลย เพื่อให้ได้ทั้งที่รับรองแล้วและยังไม่รับรอง —
+   * backend แปลงค่าที่ไม่ใช่ 'true'/'1' เป็น false จึงส่งคำว่า all ไปไม่ได้
+   */
+  const directory = useResource<Company[]>('/companies', {
+    initial: [],
+    select: raw => (Array.isArray(raw) ? (raw as Company[]) : []),
+    errorFallback: 'ไม่สามารถโหลดทำเนียบสถานประกอบการได้',
+  });
+  const companies = directory.data;
+  const loading = directory.loading;
+  const loadData = directory.reload;
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  /** error ของ *การกระทำ* (รับรอง/ลบ) เท่านั้น — error ของการโหลดมาจาก `directory.error` */
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -96,25 +111,6 @@ const CompanyDirectory: React.FC = () => {
   const [form, setForm] = useState<CompanyForm>(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      // ไม่ส่ง is_verified ไปเลย เพื่อให้ได้ทั้งที่รับรองแล้วและยังไม่รับรอง —
-      // backend แปลงค่าที่ไม่ใช่ 'true'/'1' เป็น false จึงส่งคำว่า all ไปไม่ได้
-      const rows = await api.get('/companies');
-      setCompanies(Array.isArray(rows) ? rows : []);
-    } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถโหลดทำเนียบสถานประกอบการได้'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadData();
-  }, []);
 
   const unverifiedCount = companies.filter(c => !c.is_verified).length;
   const incompleteCount = companies.filter(contactIsIncomplete).length;
@@ -234,6 +230,109 @@ const CompanyDirectory: React.FC = () => {
       setForm(prev => ({ ...prev, [key]: e.target.value })),
   });
 
+  /**
+   * เนื้อในของแต่ละช่องยังเป็นของหน้านี้เต็มที่ — `DataTable` รับผิดชอบแค่เปลือก
+   * (โครง เส้น สี ระยะ คู่ `dark:` และการเลื่อนแนวนอน) การย้ายมาใช้จึงไม่เปลี่ยนหน้าตา
+   */
+  const columns: Column<Company>[] = [
+    {
+      key: 'name',
+      header: 'สถานประกอบการ',
+      cell: company => (
+        <>
+          <p className="font-bold text-sm text-gray-900 dark:text-white">{company.name_th}</p>
+          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+            {company.name_en || (!company.google_place_id ? 'กรอกข้อมูลด้วยมือ' : '—')}
+          </p>
+        </>
+      ),
+    },
+    {
+      key: 'location',
+      header: 'ที่ตั้ง',
+      cell: company => (
+        <span className="text-gray-700 dark:text-gray-300">
+          {company.district}
+          <span className="block text-gray-600 dark:text-gray-400">{company.province}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'contact',
+      header: 'ผู้ติดต่อ',
+      cell: company =>
+        company.contact_person ? (
+          <>
+            <p className="text-gray-900 dark:text-gray-100">{company.contact_person}</p>
+            <p className="text-gray-600 dark:text-gray-400 mt-0.5">
+              {company.contact_position || 'ไม่ระบุตำแหน่ง'}
+            </p>
+            {!company.email && (
+              <p className="text-red-700 dark:text-red-400 mt-0.5">ยังไม่มีอีเมล</p>
+            )}
+          </>
+        ) : (
+          <span className="text-red-700 dark:text-red-400 font-medium">ยังไม่มีผู้ติดต่อ</span>
+        ),
+    },
+    {
+      key: 'status',
+      header: 'สถานะ',
+      align: 'center',
+      cell: company =>
+        company.is_verified ? (
+          <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/40">
+            รับรองแล้ว
+          </span>
+        ) : (
+          <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/40">
+            ยังไม่รับรอง
+          </span>
+        ),
+    },
+    {
+      key: 'actions',
+      header: 'จัดการ',
+      align: 'right',
+      cell: company => (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            variant={company.is_verified ? 'secondary' : 'success'}
+            size="sm"
+            onClick={() => setVerifyTarget(company)}
+            icon={
+              company.is_verified ? (
+                <ShieldOff className="w-3.5 h-3.5" />
+              ) : (
+                <ShieldCheck className="w-3.5 h-3.5" />
+              )
+            }
+          >
+            {company.is_verified ? 'ยกเลิกรับรอง' : 'รับรอง'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => openEdit(company)}
+            title="แก้ไขข้อมูล"
+            aria-label={`แก้ไขข้อมูล ${company.name_th}`}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => setDeleteTarget(company)}
+            title="ลบออกจากทำเนียบ"
+            aria-label={`ลบ ${company.name_th} ออกจากทำเนียบ`}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 page-enter">
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
@@ -284,7 +383,7 @@ const CompanyDirectory: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
-              onClick={loadData}
+              onClick={() => loadData()}
               title="ดึงข้อมูลใหม่"
               aria-label="ดึงข้อมูลใหม่"
             >
@@ -319,130 +418,50 @@ const CompanyDirectory: React.FC = () => {
           </Select>
         </div>
 
-        <AlertBanner variant="error" message={error} className="mb-6" />
+        <AlertBanner variant="error" message={error ?? directory.error} className="mb-6" />
         <AlertBanner variant="success" message={success} className="mb-6" />
 
         {loading ? (
           <PageSkeleton variant="table" />
-        ) : visible.length === 0 ? (
-          <div className="py-16 text-center text-sm text-gray-600 dark:text-gray-400">
-            {companies.length === 0 ? (
-              <>
-                <p>ยังไม่มีสถานประกอบการในทำเนียบ</p>
-                <p className="mt-1 text-xs">
-                  รายการจะเพิ่มเข้ามาเองเมื่อนักศึกษายื่นแบบหาที่ฝึกเอง หรือกดปุ่ม "เพิ่มสถานประกอบการ" เพื่อบันทึกรายที่ตอบแบบสำรวจ (สหกิจ 02) กลับมา
-                </p>
-              </>
-            ) : (
-              <>
-                <p>ไม่พบสถานประกอบการตรงตามเงื่อนไขที่เลือก</p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch('');
-                    setStatusFilter('all');
-                  }}
-                  className="mt-2 text-xs font-bold text-brand-blue dark:text-blue-400 hover:underline"
-                >
-                  แสดงทุกสถานะ ({companies.length} แห่ง)
-                </button>
-              </>
-            )}
-          </div>
         ) : (
-          <div className="overflow-x-auto border border-gray-100 dark:border-gray-700 rounded-xl">
-            <table className="w-full border-collapse text-left text-xs min-w-[900px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
-                  <th className="p-4 font-bold">สถานประกอบการ</th>
-                  <th className="p-4 font-bold">ที่ตั้ง</th>
-                  <th className="p-4 font-bold">ผู้ติดต่อ</th>
-                  <th className="p-4 font-bold text-center">สถานะ</th>
-                  <th className="p-4 font-bold text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {visible.map(company => (
-                  <tr
-                    key={company.company_id}
-                    className="hover:bg-gray-50/40 dark:hover:bg-gray-800/20 align-top"
-                  >
-                    <td className="p-4">
-                      <p className="font-bold text-sm text-gray-900 dark:text-white">{company.name_th}</p>
-                      <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                        {company.name_en || (!company.google_place_id ? 'กรอกข้อมูลด้วยมือ' : '—')}
-                      </p>
-                    </td>
-                    <td className="p-4 text-gray-700 dark:text-gray-300">
-                      {company.district}
-                      <span className="block text-gray-600 dark:text-gray-400">{company.province}</span>
-                    </td>
-                    <td className="p-4">
-                      {company.contact_person ? (
-                        <>
-                          <p className="text-gray-900 dark:text-gray-100">{company.contact_person}</p>
-                          <p className="text-gray-600 dark:text-gray-400 mt-0.5">
-                            {company.contact_position || 'ไม่ระบุตำแหน่ง'}
-                          </p>
-                          {!company.email && (
-                            <p className="text-red-700 dark:text-red-400 mt-0.5">ยังไม่มีอีเมล</p>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-red-700 dark:text-red-400 font-medium">ยังไม่มีผู้ติดต่อ</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-center">
-                      {company.is_verified ? (
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/40">
-                          รับรองแล้ว
-                        </span>
-                      ) : (
-                        <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/40">
-                          ยังไม่รับรอง
-                        </span>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant={company.is_verified ? 'secondary' : 'success'}
-                          size="sm"
-                          onClick={() => setVerifyTarget(company)}
-                          icon={
-                            company.is_verified ? (
-                              <ShieldOff className="w-3.5 h-3.5" />
-                            ) : (
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                            )
-                          }
-                        >
-                          {company.is_verified ? 'ยกเลิกรับรอง' : 'รับรอง'}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openEdit(company)}
-                          title="แก้ไขข้อมูล"
-                          aria-label={`แก้ไขข้อมูล ${company.name_th}`}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => setDeleteTarget(company)}
-                          title="ลบออกจากทำเนียบ"
-                          aria-label={`ลบ ${company.name_th} ออกจากทำเนียบ`}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden">
+            <DataTable
+              rows={visible}
+              columns={columns}
+              rowKey={company => company.company_id}
+              refreshing={directory.refreshing}
+              testId="company-directory-table"
+              empty={
+                companies.length === 0 ? (
+                  <EmptyState
+                    icon={Building2}
+                    title="ยังไม่มีสถานประกอบการในทำเนียบ"
+                    description={
+                      'รายการจะเพิ่มเข้ามาเองเมื่อนักศึกษายื่นแบบหาที่ฝึกเอง หรือกดปุ่ม "เพิ่มสถานประกอบการ" เพื่อบันทึกรายที่ตอบแบบสำรวจ (สหกิจ 02) กลับมา'
+                    }
+                  />
+                ) : (
+                  /* ว่างเพราะตัวกรองซ่อนไว้ ไม่ใช่เพราะไม่มีข้อมูล — ต้องมีทางออกให้กด */
+                  <EmptyState
+                    icon={Search}
+                    title="ไม่พบสถานประกอบการตรงตามเงื่อนไขที่เลือก"
+                    description={`ในทำเนียบมีทั้งหมด ${companies.length} แห่ง แต่ตัวกรองที่เลือกอยู่ซ่อนไว้ทั้งหมด`}
+                    action={
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSearch('');
+                          setStatusFilter('all');
+                        }}
+                      >
+                        แสดงทุกสถานะ ({companies.length} แห่ง)
+                      </Button>
+                    }
+                  />
+                )
+              }
+            />
           </div>
         )}
       </div>
