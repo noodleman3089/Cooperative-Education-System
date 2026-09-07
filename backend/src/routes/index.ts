@@ -19,6 +19,7 @@ import weeklyLogRoutes from './weeklyLog';
 import monthlyLogRoutes from './monthlyLog';
 import applicationRoutes from './application';
 import finalReportRoutes from './finalReport';
+import reportConfirmationRoutes from './reportConfirmation';
 import finalEvaluationRoutes from './finalEvaluation';
 import coopProgressRoutes from './coopProgress';
 import announcementRoutes from './announcement';
@@ -55,6 +56,7 @@ router.use('/applications', applicationRoutes);
 
 // Phase 4 Routes
 router.use('/final-reports', finalReportRoutes);
+router.use('/report-confirmations', reportConfirmationRoutes);
 router.use('/final-evaluations', finalEvaluationRoutes);
 router.use('/coop-progress', coopProgressRoutes);
 router.use('/announcements', announcementRoutes);

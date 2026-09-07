@@ -32,11 +32,21 @@ router.get(
   FinalReportController.getStudentReports
 );
 
+// ⛔ TODO(2026-09-07): รอเจ้าของยืนยันว่าจะจำกัดสิทธิ์เหลือเฉพาะ 'advisor' หรือคงเดิมไว้
+// ตอนนี้ยังคง 'advisor', 'staff', 'dept_head' ไว้ตามเดิมเพื่อไม่ให้กระทบการทำงานจริง
 router.patch(
   '/:id/status',
   authenticateToken,
   authorizeRoles('advisor', 'staff', 'dept_head'),
   FinalReportController.reviewReport
+);
+
+// พี่เลี้ยงตรวจร่างรายงานฉบับสมบูรณ์ (ขั้นที่ 1)
+router.patch(
+  '/:id/mentor-review',
+  authenticateToken,
+  authorizeRoles('mentor'),
+  FinalReportController.mentorReview
 );
 
 router.post(

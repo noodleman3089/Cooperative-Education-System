@@ -722,9 +722,22 @@ CREATE TABLE IF NOT EXISTS final_reports (
     status VARCHAR(50) NOT NULL DEFAULT 'submitted' CHECK (status IN ('submitted', 'approved', 'rejected')),
     rejection_comment TEXT,
     version INT NOT NULL DEFAULT 1,
+    reviewer_kind VARCHAR(10) NOT NULL DEFAULT 'advisor',
+    reviewer_comment TEXT,
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     reviewed_by INT REFERENCES users(user_id) ON DELETE SET NULL,
     reviewed_at TIMESTAMP
+);
+
+-- 18.1 Report Confirmations (สหกิจ 14)
+CREATE TABLE IF NOT EXISTS report_confirmations (
+    confirmation_id SERIAL PRIMARY KEY,
+    student_id  INT NOT NULL UNIQUE REFERENCES students(student_id) ON DELETE CASCADE,
+    report_id   INT NOT NULL REFERENCES final_reports(report_id) ON DELETE RESTRICT,
+    requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    certified_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    certified_at TIMESTAMPTZ,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending'   -- pending | certified
 );
 
 -- 19. Final Evaluations (Phase 4)

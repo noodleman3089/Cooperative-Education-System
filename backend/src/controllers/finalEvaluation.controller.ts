@@ -245,6 +245,18 @@ export class FinalEvaluationController {
         ? calendarStatus(window.today, window.start_date, window.end_date)
         : 'not_configured';
 
+      // Fetch student intent (start_date, end_date, mentor name, company name)
+      const intentRes = await query(
+        `SELECT i.start_date, i.end_date, m.name as mentor_name, c.name_th as company_name
+         FROM intent_forms i
+         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
+         LEFT JOIN companies c ON i.company_id = c.company_id
+         WHERE i.student_id = $1 AND i.status = 'accepted'
+         ORDER BY i.form_id DESC LIMIT 1`,
+        [studentId]
+      );
+      const intent = intentRes.rows[0] || null;
+
       if (status !== 'closed') {
         const message =
           status === 'not_configured' || !window?.end_date
@@ -252,7 +264,16 @@ export class FinalEvaluationController {
             : `ผลประเมินจะเปิดให้ดูหลังสิ้นสุดช่วงปฏิบัติงาน คือหลังวันที่ ${formatThaiDate(
                 window.end_date
               )} ตามปฏิทินสหกิจศึกษา`;
-        res.status(403).json({ message });
+        res.status(403).json({
+          message,
+          data: {
+            is_open: false,
+            end_date: intent?.end_date || null,
+            start_date: intent?.start_date || null,
+            mentor_name: intent?.mentor_name || null,
+            company_name: intent?.company_name || null,
+          }
+        });
         return;
       }
 
@@ -283,6 +304,11 @@ export class FinalEvaluationController {
       res.status(200).json({
         success: true,
         data: {
+          is_open: true,
+          end_date: intent?.end_date || null,
+          start_date: intent?.start_date || null,
+          mentor_name: intent?.mentor_name || null,
+          company_name: intent?.company_name || null,
           sahatkit_15: byForm.sahatkit_15 ?? null,
           sahatkit_16: byForm.sahatkit_16 ?? null,
         },

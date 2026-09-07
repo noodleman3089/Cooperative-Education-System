@@ -9,6 +9,7 @@ export class FinalReportController {
   /**
    * Submit Final Report PDF (Student only)
    * Route: POST /api/final-reports
+   * Supports: reviewer_kind = 'mentor' (Step 1 draft) or 'advisor' (Step 2 final)
    */
   static async submitReport(req: Request, res: Response): Promise<void> {
     try {
@@ -23,42 +24,48 @@ export class FinalReportController {
       }
 
       const studentId = req.user.userId;
+      const reviewerKind = req.body.reviewer_kind === 'mentor' ? 'mentor' : 'advisor';
 
-      // 1. Check if Report Outline (สหกิจ 11) is Approved
-      const outlineRes = await query(
-        `SELECT status FROM report_outlines WHERE student_id = $1 AND status = 'approved'`,
-        [studentId]
-      );
+      // 1. Check if Report Outline (สหกิจ 11) is Approved (required for advisor submission)
+      if (reviewerKind === 'advisor') {
+        const outlineRes = await query(
+          `SELECT status FROM report_outlines WHERE student_id = $1 AND status = 'approved'`,
+          [studentId]
+        );
 
-      if ((outlineRes.rowCount ?? 0) === 0) {
-        res.status(400).json({
-          message: 'โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน จึงจะสามารถอัปโหลดเล่มรายงานสมบูรณ์ได้'
-        });
-        return;
+        if ((outlineRes.rowCount ?? 0) === 0) {
+          res.status(400).json({
+            message: 'โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน จึงจะสามารถอัปโหลดเล่มรายงานสมบูรณ์ได้'
+          });
+          return;
+        }
       }
 
       const filePath = `final_reports/${req.file.filename}`;
 
-      // 2. Get next version number
+      // 2. Get next version number per (student_id, reviewer_kind)
       const verRes = await query(
-        `SELECT COALESCE(MAX(version), 0) as max_ver FROM final_reports WHERE student_id = $1`,
-        [studentId]
+        `SELECT COALESCE(MAX(version), 0) as max_ver FROM final_reports WHERE student_id = $1 AND reviewer_kind = $2`,
+        [studentId, reviewerKind]
       );
-      const nextVer = verRes.rows[0].max_ver + 1;
+      const nextVer = Number(verRes.rows[0].max_ver) + 1;
 
       // 3. Save report details
       await query(
-        `INSERT INTO final_reports (student_id, file_path, status, version) VALUES ($1, $2, 'submitted', $3)`,
-        [studentId, filePath, nextVer]
+        `INSERT INTO final_reports (student_id, file_path, status, version, reviewer_kind)
+         VALUES ($1, $2, 'submitted', $3, $4)`,
+        [studentId, filePath, nextVer, reviewerKind]
       );
 
-      // 4. Trigger Auto-email to Mentor (Checks cooldown)
+      // 4. Trigger Auto-email to Mentor (Checks cooldown) if draft or advisor report
       await FinalReportController.sendMentorNotificationHelper(studentId);
 
       res.status(201).json({
         success: true,
-        message: 'อัปโหลดเล่มรายงานฉบับสมบูรณ์สำเร็จแล้ว ระบบได้ส่งการแจ้งเตือนไปยังพี่เลี้ยงเรียบร้อย',
-        data: { file_path: filePath, version: nextVer }
+        message: reviewerKind === 'mentor'
+          ? 'อัปโหลดร่างรายงานให้พี่เลี้ยงตรวจสำเร็จแล้ว'
+          : 'อัปโหลดเล่มรายงานฉบับสมบูรณ์สำเร็จแล้ว ระบบได้ส่งการแจ้งเตือนไปยังพี่เลี้ยงเรียบร้อย',
+        data: { file_path: filePath, version: nextVer, reviewer_kind: reviewerKind }
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Submit Final Report Error', 'An internal server error occurred.');
@@ -66,7 +73,7 @@ export class FinalReportController {
   }
 
   /**
-   * Get student's own report history
+   * Get student's own report history (both mentor drafts and advisor reports + intent metadata)
    * Route: GET /api/final-reports/my-report
    */
   static async getMyReport(req: Request, res: Response): Promise<void> {
@@ -78,21 +85,147 @@ export class FinalReportController {
 
       const studentId = req.user.userId;
 
+      // Intent & dates
+      const intentRes = await query(
+        `SELECT i.start_date, i.end_date, c.name_th as company_name, m.name as mentor_name
+         FROM intent_forms i
+         JOIN companies c ON i.company_id = c.company_id
+         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
+         WHERE i.student_id = $1 AND i.status = 'accepted'
+         ORDER BY i.form_id DESC LIMIT 1`,
+        [studentId]
+      );
+      const intent = intentRes.rows[0] || null;
+
+      // Report outline status
+      const outlineRes = await query(
+        `SELECT status FROM report_outlines WHERE student_id = $1 AND status = 'approved' LIMIT 1`,
+        [studentId]
+      );
+      const outlineApproved = (outlineRes.rowCount ?? 0) > 0;
+
+      // Final reports list
       const reportRes = await query(
-        `SELECT r.report_id, r.file_path, r.status, r.rejection_comment, r.version, r.submitted_at, r.reviewed_at, u.email as reviewer_email
+        `SELECT r.report_id, r.file_path, r.status, r.rejection_comment, r.version,
+                r.reviewer_kind, r.reviewer_comment, r.submitted_at, r.reviewed_at,
+                u.email as reviewer_email,
+                p.first_name as advisor_first_name, p.last_name as advisor_last_name,
+                m.name as mentor_reviewer_name
          FROM final_reports r
          LEFT JOIN users u ON r.reviewed_by = u.user_id
+         LEFT JOIN personnel p ON r.reviewed_by = p.personnel_id
+         LEFT JOIN mentors m ON r.reviewed_by = m.mentor_id
          WHERE r.student_id = $1
          ORDER BY r.version DESC`,
         [studentId]
       );
 
+      // Report confirmation (สหกิจ 14)
+      const confirmRes = await query(
+        `SELECT rc.confirmation_id, rc.report_id, rc.status, rc.requested_at, rc.certified_at,
+                p.first_name as certified_by_first_name, p.last_name as certified_by_last_name
+         FROM report_confirmations rc
+         LEFT JOIN personnel p ON rc.certified_by = p.personnel_id
+         WHERE rc.student_id = $1
+         LIMIT 1`,
+        [studentId]
+      );
+      const confirmation = confirmRes.rows[0] || null;
+
+      // Deadline mentor draft: intent.end_date - 14 days
+      let deadlineMentorDraft: string | null = null;
+      if (intent?.end_date) {
+        const d = new Date(intent.end_date);
+        d.setDate(d.getDate() - 14);
+        deadlineMentorDraft = d.toISOString().split('T')[0];
+      }
+
       res.status(200).json({
         success: true,
-        data: reportRes.rows
+        data: {
+          intent,
+          outline_approved: outlineApproved,
+          deadline_mentor_draft: deadlineMentorDraft,
+          mentor_drafts: reportRes.rows.filter((r: { reviewer_kind: string }) => r.reviewer_kind === 'mentor'),
+          advisor_reports: reportRes.rows.filter((r: { reviewer_kind: string }) => r.reviewer_kind === 'advisor'),
+          confirmation,
+        }
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Get My Report Error', 'An internal server error occurred.');
+    }
+  }
+
+  /**
+   * Mentor reviews draft report (Step 1)
+   * Route: PATCH /api/final-reports/:id/mentor-review
+   * Access: mentor
+   */
+  static async mentorReview(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const reportId = parseInt(req.params.id, 10);
+      const { status, comment } = req.body;
+
+      if (isNaN(reportId) || !status || !['approved', 'rejected'].includes(status)) {
+        res.status(400).json({ message: 'Invalid request data. Status must be approved or rejected.' });
+        return;
+      }
+
+      const mentorId = req.user.userId;
+
+      // Verify report exists and reviewer_kind is mentor
+      const reportRes = await query(
+        `SELECT r.student_id, r.reviewer_kind
+         FROM final_reports r
+         WHERE r.report_id = $1`,
+        [reportId]
+      );
+      if ((reportRes.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบร่างรายงานที่ระบุ' });
+        return;
+      }
+      const { student_id, reviewer_kind } = reportRes.rows[0];
+      if (reviewer_kind !== 'mentor') {
+        res.status(400).json({ message: 'รายงานนี้ไม่ใช่ร่างที่ส่งให้พี่เลี้ยงตรวจ' });
+        return;
+      }
+
+      // Check mentor assignment via intent_forms
+      const mentorCheck = await query(
+        `SELECT 1 FROM intent_forms WHERE student_id = $1 AND mentor_id = $2 AND status = 'accepted' LIMIT 1`,
+        [student_id, mentorId]
+      );
+      if ((mentorCheck.rowCount ?? 0) === 0) {
+        res.status(403).json({ message: 'Forbidden. นักศึกษาคนนี้ไม่ได้อยู่ในการดูแลของคุณ' });
+        return;
+      }
+
+      await query(
+        `UPDATE final_reports
+         SET status = $1, reviewer_comment = $2, reviewed_by = $3, reviewed_at = CURRENT_TIMESTAMP
+         WHERE report_id = $4`,
+        [status, comment || null, mentorId, reportId]
+      );
+
+      writeAudit({
+        action: AuditAction.FINAL_REPORT_REVIEWED,
+        entityType: 'final_report_draft',
+        entityId: reportId,
+        subjectId: student_id,
+        detail: { status, reviewer_comment: comment ?? null },
+      }, req).catch(() => undefined);
+
+      res.status(200).json({
+        success: true,
+        message: `บันทึกผลการตรวจร่างรายงานเป็น ${status === 'approved' ? 'เห็นชอบ' : 'ส่งกลับให้แก้ไข'} เรียบร้อยแล้ว`
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Mentor Review Error', 'An internal server error occurred.');
     }
   }
 

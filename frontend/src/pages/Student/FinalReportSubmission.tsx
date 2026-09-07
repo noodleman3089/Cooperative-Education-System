@@ -1,55 +1,135 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import { AuthContext } from '../../context/AuthContext';
-import api, { API_BASE_URL } from '../../services/api';
-import { FileUp, CheckCircle, XCircle, Clock, AlertCircle } from 'lucide-react';
+import api from '../../services/api';
+import {
+  FileText,
+  Upload,
+  CheckCircle2,
+  AlertTriangle,
+  Printer,
+  ChevronRight,
+  Send,
+} from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { CalendarGate, useCalendarGate } from '../../components/ui/CalendarGate';
 import { getErrorMessage } from '../../utils/errors';
 
-interface Version {
+interface ReportItem {
   report_id: number;
   file_path: string;
-  submitted_at: string;
+  status: 'submitted' | 'approved' | 'rejected';
   rejection_comment: string | null;
-  status: string;
-  reviewer_email: string | null;
+  reviewer_comment: string | null;
   version: number;
+  reviewer_kind: 'mentor' | 'advisor';
+  submitted_at: string;
+  reviewed_at: string | null;
+  reviewer_email: string | null;
+  advisor_first_name?: string | null;
+  advisor_last_name?: string | null;
+  mentor_reviewer_name?: string | null;
 }
+
+interface IntentMeta {
+  start_date: string | null;
+  end_date: string | null;
+  company_name: string | null;
+  mentor_name: string | null;
+}
+
+interface ConfirmationData {
+  confirmation_id: number;
+  report_id: number;
+  status: 'pending' | 'certified';
+  requested_at: string | null;
+  certified_at: string | null;
+  certified_by_first_name?: string | null;
+  certified_by_last_name?: string | null;
+}
+
+interface FinalReportData {
+  intent: IntentMeta | null;
+  outline_approved: boolean;
+  deadline_mentor_draft: string | null;
+  mentor_drafts: ReportItem[];
+  advisor_reports: ReportItem[];
+  confirmation: ConfirmationData | null;
+}
+
+const formatThaiDate = (dateStr: string | null): string => {
+  if (!dateStr) return '-';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('th-TH', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+};
 
 const FinalReportSubmission: React.FC = () => {
   const auth = useContext(AuthContext);
-  const [versions, setVersions] = useState<Version[]>([]);
-  const [isOutlineApproved, setIsOutlineApproved] = useState<boolean>(false);
+
+  const [data, setData] = useState<FinalReportData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [uploadingStep1, setUploadingStep1] = useState<boolean>(false);
+  const [uploadingStep2, setUploadingStep2] = useState<boolean>(false);
+  const [requestingConfirm, setRequestingConfirm] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState<boolean>(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [examDate, setExamDate] = useState<string | null>(null);
+
+  const step1InputRef = useRef<HTMLInputElement>(null);
+  const step2InputRef = useRef<HTMLInputElement>(null);
+
+  const { status: calendarStatus } = useCalendarGate('final_report');
+  const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
 
   useEffect(() => {
-    const fetchSubmissionData = async () => {
+    let active = true;
+    const fetchData = async () => {
       if (!auth?.user) return;
       try {
         setLoading(true);
         setError(null);
 
-        // 1. Check if report outline is approved
-        const outlineResult = await api.get(`/outlines/student/${auth.user.userId}`);
-        const outlineApproved = outlineResult.data?.status === 'approved';
-        setIsOutlineApproved(outlineApproved);
+        const [reportRes, calRes] = await Promise.allSettled([
+          api.get('/final-reports/my-report'),
+          api.get('/calendar'),
+        ]);
 
-        // 2. Fetch final report submission history
-        const reportResult = await api.get('/final-reports/my-report');
-        setVersions(reportResult.data || []);
+        if (!active) return;
+
+        if (reportRes.status === 'fulfilled') {
+          const resData = (reportRes.value as { data?: FinalReportData })?.data || null;
+          setData(resData);
+        } else {
+          setError(getErrorMessage(reportRes.reason, 'ไม่สามารถโหลดข้อมูลรายงานได้'));
+        }
+
+        if (calRes.status === 'fulfilled') {
+          const calData = calRes.value as { activities?: { activity_key: string; start_date?: string; end_date?: string }[] };
+          const examAct = calData?.activities?.find((a) => a.activity_key === 'coop_exam');
+          if (examAct?.end_date || examAct?.start_date) {
+            setExamDate(examAct.end_date || examAct.start_date || null);
+          }
+        }
       } catch (err) {
+        if (!active) return;
         setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
     };
 
-    fetchSubmissionData();
-  }, [auth?.user]);
+    fetchData();
+    return () => {
+      active = false;
+    };
+  }, [auth?.user, refreshTrigger]);
 
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Step 1 upload (draft to mentor)
+  const handleUploadStep1 = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -64,169 +144,537 @@ const FinalReportSubmission: React.FC = () => {
     }
 
     try {
-      setUploading(true);
+      setUploadingStep1(true);
       setError(null);
+      setSuccess(null);
+
       const formData = new FormData();
       formData.append('report', file);
+      formData.append('reviewer_kind', 'mentor');
 
-      await api.post('/final-reports', formData);
+      const res = await api.post('/final-reports', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
 
-      // Refetch report history
-      const reportResult = await api.get('/final-reports/my-report');
-      setVersions(reportResult.data || []);
-      
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      const msg = (res as { message?: string })?.message || 'ส่งร่างรายงานให้พี่เลี้ยงตรวจเรียบร้อยแล้ว';
+      setSuccess(msg);
+      setRefreshTrigger((prev) => prev + 1);
+      if (step1InputRef.current) step1InputRef.current.value = '';
     } catch (err) {
-      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการอัปโหลดไฟล์'));
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการส่งร่างรายงาน'));
     } finally {
-      setUploading(false);
+      setUploadingStep1(false);
     }
   };
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'approved': return <CheckCircle className="text-green-500 w-5 h-5" />;
-      case 'rejected': return <XCircle className="text-red-500 w-5 h-5" />;
-      default: return <Clock className="text-orange-500 w-5 h-5" />;
+  // Handle Step 2 upload (final report to advisor)
+  const handleUploadStep2 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (calendarStatus === 'upcoming' || calendarStatus === 'closed') {
+      setError('ไม่อยู่ในช่วงเวลาที่เปิดให้ส่งรายงานฉบับสมบูรณ์ตามปฏิทินสหกิจศึกษา');
+      return;
+    }
+
+    if (!data?.outline_approved) {
+      setError('โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน');
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      setError('กรุณาอัปโหลดไฟล์ PDF เท่านั้น');
+      return;
+    }
+
+    if (file.size > 20 * 1024 * 1024) {
+      setError('ขนาดไฟล์ต้องไม่เกิน 20MB');
+      return;
+    }
+
+    try {
+      setUploadingStep2(true);
+      setError(null);
+      setSuccess(null);
+
+      const formData = new FormData();
+      formData.append('report', file);
+      formData.append('reviewer_kind', 'advisor');
+
+      const res = await api.post('/final-reports', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const msg = (res as { message?: string })?.message || 'ส่งเล่มรายงานฉบับสมบูรณ์เรียบร้อยแล้ว';
+      setSuccess(msg);
+      setRefreshTrigger((prev) => prev + 1);
+      if (step2InputRef.current) step2InputRef.current.value = '';
+    } catch (err) {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการส่งรายงานฉบับสมบูรณ์'));
+    } finally {
+      setUploadingStep2(false);
     }
   };
 
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'approved': return 'อนุมัติแล้ว';
-      case 'rejected': return 'ต้องแก้ไข (ตีกลับ)';
-      default: return 'รออาจารย์นิเทศตรวจสอบ';
+  // Handle Step 3 request confirmation (สหกิจ 14)
+  const handleRequestConfirmation = async () => {
+    try {
+      setRequestingConfirm(true);
+      setError(null);
+      setSuccess(null);
+
+      const res = await api.post('/report-confirmations');
+      const msg = (res as { message?: string })?.message || 'ยื่นคำขอให้อาจารย์ที่ปรึกษารับรองเรียบร้อยแล้ว';
+      setSuccess(msg);
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถยื่นขอการรับรองได้'));
+    } finally {
+      setRequestingConfirm(false);
     }
   };
 
-  // The latest status is the status of the first version in the sorted array (which is sorted version DESC)
-  const currentStatus = versions.length > 0 ? versions[0].status : null;
+  // State derivation
+  const latestMentorDraft = data?.mentor_drafts?.[0] || null;
+  const isMentorApproved = latestMentorDraft?.status === 'approved';
+  const isMentorPending = latestMentorDraft?.status === 'submitted';
+  const isMentorRejected = latestMentorDraft?.status === 'rejected';
+
+  const latestAdvisorReport = data?.advisor_reports?.[0] || null;
+  const isAdvisorApproved = latestAdvisorReport?.status === 'approved';
+  const isAdvisorPending = latestAdvisorReport?.status === 'submitted';
+  const isAdvisorRejected = latestAdvisorReport?.status === 'rejected';
+
+  const confirmation = data?.confirmation || null;
+  const isConfirmed = confirmation?.status === 'certified';
+  const isConfirmPending = confirmation?.status === 'pending';
+
+  // Deadline calculation for step 1
+  const step1Deadline = data?.deadline_mentor_draft || null;
+  const isStep1Late = (() => {
+    if (!step1Deadline) return false;
+    const dl = new Date(step1Deadline);
+    const now = new Date();
+    return now.getTime() > dl.getTime();
+  })();
+
+  const daysLateStep1 = (() => {
+    if (!step1Deadline || !isStep1Late) return 0;
+    const dl = new Date(step1Deadline);
+    const now = new Date();
+    return Math.floor((now.getTime() - dl.getTime()) / (1000 * 60 * 60 * 24));
+  })();
+
+  if (loading) {
+    return (
+      <div className="max-w-5xl mx-auto py-10 space-y-6">
+        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-28" />
+        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-48" />
+        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-64" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 md:p-8">
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">ส่งรายงานฉบับสมบูรณ์ (Final Report)</h1>
-            <p className="text-gray-500 dark:text-gray-400">อัปโหลดรายงานสหกิจศึกษาฉบับสมบูรณ์ (ไฟล์ PDF) เพื่อรับการประเมินขั้นสุดท้าย</p>
+    <div className="max-w-5xl mx-auto space-y-6 pb-12">
+      {/* 1. Header Card */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm">
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
+          รายงานฉบับสมบูรณ์
+        </h1>
+        <p className="mt-1 text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+          การส่งรายงานมี 3 ขั้นตามคู่มือ และต้องทำตามลำดับ — ขั้นสุดท้ายคือใบแจ้งยืนยันการส่งรายงาน (สหกิจ 14) ที่อาจารย์ที่ปรึกษาต้องลงนาม
+        </p>
+      </div>
+
+      {error && <AlertBanner variant="error" message={error} />}
+      {success && <AlertBanner variant="success" message={success} />}
+
+      {/* 2. Step 1: Draft to Mentor */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+        <div className="flex items-start gap-4">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+              isMentorApproved
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700'
+                : latestMentorDraft
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+            }`}
+          >
+            {isMentorApproved ? <CheckCircle2 className="w-5 h-5" /> : '1'}
           </div>
 
-          <div className="mt-4 md:mt-0">
-            <input
-              type="file"
-              ref={fileInputRef}
-              onChange={handleUpload}
-              className="hidden"
-              accept=".pdf"
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading || !isOutlineApproved || currentStatus === 'approved'}
-              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-medium transition-all duration-200 shadow-sm
-                ${uploading || !isOutlineApproved || currentStatus === 'approved'
-                  ? 'bg-gray-100 text-gray-600 cursor-not-allowed dark:bg-gray-700 dark:text-gray-400'
-                  : 'bg-brand-blue hover:bg-blue-600 text-white hover:shadow-md hover:shadow-blue-500/20 active:scale-95'}`}
-            >
-              {uploading ? (
-                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              ) : (
-                <FileUp className="w-5 h-5" />
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                ขั้นที่ 1 · ส่งร่างรายงานให้พี่เลี้ยงตรวจ
+              </h2>
+              <span
+                data-testid="finalreport-step1-status"
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                  isMentorApproved
+                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
+                    : isMentorPending
+                    ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800'
+                    : isMentorRejected
+                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-700/50 dark:text-gray-400 dark:border-gray-700'
+                }`}
+              >
+                {isMentorApproved
+                  ? `พี่เลี้ยงตรวจแล้ว · ${formatThaiDate(latestMentorDraft?.reviewed_at)}`
+                  : isMentorPending
+                  ? 'รอพี่เลี้ยงตรวจ'
+                  : isMentorRejected
+                  ? 'ส่งกลับมาแก้'
+                  : 'ยังไม่ได้ส่งร่าง'}
+              </span>
+            </div>
+
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              คู่มือกำหนดว่าต้องส่งให้พี่เลี้ยงตรวจ{' '}
+              <strong className="text-gray-900 dark:text-white">
+                อย่างน้อย 2 สัปดาห์ก่อนวันสุดท้ายของการปฏิบัติงาน
+              </strong>{' '}
+              เพื่อให้มีเวลาแก้ — สำหรับคุณคือภายใน{' '}
+              <span className="font-semibold text-gray-900 dark:text-gray-200">
+                {step1Deadline ? formatThaiDate(step1Deadline) : 'สัปดาห์ที่ 14'}
+              </span>
+              {isStep1Late && !isMentorApproved && (
+                <span className="ml-2 text-red-600 dark:text-red-400 font-semibold">
+                  (เลยกำหนดมาแล้ว {daysLateStep1} วัน)
+                </span>
               )}
-              <span>{uploading ? 'กำลังอัปโหลด...' : 'อัปโหลดรายงานสมบูรณ์'}</span>
-            </button>
+            </p>
           </div>
         </div>
 
-        <AlertBanner variant="error" message={error} className="mb-6" />
-
-        {!isOutlineApproved && !loading && (
-          <div className="mb-6 flex items-start gap-3 p-4 text-orange-700 bg-orange-50 dark:bg-orange-900/20 dark:text-orange-400 rounded-xl border border-orange-100 dark:border-orange-800">
-            <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-semibold mb-1">ไม่สามารถส่งรายงานได้</p>
-              <p className="text-sm">นักศึกษาต้องผ่านการอนุมัติโครงร่างรายงาน สหกิจ 11 จากอาจารย์ที่ปรึกษาในขั้นตอนก่อนหน้าให้เรียบร้อยก่อนจึงจะทำการส่งเล่มสมบูรณ์ได้</p>
-            </div>
-          </div>
-        )}
-
-        {loading ? (
-          <div className="py-12 flex justify-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-blue border-t-transparent" />
-          </div>
-        ) : versions.length === 0 ? (
-          <div className="py-16 text-center border-2 border-dashed border-gray-200 dark:border-gray-700 rounded-2xl bg-gray-50 dark:bg-gray-800/50">
-            <FileUp className="w-12 h-12 text-gray-600 dark:text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-1">ยังไม่มีการส่งเล่มรายงานสมบูรณ์</h3>
-            <p className="text-gray-500 dark:text-gray-400 text-sm">อัปโหลดรายงานฉบับสมบูรณ์เป็นไฟล์ PDF (ขนาดไม่เกิน 20MB)</p>
-          </div>
-        ) : (
-          <div className="space-y-8">
-            <div className="flex items-center p-4 bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-100 dark:border-gray-600">
+        {/* Step 1 content & actions */}
+        <div className="ml-12 space-y-4">
+          {latestMentorDraft && (
+            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
-                {getStatusIcon(versions[0].status)}
-                <span className="font-semibold text-gray-900 dark:text-white">
-                  สถานะปัจจุบัน: {getStatusText(versions[0].status)}
-                </span>
+                <FileText className="w-5 h-5 text-gray-500 shrink-0" />
+                <div>
+                  <span className="text-sm font-semibold text-gray-800 dark:text-gray-200">
+                    {latestMentorDraft.file_path.split('/').pop()} (เวอร์ชัน {latestMentorDraft.version})
+                  </span>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    ส่งเมื่อ {formatThaiDate(latestMentorDraft.submitted_at)}
+                  </p>
+                </div>
+              </div>
+
+              {latestMentorDraft.reviewer_comment && (
+                <div
+                  data-testid="finalreport-mentor-comment"
+                  className="text-xs md:text-sm text-gray-700 dark:text-gray-300 italic bg-white dark:bg-gray-800 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700"
+                >
+                  พี่เลี้ยงบันทึกไว้ว่า: &ldquo;{latestMentorDraft.reviewer_comment}&rdquo;
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Upload Button */}
+          <div className="flex items-center gap-3">
+            <input
+              type="file"
+              ref={step1InputRef}
+              data-testid="finalreport-step1-upload"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleUploadStep1}
+              disabled={uploadingStep1}
+            />
+            <button
+              type="button"
+              onClick={() => step1InputRef.current?.click()}
+              disabled={uploadingStep1}
+              className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold flex items-center gap-2 transition shadow-sm disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              {uploadingStep1
+                ? 'กำลังอัปโหลด...'
+                : latestMentorDraft
+                ? 'ส่งร่างฉบับแก้ไขให้พี่เลี้ยงใหม่'
+                : 'ส่งร่างรายงานให้พี่เลี้ยงตรวจ'}
+            </button>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              PDF เท่านั้น ไม่เกิน 20 MB
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Step 2: Final Report to Advisor */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+        <div className="flex items-start gap-4">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+              isAdvisorApproved
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700'
+                : isMentorApproved
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}
+          >
+            {isAdvisorApproved ? <CheckCircle2 className="w-5 h-5" /> : '2'}
+          </div>
+
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                ขั้นที่ 2 · ส่งรายงานฉบับสมบูรณ์เข้าระบบ
+              </h2>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                  isAdvisorApproved
+                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
+                    : isAdvisorPending
+                    ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800'
+                    : isAdvisorRejected
+                    ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-700/50 dark:text-gray-400 dark:border-gray-700'
+                }`}
+              >
+                {isAdvisorApproved
+                  ? `อาจารย์ที่ปรึกษาอนุมัติแล้ว · ${formatThaiDate(latestAdvisorReport?.reviewed_at)}`
+                  : isAdvisorPending
+                  ? 'รออาจารย์ที่ปรึกษาตรวจ'
+                  : isAdvisorRejected
+                  ? 'ส่งกลับมาแก้'
+                  : 'ยังไม่ได้ส่งรายงาน'}
+              </span>
+            </div>
+
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              ไฟล์ PDF ไม่เกิน 20 MB · ส่งใหม่ได้เรื่อยๆ ระบบเก็บเป็นเวอร์ชัน ไม่ทับของเดิม
+            </p>
+          </div>
+        </div>
+
+        <div className="ml-12 space-y-5">
+          {/* Calendar Gate */}
+          <CalendarGate activityKey="final_report" actionLabel="ส่งรายงานฉบับสมบูรณ์" />
+
+          {/* Condition: Report outline must be approved */}
+          {!data?.outline_approved ? (
+            <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/70 dark:bg-amber-950/20 flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
+                <p className="font-semibold">
+                  โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน
+                </p>
+                <p>
+                  โปรดตรวจสอบความคืบหน้าของโครงร่างรายงาน หรือปรับปรุงเนื้อหาให้เรียบร้อย
+                </p>
+                <a
+                  href="/dashboard?menu=report_outline"
+                  className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 hover:underline pt-1"
+                >
+                  ไปที่หน้าโครงร่างรายงาน
+                  <ChevronRight className="w-4 h-4" />
+                </a>
               </div>
             </div>
+          ) : (
+            <>
+              {/* Upload Dropzone */}
+              <div
+                onClick={() => step2InputRef.current?.click()}
+                className="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 bg-gray-50/60 dark:bg-gray-750/30 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
+              >
+                <Upload className="w-8 h-8 text-gray-400 dark:text-gray-500" />
+                <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
+                  {uploadingStep2
+                    ? 'กำลังอัปโหลดรายงาน...'
+                    : 'ลากไฟล์รายงานมาวาง หรือคลิกเพื่อเลือกไฟล์จากเครื่อง'}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  PDF เท่านั้น ไม่เกิน 20 MB
+                </span>
+                <input
+                  type="file"
+                  ref={step2InputRef}
+                  data-testid="finalreport-upload"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={handleUploadStep2}
+                  disabled={uploadingStep2}
+                />
+              </div>
 
-            <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-6">ประวัติการส่งเล่ม (Versions)</h3>
-              <div className="relative border-l-2 border-gray-200 dark:border-gray-700 ml-3 md:ml-4 space-y-8">
-                {versions.map((version) => (
-                  <div key={version.report_id} className="relative pl-6 md:pl-8">
-                    <div className={`absolute -left-[9px] top-1 h-4 w-4 rounded-full border-2 border-white dark:border-gray-800 ${
-                      version.status === 'approved' ? 'bg-green-500' :
-                      version.status === 'rejected' ? 'bg-red-500' : 'bg-brand-blue'
-                    }`} />
-                    
-                    <div className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-100 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
-                        <span className="font-semibold text-gray-900 dark:text-white">
-                          เวอร์ชัน {version.version}
-                        </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                          <Clock className="w-4 h-4" />
-                          {new Date(version.submitted_at).toLocaleString('th-TH')}
-                        </span>
-                      </div>
-                      
-                      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
-                            version.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                            version.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                            'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-                          }`}>
-                            {getStatusText(version.status)}
+              {/* Version history */}
+              {data?.advisor_reports && data.advisor_reports.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                    ประวัติการส่งรายงานฉบับสมบูรณ์
+                  </h3>
+
+                  <div className="space-y-2.5">
+                    {data.advisor_reports.map((ver) => (
+                      <div
+                        key={ver.report_id}
+                        data-testid={`finalreport-version-${ver.version}`}
+                        className={`p-4 rounded-xl border ${
+                          ver.status === 'rejected'
+                            ? 'border-red-200 dark:border-red-800/70 bg-red-50/50 dark:bg-red-950/20'
+                            : ver.status === 'approved'
+                            ? 'border-green-200 dark:border-green-800/70 bg-green-50/40 dark:bg-green-950/20'
+                            : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800'
+                        } space-y-2`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 flex items-center justify-center text-xs font-bold shrink-0">
+                              {ver.version}
+                            </span>
+                            <div>
+                              <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                                {ver.file_path.split('/').pop()}
+                              </span>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                ส่งเมื่อ {formatThaiDate(ver.submitted_at)}
+                              </p>
+                            </div>
+                          </div>
+
+                          <span
+                            className={`px-3 py-0.5 rounded-full text-xs font-bold border ${
+                              ver.status === 'approved'
+                                ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300'
+                                : ver.status === 'rejected'
+                                ? 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-300'
+                                : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300'
+                            }`}
+                          >
+                            {ver.status === 'approved'
+                              ? 'อนุมัติ'
+                              : ver.status === 'rejected'
+                              ? 'ส่งกลับมาแก้'
+                              : 'รอตรวจ'}
                           </span>
                         </div>
-                        {/* Same dead /uploads/ link the advisor's screen had —
-                            a student could not reopen the report they had just
-                            submitted. */}
-                        <a
-                          href={`${API_BASE_URL}/files/${version.file_path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm font-medium text-brand-blue hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
-                        >
-                          เปิดไฟล์รายงาน PDF
-                        </a>
-                      </div>
 
-                      {version.rejection_comment && (
-                        <div className="mt-3 p-4 bg-red-50 dark:bg-red-900/10 rounded-lg border border-red-100 dark:border-red-900/30">
-                          <p className="text-sm text-red-800 dark:text-red-300 font-medium mb-1">ความคิดเห็น/ข้อแนะนำเพื่อแก้ไข:</p>
-                          <p className="text-sm text-red-700 dark:text-red-400 whitespace-pre-wrap">{version.rejection_comment}</p>
-                        </div>
-                      )}
-                    </div>
+                        {/* Rejection comment */}
+                        {ver.status === 'rejected' && ver.rejection_comment && (
+                          <div
+                            data-testid="finalreport-rejection-comment"
+                            className="ml-10 p-3 rounded-lg bg-white dark:bg-gray-800 border border-red-100 dark:border-red-900/50 text-xs md:text-sm text-red-800 dark:text-red-300 leading-relaxed"
+                          >
+                            <span className="font-semibold">
+                              {ver.advisor_first_name
+                                ? `อาจารย์${ver.advisor_first_name} ${ver.advisor_last_name || ''}: `
+                                : 'อาจารย์ที่ปรึกษา: '}
+                            </span>
+                            {ver.rejection_comment}
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Step 3: Report Confirmation (สหกิจ 14) */}
+      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+        <div className="flex items-start gap-4">
+          <div
+            className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+              isConfirmed
+                ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700'
+                : isAdvisorApproved
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+            }`}
+          >
+            {isConfirmed ? <CheckCircle2 className="w-5 h-5" /> : '3'}
           </div>
-        )}
+
+          <div className="flex-1 space-y-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                ขั้นที่ 3 · ใบแจ้งยืนยันการส่งรายงาน (สหกิจ 14)
+              </h2>
+              <span
+                data-testid="finalreport-confirm-status"
+                className={`px-3 py-1 rounded-full text-xs font-bold border ${
+                  isConfirmed
+                    ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800'
+                    : isConfirmPending
+                    ? 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:border-amber-800'
+                    : 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-700/50 dark:text-gray-400 dark:border-gray-700'
+                }`}
+              >
+                {isConfirmed
+                  ? `ได้รับการรับรองแล้ว · ${formatThaiDate(confirmation?.certified_at)}`
+                  : isConfirmPending
+                  ? 'รออาจารย์ที่ปรึกษารับรอง'
+                  : 'ยังทำไม่ได้'}
+              </span>
+            </div>
+
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              เปิดให้ทำเมื่ออาจารย์ที่ปรึกษาอนุมัติรายงานในขั้นที่ 2 แล้ว · ต้องทำ
+              <strong className="text-gray-900 dark:text-white">
+                ก่อนวันนำเสนอผลงาน
+              </strong>
+              {examDate && (
+                <span className="ml-1 text-gray-800 dark:text-gray-200">
+                  (วันสอบสหกิจศึกษา {formatThaiDate(examDate)})
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        <div className="ml-12 space-y-4">
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-750/40 text-xs md:text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+            ใบนี้เป็นหลักฐานว่าส่งรายงานครบแล้ว ระบบเติมข้อมูลให้เองทั้งใบ (ชื่อ · รหัส · สถานประกอบการ · ชื่อรายงาน · วันที่ส่ง) นักศึกษาไม่ต้องกรอกอะไร — กดขอให้อาจารย์รับรอง แล้วพิมพ์ไปส่งงานสหกิจศึกษาประจำคณะ
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              data-testid="finalreport-confirm-request"
+              onClick={handleRequestConfirmation}
+              disabled={!isAdvisorApproved || isConfirmed || isConfirmPending || requestingConfirm}
+              className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition ${
+                !isAdvisorApproved || isConfirmed || isConfirmPending
+                  ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+              }`}
+            >
+              <Send className="w-4 h-4" />
+              {requestingConfirm
+                ? 'กำลังยื่นคำขอ...'
+                : isConfirmed
+                ? 'อาจารย์รับรองแล้ว'
+                : isConfirmPending
+                ? 'ยื่นคำขอแล้ว (รออาจารย์รับรอง)'
+                : 'ขอให้อาจารย์ที่ปรึกษารับรอง'}
+            </button>
+
+            {confirmation && (
+              <a
+                data-testid="finalreport-confirm-print"
+                href="/api/report-confirmations/print"
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm font-semibold flex items-center gap-2 transition shadow-sm"
+              >
+                <Printer className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+                พิมพ์ใบยืนยัน (สหกิจ 14)
+              </a>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
