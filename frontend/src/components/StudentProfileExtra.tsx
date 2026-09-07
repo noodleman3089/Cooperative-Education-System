@@ -4,6 +4,7 @@ import type { StudentProfile } from '../types/api';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage } from '../utils/errors';
 import { Select, Textarea } from './ui/Input';
+import { JOB_TYPE_OPTIONS, WORK_REGION_OPTIONS } from '../config/studentInterests';
 
 interface StudentProfileExtraProps {
   profile: StudentProfile;
@@ -32,8 +33,10 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const regionOptions = ['ภาคเหนือ', 'ภาคกลาง', 'ภาคตะวันออกเฉียงเหนือ (อีสาน)', 'ภาคใต้', 'ภาคตะวันออก', 'ภาคตะวันตก', 'กรุงเทพมหานครและปริมณฑล', 'ต่างประเทศ'];
-  const jobTypeOptions = ['งานภาคสนาม (Fieldwork)', 'งานวิจัยและพัฒนา (R&D)', 'งานห้องปฏิบัติการ (Lab)', 'งานการตลาดและการขาย (Marketing & Sales)', 'งานออกแบบ (Design)', 'งานเอกสารและธุรการ (Admin)', 'งานไอทีและโปรแกรมมิ่ง (IT/Programming)', 'งานโรงงานและฝ่ายผลิต (Production)'];
+  // ⛔ รายการอยู่ที่ `config/studentInterests.ts` ที่เดียว — ก๊อปเดิมของไฟล์นี้มีค่าเท่ากัน
+  //    แต่ **เรียงคนละลำดับ** กับหน้าโปรไฟล์ ผู้ใช้จึงเห็นสองหน้าไม่เหมือนกันโดยไม่มีเหตุผล
+  const regionOptions = WORK_REGION_OPTIONS;
+  const jobTypeOptions = JOB_TYPE_OPTIONS;
 
   const handleAddLanguage = () => {
     setLanguages([...languages, { language: '', level: 'พอใช้' }]);

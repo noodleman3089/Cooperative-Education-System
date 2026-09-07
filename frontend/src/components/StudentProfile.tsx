@@ -9,6 +9,7 @@ import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input, Select, Textarea } from './ui/Input';
+import { JOB_TYPE_OPTIONS, WORK_REGION_OPTIONS } from '../config/studentInterests';
 
 interface Major {
   major_id: number;
@@ -206,27 +207,10 @@ const StudentProfile: React.FC = () => {
   // until it lands, which only leaves the province dropdown briefly bare.
   const [thaiAddress, setThaiAddress] = useState<ProvinceItem[]>([]);
 
-  const regionOptions = [
-    'กรุงเทพมหานครและปริมณฑล',
-    'ภาคกลาง',
-    'ภาคตะวันออก',
-    'ภาคเหนือ',
-    'ภาคตะวันออกเฉียงเหนือ (อีสาน)',
-    'ภาคใต้',
-    'ภาคตะวันตก',
-    'ต่างประเทศ',
-  ];
-
-  const jobTypeOptions = [
-    'งานไอทีและโปรแกรมมิ่ง (IT/Programming)',
-    'งานออกแบบ (Design)',
-    'งานวิจัยและพัฒนา (R&D)',
-    'งานห้องปฏิบัติการ (Lab)',
-    'งานภาคสนาม (Fieldwork)',
-    'งานการตลาดและการขาย (Marketing & Sales)',
-    'งานโรงงานและฝ่ายผลิต (Production)',
-    'งานเอกสารและธุรการ (Admin)',
-  ];
+  // ⛔ รายการอยู่ที่ `config/studentInterests.ts` ที่เดียว — ค่าพวกนี้ถูกเขียนลงฐาน
+  //    เป็นสตริงตรงๆ สามหน้าที่ใช้มันต้องสะกดตรงกันเป๊ะ ไม่งั้นตัวกรองหางานพังเงียบ
+  const regionOptions = WORK_REGION_OPTIONS;
+  const jobTypeOptions = JOB_TYPE_OPTIONS;
 
   // Derived lists for cascading dropdowns
   const availableDistricts = thaiAddress.find((p) => p.name === selectedProv)?.districts || [];

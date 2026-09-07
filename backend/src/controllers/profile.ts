@@ -125,6 +125,24 @@ export class ProfileController {
         // ponytail: All enrolled students are eligible by default
         const seededEligible = inheritsEligibility ? eligibilityRecord!.is_eligible : true;
 
+        /**
+         * ช่องติดต่อที่หน้ากรอกครั้งแรกเก็บมาด้วย (2026-09-07)
+         *
+         * เดิมส่ง `null` เข้าไปทุกช่องทั้งที่ `createStudent` รับได้อยู่แล้ว นักศึกษาจึงต้อง
+         * เข้าระบบแล้วไปกรอกชื่อตัวเองซ้ำอีกรอบในหน้าโปรไฟล์ ทั้งที่เพิ่งกรอกไปเมื่อครู่
+         *
+         * ⛔ **สี่ช่องนี้เท่านั้น** — เป็นข้อมูลติดต่อที่เจ้าตัวเป็นแหล่งความจริง
+         * ห้ามเปิดรับเพิ่มจากตรงนี้: `cumulative_gpa` ยังมาจากรายชื่อที่เจ้าหน้าที่นำเข้า
+         * เท่านั้น (`seededGpa`) และ **เลขบัตร/เชื้อชาติ/ศาสนาไม่อยู่ในขั้นนี้โดยตั้งใจ**
+         * — สามอย่างนั้นขอตอนเริ่มยื่นเรื่องจริง เพราะ SEC-12 บังคับให้เข้ารหัสและลบใน
+         * 90 วัน ระบบจึงต้องไม่ถือไว้ตั้งแต่วันแรกสำหรับคนที่สุดท้ายอาจไม่ได้ไปสหกิจ
+         */
+        const text = (value: unknown, max: number): string | null => {
+          if (typeof value !== 'string') return null;
+          const trimmed = value.trim();
+          return trimmed ? trimmed.slice(0, max) : null;
+        };
+
         // Save profile to STUDENT table
         const profile = await StudentModel.createStudent(
           userId,
@@ -132,13 +150,13 @@ export class ProfileController {
           major_id,
           province_id !== undefined && province_id !== null ? province_id : null,
           seededGpa, // GPA is authoritative from the staff import, never self-reported
-          null, // first_name
-          null, // last_name
+          text(body.first_name, 255),
+          text(body.last_name, 255),
           null, // nickname
           null, // year_level
           null, // birth_date
-          null, // alt_email
-          null, // phone
+          text(body.alt_email, 255),
+          text(body.phone, 50),
           null, // current_address
           null, // parent_name
           null, // parent_phone
@@ -146,6 +164,51 @@ export class ProfileController {
           seededEligible,
           false // orientation is confirmed by staff after the briefing session
         );
+
+        /**
+         * งานที่สนใจ — เก็บในขั้นตอนเดียวกันโดยตั้งใจ
+         *
+         * มี `PUT /profile/student/optional` อยู่แล้วก็จริง แต่เส้นนั้นบังคับ role
+         * `student` ซึ่ง **ยังไม่มีอยู่ใน token ตอนนี้** — role เพิ่งถูกเพิ่มบรรทัดถัดไป
+         * และ token ที่ผู้เรียกถืออยู่ออกก่อนหน้านั้น ให้หน้าจอยิงตามหลังจึงได้ 403
+         * เขียนจากตรงนี้แทน หน้าจอจึงส่งครั้งเดียวจบตามที่ผู้ใช้เห็น
+         *
+         * ปลอดภัยที่จะเขียนทับ เพราะแถวเพิ่งถูกสร้าง ทุกคอลัมน์ยังเป็น NULL อยู่
+         * (`updateOptionalProfile` ไม่มี COALESCE — บนแถวที่มีข้อมูลแล้วมันล้างของเดิม)
+         */
+        /**
+         * เกรดที่นักศึกษาแจ้งเอง — ลง `students.claimed_gpa` **ไม่ใช่ `cumulative_gpa`**
+         *
+         * อาจารย์ที่ปรึกษาโปรเจคขอให้นักศึกษากรอกเกรดได้ตั้งแต่ต้น (2026-09-07) ซึ่งจำเป็นจริง
+         * เพราะที่เดิมสำหรับค่านี้คือ `coop_applications.claimed_gpa` ของ สหกิจ 01 ที่ถูกข้ามไปแล้ว
+         * — ไม่เหลือที่ให้แจ้งเกรดเลย
+         *
+         * ⛔ แต่ยังลง `cumulative_gpa` ตรงๆ ไม่ได้ (SEC-05): เลขทะเบียนถูกพิมพ์ลง
+         * **หนังสือราชการที่คณบดีเซ็น** ตัวเลขที่ยังไม่มีมนุษย์ยืนยันจึงกลายเป็นเอกสารเท็จได้
+         * การคัดลอกเข้าทะเบียนต้องผ่านการยืนยันของเจ้าหน้าที่เหมือนที่หัวหน้าสาขาเคยทำใน สหกิจ 01
+         */
+        let claimedGpa: number | null = null;
+        if (body.claimed_gpa !== undefined && body.claimed_gpa !== null && body.claimed_gpa !== '') {
+          const parsed = Number(body.claimed_gpa);
+          if (!Number.isFinite(parsed) || parsed < 0 || parsed > 4) {
+            res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
+            return;
+          }
+          claimedGpa = Math.round(parsed * 100) / 100;
+        }
+
+        if (claimedGpa !== null) {
+          await StudentModel.updateClaimedGpa(userId, claimedGpa);
+        }
+
+        const region = text(body.preferred_work_region, 255);
+        const jobTypes = Array.isArray(body.interested_job_types)
+          ? body.interested_job_types.filter((t): t is string => typeof t === 'string' && !!t.trim()).slice(0, 20)
+          : null;
+
+        if (region || (jobTypes && jobTypes.length > 0)) {
+          await StudentModel.updateOptionalProfile(userId, null, null, region, jobTypes);
+        }
 
         // Assign 'student' role in USER_ROLES
         await UserModel.addRole(userId, 'student');
