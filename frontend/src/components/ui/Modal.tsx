@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 
@@ -83,9 +84,9 @@ export const Modal: React.FC<ModalProps> = ({
     };
   }, []);
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/60 backdrop-blur-sm p-4 animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-gray-950/60 backdrop-blur-sm p-4 sm:p-6 animate-fade-in"
       onMouseDown={(e) => {
         // mousedown, not click: a drag that starts inside the panel and ends on
         // the backdrop should not count as clicking away.
@@ -97,7 +98,7 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
-        className={`w-full ${SIZES[size]} max-h-[90vh] flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-hidden animate-scale-in ${className}`.trim()}
+        className={`w-full ${SIZES[size]} max-h-[calc(100vh-3.5rem)] my-auto flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-hidden animate-scale-in ${className}`.trim()}
       >
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
@@ -118,7 +119,8 @@ export const Modal: React.FC<ModalProps> = ({
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
