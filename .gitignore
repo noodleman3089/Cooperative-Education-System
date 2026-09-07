@@ -50,3 +50,6 @@ e2e/playwright-report/
 
 # Agent configuration
 .agents
+
+# ไฟล์ต้นทางของแคนวาสออกแบบ (.dc.html + canvas.json) — repo เก็บเฉพาะ backend/ กับ frontend/
+.design/

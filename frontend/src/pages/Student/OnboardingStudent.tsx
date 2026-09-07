@@ -350,13 +350,7 @@ const OnboardingStudent: React.FC = () => {
                         onChange={e => { setGpa(e.target.value); clearError('gpa'); }}
                         data-testid="onboarding-gpa"
                       />
-                      {errors.gpa ? (
-                        fieldError('gpa')
-                      ) : (
-                        <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-                          เจ้าหน้าที่จะตรวจกับใบเกรดก่อนพิมพ์ลงหนังสือราชการ
-                        </p>
-                      )}
+                      {fieldError('gpa')}
                     </div>
                     <div>
                       {label('เบอร์โทรศัพท์ *')}

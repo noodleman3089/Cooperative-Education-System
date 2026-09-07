@@ -5,6 +5,7 @@ import { useDashboardData } from '../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile, IntentForm, OfficialDocument } from '../types/api';
 import CoopStepperBar, { type PhaseGroup } from './CoopStepperBar';
+import CoopNowCard from './CoopNowCard';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
@@ -599,6 +600,29 @@ const StudentDashboard: React.FC = () => {
 
       {/* Co-op Calendar Banner — separate system, sits under the PR notice */}
       {calendarBanner}
+
+      {/*
+        "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
+
+        หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
+        *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
+        คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
+
+        การ์ดอ่าน `phases` ชุดเดียวกับ CoopStepperBar ด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
+      */}
+      <CoopNowCard
+        phases={phases}
+        deadline={
+          acceptanceDue
+            ? {
+                label: 'กำหนดส่งหลักฐานตอบรับ',
+                date: formatThaiDate(acceptanceDue.due),
+                daysLeft: acceptanceDue.daysLeft,
+                overdue: acceptanceDue.overdue,
+              }
+            : null
+        }
+      />
 
       {/* Bento Grid Profile Banner */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

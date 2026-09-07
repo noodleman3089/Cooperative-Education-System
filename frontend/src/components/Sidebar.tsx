@@ -21,6 +21,16 @@ interface MenuItem {
   id: string;
   label: string;
   icon: React.ReactNode;
+  /**
+   * หัวข้อกลุ่มที่รายการนี้อยู่ใต้ — ใส่เฉพาะ role ที่เมนูยาวจนอ่านไม่ออกว่าอะไรก่อนอะไรหลัง
+   *
+   * ตัวเรนเดอร์ขึ้นหัวข้อให้เองเมื่อค่า `group` เปลี่ยนจากรายการก่อนหน้า จึงต้องเรียง
+   * รายการในกลุ่มเดียวกันติดกันเสมอ · รายการที่ไม่มี `group` ไม่มีหัวข้อคั่น
+   *
+   * ⛔ **`id` ห้ามเปลี่ยน** — มันคือ `data-testid="nav-<id>"` ที่ E2E ใช้เดินทั้งชุด
+   * ส่วน `label` เปลี่ยนได้อิสระ (ตรวจแล้ว 2026-09-07: ไม่มี spec ไหนคลิกด้วยข้อความ)
+   */
+  group?: string;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({
@@ -171,21 +181,35 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const menuConfig: Record<string, MenuItem[]> = {
+    /**
+     * เมนูนักศึกษาจัดตาม **ช่วงเวลาของสหกิจ** ไม่ใช่ตามชื่อแบบฟอร์ม (2026-09-07)
+     *
+     * เดิมเป็นรายการเรียงแบน 11 อัน ตั้งชื่อตามเอกสารที่มันแทน — นักศึกษาวันแรกจึงเห็น
+     * ตู้เอกสารทั้งตู้ โดยที่ ~8 อันล็อกอยู่ และไม่มีอะไรบอกว่าอะไรมาก่อนอะไร
+     * การจัดกลุ่มไม่ได้ตัดเมนูไหนออกเลย ทุกความสามารถยังอยู่ครบ เปลี่ยนแค่ลำดับกับชื่อ
+     *
+     * ป้ายสั้นลงได้เพราะหัวข้อกลุ่มบอกบริบทแทนแล้ว — "ใบสมัครงานสหกิจ (สหกิจ 03)"
+     * ไม่ต้องแบกคำว่าสหกิจ 03 ไว้บนแถบแคบๆ อีก (เลขเอกสารยังอยู่บนหัวหน้าจอปลายทาง)
+     */
     student: [
-      { id: 'dashboard', label: 'หน้าแรก / แดชบอร์ด', icon: icons.dashboard },
-      { id: 'jobs', label: 'ตำแหน่งงาน / สมัครงาน', icon: icons.jobs },
-      { id: 'job_application', label: 'ใบสมัครงานสหกิจ (สหกิจ 03)', icon: icons.application },
-      { id: 'accommodation_plan', label: 'รายละเอียดที่พัก & แผนงาน', icon: icons.accommodation },
-      { id: 'report_outline', label: 'โครงร่างรายงานปฏิบัติงาน', icon: icons.report_outline },
-      { id: 'weekly_log', label: 'บันทึกการทำงานรายสัปดาห์', icon: icons.weekly_log },
-      { id: 'final_report', label: 'รายงานการปฏิบัติงานสมบูรณ์', icon: icons.final_report },
-      // ผลประเมินจากพี่เลี้ยง — เซิร์ฟเวอร์เปิดให้ดูหลังสิ้นสุดช่วงปฏิบัติงานเท่านั้น
-      // เมนูจึงอยู่ตลอด แต่ปลายทางเป็นหน้าอธิบายว่าจะเปิดเมื่อไหร่ (ไม่ใช่ปุ่มตาย)
-      { id: 'evaluation_result', label: 'ผลประเมินจากพี่เลี้ยง', icon: icons.evaluation },
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+
+      { id: 'jobs', label: 'หาที่ฝึกงาน', icon: icons.jobs, group: 'ก่อนออกฝึก' },
+      { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
+      { id: 'accommodation_plan', label: 'ที่พักและแผนงาน', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
+
+      { id: 'weekly_log', label: 'บันทึกรายสัปดาห์', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
+      { id: 'report_outline', label: 'โครงร่างรายงาน', icon: icons.report_outline, group: 'ระหว่างฝึก' },
       // บันทึกข้อความกรณียกเว้น — ไม่ล็อกตามขั้นตอนหรือปฏิทิน เพราะเหตุจำเป็น
       // เกิดได้ทุกช่วง และการปิดเมนูนี้เท่ากับปิดทางออกเดียวของคนที่ตกกรณียกเว้น
-      { id: 'memos', label: 'บันทึกข้อความถึงคณบดี', icon: icons.report_outline },
-      { id: 'profile', label: 'ข้อมูลส่วนตัว & เรซูเม่', icon: icons.profile }
+      { id: 'memos', label: 'บันทึกถึงคณบดี', icon: icons.report_outline, group: 'ระหว่างฝึก' },
+
+      { id: 'final_report', label: 'รายงานฉบับสมบูรณ์', icon: icons.final_report, group: 'หลังฝึกเสร็จ' },
+      // ผลประเมินจากพี่เลี้ยง — เซิร์ฟเวอร์เปิดให้ดูหลังสิ้นสุดช่วงปฏิบัติงานเท่านั้น
+      // เมนูจึงอยู่ตลอด แต่ปลายทางเป็นหน้าอธิบายว่าจะเปิดเมื่อไหร่ (ไม่ใช่ปุ่มตาย)
+      { id: 'evaluation_result', label: 'ผลประเมิน', icon: icons.evaluation, group: 'หลังฝึกเสร็จ' },
+
+      { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     advisor: [
       { id: 'dashboard', label: 'แดชบอร์ดที่ปรึกษา', icon: icons.dashboard },
@@ -311,12 +335,29 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Navigation Links */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-        {activeMenuItems.map((item) => {
+        {activeMenuItems.map((item, index) => {
           const isActive = activeMenu === item.id;
           const lockReason = lockedMenus[item.id];
+          // หัวข้อกลุ่มขึ้นเมื่อค่า group เปลี่ยนจากรายการก่อนหน้า · ตอนพับเมนูไม่มีที่ให้
+          // ข้อความ จึงคั่นด้วยเส้นแทน ไม่งั้นทุกกลุ่มไหลติดกันเป็นแถวไอคอนยาวเหยียด
+          const prevGroup = index > 0 ? activeMenuItems[index - 1].group : undefined;
+          const startsGroup = !!item.group && item.group !== prevGroup;
           return (
+            <React.Fragment key={`g-${item.id}`}>
+            {startsGroup && (
+              isCollapsed ? (
+                <div className="my-2 border-t border-gray-800" aria-hidden="true" />
+              ) : (
+                <div className="px-3.5 pt-4 pb-1.5">
+                  {/* gray-400 บนพื้น gray-900 — ตัวเดียวกับป้ายเมนูที่ไม่ได้เลือก
+                      ซึ่งวัดได้ผ่าน AA อยู่แล้ว · gray-500/600 ตกเกณฑ์บนพื้นนี้ */}
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
+                    {item.group}
+                  </span>
+                </div>
+              )
+            )}
             <button
-              key={item.id}
               type="button"
               // Menu ids are stable; the Thai labels are not, and E2E used to
               // navigate by clicking those labels.
@@ -354,6 +395,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 </svg>
               )}
             </button>
+            </React.Fragment>
           );
         })}
       </nav>
