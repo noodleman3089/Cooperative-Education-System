@@ -11,12 +11,6 @@ const LoginPersonnel: React.FC = () => (
     identifierLabel="อีเมลของบุคลากร (Email)"
     identifierPlaceholder="กรอกอีเมลบุคลากร"
     submitLabel="เข้าสู่ระบบบุคลากร"
-    firstTimeHint={
-      <>
-        หากเข้าสู่ระบบเป็น<span className="font-semibold text-brand-blue dark:text-blue-400">ครั้งแรก</span> กรุณาใช้{' '}
-        <span className="font-semibold">Sign in with Google</span> ด้วยอีเมลมหาวิทยาลัยเพื่อเปิดใช้งานและยืนยันสิทธิ์บัญชีผู้ใช้
-      </>
-    }
   />
 );
 
