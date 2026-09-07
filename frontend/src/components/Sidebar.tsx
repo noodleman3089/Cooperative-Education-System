@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import api from '../services/api';
 
 interface SidebarProps {
   currentRole: string;
@@ -37,7 +36,6 @@ const Sidebar: React.FC<SidebarProps> = ({
   currentRole,
   activeMenu,
   onMenuChange,
-  onLogout,
   isOpen = false,
   lockedMenus = {}
 }) => {
@@ -276,21 +274,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile }
   ];
 
-  const handleLogoutClick = async () => {
-    if (onLogout) {
-      onLogout();
-      return;
-    }
-    // The session cookie is httpOnly, so only the server can drop it.
-    try {
-      await api.post('/auth/logout');
-    } catch {
-      // Already signed out server-side; still send the user to the login page.
-    }
-    localStorage.removeItem('auth_user');
-    localStorage.removeItem('user_role');
-    window.location.href = '/login';
-  };
 
   return (
     <aside
@@ -301,8 +284,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/80">
         {!isCollapsed ? (
           <>
-            <span className="text-brand-navy dark:text-white font-extrabold text-xs tracking-wider uppercase truncate">
-              Coop Edu Portal
+            {/* ชื่อระบบเป็นภาษาไทยเหมือนที่เขียนบนหน้าเข้าสู่ระบบ — ของเดิมเป็น
+                "COOP EDU PORTAL" ตัวพิมพ์ใหญ่ ซึ่งไม่ตรงกับชื่อที่ใช้ที่อื่นในระบบเลย */}
+            <span className="flex items-center gap-2 truncate text-sm font-extrabold text-brand-navy dark:text-white">
+              <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M22 10 12 5 2 10l10 5 10-5Z" />
+                <path d="M6 12.5V17c0 1.7 2.7 3 6 3s6-1.3 6-3v-4.5" />
+              </svg>
+              ระบบสหกิจศึกษา
             </span>
             <button
               type="button"
@@ -400,28 +389,9 @@ const Sidebar: React.FC<SidebarProps> = ({
         })}
       </nav>
 
-      {/* Unified Bottom Footer with Integrated Logout Button */}
-      <div className="p-2 border-t border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-950/60 space-y-2">
-        <button
-          type="button"
-          data-testid="logout"
-          onClick={handleLogoutClick}
-          title={isCollapsed ? 'ออกจากระบบ' : undefined}
-          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 dark:bg-red-500/10 dark:hover:bg-red-500/20 dark:text-red-400 dark:border-red-500/20 transition-all cursor-pointer ${isCollapsed ? 'justify-center' : ''
-            }`}
-        >
-          {icons.logout}
-          {!isCollapsed && <span className="truncate">ออกจากระบบ</span>}
-        </button>
-
-        {!isCollapsed && (
-          <div className="text-center">
-            {/* The sidebar is dark chrome in both themes, so this needs the
-                lighter grey unconditionally, not only under dark:. */}
-            <span className="text-xs text-gray-600 dark:text-gray-400">RMUTTO Coop v1.0.0</span>
-          </div>
-        )}
-      </div>
+      {/* ⛔ ปุ่มออกจากระบบเคยอยู่ตรงนี้ — ย้ายไปอยู่ในเมนูใต้ชื่อผู้ใช้บนแถบบน (2026-09-07)
+          เพราะร่างที่ตกลงกันไม่มีอะไรท้ายแถบเมนู · **ย้าย ไม่ใช่ลบ** และ
+          `data-testid="logout"` ย้ายไปด้วยทั้งอัน helper `logout(page)` จึงยังใช้ได้ */}
     </aside>
   );
 };

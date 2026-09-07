@@ -2,7 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import api from '../services/api';
-import { Bell, FileText } from 'lucide-react';
+import { Bell, FileText, LogOut } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
 import DeanSignModal from './DeanSignModal';
 import { Select } from './ui/Input';
@@ -51,6 +51,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   // Notification and Modal states
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  /** ชื่อจริงของผู้ใช้ — null จนกว่า /profile/me จะตอบ แล้วตกกลับไปใช้อีเมล */
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
   const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
 
@@ -66,6 +69,23 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
+  };
+
+  /**
+   * ออกจากระบบ — ย้ายมาจากท้ายแถบเมนู (2026-09-07) เพราะร่างไม่มีอะไรตรงนั้น
+   * session เป็น httpOnly cookie มีแต่เซิร์ฟเวอร์ที่ลบได้ จึงต้องยิง API ไม่ใช่ล้าง localStorage เฉยๆ
+   */
+  const handleLogout = async () => {
+    setShowUserMenu(false);
+    try {
+      await api.post('/auth/logout');
+    } catch {
+      // ฝั่งเซิร์ฟเวอร์ออกไปแล้ว — ยังไงก็พาไปหน้าเข้าสู่ระบบ
+    }
+    auth?.logout?.();
+    localStorage.removeItem('auth_user');
+    localStorage.removeItem('user_role');
+    window.location.href = '/login';
   };
 
   const getRoleLabel = (role: string) => {
@@ -202,6 +222,35 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
       window.removeEventListener('open-intent-review', handleOpenReview);
     };
   }, [currentRole, auth?.user]);
+
+  /**
+   * ชื่อ-นามสกุลของผู้ใช้ สำหรับแสดงบนแถบบน
+   *
+   * token มีแค่อีเมล จึงต้องถามเซิร์ฟเวอร์ครั้งเดียวตอนเข้า — ของเดิมโชว์อีเมลดิบ
+   * ซึ่งอ่านยากและไม่ตรงกับร่างที่ตกลงกันไว้ (ร่างโชว์ชื่อจริง + อักษรย่อ)
+   * · 404 = ยังไม่ได้ตั้งโปรไฟล์ ให้ตกกลับไปใช้อีเมลเหมือนเดิม ไม่ใช่ขึ้น error
+   */
+  useEffect(() => {
+    // ไม่ล้างค่าตอนไม่มี user — ทั้งบล็อกที่แสดงผลถูกครอบด้วย `auth?.user &&` อยู่แล้ว
+    // และการออกจากระบบโหลดหน้าใหม่ทั้งหน้า state จึงหายไปเอง (การ setState ตรงนี้
+    // จะเป็นการเรียก setState ใน effect โดยไม่จำเป็น ซึ่ง lint ห้ามไว้)
+    if (!auth?.user) return;
+    let cancelled = false;
+    api
+      .get('/profile/me')
+      .then((res) => {
+        if (cancelled) return;
+        const p = (res?.profile ?? {}) as { first_name?: string | null; last_name?: string | null };
+        const full = [p.first_name, p.last_name].filter(Boolean).join(' ').trim();
+        setDisplayName(full || null);
+      })
+      .catch(() => {
+        /* ยังไม่มีโปรไฟล์ หรือ role นี้ไม่มี endpoint — ใช้อีเมลแทน */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth?.user]);
 
   return (
     <>
@@ -373,15 +422,53 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             )}
           </button>
 
-          {/* User Info */}
-          <div className="text-right hidden sm:block">
-            <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
-              {auth?.user?.email}
-            </span>
-            <span className="block text-xs text-gray-600 dark:text-gray-400">
-              {getRoleLabel(currentRole)}
-            </span>
-          </div>
+          {/* ตัวตนผู้ใช้ — อักษรย่อ + ชื่อจริง ตามร่าง (ของเดิมเป็นอีเมลดิบ + บทบาท
+              ซึ่งอ่านยากและซ้ำกับตัวเลือกบทบาทที่อยู่ฝั่งซ้ายอยู่แล้วเมื่อมีหลาย role) */}
+          {auth?.user && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex cursor-pointer items-center gap-2.5 rounded-xl px-2 py-1.5 transition-colors hover:bg-gray-100 dark:hover:bg-gray-800"
+                aria-expanded={showUserMenu}
+                aria-label="เมนูบัญชีผู้ใช้"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
+                  {(displayName ?? auth.user.email).slice(0, 2)}
+                </span>
+                <span className="hidden text-sm font-semibold text-gray-900 sm:block dark:text-white">
+                  {displayName ?? auth.user.email}
+                </span>
+              </button>
+
+              {showUserMenu && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
+                  <div className="absolute right-0 z-40 mt-2 w-56 overflow-hidden rounded-2xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                    <div className="border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
+                      <p className="truncate text-xs text-gray-600 dark:text-gray-400">
+                        {auth.user.email}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-400">
+                        {getRoleLabel(currentRole)}
+                      </p>
+                    </div>
+                    {/* ⛔ ปุ่มนี้ย้ายมาจากท้ายแถบเมนู (ร่างไม่มีอะไรตรงนั้น) — ย้าย ไม่ใช่ลบ
+                        `data-testid="logout"` ต้องคงไว้ เพราะ helper `logout(page)` ใช้เดินทั้งชุด */}
+                    <button
+                      type="button"
+                      data-testid="logout"
+                      onClick={handleLogout}
+                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                    >
+                      <LogOut className="h-4 w-4 shrink-0" />
+                      ออกจากระบบ
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </nav>
 
