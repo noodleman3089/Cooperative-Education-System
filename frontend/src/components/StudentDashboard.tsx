@@ -12,7 +12,7 @@ import ConfirmDialog from './ui/ConfirmDialog';
 import StatusBadge from './ui/StatusBadge';
 import { intentDisplayStatus } from '../utils/intentStatus';
 import Button from './ui/Button';
-import { CalendarDays, Pin, Upload, UserPen } from 'lucide-react';
+import { Building2, CalendarDays, Pin, Upload, UserPen } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input } from './ui/Input';
 import CoopCalendarModal from './CoopCalendarModal';
@@ -624,100 +624,117 @@ const StudentDashboard: React.FC = () => {
         }
       />
 
-      {/* Bento Grid Profile Banner */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Profile Card (2/3 width on large screens) */}
-        <div className="lg:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-3xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center gap-6 relative overflow-hidden">
-          {/* Decorative background circle */}
-          <div className="absolute -top-12 -right-12 w-48 h-48 bg-blue-50/50 dark:bg-blue-900/10 rounded-full blur-3xl pointer-events-none" />
-          
-          <div className="shrink-0">
-            {/* วงกลมนี้เคยเป็นตัวอักษรแรกของชื่อเสมอ เพราะระบบไม่มีที่เก็บรูปเลย
-                — เปลี่ยนรูปในหน้าโปรไฟล์แล้วต้องเห็นที่นี่ด้วย ไม่งั้นผู้ใช้จะไม่แน่ใจ
-                ว่าอัปโหลดติดจริงไหม (`/files/…` ต้องล็อกอิน จึงอ่านได้เฉพาะเจ้าตัว) */}
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-gradient-to-br from-brand-blue to-blue-600 shadow-lg shadow-blue-500/30 flex items-center justify-center text-white text-3xl font-bold uppercase ring-4 ring-white dark:ring-gray-900 z-10 relative overflow-hidden">
-              {data.student.profile_image ? (
-                <img
-                  src={`${API_BASE_URL}/files/${data.student.profile_image}`}
-                  alt="รูปโปรไฟล์นักศึกษา"
-                  data-testid="dashboard-avatar-image"
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                data.student.first_name ? data.student.first_name.charAt(0) : data.student.student_code.charAt(0)
-              )}
-            </div>
-          </div>
-          
-          <div className="flex-1 space-y-1.5 z-10">
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50 dark:bg-blue-950/50 text-brand-blue dark:text-blue-400 text-xs font-bold tracking-wide uppercase">
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-              Student Profile
+      {/*
+        แถบตัวตนแบบบรรทัดเดียว แทนแบนเนอร์โปรไฟล์เดิม (2026-09-07)
+
+        ของเดิมเป็น bento สามช่องสูงเกือบครึ่งจอ: รูปใหญ่ 96px วงกลมเบลอตกแต่ง ป้าย
+        "STUDENT PROFILE" หัวเรื่องขนาด 3xl แล้วต่อด้วยการ์ดสถิติอีกสามใบ ทั้งหมดนั้น
+        ตอบว่า *คุณคือใคร* ซึ่งเป็นข้อมูลที่เจ้าตัวรู้อยู่แล้ว และมันเบียดสิ่งที่ต้องทำ
+        ตกไปอยู่ใต้เส้นพับ
+
+        ข้อมูลเดิมยังอยู่ครบทุกตัว — รูป ชื่อ รหัส สาขา สิทธิ์ เกรด ที่ปรึกษา
+        เปลี่ยนแค่พื้นที่ที่มันกิน · **ห้ามตัดตัวไหนออก** โดยเฉพาะรูป: `student-avatar`
+        คุมไว้ว่าอัปโหลดในหน้าโปรไฟล์แล้วต้องเห็นที่หน้าแรกด้วย
+      */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="h-12 w-12 shrink-0 overflow-hidden rounded-2xl bg-brand-blue text-lg font-bold uppercase text-white">
+          {data.student.profile_image ? (
+            <img
+              src={`${API_BASE_URL}/files/${data.student.profile_image}`}
+              alt="รูปโปรไฟล์นักศึกษา"
+              data-testid="dashboard-avatar-image"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center">
+              {data.student.first_name
+                ? data.student.first_name.charAt(0)
+                : data.student.student_code.charAt(0)}
             </span>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-gray-800 dark:text-white tracking-tight">
-              {data.student.first_name && data.student.last_name 
-                ? `${data.student.first_name} ${data.student.last_name}` 
-                : 'ไม่ระบุชื่อ'}
-            </h2>
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">
-              <div className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" /></svg>
-                {data.student.student_code}
-              </div>
-              <div className="hidden sm:block w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-700" />
-              <div className="flex items-center gap-1.5">
-                <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg>
-                {data.student.major_name_th || 'ไม่ระบุสาขาวิชา'}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
-        {/* Right Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 gap-4">
-          {/* Status Badge */}
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex items-center gap-4 hover:border-brand-blue/30 transition-colors group">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.is_eligible ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'}`}>
-              {data.student.is_eligible ? (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-              ) : (
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
-              )}
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">สิทธิ์สหกิจศึกษา</p>
-              <p className={`text-sm font-bold ${data.student.is_eligible ? 'text-gray-800 dark:text-white' : 'text-rose-600 dark:text-rose-400'}`}>
-                {data.student.is_eligible ? 'ผ่านเกณฑ์' : 'ยังไม่ผ่านเกณฑ์'}
-              </p>
-            </div>
-          </div>
-
-          {/* GPAX Badge */}
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex items-center gap-4 hover:border-brand-blue/30 transition-colors group">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400 flex items-center justify-center shrink-0 transition-transform group-hover:scale-110">
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">เกรดเฉลี่ยสะสม</p>
-              <p className="text-sm font-bold text-gray-800 dark:text-white">
-                {data.student.cumulative_gpa ? data.student.cumulative_gpa.toFixed(2) : 'N/A'}
-              </p>
-            </div>
-          </div>
-
-          {/* Advisor Badge */}
-          <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm flex items-center gap-4 sm:col-span-3 lg:col-span-1 hover:border-brand-blue/30 transition-colors group">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-110 ${data.student.advisor ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' : 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
-            </div>
-            <div>
-              <p className="text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-0.5">อาจารย์ที่ปรึกษาสหกิจ</p>
-              <p className={`text-sm font-bold ${data.student.advisor ? 'text-gray-800 dark:text-white' : 'text-gray-600 dark:text-gray-400 italic'}`}>
-                {data.student.advisor ? (data.student.advisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)') : 'รอการจัดสรร'}
-              </p>
-            </div>
-          </div>
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-bold text-gray-900 dark:text-white">
+            {data.student.first_name && data.student.last_name
+              ? `${data.student.first_name} ${data.student.last_name}`
+              : 'ไม่ระบุชื่อ'}
+          </h2>
+          <p className="truncate text-xs text-gray-600 dark:text-gray-400">
+            {data.student.student_code} · {data.student.major_name_th || 'ไม่ระบุสาขาวิชา'}
+          </p>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-bold ${
+              data.student.is_eligible
+                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-400'
+                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400'
+            }`}
+          >
+            {data.student.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ยังไม่ผ่านเกณฑ์สหกิจ'}
+          </span>
+          <span className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-bold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
+            เกรดเฉลี่ย {data.student.cumulative_gpa ? data.student.cumulative_gpa.toFixed(2) : 'ยังไม่มี'}
+          </span>
+        </div>
+      </div>
+
+      {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">ที่ฝึกงานของคุณ</h3>
+          {activeIntent?.company_name_th ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {activeIntent.company_name_th}
+                </span>
+                {activeIntent.job_title && (
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    ตำแหน่ง {activeIntent.job_title}
+                  </span>
+                )}
+                <StatusBadge
+                  domain="intent"
+                  status={intentDisplayStatus(activeIntent.status, coverLetter?.status)}
+                  className="mt-1 self-start"
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+              ยังไม่ได้เลือกสถานประกอบการ — เลือกได้จากเมนู “หาที่ฝึกงาน”
+            </p>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">อาจารย์ที่ปรึกษาของคุณ</h3>
+          {data.student.advisor ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
+                {(data.student.advisor.name || 'อ').charAt(0)}
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {data.student.advisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)'}
+                </span>
+                <span className="truncate text-xs text-gray-600 dark:text-gray-400">
+                  {data.student.advisor.email}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+              รอหัวหน้าสาขาวิชาจัดสรร — ยังไม่ต้องทำอะไร ระบบจะแจ้งเมื่อมีชื่อแล้ว
+            </p>
+          )}
+        </section>
       </div>
 
       {/* Milestone Progress Tracker */}
