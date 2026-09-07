@@ -84,18 +84,9 @@ export interface CoopActivity {
 /** ลำดับในอาร์เรย์ = ลำดับที่แสดงบนหน้าจอ (ตามลำดับจริงของกระบวนการสหกิจ) */
 export const COOP_ACTIVITIES: CoopActivity[] = [
   {
-    key: 'coop_application',
-    label: 'ยื่นใบสมัครเข้าโครงการสหกิจศึกษา (สหกิจ 01)',
-    dateKind: 'range',
-    locks: true,
-    // ไม่มีบนปฏิทินคณะ — เป็นด่านคัดกรองของสาขาก่อนถึงขั้นทาบทาม
-    paperRow: null,
-    allowLate: true,
-    hint: 'ไม่มีบนปฏิทินคณะ — สาขาวิชากำหนดเอง',
-  },
-  {
     key: 'intent_submission',
-    label: 'ยื่นแบบแจ้งความจำนงไปสถานประกอบการ',
+    label:
+      'นักศึกษาส่งแบบคำร้องขอหนังสือขอความอนุเคราะห์นักศึกษาสหกิจศึกษา (หนังสือทาบทาม) (เอกสารหมายเลข ๑) และรับหนังสือขอความอนุเคราะห์พร้อมแบบยืนยันแบบตอบรับ เพื่อนำส่งสถานประกอบการลงนาม',
     dateKind: 'range',
     locks: true,
     paperRow: 'แถว 1 — ขอหนังสือทาบทาม (เอกสารหมายเลข 1)',
@@ -177,7 +168,24 @@ export const COOP_ACTIVITIES: CoopActivity[] = [
   },
 ];
 
-const ACTIVITY_BY_KEY = new Map<string, CoopActivity>(COOP_ACTIVITIES.map((a) => [a.key, a]));
+// ponytail: coop_application เป็นขั้นตอนเดิมของสาขาที่ถูก bypass ออกจากปฏิทินคณะแล้ว
+// เก็บไว้ใน ACTIVITY_BY_KEY เพื่อ backward compatibility กับ endpoint ภายในที่อาจอ้างถึง
+const LEGACY_ACTIVITIES: CoopActivity[] = [
+  {
+    key: 'coop_application',
+    label: 'ยื่นใบสมัครเข้าโครงการสหกิจศึกษา (สหกิจ 01)',
+    dateKind: 'range',
+    locks: true,
+    paperRow: null,
+    allowLate: true,
+    hint: null,
+  },
+];
+
+const ACTIVITY_BY_KEY = new Map<string, CoopActivity>([
+  ...COOP_ACTIVITIES.map((a): [string, CoopActivity] => [a.key, a]),
+  ...LEGACY_ACTIVITIES.map((a): [string, CoopActivity] => [a.key, a]),
+]);
 
 /**
  * กิจกรรมที่ช่วงเวลามาจากกิจกรรมอื่น เจ้าหน้าที่ไม่ต้องกรอกซ้ำ

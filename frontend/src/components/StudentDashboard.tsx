@@ -729,37 +729,39 @@ const StudentDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* เอกสารหมายเลข 1 — พิมพ์ได้ทันทีที่ยื่นคำร้อง ไม่ต้องรอใครอนุมัติ
-                  เพราะลายเซ็นของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บนกระดาษใบนี้เอง
-                  เปิดแท็บใหม่แล้วให้ผู้ใช้กด Ctrl+P — หน้านั้นเป็น HTML ไม่ใช่ PDF */}
-              <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
-                <span className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)
-                </span>
-                <p className="text-xs text-gray-600 mb-2 leading-relaxed dark:text-gray-400">
-                  พิมพ์ออกมากรอกช่องที่เว้นไว้ด้วยปากกา แล้วนำไปให้อาจารย์ที่ปรึกษาและ
-                  หัวหน้าสาขาวิชาลงนาม
-                </p>
-                <a
-                  href={`${API_BASE_URL}/intents/${activeIntent.form_id}/request-form`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="print-request-form"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-brand-blue px-3 py-2 text-xs font-bold text-brand-blue transition-all hover:bg-blue-50/10 dark:border-blue-800 dark:text-blue-400"
-                >
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                  </svg>
-                  เปิดแบบคำร้องเพื่อสั่งพิมพ์
-                </a>
+              {/* เอกสารหมายเลข 1 — พิมพ์ได้ทันทีที่ยื่นคำร้อง และอัปโหลดไฟล์ที่ลงนามแล้ว
+                  แสดงเฉพาะระหว่างรอลงนาม (pending_advisor) หรือรอเจ้าหน้าที่ตรวจสอบ (pending_officer_request) */}
+              {(activeIntent.status === 'pending_advisor' ||
+                activeIntent.status === 'pending_officer_request') && (
+                <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
+                  <span className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                    แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)
+                  </span>
 
-                {/* ขั้นถัดไป: อัปโหลดกระดาษที่ลงนามแล้ว
-                    เปิดให้ทำได้ทั้งตอน pending_advisor (ยังไม่เคยส่ง) และ
-                    pending_officer_request (ส่งแล้วแต่ยังไม่ผ่านมือเจ้าหน้าที่ —
-                    สแกนเบลอหรือลืมหน้าหลังต้องส่งใหม่ได้) */}
-                {(activeIntent.status === 'pending_advisor' ||
-                  activeIntent.status === 'pending_officer_request') && (
-                  <div className="mt-3">
+                  {/* ponytail: ซ่อนปุ่มสั่งพิมพ์และคำแนะนำเมื่อส่งแบบคำร้องแล้ว */}
+                  {!activeIntent.request_form_path && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-600 mb-2 leading-relaxed dark:text-gray-400">
+                        พิมพ์ออกมากรอกช่องที่เว้นไว้ด้วยปากกา แล้วนำไปให้อาจารย์ที่ปรึกษาและ
+                        หัวหน้าสาขาวิชาลงนาม
+                      </p>
+                      <a
+                        href={`${API_BASE_URL}/intents/${activeIntent.form_id}/request-form`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid="print-request-form"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-brand-blue px-3 py-2 text-xs font-bold text-brand-blue transition-all hover:bg-blue-50/10 dark:border-blue-800 dark:text-blue-400"
+                      >
+                        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        เปิดแบบคำร้องเพื่อสั่งพิมพ์
+                      </a>
+                    </div>
+                  )}
+
+                  {/* ขั้นถัดไป: อัปโหลดกระดาษที่ลงนามแล้ว */}
+                  <div>
                     {activeIntent.request_form_path ? (
                       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -784,7 +786,7 @@ const StudentDashboard: React.FC = () => {
                             บนหน้าจอที่เป็นภาษาไทยทั้งหน้ามันโดดออกมาชัดมาก
                             จึงซ่อน input ไว้แล้วให้ label เป็นปุ่มจริงแทน
                             · ยังเป็น input ตัวเดิมที่มี data-testid เดิม — setInputFiles
-                              ของ Playwright ทำงานกับ input ที่ซ่อนอยู่ได้ตามปกติ */}
+                            ของ Playwright ทำงานกับ input ที่ซ่อนอยู่ได้ตามปกติ */}
                         <span className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
                           ลงนามครบทั้งสองช่องแล้ว อัปโหลดไฟล์ที่สแกนหรือถ่ายรูปกลับเข้าระบบ
                           (PDF หรือรูปภาพ ไม่เกิน 10 MB)
@@ -815,25 +817,25 @@ const StudentDashboard: React.FC = () => {
                       </span>
                     )}
                   </div>
-                )}
 
-                {/* เจ้าหน้าที่ตีกลับ — เหตุผลอยู่บนแถว ไม่ใช่แค่ audit_log (SEC-07)
-                    เพราะคนที่ต้องอ่านคือนักศึกษา */}
-                {activeIntent.status === 'pending_advisor' && activeIntent.reject_reason && (
-                  <div className="mt-3">
-                    <AlertBanner
-                      variant="warning"
-                      message={
-                        <>
-                          <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {activeIntent.reject_reason}
-                          <br />
-                          แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย
-                        </>
-                      }
-                    />
-                  </div>
-                )}
-              </div>
+                  {/* เจ้าหน้าที่ตีกลับ — เหตุผลอยู่บนแถว ไม่ใช่แค่ audit_log (SEC-07)
+                      เพราะคนที่ต้องอ่านคือนักศึกษา */}
+                  {activeIntent.status === 'pending_advisor' && activeIntent.reject_reason && (
+                    <div className="mt-3">
+                      <AlertBanner
+                        variant="warning"
+                        message={
+                          <>
+                            <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {activeIntent.reject_reason}
+                            <br />
+                            แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย
+                          </>
+                        }
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {activeIntent.status === 'approved_by_dept_head' && (
                 <div className="border-t border-gray-100 pt-4 mt-4 dark:border-gray-800 space-y-4">

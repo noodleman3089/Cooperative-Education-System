@@ -470,6 +470,8 @@ export class IntentFormController {
         pending_advisor: 0,
         pending_officer_request: 0,
         approved_by_dept_head: 0,
+        pending_sign: 0,
+        dean_signed: 0,
         accepted: 0,
         pending_officer_approval: 0,
         rejected: 0,
@@ -483,13 +485,37 @@ export class IntentFormController {
         }
       });
 
+      // ponytail: แยกใบที่เจ้าหน้าที่รับคำร้องแล้ว (approved_by_dept_head) ออกเป็นสองด่าน:
+      // 1) รอคณบดีลงนาม: cover letter สถานะ pending_sign (หรือยังไม่ออกหนังสือ)
+      // 2) คณบดีลงนามแล้ว: cover letter ลงนามแล้ว (signed) รอนักศึกษานำส่งและรอแบบตอบรับ
+      // ป้องกันเจ้าหน้าที่สับสนว่าทำไมคณบดีเซ็นแล้วแต่ตัวเลขยังค้างที่ "รอคณบดีลงนาม"
+      const deanSignedResult = await query(`
+        SELECT COUNT(*)::int as count
+        FROM intent_forms i
+        JOIN LATERAL (
+          SELECT d.status
+            FROM official_documents d
+           WHERE d.student_id = i.student_id
+             AND d.company_id = i.company_id
+             AND d.type = 'cover_letter'
+             AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+           ORDER BY d.doc_id DESC
+           LIMIT 1
+        ) doc ON TRUE
+        WHERE i.status = 'approved_by_dept_head'
+          AND doc.status = 'signed'
+      `);
+      const deanSignedCount = Number(deanSignedResult.rows[0]?.count || 0);
+      counts.dean_signed = deanSignedCount;
+      counts.pending_sign = Math.max(0, counts.approved_by_dept_head - deanSignedCount);
+
       // ใบที่รอออกหนังสือส่งตัว = ตอบรับแล้ว และยังไม่มีหนังสือส่งตัวของบริษัทนั้น
       //
-      // ⛔ ของเดิมเทียบ `d.type = 'dispatch_letter'` ซึ่ง **ไม่มีอยู่จริงในระบบ** (ชนิดจริง
+      // ⛔ ของเดิมเทียบ \`d.type = 'dispatch_letter'\` ซึ่ง **ไม่มีอยู่จริงในระบบ** (ชนิดจริง
       //    คือ 'send_letter' ตามที่หน้าจอทั้งสองฝั่งแปลป้ายไว้) และ join ด้วย student_id
       //    อย่างเดียว ตัวเลขจึงเท่ากับ "จำนวนใบที่ accepted" มาตลอดโดยไม่มีใครสังเกต
       //    เพราะไม่เคยมีแถวชนิดนั้นให้ตัดออกเลย · ตอนนี้เทียบทั้งชนิดและสถานประกอบการ
-      //    เหมือนที่ `issueDispatchLetter` ใช้กันออกซ้ำ ทั้งสองที่จึงตอบตรงกันเสมอ
+      //    เหมือนที่ \`issueDispatchLetter\` ใช้กันออกซ้ำ ทั้งสองที่จึงตอบตรงกันเสมอ
       const dispatchEligibleResult = await query(`
         SELECT COUNT(*)::int as count
         FROM intent_forms i

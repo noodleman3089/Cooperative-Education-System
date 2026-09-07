@@ -91,6 +91,7 @@ const addDays = (iso: string, days: number): string => {
 
 interface GeneratedDocument {
   doc_id: number;
+  document_number?: string | null;
   type: string;
   student_id: number;
   company_id: number;
@@ -99,6 +100,8 @@ interface GeneratedDocument {
   status: string;
   dean_signature_date: string | null;
   student_code: string;
+  first_name?: string | null;
+  last_name?: string | null;
   company_name_th: string;
 }
 
@@ -154,10 +157,16 @@ const PIPELINE_STEPS: {
     count: (s) => s.pending_officer_request || 0,
   },
   {
-    status: 'approved_by_dept_head',
-    title: 'เจ้าหน้าที่รับคำร้องแล้ว',
-    waitingOn: 'ออกเลขที่หนังสือแล้ว · รอคณบดีลงนาม',
-    count: (s) => s.approved_by_dept_head || 0,
+    status: 'pending_sign',
+    title: 'รอคณบดีลงนาม',
+    waitingOn: 'ออกเลขที่หนังสือแล้ว · อยู่ในคิวรอคณบดีลงนาม',
+    count: (s) => (s.pending_sign !== undefined ? s.pending_sign : (s.approved_by_dept_head || 0)),
+  },
+  {
+    status: 'dean_signed',
+    title: 'คณบดีลงนามแล้ว',
+    waitingOn: 'ลงนามแล้ว · รอนักศึกษานำส่งและรอแบบตอบรับ',
+    count: (s) => s.dean_signed || 0,
   },
   {
     status: 'accepted',
@@ -287,6 +296,9 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
 
   const [pipelineSummary, setPipelineSummary] = useState<Record<string, number>>({
     pending_advisor: 0,
+    pending_officer_request: 0,
+    pending_sign: 0,
+    dean_signed: 0,
     approved_by_dept_head: 0,
     accepted: 0,
     dispatch_eligible: 0,
@@ -2188,7 +2200,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
               </span>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
               {PIPELINE_STEPS.map((step, i) => {
                 const count = step.count(pipelineSummary);
                 return (
@@ -2199,7 +2211,7 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     {i > 0 && (
                       <ChevronRight
                         aria-hidden="true"
-                        className="hidden lg:block absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 dark:text-gray-700"
+                        className="hidden xl:block absolute -left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-300 dark:text-gray-700"
                       />
                     )}
                     <div
@@ -2414,8 +2426,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
           <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
             <div className="px-6 py-4 border-b border-gray-100 bg-gray-50 dark:bg-gray-900 dark:border-gray-800">
               <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                ประวัติการทำจดหมายออกส่งตัว & สถานะการเซ็นของคณบดี
+                ประวัติหนังสือราชการ & สถานะการลงนามของคณบดี
               </span>
+              <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                หนังสือขอความอนุเคราะห์และหนังสือส่งตัวนักศึกษา พร้อมสถานะและวันที่คณบดีลงนาม
+              </p>
             </div>
 
             {documents.length > 0 ? (
@@ -2424,10 +2439,11 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                       <th className="p-4 font-semibold">รหัสอ้างอิงเอกสาร</th>
-                      <th className="p-4 font-semibold">ประเภทจดหมาย</th>
-                      <th className="p-4 font-semibold">รหัสนักศึกษา</th>
+                      <th className="p-4 font-semibold">เลขที่หนังสือ</th>
+                      <th className="p-4 font-semibold">ประเภทหนังสือ</th>
+                      <th className="p-4 font-semibold">นักศึกษา</th>
                       <th className="p-4 font-semibold">บริษัทปลายทาง</th>
-                      <th className="p-4 font-semibold text-center">สถานะลายเซ็น</th>
+                      <th className="p-4 font-semibold text-center">สถานะลายเซ็นคณบดี</th>
                       <th className="p-4 font-semibold text-right">ลิงก์อ่านไฟล์</th>
                     </tr>
                   </thead>
@@ -2435,18 +2451,32 @@ const StaffDashboard: React.FC<StaffDashboardProps> = ({ activeMenu = 'dashboard
                     {documents.map((doc) => (
                       <tr key={doc.doc_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
                         <td className="p-4 font-bold text-gray-800 dark:text-gray-300">#DOC-{doc.doc_id}</td>
+                        <td className="p-4 font-mono text-gray-700 dark:text-gray-300">{doc.document_number || '-'}</td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">{getDocTypeLabel(doc.type)}</td>
-                        <td className="p-4 text-gray-700 dark:text-gray-300 font-medium">{doc.student_code}</td>
+                        <td className="p-4">
+                          <span className="block font-medium text-gray-800 dark:text-gray-200">
+                            {[doc.first_name, doc.last_name].filter(Boolean).join(' ') || '-'}
+                          </span>
+                          <span className="block text-xs text-gray-500 dark:text-gray-400">
+                            รหัส: {doc.student_code}
+                          </span>
+                        </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">{doc.company_name_th}</td>
                         <td className="p-4 text-center">
-                          <span className={`inline-block px-2 py-0.5 rounded-full font-bold text-xs ${
-                            doc.status === 'signed'
-                              ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
-                              /* Same reasoning as the job queue badge above. */
-                              : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400'
-                          }`}>
-                            {doc.status === 'signed' ? 'ลงนามเสร็จสิ้น' : 'รอลงนาม'}
-                          </span>
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className={`inline-block px-2.5 py-0.5 rounded-full font-bold text-xs ${
+                              doc.status === 'signed'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
+                            }`}>
+                              {doc.status === 'signed' ? 'คณบดีลงนามแล้ว' : 'รอคณบดีลงนาม'}
+                            </span>
+                            {doc.status === 'signed' && doc.dean_signature_date && (
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                ลงนามเมื่อ {formatThaiDate(doc.dean_signature_date.slice(0, 10))}
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="p-4 text-right">
                           {doc.generated_file_path ? (

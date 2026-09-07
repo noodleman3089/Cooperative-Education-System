@@ -11,6 +11,8 @@ interface ConfirmDialogProps {
   message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmTestId?: string;
+  cancelTestId?: string;
   /** Red confirm button, for deletions and anything that cannot be undone. */
   destructive?: boolean;
   busy?: boolean;
@@ -34,6 +36,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   message,
   confirmLabel = 'ยืนยัน',
   cancelLabel = 'ยกเลิก',
+  confirmTestId,
+  cancelTestId,
   destructive = false,
   busy = false,
   onConfirm,
@@ -59,7 +63,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       </ModalBody>
 
       <ModalFooter>
-        <Button variant="secondary" size="sm" onClick={onCancel} disabled={busy}>
+        <Button variant="secondary" size="sm" onClick={onCancel} disabled={busy} data-testid={cancelTestId}>
           {cancelLabel}
         </Button>
         <Button
@@ -67,6 +71,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           size="sm"
           onClick={onConfirm}
           loading={busy}
+          data-testid={confirmTestId}
         >
           {confirmLabel}
         </Button>

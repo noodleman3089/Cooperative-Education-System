@@ -103,9 +103,11 @@ export const sendCompanyInviteEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Company invitation email successfully sent to: ${toEmail}`);
-  } catch {
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
     console.error('════════════════════════════════════════════════════');
-    console.error(`[Email] COMPANY INVITE (SMTP failed — dev console fallback)`);
+    console.error(`[Email] COMPANY INVITE (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
     console.error(`  To: ${toEmail}`);
     console.error(`  Link: ${inviteLink}`);
     console.error('════════════════════════════════════════════════════');
@@ -140,9 +142,11 @@ export const sendMentorInviteEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Mentor invitation email successfully sent to: ${toEmail}`);
-  } catch {
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
     console.error('════════════════════════════════════════════════════');
-    console.error(`[Email] MENTOR INVITE (SMTP failed — dev console fallback)`);
+    console.error(`[Email] MENTOR INVITE (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
     console.error(`  To: ${toEmail}`);
     console.error(`  Link: ${inviteLink}`);
     console.error('════════════════════════════════════════════════════');
@@ -235,10 +239,11 @@ export const sendSignedDocumentEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Signed document email with PDF attachment successfully sent to: ${toEmail}`);
-  } catch {
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
     console.error('========================================================');
-    console.error(`FAILED TO SEND SIGNED DOCUMENT EMAIL to ${toEmail}`);
-    console.error(`Please configure SMTP settings in .env`);
+    console.error(`FAILED TO SEND SIGNED DOCUMENT EMAIL to ${toEmail}: ${error?.message || err}`);
+    if (error?.response) console.error(`SMTP Response: ${error.response}`);
     console.error('========================================================');
   }
 };

@@ -189,6 +189,9 @@ export class DocumentController {
           // ⚠️ fire-and-forget — **ห้ามใส่ await** การส่งอีเมลไม่ควรทำให้คณบดีรอ
           // (ของเดิม await ไว้กลางลูป ทำให้แถบ "ลงนามสำเร็จ" ไม่ขึ้นภายใน 10 วินาที)
           notifyStudentStatusChangeByDocId(parsedDocId, 'signed').catch(console.error);
+
+          // ส่งหนังสือราชการฉบับลงนามและคำเชิญเปิดบัญชีให้สถานประกอบการ
+          DocumentController.onboardCompanyAndSendEmail(doc.company_id, parsedDocId).catch(console.error);
         } catch (err) {
           console.error(`Error processing doc_id: ${docId}`, err);
           failedDocs.push({

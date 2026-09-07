@@ -43,6 +43,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
   const autocompleteRef = useRef<PlacesAutocomplete | null>(null);
 
+  // ponytail: contact_email ถูกตัดออกตามคำขอเพราะไม่จำเป็นสำหรับ workflow ปัจจุบัน
   const [selfFoundForm, setSelfFoundForm] = useState({
     company_name_th: '',
     company_name_en: '',
@@ -52,8 +53,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
     company_postal_code: '',
     company_phone: '',
     contact_person: '',
-    contact_position: '',
-    contact_email: ''
+    contact_position: ''
   });
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -231,7 +231,6 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           company_phone,
           contact_person: selfFoundForm.contact_person || undefined,
           contact_position: selfFoundForm.contact_position || undefined,
-          contact_email: selfFoundForm.contact_email || undefined,
           is_self_found: true,
           semester_id: activeSemester.semester_id,
           late_reason: lateWindow.isLate ? lateReason.trim() : undefined
@@ -378,7 +377,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 เบอร์โทรศัพท์สถานประกอบการ <span className="text-red-600 dark:text-red-400">*</span>
@@ -402,9 +401,6 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_person: e.target.value })}
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
                 ตำแหน่งผู้ติดต่อประสานงาน
@@ -414,17 +410,6 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                 placeholder="เช่น เจ้าหน้าที่ฝ่ายบุคคล HR"
                 value={selfFoundForm.contact_position}
                 onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_position: e.target.value })}
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1">
-                อีเมลติดต่อประสานงานหลัก
-              </label>
-              <Input
-                type="email"
-                placeholder="เช่น hr@example.com"
-                value={selfFoundForm.contact_email}
-                onChange={(e) => setSelfFoundForm({ ...selfFoundForm, contact_email: e.target.value })}
               />
             </div>
           </div>

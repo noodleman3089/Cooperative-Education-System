@@ -44,6 +44,25 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
   const currentSelectedPhase = phases.find((p) => p.phaseId === selectedPhaseId) || phases[0];
   const activePhase = phases.find((p) => p.phaseId === activePhaseId) || phases[0];
 
+  // ponytail: Dynamic column layout matching step count on desktop so steps stay on one row without dangling cards or line overflows
+  const subStepCount = currentSelectedPhase?.subSteps?.length || 0;
+  let gridColsClass = 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4';
+  let lineVisibilityClass = 'hidden sm:block';
+
+  if (subStepCount === 5) {
+    gridColsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-5';
+    lineVisibilityClass = 'hidden lg:block';
+  } else if (subStepCount === 3) {
+    gridColsClass = 'grid-cols-1 sm:grid-cols-3';
+    lineVisibilityClass = 'hidden sm:block';
+  } else if (subStepCount === 2) {
+    gridColsClass = 'grid-cols-1 sm:grid-cols-2';
+    lineVisibilityClass = 'hidden sm:block';
+  } else if (subStepCount === 4) {
+    gridColsClass = 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4';
+    lineVisibilityClass = 'hidden lg:block';
+  }
+
   return (
     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200/80 dark:border-gray-800 shadow-sm space-y-8">
       {/* 1. Header */}
@@ -193,8 +212,8 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
           </div>
 
           {/* Horizontal Sub-Stepper Grid Nodes */}
-          <div className="relative pt-1">
-            <div className={`grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 relative z-10`}>
+          <div className="relative pt-1 overflow-hidden">
+            <div className={`grid ${gridColsClass} gap-4 relative z-10`}>
               {currentSelectedPhase.subSteps.map((step, idx) => {
                 const isStepDone = step.status === 'completed';
                 const isStepActive = step.status === 'active';
@@ -222,7 +241,7 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
                     {/* Horizontal Connecting Line between sub-steps */}
                     {!isLastStep && (
                       <div
-                        className={`hidden sm:block absolute top-3 left-1/2 w-full h-0.5 -z-0 transition-colors duration-500 ${
+                        className={`${lineVisibilityClass} absolute top-3 left-1/2 w-full h-0.5 -z-0 transition-colors duration-500 ${
                           isStepDone ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-gray-700'
                         }`}
                       />

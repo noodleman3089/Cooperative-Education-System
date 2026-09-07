@@ -9,6 +9,7 @@ import api from '../services/api';
 import { Lock } from 'lucide-react';
 import { getErrorStatus } from '../utils/errors';
 import { formatThaiDate, formatThaiRange } from '../utils/thaiDate';
+import { CALENDAR_MENU_BY_ACTIVITY } from '../utils/calendarMenus';
 import type { CoopCalendarResponse } from '../types/api';
 
 /**
@@ -65,24 +66,6 @@ const STAGE_GATED_STUDENT_MENUS = [
   // ยังไม่มีที่ฝึกงาน = ยังไม่มีพี่เลี้ยง = ไม่มีทางมีผลประเมิน
   'evaluation_result',
 ] as const;
-
-/**
- * กิจกรรมในปฏิทินสหกิจ → เมนูที่ควรขึ้นกุญแจเมื่ออยู่นอกช่วงที่เจ้าหน้าที่ตั้งไว้
- *
- * นี่คือความรู้ของฝั่ง UI ล้วนๆ — backend ไม่รู้จักคำว่า "เมนู" มันรู้แค่ว่า
- * endpoint ไหนถูกล็อกด้วย key ไหน (`middlewares/calendarGate.ts`) จึงเก็บไว้ที่นี่
- *
- * `intent_submission` จงใจไม่อยู่ในนี้: เมนู jobs ต้องเปิดให้ดูประกาศงานได้เสมอ
- * เหมือนที่ STAGE_GATED_STUDENT_MENUS ไม่ล็อก jobs — ตัวปุ่มยื่นบนการ์ดเป็นคน
- * อธิบายเอง เพราะเซิร์ฟเวอร์ตอบ 403 พร้อมข้อความไทยเต็มอยู่แล้ว
- */
-const CALENDAR_LOCKED_MENU_BY_ACTIVITY: Record<string, string> = {
-  coop_application: 'application',
-  accommodation_plan: 'accommodation_plan',
-  weekly_log: 'weekly_log',
-  report_outline: 'report_outline',
-  final_report: 'final_report',
-};
 
 interface StudentStage {
   hasProfile: boolean;
@@ -196,7 +179,11 @@ const Dashboard: React.FC = () => {
 
     const locks: Record<string, { heading: string; reason: string }> = {};
     for (const activity of calendar.activities) {
-      const menuId = CALENDAR_LOCKED_MENU_BY_ACTIVITY[activity.activity_key];
+      // ⛔ ใช้ตารางร่วมกับปุ่มกดในปฏิทิน (`utils/calendarMenus.ts`) แต่เคารพ
+      //    `locksMenu` ด้วย — เมนูที่ทำหลายอย่าง (jobs · dashboard) ห้ามถูกล็อก
+      //    ทั้งเมนูเพราะกิจกรรมเดียวหมดเวลา
+      const target = CALENDAR_MENU_BY_ACTIVITY[activity.activity_key];
+      const menuId = target?.locksMenu ? target.menu : undefined;
       // `locks: false` = หมุดบอกเวลา (วันเริ่ม/วันสิ้นสุด/วันสอบ) ไม่ใช่ด่าน —
       // เซิร์ฟเวอร์ไม่ปฏิเสธอะไรจากมัน หน้าจอจึงต้องไม่แขวนกุญแจให้เหมือนกัน
       if (!menuId || !activity.locks) continue;
