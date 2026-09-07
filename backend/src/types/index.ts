@@ -28,8 +28,14 @@ export interface Student {
   student_id: number;
   student_code: string;
   major_id: number;
+  major_name_th?: string;
+  faculty_name_th?: string;
+  advisor_first_name?: string | null;
+  advisor_last_name?: string | null;
   province_id: number | null;
   cumulative_gpa: number | null;
+  claimed_gpa?: number | null;
+  section?: string | null;
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` เหมือน resume_file — NULL = ยังไม่เคยอัปโหลด */
   profile_image?: string | null;

@@ -1150,10 +1150,51 @@ export class StudentController {
 
       const accRes = await query('SELECT * FROM accommodations WHERE student_id = $1', [studentId]);
       const plansRes = await query('SELECT * FROM weekly_work_plans WHERE student_id = $1 ORDER BY week_number ASC', [studentId]);
+      const monthlyPlansRes = await query(
+        'SELECT plan_id, month_index, topic, created_at, updated_at FROM monthly_work_plans WHERE student_id = $1 ORDER BY month_index ASC',
+        [studentId]
+      );
+      const approvalsRes = await query(
+        `SELECT a.approval_id, a.approver_role, a.approver_id, a.status, a.approved_at, a.comment,
+                p.first_name as personnel_first_name, p.last_name as personnel_last_name,
+                m.name as mentor_name
+         FROM work_plan_approvals a
+         LEFT JOIN personnel p ON a.approver_id = p.personnel_id
+         LEFT JOIN mentors m ON a.approver_id = m.mentor_id
+         WHERE a.student_id = $1
+         ORDER BY a.approval_id ASC`,
+        [studentId]
+      );
+
+      // Fetch company and job details from accepted intent_forms (สหกิจ 07 หน้า 1-2)
+      const intentRes = await query(
+        `SELECT i.start_date, i.end_date, i.mentor_id, i.company_id,
+                c.name_th as company_name,
+                j.title as job_title, j.description as job_description,
+                m.name as mentor_name, m.position as mentor_position, m.phone as mentor_phone,
+                COALESCE(i.start_date, i.acceptance_signed_date) as intent_created_at
+         FROM intent_forms i
+         JOIN companies c ON i.company_id = c.company_id
+         LEFT JOIN job_posts j ON i.job_id = j.job_id
+         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
+         WHERE i.student_id = $1 AND i.status = 'accepted'
+         ORDER BY i.form_id DESC LIMIT 1`,
+        [studentId]
+      );
+      const intent = intentRes.rows[0] ?? null;
+
+      let monthsCount = 4;
+      if (intent?.start_date && intent?.end_date) {
+        const s = new Date(intent.start_date);
+        const e = new Date(intent.end_date);
+        const diff = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
+        if (diff >= 1 && diff <= 12) monthsCount = diff;
+      }
+
       // ⛔ ผู้ติดต่อฉุกเฉินอยู่บนโปรไฟล์นักศึกษาแล้ว ไม่ใช่บนแถวที่พัก (migration 013)
       //    — มันเป็นคุณสมบัติของคน และทั้ง สหกิจ 03 กับ 06 ถามช่องเดียวกัน
       const emgRes = await query(
-        `SELECT emergency_contact_name, emergency_relationship, emergency_phone, section
+        `SELECT emergency_contact_name, emergency_relationship, emergency_phone, emergency_address, section
            FROM students WHERE student_id = $1`,
         [studentId]
       );
@@ -1162,22 +1203,43 @@ export class StudentController {
       const accRow = accRes.rowCount && accRes.rowCount > 0 ? accRes.rows[0] : null;
 
       res.status(200).json({
-        // "ห้อง" อยู่บนใบ สหกิจ 06 แต่เป็นคอลัมน์ของ `students` — ส่งคู่กับที่พัก
-        // เพราะหน้าจอเดียวกันเป็นคนกรอก (แบบเดียวกับผู้ติดต่อฉุกเฉิน)
         section: emg.section ?? null,
-        // `formatted_address` ประกอบจากช่องย่อยที่เซิร์ฟเวอร์ ไม่ให้ React ต่อสตริงเอง
-        // — ไม่งั้นรูปแบบที่อยู่จะมีสองแหล่งความจริงทันที (ดู utils/accommodationAddress.ts)
         accommodation: accRow
           ? {
               ...accRow,
               formatted_address: formatAccommodationAddress(accRow),
-              // ประกอบกลับให้หน้าจอเดิมใช้ชื่อคีย์เท่าเดิม — แหล่งความจริงคือโปรไฟล์
               emergency_contact: emg.emergency_contact_name ?? null,
               emergency_relationship: emg.emergency_relationship ?? null,
               emergency_phone: emg.emergency_phone ?? null,
             }
           : null,
-        weekly_plans: plansRes.rows || []
+        company_job_info: intent
+          ? {
+              job_title: intent.job_title ?? null,
+              job_description: intent.job_description ?? null,
+              mentor_name: intent.mentor_name ?? null,
+              mentor_position: intent.mentor_position ?? null,
+              mentor_phone: intent.mentor_phone ?? null,
+              company_name: intent.company_name ?? null,
+              submitted_at: intent.intent_created_at ?? null,
+            }
+          : null,
+        emergency_contact: {
+          name: emg.emergency_contact_name ?? null,
+          relationship: emg.emergency_relationship ?? null,
+          phone: emg.emergency_phone ?? null,
+          address: emg.emergency_address ?? null,
+        },
+        weekly_plans: plansRes.rows || [],
+        monthly_plans: monthlyPlansRes.rows || [],
+        approvals: approvalsRes.rows || [],
+        months_count: monthsCount,
+        intent: intent
+          ? {
+              start_date: intent.start_date,
+              end_date: intent.end_date,
+            }
+          : null,
       });
     } catch (error) {
       if (sendAccessError(res, error)) return;
@@ -1207,16 +1269,13 @@ export class StudentController {
         res.status(403).json({ message: 'Forbidden. You can only submit accommodation and plans for yourself.' });
         return;
       }
-      const { accommodation, weekly_plans } = req.body;
+      const { accommodation, weekly_plans, monthly_plans, submit_to_mentor } = req.body;
 
       if (!accommodation || typeof accommodation !== 'object') {
         res.status(400).json({ message: 'กรุณากรอกข้อมูลที่พักระหว่างปฏิบัติงานให้ครบถ้วน' });
         return;
       }
 
-      // ⛔ ตั้งแต่ 2026-09-03 ที่อยู่เป็น **ช่องย่อยตามฟอร์ม สหกิจ 06** ไม่ใช่ก้อนเดียว
-      //    ห้าม fallback ไปรับ `address` ก้อนเดิม — ถ้ารับ ที่อยู่ครึ่งระบบจะกลับไป
-      //    เป็นข้อความอิสระที่พิมพ์ลงแบบฟอร์มไม่ได้ และไม่มีใครสังเกตจนกว่าจะพิมพ์จริง
       const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
       const missing = [
         ['บ้านเลขที่', text(accommodation.house_no)],
@@ -1238,8 +1297,6 @@ export class StudentController {
         return;
       }
 
-      // พิกัดเป็นของไม่บังคับ (หน้าจอโหลดแผนที่ไม่ได้ก็ยังต้องส่งฟอร์มได้) แต่ถ้าส่งมา
-      // ต้องเป็นพิกัดจริง — ค่าขยะที่หลุดเข้าฐานจะพาอาจารย์นิเทศไปผิดที่
       const hasCoords =
         accommodation.latitude !== undefined &&
         accommodation.latitude !== null &&
@@ -1252,49 +1309,11 @@ export class StudentController {
         return;
       }
 
-      // Validation: Must have at least 16 weeks of plans
-      if (!weekly_plans || !Array.isArray(weekly_plans) || weekly_plans.length < 16) {
-        res.status(400).json({ message: 'กรุณากรอกแผนปฏิบัติงานให้ครบอย่างน้อย 16 สัปดาห์ตามเกณฑ์ของมหาวิทยาลัย' });
-        return;
-      }
-
-      // Check if student has an active intent and check the start date to enforce the "first week" rule
-      //
-      // ⚠️ นี่คือด่านที่ *สอง* ไม่ใช่ด่านซ้ำ — อย่าลบทิ้งเพราะคิดว่าปฏิทินทำแทนแล้ว
-      //   ด่านแรก  = `requireCalendarWindow('accommodation_plan')` ที่ routes/student.ts
-      //              ช่วงกลางที่เจ้าหน้าที่ตั้ง เท่ากันทั้งรุ่น
-      //   ด่านนี้   = 7 วันนับจาก `intent_forms.start_date` ของนักศึกษา *แต่ละคน*
-      //              ซึ่งไม่เท่ากันเลยสักคน ปฏิทินกลางจึงแทนไม่ได้
-      const intentRes = await query(`
-        SELECT start_date FROM intent_forms 
-        WHERE student_id = $1 AND status = 'accepted'
-        ORDER BY form_id DESC LIMIT 1
-      `, [studentId]);
-      
-      if (intentRes.rowCount && intentRes.rowCount > 0) {
-        const startDate = new Date(intentRes.rows[0].start_date);
-        const today = new Date();
-        const diffTime = Math.abs(today.getTime() - startDate.getTime());
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-        
-        // Block if it's more than 7 days past the start date
-        // Note: For testing purposes, we'll allow this if start date is in the future.
-        if (today > startDate && diffDays > 7) {
-          res.status(403).json({ message: 'ไม่อนุญาตให้ส่งข้อมูลเกินกำหนด 1 สัปดาห์หลังจากเริ่มปฏิบัติงานจริง' });
-          return;
-        }
-      } else {
-        res.status(400).json({ message: 'ไม่พบข้อมูลใบตอบรับจากบริษัท' });
-        return;
-      }
-
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
 
         // Upsert accommodation
-        // ⛔ `address_legacy` ไม่อยู่ในรายการนี้โดยตั้งใจ — เป็นค่าเก่าอ่านอย่างเดียว
-        //    กรอกใหม่แล้วช่องย่อยคือความจริง ของเก่าคงไว้เป็นหลักฐานว่าเคยกรอกอะไร
         const accQuery = `
           INSERT INTO accommodations (
             student_id, house_no, building, room_no, soi, road,
@@ -1339,39 +1358,64 @@ export class StudentController {
           hasCoords ? Number(accommodation.longitude) : null,
         ]);
 
-        // ⛔ ผู้ติดต่อฉุกเฉินเขียนลง **โปรไฟล์นักศึกษา** ไม่ใช่แถวที่พัก (migration 013)
-        //    ทั้ง สหกิจ 03 และ 06 ถามช่องเดียวกัน เก็บสองที่คือเปิดช่องให้ข้อมูลขัดกันเอง
-        //    · เขียนในทรานแซกชันเดียวกับที่พัก — ล้มกลางทางต้องไม่เหลือครึ่งเดียว
-        // `section` (ห้องเรียน) ก็เป็นของ **คน** เหมือนกัน — อยู่บนหัวใบ สหกิจ 06
-        // ข้าง "ชั้นปีที่" ไม่ใช่ในบล็อกที่อยู่ (ดู migration 016)
-        await client.query(
-          `UPDATE students
-              SET emergency_contact_name = $2,
-                  emergency_relationship = $3,
-                  emergency_phone = $4,
-                  section = $5
-            WHERE student_id = $1`,
-          [
-            studentId,
-            optional(accommodation.emergency_contact),
-            optional(accommodation.emergency_relationship),
-            optional(accommodation.emergency_phone),
-            optional(accommodation.section),
-          ]
-        );
+        if (accommodation.section !== undefined) {
+          await client.query(
+            `UPDATE students SET section = $2 WHERE student_id = $1`,
+            [studentId, optional(accommodation.section)]
+          );
+        }
 
-        // Handle weekly plans (delete old, insert new)
-        await client.query('DELETE FROM weekly_work_plans WHERE student_id = $1', [studentId]);
-        
-        for (const plan of weekly_plans) {
-          await client.query(`
-            INSERT INTO weekly_work_plans (student_id, week_number, start_date, end_date, tasks, status)
-            VALUES ($1, $2, $3, $4, $5, 'planned')
-          `, [studentId, plan.week_number, plan.start_date, plan.end_date, plan.tasks]);
+        // Save weekly plans if provided
+        if (Array.isArray(weekly_plans) && weekly_plans.length > 0) {
+          await client.query('DELETE FROM weekly_work_plans WHERE student_id = $1', [studentId]);
+          for (const plan of weekly_plans) {
+            if (plan.week_number && plan.start_date && plan.end_date) {
+              await client.query(`
+                INSERT INTO weekly_work_plans (student_id, week_number, start_date, end_date, tasks, status)
+                VALUES ($1, $2, $3, $4, $5, 'planned')
+              `, [studentId, plan.week_number, plan.start_date, plan.end_date, plan.tasks || '']);
+            }
+          }
+        }
+
+        // Save monthly plans if provided
+        if (Array.isArray(monthly_plans) && monthly_plans.length > 0) {
+          for (const mp of monthly_plans) {
+            const mIdx = parseInt(mp.month_index, 10);
+            if (!isNaN(mIdx) && mIdx > 0) {
+              await client.query(`
+                INSERT INTO monthly_work_plans (student_id, month_index, topic, updated_at)
+                VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (student_id, month_index)
+                DO UPDATE SET topic = EXCLUDED.topic, updated_at = NOW()
+              `, [studentId, mIdx, String(mp.topic || '').trim()]);
+            }
+          }
+        }
+
+        // Submit to mentor if requested
+        if (submit_to_mentor === true) {
+          const mentorRes = await client.query(
+            `SELECT mentor_id FROM intent_forms WHERE student_id = $1 AND status = 'accepted' ORDER BY form_id DESC LIMIT 1`,
+            [studentId]
+          );
+          const mentorId = mentorRes.rows[0]?.mentor_id ?? null;
+
+          await client.query(
+            `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status, created_at)
+             VALUES ($1, 'mentor', $2, 'pending', NOW())
+             ON CONFLICT (student_id, approver_role)
+             DO UPDATE SET status = 'pending', approver_id = EXCLUDED.approver_id, approved_at = NULL, comment = NULL`,
+            [studentId, mentorId]
+          );
         }
 
         await client.query('COMMIT');
-        res.status(200).json({ message: 'บันทึกข้อมูลที่พักและแผนปฏิบัติงานสำเร็จ' });
+        res.status(200).json({
+          message: submit_to_mentor
+            ? 'บันทึกและส่งแผนปฏิบัติงานให้พี่เลี้ยงรับรองสำเร็จแล้ว'
+            : 'บันทึกข้อมูลที่พักและแผนปฏิบัติงานสำเร็จ',
+        });
       } catch (error) {
         await client.query('ROLLBACK');
         throw error;
@@ -1380,6 +1424,102 @@ export class StudentController {
       }
     } catch (error) {
       sendUnexpectedError(res, error, 'submitAccommodationAndPlan Error', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
+    }
+  }
+
+  /**
+   * Approve work plan (mentor / advisor / supervisor)
+   * Route: PATCH /api/students/:id/work-plan/approve
+   */
+  static async approveWorkPlan(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const studentId = parseInt(req.params.id, 10);
+      const roles = req.user.roles;
+      let approverRole: 'mentor' | 'advisor' | 'supervisor' | null = null;
+      if (roles.includes('mentor')) approverRole = 'mentor';
+      else if (roles.includes('advisor')) approverRole = 'advisor';
+      else if (roles.includes('staff')) approverRole = 'advisor';
+
+      if (!approverRole) {
+        res.status(403).json({ message: 'คุณไม่มีสิทธิ์ในการรับรองแผนงาน' });
+        return;
+      }
+
+      await query(
+        `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status, approved_at)
+         VALUES ($1, $2, $3, 'approved', NOW())
+         ON CONFLICT (student_id, approver_role)
+         DO UPDATE SET status = 'approved', approver_id = $3, approved_at = NOW(), comment = NULL`,
+        [studentId, approverRole, req.user.userId]
+      );
+
+      // If mentor approves, initialize advisor and supervisor approvals as pending
+      if (approverRole === 'mentor') {
+        const st = await query(`SELECT advisor_id, supervisor_id FROM students WHERE student_id = $1`, [studentId]);
+        const advId = st.rows[0]?.advisor_id;
+        const supId = st.rows[0]?.supervisor_id;
+        if (advId) {
+          await query(
+            `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status)
+             VALUES ($1, 'advisor', $2, 'pending')
+             ON CONFLICT (student_id, approver_role) DO NOTHING`,
+            [studentId, advId]
+          );
+        }
+        if (supId) {
+          await query(
+            `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status)
+             VALUES ($1, 'supervisor', $2, 'pending')
+             ON CONFLICT (student_id, approver_role) DO NOTHING`,
+            [studentId, supId]
+          );
+        }
+      }
+
+      res.status(200).json({ success: true, message: 'รับรองแผนปฏิบัติงานเรียบร้อยแล้ว' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Approve Work Plan Error', 'เกิดข้อผิดพลาดในการรับรองแผนงาน');
+    }
+  }
+
+  /**
+   * Reject / return work plan with comments
+   * Route: PATCH /api/students/:id/work-plan/reject
+   */
+  static async rejectWorkPlan(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const studentId = parseInt(req.params.id, 10);
+      const { comment } = req.body;
+      const roles = req.user.roles;
+      let approverRole: 'mentor' | 'advisor' | 'supervisor' | null = null;
+      if (roles.includes('mentor')) approverRole = 'mentor';
+      else if (roles.includes('advisor')) approverRole = 'advisor';
+      else if (roles.includes('staff')) approverRole = 'advisor';
+
+      if (!approverRole) {
+        res.status(403).json({ message: 'Forbidden.' });
+        return;
+      }
+
+      await query(
+        `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status, comment)
+         VALUES ($1, $2, $3, 'rejected', $4)
+         ON CONFLICT (student_id, approver_role)
+         DO UPDATE SET status = 'rejected', approver_id = $3, comment = $4`,
+        [studentId, approverRole, req.user.userId, comment || null]
+      );
+
+      res.status(200).json({ success: true, message: 'ส่งกลับแผนปฏิบัติงานให้แก้ไขเรียบร้อยแล้ว' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Reject Work Plan Error', 'เกิดข้อผิดพลาดในการส่งกลับแผนงาน');
     }
   }
 }

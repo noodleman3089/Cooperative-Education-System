@@ -4,11 +4,18 @@ import { Student } from '../types';
 export class StudentModel {
   static async findByStudentId(studentId: number): Promise<Student | null> {
     const res = await query(
-      `SELECT student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, profile_image, is_eligible, is_orientation_passed, advisor_id, supervisor_id,
-              first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone, enrollment_year,
-              skills_and_activities, language_proficiency, preferred_work_region, interested_job_types
-       FROM students 
-       WHERE student_id = $1`,
+      `SELECT s.student_id, s.student_code, s.major_id, s.province_id, s.cumulative_gpa, s.claimed_gpa, s.section,
+              s.resume_file, s.profile_image, s.is_eligible, s.is_orientation_passed, s.advisor_id, s.supervisor_id,
+              s.first_name, s.last_name, s.nickname, s.year_level, s.birth_date, s.alt_email, s.phone,
+              s.current_address, s.parent_name, s.parent_phone, s.enrollment_year,
+              s.skills_and_activities, s.language_proficiency, s.preferred_work_region, s.interested_job_types,
+              m.major_name_th, f.faculty_name_th,
+              p_adv.first_name as advisor_first_name, p_adv.last_name as advisor_last_name
+         FROM students s
+         LEFT JOIN master_major m ON s.major_id = m.major_id
+         LEFT JOIN master_faculty f ON m.faculty_id = f.faculty_id
+         LEFT JOIN personnel p_adv ON s.advisor_id = p_adv.personnel_id
+        WHERE s.student_id = $1`,
       [studentId]
     );
     if ((res.rowCount ?? 0) === 0) return null;
@@ -105,16 +112,18 @@ export class StudentModel {
     currentAddress: string | null,
     parentName: string | null,
     parentPhone: string | null,
-    enrollmentYear: number | null
+    enrollmentYear: number | null,
+    section: string | null = null
   ): Promise<Student> {
     const res = await query(
       `UPDATE students 
        SET student_code = $2, major_id = $3, province_id = $4, cumulative_gpa = $5, resume_file = COALESCE($6, resume_file),
            first_name = $7, last_name = $8, nickname = $9, year_level = $10, birth_date = $11, alt_email = $12, phone = $13, current_address = $14, parent_name = $15, parent_phone = $16,
-           enrollment_year = $17
+           enrollment_year = $17,
+           section = COALESCE($18, section)
        WHERE student_id = $1 
        RETURNING *`,
-      [studentId, studentCode, majorId, provinceId, cumulativeGpa, resumeFile, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear]
+      [studentId, studentCode, majorId, provinceId, cumulativeGpa, resumeFile, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear, section]
     );
     return res.rows[0] as Student;
   }

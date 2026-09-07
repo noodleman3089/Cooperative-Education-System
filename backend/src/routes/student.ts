@@ -116,4 +116,18 @@ router.post(
   StudentController.submitAccommodationAndPlan
 );
 
+// Route: PATCH /api/students/:id/work-plan/approve (Mentor, Advisor, Staff)
+router.patch(
+  '/:id/work-plan/approve',
+  authorizeRoles('mentor', 'advisor', 'staff', 'dean'),
+  StudentController.approveWorkPlan
+);
+
+// Route: PATCH /api/students/:id/work-plan/reject (Mentor, Advisor, Staff)
+router.patch(
+  '/:id/work-plan/reject',
+  authorizeRoles('mentor', 'advisor', 'staff', 'dean'),
+  StudentController.rejectWorkPlan
+);
+
 export default router;

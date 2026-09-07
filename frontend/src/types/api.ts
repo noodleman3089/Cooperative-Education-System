@@ -7,7 +7,10 @@ export interface User {
 /** ความสามารถทางภาษาหนึ่งรายการ ตามที่นักศึกษากรอกในหน้าประวัติ */
 export interface LanguageProficiency {
   language: string;
-  level: string;
+  level?: string;
+  reading?: string;
+  speaking?: string;
+  writing?: string;
 }
 
 /** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนแดชบอร์ดนักศึกษา */
@@ -184,6 +187,8 @@ export interface StudentProfile {
   province_id: number | null;
   province_name_th?: string;
   cumulative_gpa?: number | null;
+  claimed_gpa?: number | null;
+  section?: string | null;
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` (เช่น `avatars/avatar-user-2-…jpg`) ไม่ใช่ URL เต็ม */
   profile_image?: string | null;
@@ -191,6 +196,8 @@ export interface StudentProfile {
   is_orientation_passed: boolean;
   advisor_id?: number | null;
   advisor_email?: string | null;
+  advisor_first_name?: string | null;
+  advisor_last_name?: string | null;
   supervisor_id?: number | null;
   supervisor_email?: string | null;
   first_name?: string | null;

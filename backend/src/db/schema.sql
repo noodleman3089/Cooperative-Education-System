@@ -798,3 +798,28 @@ CREATE TABLE IF NOT EXISTS mentor_notifications (
     last_notified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     notification_count INT NOT NULL DEFAULT 1
 );
+
+-- 22. Monthly Work Plans (สหกิจ 07 หน้า 3 แผนปฏิบัติงานรายเดือน)
+CREATE TABLE IF NOT EXISTS monthly_work_plans (
+    plan_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    month_index INT NOT NULL,
+    topic TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (student_id, month_index)
+);
+
+-- 23. Work Plan Approvals (สายการรับรองแผนงาน 3 ฝ่าย)
+CREATE TABLE IF NOT EXISTS work_plan_approvals (
+    approval_id SERIAL PRIMARY KEY,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    approver_role VARCHAR(20) NOT NULL, -- 'mentor', 'advisor', 'supervisor'
+    approver_id INT REFERENCES users(user_id) ON DELETE SET NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
+    approved_at TIMESTAMPTZ,
+    comment TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (student_id, approver_role)
+);
+

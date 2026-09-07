@@ -351,6 +351,7 @@ export class ProfileController {
         last_name,
         nickname,
         year_level,
+        section,
         birth_date,
         alt_email,
         phone,
@@ -371,6 +372,7 @@ export class ProfileController {
       const cleanFirstName = first_name || null;
       const cleanLastName = last_name || null;
       const cleanNickname = nickname || null;
+      const cleanSection = section ? String(section).trim() : null;
       const cleanBirthDate = birth_date || null;
       const cleanAltEmail = alt_email || null;
       const cleanPhone = phone || null;
@@ -431,7 +433,8 @@ export class ProfileController {
         cleanCurrentAddress,
         cleanParentName,
         cleanParentPhone,
-        lockedEnrollmentYear
+        lockedEnrollmentYear,
+        cleanSection
       );
 
       res.status(200).json({
