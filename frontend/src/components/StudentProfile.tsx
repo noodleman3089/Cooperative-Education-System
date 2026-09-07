@@ -5,7 +5,11 @@ import type { StudentProfile as StudentType, LanguageProficiency } from '../type
 import ResumePdfModal from './ResumePdfModal';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
-import { JOB_TYPE_OPTIONS, WORK_REGION_OPTIONS } from '../config/studentInterests';
+import {
+  JOB_TYPE_OPTIONS,
+  WORK_REGION_OPTIONS,
+  getRecommendedJobTypes,
+} from '../config/studentInterests';
 import { Lock, FileText, Upload, Eye, Download } from 'lucide-react';
 
 interface Major {
@@ -41,6 +45,7 @@ const StudentProfile: React.FC = () => {
   const [skillsAndActivities, setSkillsAndActivities] = useState('');
   const [preferredRegion, setPreferredRegion] = useState('');
   const [jobTypes, setJobTypes] = useState<string[]>([]);
+  const [showAllJobTypes, setShowAllJobTypes] = useState(false);
 
   // Language proficiency (English)
   const [engReading, setEngReading] = useState('ดี');
@@ -66,6 +71,20 @@ const StudentProfile: React.FC = () => {
 
   const regionOptions = WORK_REGION_OPTIONS;
   const jobTypeOptions = JOB_TYPE_OPTIONS;
+
+  const currentMajor = majors.find((m) => m.major_id === selectedMajorId);
+  const majorIdentifier =
+    currentMajor?.major_code ||
+    profile?.major_code ||
+    currentMajor?.major_name_th ||
+    profile?.major_name_th ||
+    '';
+  const recommendedTypes = getRecommendedJobTypes(majorIdentifier);
+
+  const visibleJobTypes =
+    recommendedTypes.length > 0 && !showAllJobTypes
+      ? Array.from(new Set([...recommendedTypes, ...jobTypes]))
+      : jobTypeOptions;
 
   const loadProfile = async () => {
     try {
@@ -724,14 +743,21 @@ const StudentProfile: React.FC = () => {
           {/* Job Types and Region */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                ประเภทงานที่สนใจ
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  ประเภทงานที่สนใจ
+                </label>
+                {recommendedTypes.length > 0 && !showAllJobTypes && (
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">
+                    ✨ แนะนำตามสาขาของคุณ
+                  </span>
+                )}
+              </div>
               <div
                 data-testid="profile-interests"
                 className="flex flex-wrap gap-1.5 p-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 min-h-[42px]"
               >
-                {jobTypeOptions.map((type) => {
+                {visibleJobTypes.map((type) => {
                   const isChecked = jobTypes.includes(type);
                   return (
                     <button
@@ -749,6 +775,17 @@ const StudentProfile: React.FC = () => {
                   );
                 })}
               </div>
+              {recommendedTypes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllJobTypes((prev) => !prev)}
+                  className="mt-1.5 text-xs text-brand-blue dark:text-blue-400 font-semibold hover:underline cursor-pointer inline-flex items-center gap-1"
+                >
+                  {showAllJobTypes
+                    ? '▲ ยุบแสดงเฉพาะสายงานแนะนำ'
+                    : `+ ดูสายงานอื่นทั้งหมด (อีก ${jobTypeOptions.length - visibleJobTypes.length} สายงาน)`}
+                </button>
+              )}
             </div>
 
             <div>
