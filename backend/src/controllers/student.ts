@@ -6,6 +6,7 @@ import pool, { query } from '../config/database';
 import {
   assertCanAccessStudent,
   assertCanReviewStudentWork,
+  assertMentorOwnsStudent,
   resolveMajorScope,
   sendAccessError,
 } from '../utils/access';
@@ -1438,15 +1439,30 @@ export class StudentController {
         return;
       }
       const studentId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(studentId)) {
+        res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
+        return;
+      }
       const roles = req.user.roles;
-      let approverRole: 'mentor' | 'advisor' | 'supervisor' | null = null;
-      if (roles.includes('mentor')) approverRole = 'mentor';
-      else if (roles.includes('advisor')) approverRole = 'advisor';
-      else if (roles.includes('staff')) approverRole = 'advisor';
+
+      // ⛔ SEC-06: ต้องตรวจว่านักศึกษาคนนี้เป็นของผู้เรียกจริง **ก่อน** เขียนอะไรลงฐาน
+      //    ของเดิมรับ `:id` มาแล้วเขียนเลย แปลว่าพี่เลี้ยงคนไหนก็ได้ใส่รหัสนักศึกษา
+      //    ของบริษัทอื่นแล้วลงนามรับรองแผนงานให้เขาได้ · หน้าจอไม่เคยมีปุ่มนั้น
+      //    ซึ่งเป็นเหตุผลที่ไม่มีใครสังเกต แต่ URL มี
+      const approverRole = roles.includes('mentor')
+        ? 'mentor'
+        : roles.includes('advisor') || roles.includes('staff')
+          ? 'advisor'
+          : null;
 
       if (!approverRole) {
         res.status(403).json({ message: 'คุณไม่มีสิทธิ์ในการรับรองแผนงาน' });
         return;
+      }
+      if (approverRole === 'mentor') {
+        await assertMentorOwnsStudent(req.user.userId, studentId);
+      } else {
+        await assertCanReviewStudentWork(req.user.userId, roles, studentId);
       }
 
       await query(
@@ -1482,6 +1498,8 @@ export class StudentController {
 
       res.status(200).json({ success: true, message: 'รับรองแผนปฏิบัติงานเรียบร้อยแล้ว' });
     } catch (error) {
+      // ด่านสิทธิ์โยน AccessDeniedError ซึ่งเป็น 403 ของผู้เรียก ไม่ใช่ระบบพัง
+      if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Approve Work Plan Error', 'เกิดข้อผิดพลาดในการรับรองแผนงาน');
     }
   }
@@ -1497,16 +1515,29 @@ export class StudentController {
         return;
       }
       const studentId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(studentId)) {
+        res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
+        return;
+      }
       const { comment } = req.body;
       const roles = req.user.roles;
-      let approverRole: 'mentor' | 'advisor' | 'supervisor' | null = null;
-      if (roles.includes('mentor')) approverRole = 'mentor';
-      else if (roles.includes('advisor')) approverRole = 'advisor';
-      else if (roles.includes('staff')) approverRole = 'advisor';
+
+      // ⛔ SEC-06 เหมือนกับ approveWorkPlan ด้านบน — การตีกลับก็เป็นการเขียนสถานะ
+      //    ลงแผนงานของคนอื่นได้เท่ากัน และยังทำให้แผนที่เขาลงนามไว้แล้วกลับเป็นร่าง
+      const approverRole = roles.includes('mentor')
+        ? 'mentor'
+        : roles.includes('advisor') || roles.includes('staff')
+          ? 'advisor'
+          : null;
 
       if (!approverRole) {
         res.status(403).json({ message: 'Forbidden.' });
         return;
+      }
+      if (approverRole === 'mentor') {
+        await assertMentorOwnsStudent(req.user.userId, studentId);
+      } else {
+        await assertCanReviewStudentWork(req.user.userId, roles, studentId);
       }
 
       await query(
@@ -1519,6 +1550,8 @@ export class StudentController {
 
       res.status(200).json({ success: true, message: 'ส่งกลับแผนปฏิบัติงานให้แก้ไขเรียบร้อยแล้ว' });
     } catch (error) {
+      // ด่านสิทธิ์โยน AccessDeniedError ซึ่งเป็น 403 ของผู้เรียก ไม่ใช่ระบบพัง
+      if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Reject Work Plan Error', 'เกิดข้อผิดพลาดในการส่งกลับแผนงาน');
     }
   }

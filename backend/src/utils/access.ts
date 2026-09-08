@@ -121,6 +121,34 @@ export async function assertCanReviewStudentWork(
   throw new AccessDeniedError('Forbidden. You do not have access to this student\'s records.');
 }
 
+/**
+ * Assert that a mentor is *this student's* assigned mentor.
+ *
+ * SEC-06 again, on the co-op side this time. `PATCH /students/:id/work-plan/approve`
+ * and `/reject` shipped with no ownership check at all: any account holding the
+ * `mentor` role could put someone else's student id in the URL and sign — or bounce
+ * — a work plan for a student at a different company entirely. The screens never
+ * offered that, which is exactly why it went unnoticed; the URL did.
+ *
+ * The tie is `intent_forms.mentor_id` on an accepted placement, the same row every
+ * other mentor endpoint checks (`weeklyLog.certifyLog`, `monthlyLog.certifyLog`,
+ * `finalReport.mentorReview`). Those three already inline this query; new callers
+ * should use this helper so there is one definition to get right.
+ *
+ * ⛔ Deliberately not "if a mentor row exists, filter by it" — a mentor with no
+ *    accepted placement gets a denial, never an unfiltered pass.
+ */
+export async function assertMentorOwnsStudent(userId: number, studentId: number): Promise<void> {
+  const res = await query(
+    `SELECT 1 FROM intent_forms
+      WHERE student_id = $1 AND mentor_id = $2 AND status = 'accepted' LIMIT 1`,
+    [studentId, userId]
+  );
+  if ((res.rowCount ?? 0) === 0) {
+    throw new AccessDeniedError('นักศึกษาคนนี้ไม่ได้อยู่ในการดูแลของท่าน');
+  }
+}
+
 /** Map an AccessDeniedError onto a response; rethrows anything else. */
 export function sendAccessError(res: { status: (c: number) => { json: (b: unknown) => void } }, error: unknown): boolean {
   if (error instanceof AccessDeniedError) {
