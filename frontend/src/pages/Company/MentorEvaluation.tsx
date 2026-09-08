@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
@@ -68,6 +69,10 @@ const FORM_META: Record<FormCode, { tab: string; title: string; maxTotal: number
 };
 
 const MentorEvaluation: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const studentParam = searchParams.get('student');
+  const formParam = searchParams.get('form');
+
   const [students, setStudents] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [activeForm, setActiveForm] = useState<FormCode>('sahatkit_15');
@@ -136,6 +141,15 @@ const MentorEvaluation: React.FC = () => {
     setError(null);
     setActiveForm('sahatkit_15');
     resetForm('sahatkit_15');
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('student', String(student.student_id));
+        next.set('form', '15');
+        return next;
+      },
+      { replace: true }
+    );
   };
 
   const handleSwitchForm = (form: FormCode) => {
@@ -143,7 +157,65 @@ const MentorEvaluation: React.FC = () => {
     setError(null);
     setSuccess(null);
     resetForm(form);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set('form', form === 'sahatkit_16' ? '16' : '15');
+        return next;
+      },
+      { replace: true }
+    );
   };
+
+  const handleBackToList = () => {
+    setSelectedStudent(null);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('student');
+        next.delete('form');
+        return next;
+      },
+      { replace: true }
+    );
+  };
+
+  // ponytail: auto-select student and form from deep-link query params (?student=<id>&form=15|16)
+  useEffect(() => {
+    if (!studentParam) {
+      if (selectedStudent) {
+        setSelectedStudent(null);
+      }
+      return;
+    }
+    if (students.length === 0) return;
+
+    const targetForm: FormCode =
+      formParam === '16' || formParam === 'sahatkit_16' ? 'sahatkit_16' : 'sahatkit_15';
+
+    const matched = students.find(
+      (s) => String(s.student_id) === studentParam || s.student_code === studentParam
+    );
+    if (!matched) return;
+
+    if (!selectedStudent || selectedStudent.student_id !== matched.student_id) {
+      setSelectedStudent(matched);
+      setActiveForm(targetForm);
+      resetForm(targetForm);
+    } else {
+      if (
+        selectedStudent.final_report_status !== matched.final_report_status ||
+        selectedStudent.sahatkit15_score !== matched.sahatkit15_score ||
+        selectedStudent.sahatkit16_score !== matched.sahatkit16_score
+      ) {
+        setSelectedStudent(matched);
+      }
+      if (activeForm !== targetForm) {
+        setActiveForm(targetForm);
+        resetForm(targetForm);
+      }
+    }
+  }, [studentParam, formParam, students, selectedStudent, activeForm]);
 
   const handleScoreChange = (key: string, val: number | '') =>
     setScores((prev) => ({ ...prev, [key]: val }));
@@ -209,7 +281,7 @@ const MentorEvaluation: React.FC = () => {
           : 'บันทึกแบบประเมิน สหกิจ 16 เรียบร้อยแล้ว'
       );
       setConfirmingSubmit(false);
-      setSelectedStudent(null);
+      handleBackToList();
       await loadStudents();
     } catch (err) {
       setConfirmingSubmit(false);
@@ -531,6 +603,31 @@ const MentorEvaluation: React.FC = () => {
               </>
             ) : (
               <>
+                {/* ponytail: advisory draft report review banner on Form 16 — non-blocking */}
+                {selectedStudent.final_report_status === 'approved' ? (
+                  <AlertBanner
+                    variant="info"
+                    message="ท่านได้ตรวจรับรองร่างรายงานของนักศึกษาแล้ว"
+                  />
+                ) : (
+                  <AlertBanner
+                    variant="warning"
+                    message={
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span>
+                          คำแนะนำ: ท่านยังไม่ได้ตรวจรับรองร่างรายงานของนักศึกษา (แนะนำให้ตรวจร่างรายงานในเมนู 'รับรองงานนักศึกษา' ก่อนประเมินเล่มรายงาน)
+                        </span>
+                        <Link
+                          to={`/dashboard?role=mentor&menu=certify&tab=draft&student=${selectedStudent.student_id}`}
+                          className="font-medium underline hover:text-amber-950 dark:hover:text-amber-200"
+                        >
+                          ไปที่ตรวจรับรองร่างรายงาน &rarr;
+                        </Link>
+                      </div>
+                    }
+                  />
+                )}
+
                 {selectedStudent.final_report_path && (
                   <a
                     href={`${API_BASE_URL}/files/${selectedStudent.final_report_path}`}
@@ -609,7 +706,7 @@ const MentorEvaluation: React.FC = () => {
             )}
 
             <div className="flex flex-wrap justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
-              <Button type="button" variant="secondary" onClick={() => setSelectedStudent(null)}>
+              <Button type="button" variant="secondary" onClick={handleBackToList}>
                 ย้อนกลับ
               </Button>
               <Button type="submit" disabled={submitting}>
