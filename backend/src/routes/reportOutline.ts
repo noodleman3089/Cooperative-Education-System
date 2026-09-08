@@ -38,7 +38,10 @@ router.get(
 router.put(
   '/:id/status',
   authenticateToken,
-  authorizeRoles('mentor', 'advisor', 'company'),
+  // ⛔ ตัด 'company' ออกแล้ว (spec-D ข้อ 14.1) — คนที่เห็นชอบหัวข้อรายงานต้องเป็น
+  //    **พนักงานที่ปรึกษา** ซึ่งเป็นคนที่รู้ว่าอะไรเป็นความลับของบริษัท ไม่ใช่ฝ่ายบุคคล
+  //    · บัญชีสถานประกอบการยังเห็นรายการและสถานะครบผ่าน GET /outlines/company
+  authorizeRoles('mentor', 'advisor'),
   ReportOutlineController.updateStatus
 );
 

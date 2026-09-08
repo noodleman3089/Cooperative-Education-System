@@ -149,7 +149,6 @@ export interface JobPost {
   company_id: number;
   title: string;
   description: string;
-  image_path: string | null;
   created_by: number;
   quota: number;
   applied_count: number;
@@ -188,7 +187,6 @@ export interface CreateJobPostBody {
   company_id: number;
   title: string;
   description: string;
-  image_path?: string;
   quota: number;
   expire_date: string; // ISO date string or YYYY-MM-DD
 }

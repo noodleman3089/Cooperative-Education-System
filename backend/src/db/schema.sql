@@ -315,7 +315,8 @@ CREATE TABLE IF NOT EXISTS job_posts (
     company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     description TEXT NOT NULL,
-    image_path VARCHAR(255),
+    -- ⛔ ไม่มี image_path — แบนเนอร์ประกาศงานถูกลบเมื่อ 2026-09-08 (migration 028)
+    --    ตรวจกับแบบฟอร์ม สหกิจ 02 ตัวจริงแล้วไม่มีช่องรูปภาพ และไม่มีในขอบเขต
     created_by INT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
     quota INT NOT NULL,
     -- "จำนวนงานที่เสนอนักศึกษา" คู่กับ quota บนกระดาษ — บนหน้าจออ่านว่า

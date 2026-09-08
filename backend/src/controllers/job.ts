@@ -19,7 +19,7 @@ export class JobPostController {
       }
 
       const body = req.body as CreateJobPostBody;
-      const { company_id, title, description, image_path, quota, expire_date } = body;
+      const { company_id, title, description, quota, expire_date } = body;
 
       // Validate inputs
       if (company_id === undefined || !title || !description || quota === undefined || !expire_date) {
@@ -74,7 +74,6 @@ export class JobPostController {
         company_id: parsedCompanyId,
         title: title.trim(),
         description: description.trim(),
-        image_path: image_path || null,
         created_by: userId,
         quota: parsedQuota,
         expire_date: new Date(expire_date),

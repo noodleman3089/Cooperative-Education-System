@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
-import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { assertCanReviewStudentWork, assertMentorOwnsStudent, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
 
 const PERSONNEL_REVIEW_ROLES = ['advisor', 'dept_head', 'staff', 'dean'];
@@ -125,7 +125,8 @@ export class ReportOutlineController {
         res.status(404).json({ message: 'Report outline not found.' });
         return;
       }
-      const { student_id, company_id, current_status } = outlineRes.rows[0];
+      // company_id ไม่ถูกใช้แล้ว — ด่านสิทธิ์ของพี่เลี้ยงผูกที่ระดับนักศึกษาแทนที่จะเทียบบริษัท
+      const { student_id, current_status } = outlineRes.rows[0];
 
       // Relationship & State Machine Verification
       if (status === 'pending_advisor') {
@@ -138,21 +139,16 @@ export class ReportOutlineController {
           res.status(403).json({ message: 'Forbidden. Only mentors can review outlines at this stage.' });
           return;
         }
-        const mentorCheck = await query('SELECT company_id FROM mentors WHERE mentor_id = $1', [userId]);
-        let userCompanyId: number | null = null;
-        if ((mentorCheck.rowCount ?? 0) > 0) {
-          userCompanyId = mentorCheck.rows[0].company_id;
-        } else {
-          const companyCheck = await query('SELECT company_id FROM companies WHERE created_by = $1', [userId]);
-          if ((companyCheck.rowCount ?? 0) > 0) {
-            userCompanyId = companyCheck.rows[0].company_id;
-          }
-        }
-        
-        if (userCompanyId !== company_id) {
-          res.status(403).json({ message: 'Forbidden. You are not authorized to review this student\'s outline.' });
-          return;
-        }
+        /**
+         * ⛔ ต้องเป็นพี่เลี้ยง **ของนักศึกษาคนนี้** ไม่ใช่แค่พี่เลี้ยงที่บริษัทเดียวกัน
+         *
+         * ของเดิมเทียบแค่ `company_id` ตรงกัน แปลว่าพี่เลี้ยงคนอื่นในบริษัทเดียวกัน
+         * ที่ไม่เคยดูแลนักศึกษาคนนี้ ก็เห็นชอบหัวข้อรายงานของเขาได้ · SEC-06 บอกว่า
+         * พี่เลี้ยงเห็นเฉพาะนักศึกษาที่ผูกกับตัวเอง จึงต้องผูกที่ระดับนักศึกษา
+         * และของเดิมยังตกไปอ่าน `companies.created_by` ให้บัญชีบริษัทผ่านด่านนี้ด้วย
+         * ซึ่งเป็นทางที่ข้อ 14.1 สั่งปิด
+         */
+        await assertMentorOwnsStudent(userId, student_id);
       } else if (status === 'approved') {
         if (current_status !== 'pending_advisor') {
           res.status(400).json({ message: 'Cannot approve outline unless current status is pending_advisor (after mentor review).' });
@@ -178,18 +174,13 @@ export class ReportOutlineController {
           }
         }
         if (!allowed && isMentor) {
-          const mentorCheck = await query('SELECT company_id FROM mentors WHERE mentor_id = $1', [userId]);
-          let userCompanyId: number | null = null;
-          if ((mentorCheck.rowCount ?? 0) > 0) {
-            userCompanyId = mentorCheck.rows[0].company_id;
-          } else {
-            const companyCheck = await query('SELECT company_id FROM companies WHERE created_by = $1', [userId]);
-            if ((companyCheck.rowCount ?? 0) > 0) {
-              userCompanyId = companyCheck.rows[0].company_id;
-            }
-          }
-          if (userCompanyId === company_id) {
+          // ⛔ เหตุผลเดียวกับสาย pending_advisor ด้านบน — การตีกลับก็เป็นการเขียนสถานะ
+          //    ลงโครงร่างของคนอื่นได้เท่ากัน จึงต้องเป็นพี่เลี้ยงของนักศึกษาคนนั้นจริง
+          try {
+            await assertMentorOwnsStudent(userId, student_id);
             allowed = true;
+          } catch {
+            allowed = false;
           }
         }
         if (!allowed) {
@@ -237,6 +228,8 @@ export class ReportOutlineController {
         message: 'Status updated successfully.',
       });
     } catch (error) {
+      // ด่านสิทธิ์โยน AccessDeniedError ซึ่งเป็น 403 ของผู้เรียก ไม่ใช่ระบบพัง
+      if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Update Outline Status Error', 'An internal server error occurred.');
     }
   }
