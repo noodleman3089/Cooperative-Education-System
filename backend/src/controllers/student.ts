@@ -1243,7 +1243,16 @@ export class StudentController {
           address: emg.emergency_address ?? null,
         },
         weekly_plans: plansRes.rows || [],
-        monthly_plans: monthlyPlansRes.rows || [],
+        /**
+         * รูปเก่า "หนึ่งหัวข้อต่อหนึ่งเดือน" — **สร้างสดจาก `work_plan_topics` ทุกครั้ง**
+         *
+         * ⛔ ห้ามอ่านจากตาราง `monthly_work_plans` ตรง ๆ อีก เพราะฝั่งเขียนย้ายไปที่
+         *    `work_plan_topics` แล้ว การอ่านตารางเก่าจะทำให้นักศึกษากรอกแล้วกดบันทึก
+         *    สำเร็จ แต่พอรีเฟรชข้อมูลหายไปทั้งหมด (เกือบพลาดตรงนี้ตอนทำ B9)
+         * หลายหัวข้อในเดือนเดียวกันถูกต่อด้วย " · " เพราะรูปเก่ารับได้เดือนละหัวข้อเดียว
+         * ➡️ ถอดทิ้งเมื่อหน้าจอนักศึกษาเปลี่ยนไปอ่าน `work_plan_topics` แล้ว
+         */
+        monthly_plans: legacyMonthlyPlans(topicsRes.rows, monthlyPlansRes.rows),
         // ⛔ ของจริงตามกระดาษ — หน้าจอใหม่ให้อ่านตัวนี้ ไม่ใช่ monthly_plans ด้านบน
         work_plan_topics: topicsRes.rows || [],
         approvals: approvalsRes.rows || [],
@@ -1704,4 +1713,26 @@ export class StudentController {
       sendUnexpectedError(res, error, 'Reject Work Plan Error', 'เกิดข้อผิดพลาดในการส่งกลับแผนงาน');
     }
   }
+}
+
+/**
+ * แปลงเมทริกซ์ `work_plan_topics` กลับเป็นรูปเก่า "หนึ่งหัวข้อต่อหนึ่งเดือน"
+ * ไว้ให้หน้าจอที่ยังไม่ได้แก้ · ไม่มีหัวข้อเลยจึงค่อยตกไปที่ตารางเก่า
+ */
+function legacyMonthlyPlans(
+  topics: { seq: number; topic: string; months: number[] }[],
+  legacyRows: { month_index: number; topic: string }[]
+): { month_index: number; topic: string }[] {
+  if (!topics || topics.length === 0) return legacyRows || [];
+
+  const byMonth = new Map<number, string[]>();
+  for (const t of topics) {
+    for (const month of t.months || []) {
+      if (!byMonth.has(month)) byMonth.set(month, []);
+      byMonth.get(month)!.push(t.topic);
+    }
+  }
+  return Array.from(byMonth.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([month_index, list]) => ({ month_index, topic: list.join(' · ') }));
 }
