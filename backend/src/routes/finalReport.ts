@@ -24,6 +24,15 @@ router.get(
   FinalReportController.getMyReport
 );
 
+// GET /api/final-reports/mentor — ร่างที่นักศึกษาของพี่เลี้ยงคนนี้ส่งมาให้ตรวจ
+// ⛔ ต้องอยู่ก่อน '/student/:studentId' ไม่งั้น 'mentor' จะถูกจับเป็น :studentId
+router.get(
+  '/mentor',
+  authenticateToken,
+  authorizeRoles('mentor'),
+  FinalReportController.getMentorDrafts
+);
+
 // Review & administration routes
 router.get(
   '/student/:studentId',

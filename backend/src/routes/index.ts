@@ -8,6 +8,7 @@ import jobRoutes from './job';
 import jobOfferRoutes from './jobOffer';
 import publicJobOfferRoutes from './publicJobOffer';
 import mentorRoutes from './mentor';
+import form07Routes from './form07';
 import intentRoutes from './intent';
 import documentRoutes from './document';
 import acceptanceRoutes from './acceptance';
@@ -46,6 +47,8 @@ router.use('/job-offers', jobOfferRoutes);
 router.use('/public/job-offer', publicJobOfferRoutes);
 // ฝ่ายพี่เลี้ยง — คิวงานค้างและการรับรองบันทึก
 router.use('/mentor', mentorRoutes);
+// สหกิจ 07 หน้า 1-2 — ตำแหน่งงานและพนักงานที่ปรึกษา (สถานประกอบการกรอก)
+router.use('/form07', form07Routes);
 router.use('/intents', intentRoutes);
 router.use('/documents', documentRoutes);
 router.use('/acceptances', acceptanceRoutes);

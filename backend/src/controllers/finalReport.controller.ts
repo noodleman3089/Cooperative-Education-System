@@ -157,6 +157,59 @@ export class FinalReportController {
   }
 
   /**
+   * ร่างรายงานที่นักศึกษาของพี่เลี้ยงคนนี้ส่งมาให้ตรวจ (ขั้นที่ 1 ก่อน สหกิจ 16)
+   * Route: GET /api/final-reports/mentor
+   * Access: mentor
+   *
+   * ⛔ คืนเฉพาะ `reviewer_kind = 'mentor'` — **เล่มที่ส่งอาจารย์พี่เลี้ยงไม่เห็น**
+   *    สองอย่างนี้เดินคนละสาย และคนละคนเป็นผู้อนุมัติ
+   * ⛔ fail closed: กรองด้วย `intent_forms.mentor_id` ที่สถานะ accepted เสมอ (SEC-06)
+   *
+   * หัวข้อรายงานมาจากโครงร่าง (สหกิจ 11) เวอร์ชันที่อนุมัติแล้ว — พี่เลี้ยงต้องรู้ว่า
+   * กำลังอ่านร่างของหัวข้อไหน โดยไม่ต้องเปิดไฟล์ก่อน
+   */
+  static async getMentorDrafts(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const result = await query(
+        `SELECT r.report_id, r.student_id, r.version, r.file_path, r.status,
+                r.reviewer_comment, r.submitted_at, r.reviewed_at,
+                s.student_code,
+                btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS full_name,
+                (i.end_date - 14) AS draft_due_date,
+                ((i.end_date - 14) < (NOW() AT TIME ZONE 'Asia/Bangkok')::date) AS is_overdue,
+                (SELECT v.report_title
+                   FROM report_outlines o
+                   JOIN report_outline_versions v ON v.outline_id = o.outline_id
+                  WHERE o.student_id = s.student_id AND v.status = 'approved'
+                  ORDER BY v.version_id DESC LIMIT 1) AS report_title
+           FROM final_reports r
+           JOIN intent_forms i ON i.student_id = r.student_id
+           JOIN students s ON s.student_id = r.student_id
+          WHERE r.reviewer_kind = 'mentor'
+            AND i.mentor_id = $1 AND i.status = 'accepted'
+          ORDER BY s.student_code, r.version DESC`,
+        [req.user.userId]
+      );
+
+      res.status(200).json(
+        result.rows.map((r) => ({
+          ...r,
+          draft_due_date: r.draft_due_date
+            ? new Date(r.draft_due_date).toISOString().slice(0, 10)
+            : null,
+        }))
+      );
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Get mentor drafts error', 'ไม่สามารถโหลดร่างรายงานได้');
+    }
+  }
+
+  /**
    * Mentor reviews draft report (Step 1)
    * Route: PATCH /api/final-reports/:id/mentor-review
    * Access: mentor

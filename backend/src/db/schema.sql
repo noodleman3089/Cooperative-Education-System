@@ -212,7 +212,19 @@ CREATE TABLE IF NOT EXISTS companies (
         CONSTRAINT companies_contact_mode_check CHECK (contact_mode IN ('manager', 'delegate')),
     contact_department VARCHAR(255),
     contact_phone VARCHAR(50),
-    contact_fax VARCHAR(50)
+    contact_fax VARCHAR(50),
+    -- ที่อยู่แยกช่องตาม **สหกิจ 07 หน้า 1** ซึ่งมีกล่องแยก เลขที่ · ถนน · ซอย · ตำบล/แขวง
+    --
+    -- `address` ด้านบนยังเป็นแหล่งความจริงของหนังสือราชการเหมือนเดิม — เซิร์ฟเวอร์
+    -- ประกอบค่าใหม่จากช่องย่อยพวกนี้ให้ทุกครั้งที่บริษัทแก้ผ่าน สหกิจ 07 เอกสารที่
+    -- วาดจาก `address` จึงไม่ต้องแก้อะไรเลย
+    -- ⛔ ห้ามแยก `address` เดิมกลับเป็นช่องย่อยอัตโนมัติ — ที่อยู่ไทยแยกด้วยโปรแกรมไม่ได้
+    --    (บทเรียนเดียวกับ `accommodations.address_legacy`) ช่องย่อยว่างจนกว่าจะมีคนกรอกเอง
+    house_no VARCHAR(50),
+    road VARCHAR(255),
+    soi VARCHAR(255),
+    subdistrict VARCHAR(100),
+    manager_email VARCHAR(255)
 );
 
 -- Mentors Table (Profile for Company Supervisors)
