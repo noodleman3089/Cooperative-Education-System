@@ -1155,6 +1155,17 @@ export class StudentController {
         'SELECT plan_id, month_index, topic, created_at, updated_at FROM monthly_work_plans WHERE student_id = $1 ORDER BY month_index ASC',
         [studentId]
       );
+      /**
+       * แผนปฏิบัติงานตัวจริงตามกระดาษ สหกิจ 07 หน้า 3 — **เมทริกซ์ หัวข้องาน x เดือน**
+       *
+       * `monthly_work_plans` ด้านบนเป็นโครงเก่าที่เก็บหนึ่งหัวข้อต่อหนึ่งเดือน ซึ่งเก็บ
+       * ของจริงไม่ได้ (งานหนึ่งชิ้นกินได้หลายเดือน) · ยังคืนมันมาด้วยหนึ่งรอบเพื่อไม่ให้
+       * หน้าจอเดิมพังระหว่างที่ยังไม่ได้แก้ ⛔ ของใหม่ให้อ่าน `work_plan_topics` เท่านั้น
+       */
+      const topicsRes = await query(
+        'SELECT topic_id, seq, topic, months FROM work_plan_topics WHERE student_id = $1 ORDER BY seq ASC',
+        [studentId]
+      );
       const approvalsRes = await query(
         `SELECT a.approval_id, a.approver_role, a.approver_id, a.status, a.approved_at, a.comment,
                 p.first_name as personnel_first_name, p.last_name as personnel_last_name,
@@ -1233,6 +1244,8 @@ export class StudentController {
         },
         weekly_plans: plansRes.rows || [],
         monthly_plans: monthlyPlansRes.rows || [],
+        // ⛔ ของจริงตามกระดาษ — หน้าจอใหม่ให้อ่านตัวนี้ ไม่ใช่ monthly_plans ด้านบน
+        work_plan_topics: topicsRes.rows || [],
         approvals: approvalsRes.rows || [],
         months_count: monthsCount,
         intent: intent
@@ -1270,7 +1283,7 @@ export class StudentController {
         res.status(403).json({ message: 'Forbidden. You can only submit accommodation and plans for yourself.' });
         return;
       }
-      const { accommodation, weekly_plans, monthly_plans, submit_to_mentor } = req.body;
+      const { accommodation, weekly_plans, monthly_plans, work_plan_topics, submit_to_mentor } = req.body;
 
       if (!accommodation || typeof accommodation !== 'object') {
         res.status(400).json({ message: 'กรุณากรอกข้อมูลที่พักระหว่างปฏิบัติงานให้ครบถ้วน' });
@@ -1379,18 +1392,45 @@ export class StudentController {
           }
         }
 
-        // Save monthly plans if provided
-        if (Array.isArray(monthly_plans) && monthly_plans.length > 0) {
+        /**
+         * แผนปฏิบัติงาน (สหกิจ 07 หน้า 3) — เมทริกซ์ หัวข้องาน x เดือน
+         *
+         * รับได้สองรูปแบบระหว่างที่หน้าจอฝั่งนักศึกษายังไม่ได้แก้:
+         *   work_plan_topics : [{ topic, months: [1,2] }]  ← ของจริงตามกระดาษ
+         *   monthly_plans    : [{ month_index, topic }]    ← โครงเก่า หนึ่งหัวข้อต่อเดือน
+         * ⛔ ของเก่าถูกแปลงเป็นหัวข้อที่ติ๊กเดือนเดียว ไม่ได้เก็บสองที่ให้ขัดกันเอง
+         *    และ **จะเลิกรับเมื่อหน้าจอฝั่งนักศึกษาแก้เป็นเมทริกซ์แล้ว**
+         */
+        const topicRows: { topic: string; months: number[] }[] = [];
+        if (Array.isArray(work_plan_topics)) {
+          for (const t of work_plan_topics) {
+            const topic = String((t as { topic?: unknown }).topic ?? '').trim();
+            if (!topic) continue;
+            const months = Array.isArray((t as { months?: unknown }).months)
+              ? ((t as { months: unknown[] }).months)
+                  .map((m) => parseInt(String(m), 10))
+                  .filter((m) => Number.isInteger(m) && m > 0)
+              : [];
+            topicRows.push({ topic, months: Array.from(new Set(months)).sort((a, b) => a - b) });
+          }
+        } else if (Array.isArray(monthly_plans)) {
           for (const mp of monthly_plans) {
             const mIdx = parseInt(mp.month_index, 10);
-            if (!isNaN(mIdx) && mIdx > 0) {
-              await client.query(`
-                INSERT INTO monthly_work_plans (student_id, month_index, topic, updated_at)
-                VALUES ($1, $2, $3, NOW())
-                ON CONFLICT (student_id, month_index)
-                DO UPDATE SET topic = EXCLUDED.topic, updated_at = NOW()
-              `, [studentId, mIdx, String(mp.topic || '').trim()]);
-            }
+            const topic = String(mp.topic || '').trim();
+            if (!isNaN(mIdx) && mIdx > 0 && topic) topicRows.push({ topic, months: [mIdx] });
+          }
+        }
+
+        if (topicRows.length > 0 || Array.isArray(work_plan_topics)) {
+          // เขียนทับทั้งชุด — ตารางบนกระดาษเป็นใบเดียว ไม่ใช่การต่อแถวสะสม
+          await client.query('DELETE FROM work_plan_topics WHERE student_id = $1', [studentId]);
+          let seq = 1;
+          for (const row of topicRows) {
+            await client.query(
+              `INSERT INTO work_plan_topics (student_id, seq, topic, months, updated_at)
+               VALUES ($1, $2, $3, $4, NOW())`,
+              [studentId, seq++, row.topic, row.months]
+            );
           }
         }
 
@@ -1425,6 +1465,115 @@ export class StudentController {
       }
     } catch (error) {
       sendUnexpectedError(res, error, 'submitAccommodationAndPlan Error', 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง');
+    }
+  }
+
+  /**
+   * แผนปฏิบัติงานที่รอลงนาม — สำหรับพี่เลี้ยงและอาจารย์
+   * Route: GET /api/students/:id/work-plan
+   * Access: mentor (ของตัวเอง) · advisor/staff (ตามขอบเขตเดิม)
+   *
+   * ⛔ คอลัมน์เดือนคำนวณจากช่วงวันจริงเสมอ **ห้ามฮาร์ดโค้ด 4 เดือน** — ฝึก 1 พ.ย. ถึง
+   *    20 มี.ค. คร่อม 5 เดือน ซึ่งเป็นเหตุผลที่ `work_plan_topics.months` เป็น INT[]
+   *    ไม่ใช่คอลัมน์ month_1..month_4
+   */
+  static async getWorkPlanForReview(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const studentId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(studentId)) {
+        res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
+        return;
+      }
+
+      const roles = req.user.roles;
+      if (roles.includes('mentor')) {
+        await assertMentorOwnsStudent(req.user.userId, studentId);
+      } else {
+        await assertCanReviewStudentWork(req.user.userId, roles, studentId);
+      }
+
+      const headRes = await query(
+        `SELECT s.student_id, s.student_code,
+                btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS full_name,
+                mj.major_name_th, f.faculty_name_th, c.name_th AS company_name,
+                i.start_date, i.end_date,
+                -- จำนวนเดือนที่ช่วงปฏิบัติงานคร่อม (นับตามเดือนปฏิทิน ไม่ใช่ 30 วัน
+                -- เพราะกระดาษเขียนว่า "เดือนที่ 1..4" ซึ่งคนอ่านเข้าใจเป็นเดือนปฏิทิน)
+                (EXTRACT(YEAR FROM age(date_trunc('month', i.end_date),
+                                       date_trunc('month', i.start_date))) * 12
+                 + EXTRACT(MONTH FROM age(date_trunc('month', i.end_date),
+                                          date_trunc('month', i.start_date))) + 1)::int AS month_count
+           FROM students s
+           LEFT JOIN master_major mj ON mj.major_id = s.major_id
+           LEFT JOIN master_faculty f ON f.faculty_id = mj.faculty_id
+           LEFT JOIN intent_forms i ON i.student_id = s.student_id AND i.status = 'accepted'
+           LEFT JOIN companies c ON c.company_id = i.company_id
+          WHERE s.student_id = $1`,
+        [studentId]
+      );
+      if ((headRes.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบข้อมูลนักศึกษา' });
+        return;
+      }
+      const head = headRes.rows[0];
+
+      const [topicsRes, weeklyRes, approvalsRes] = await Promise.all([
+        query('SELECT topic_id, seq, topic, months FROM work_plan_topics WHERE student_id = $1 ORDER BY seq', [studentId]),
+        query('SELECT week_number, start_date, end_date, tasks FROM weekly_work_plans WHERE student_id = $1 ORDER BY week_number', [studentId]),
+        query(
+          `SELECT a.approver_role, a.status, a.approved_at, a.comment, a.created_at,
+                  COALESCE(m.name, btrim(coalesce(p.first_name, '') || ' ' || coalesce(p.last_name, ''))) AS approver_name
+             FROM work_plan_approvals a
+             LEFT JOIN mentors m ON m.mentor_id = a.approver_id
+             LEFT JOIN personnel p ON p.personnel_id = a.approver_id
+            WHERE a.student_id = $1`,
+          [studentId]
+        ),
+      ]);
+
+      const months = [];
+      if (head.start_date && head.month_count) {
+        const start = new Date(head.start_date);
+        for (let i = 0; i < head.month_count; i++) {
+          const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+          months.push({ index: i + 1, year: d.getFullYear(), month: d.getMonth() + 1 });
+        }
+      }
+
+      const approvals: Record<string, unknown> = {};
+      for (const row of approvalsRes.rows) approvals[row.approver_role] = row;
+
+      res.status(200).json({
+        student: {
+          student_id: head.student_id,
+          student_code: head.student_code,
+          full_name: head.full_name,
+          major_name_th: head.major_name_th,
+          faculty_name_th: head.faculty_name_th,
+          company_name: head.company_name,
+          start_date: head.start_date ? new Date(head.start_date).toISOString().slice(0, 10) : null,
+          end_date: head.end_date ? new Date(head.end_date).toISOString().slice(0, 10) : null,
+        },
+        // ⛔ ป้ายเดือนเป็นตัวเลขล้วน (year/month) หน้าจอเป็นคนแปลงเป็นชื่อเดือนไทย
+        months,
+        topics: topicsRes.rows,
+        weekly: weeklyRes.rows.map((w) => ({
+          ...w,
+          start_date: w.start_date ? new Date(w.start_date).toISOString().slice(0, 10) : null,
+          end_date: w.end_date ? new Date(w.end_date).toISOString().slice(0, 10) : null,
+        })),
+        // นักศึกษา "ลงนาม" ด้วยการกดส่งให้พี่เลี้ยง — ระบบไม่มีช่องลายเซ็นแยก
+        // เวลาที่แถวคำรับรองของพี่เลี้ยงถูกสร้างจึงคือเวลาที่นักศึกษายืนยันแผน
+        student_signed_at: approvals.mentor ? (approvals.mentor as { created_at: string }).created_at : null,
+        approvals,
+      });
+    } catch (error) {
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(res, error, 'Get work plan for review error', 'ไม่สามารถโหลดแผนปฏิบัติงานได้');
     }
   }
 

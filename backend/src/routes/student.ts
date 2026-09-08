@@ -116,6 +116,13 @@ router.post(
   StudentController.submitAccommodationAndPlan
 );
 
+// Route: GET /api/students/:id/work-plan (พี่เลี้ยงและอาจารย์เปิดดูก่อนลงนาม)
+router.get(
+  '/:id/work-plan',
+  authorizeRoles('mentor', 'advisor', 'staff', 'dean', 'dept_head'),
+  StudentController.getWorkPlanForReview
+);
+
 // Route: PATCH /api/students/:id/work-plan/approve (Mentor, Advisor, Staff)
 router.patch(
   '/:id/work-plan/approve',

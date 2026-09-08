@@ -21,6 +21,7 @@ import supervisionLogRoutes from './supervisionLog';
 import supervisionRecordRoutes from './supervisionRecord';
 import weeklyLogRoutes from './weeklyLog';
 import monthlyLogRoutes from './monthlyLog';
+import dailyLogRoutes from './dailyLog';
 import applicationRoutes from './application';
 import finalReportRoutes from './finalReport';
 import reportConfirmationRoutes from './reportConfirmation';
@@ -64,6 +65,8 @@ router.use('/supervision-logs', supervisionLogRoutes);
 router.use('/supervision-records', supervisionRecordRoutes);
 router.use('/weekly-logs', weeklyLogRoutes);
 router.use('/monthly-logs', monthlyLogRoutes);
+// สหกิจ 08 — เปิดใช้เมื่อพี่เลี้ยงกดสวิตช์ daily_log_required เท่านั้น
+router.use('/daily-logs', dailyLogRoutes);
 router.use('/applications', applicationRoutes);
 
 
