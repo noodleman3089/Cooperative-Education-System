@@ -226,6 +226,77 @@ export class JobOfferModel {
   }
 
   /**
+   * แถว token พร้อมข้อมูลที่ต้องใช้ตัดสินว่ายังใช้ได้ไหม
+   *
+   * ⛔ ตัดสิน "หมดอายุ" ด้วย `NOW()` ของ Postgres ไม่ใช่ของ Node — สองตัวนี้เพี้ยนกันได้
+   *    และเวลาที่เขียน `expires_at` ลงไปก็มาจากฐาน จึงต้องเทียบกับนาฬิกาเรือนเดียวกัน
+   */
+  static async findToken(token: string) {
+    const res = await query(
+      `SELECT t.token_id, t.token, t.offer_id, t.used_at, t.expires_at,
+              (t.expires_at <= NOW()) AS is_expired,
+              o.company_id, o.status AS offer_status
+         FROM job_offer_tokens t
+         JOIN coop_job_offers o ON o.offer_id = t.offer_id
+        WHERE t.token = $1`,
+      [token]
+    );
+    return (res.rowCount ?? 0) > 0 ? res.rows[0] : null;
+  }
+
+  /** เผา token ทิ้งหลังใช้ตอบไปแล้ว — ใช้ครั้งเดียวจริง ๆ */
+  static async burnToken(client: PoolClient, tokenId: number): Promise<void> {
+    await client.query(`UPDATE job_offer_tokens SET used_at = NOW() WHERE token_id = $1`, [tokenId]);
+  }
+
+  /** ออก token ล่าสุดของใบนี้เมื่อไหร่ — ใช้คุมจังหวะการขอลิงก์ใหม่ */
+  static async lastTokenIssuedAt(offerId: number): Promise<Date | null> {
+    const res = await query(
+      `SELECT MAX(created_at) AS last_at FROM job_offer_tokens WHERE offer_id = $1`,
+      [offerId]
+    );
+    const value = res.rows[0]?.last_at;
+    return value ? new Date(value) : null;
+  }
+
+  /**
+   * อีเมลที่ระบบจะส่งลิงก์ไปให้ — **จากทะเบียนเท่านั้น**
+   *
+   * ⛔ ห้ามรับอีเมลปลายทางจากคำขอ ไม่ว่าในรูปแบบไหน — ไม่งั้นใครที่ถือลิงก์เก่า
+   *    (หรือเดา token ถูก) ก็สั่งให้ระบบส่งลิงก์ของบริษัทอื่นเข้าเมลตัวเองได้
+   */
+  static async contactEmail(companyId: number): Promise<string | null> {
+    const res = await query(
+      `SELECT COALESCE(NULLIF(btrim(c.email), ''), NULLIF(btrim(u.email), '')) AS email
+         FROM companies c
+         LEFT JOIN users u ON u.user_id = c.created_by
+        WHERE c.company_id = $1`,
+      [companyId]
+    );
+    return res.rows[0]?.email ?? null;
+  }
+
+  /** ชื่อบริษัทและป้ายภาคเรียน — ใช้ประกอบเนื้ออีเมล */
+  static async offerHeadline(offerId: number) {
+    const res = await query(
+      `SELECT c.name_th, s.academic_year, s.semester, o.due_date::text AS due_date
+         FROM coop_job_offers o
+         JOIN companies c ON c.company_id = o.company_id
+         JOIN coop_semesters s ON s.semester_id = o.semester_id
+        WHERE o.offer_id = $1`,
+      [offerId]
+    );
+    const row = res.rows[0];
+    return row
+      ? {
+          companyName: row.name_th as string,
+          semesterLabel: `ภาคเรียนที่ ${row.semester}/${row.academic_year}`,
+          dueDate: row.due_date as string | null,
+        }
+      : null;
+  }
+
+  /**
    * เขียนรายการตำแหน่งทั้งชุดของใบหนึ่งใบ (แทนที่ของเดิม)
    *
    * ⛔ รายการที่มีคนสมัครแล้ว (`applied_count > 0`) ลบไม่ได้ — โยน Error ให้ controller

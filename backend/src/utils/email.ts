@@ -1,6 +1,8 @@
 import nodemailer from 'nodemailer';
 import { escapeHtml as esc } from '../middlewares/validation';
 import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
+import { JOB_OFFER_TOKEN_TTL_LABEL } from './jobOfferToken';
+import { formatThaiDate } from './thaiDate';
 import { query } from '../config/database';
 
 /**
@@ -748,5 +750,66 @@ export const sendFinalReportNotificationEmail = async (
     console.log(`[Email] Final report notification email sent successfully to ${mentorEmail}`);
   } catch (error) {
     console.error(`[Email] Error sending final report email to ${mentorEmail}:`, error);
+  }
+};
+
+/**
+ * แบบเสนองานสหกิจศึกษา (สหกิจ 02) — ลิงก์ตอบแบบสำรวจโดยไม่ต้องเข้าสู่ระบบ
+ *
+ * ⛔ อีเมลฉบับนี้ **ต้องไม่มีข้อมูลนักศึกษาแม้แต่ตัวเดียว** — ปลายทางคือกล่องรวมของ
+ *    ฝ่ายบุคคล (hr@, contact@) ที่มีคนเข้าถึงหลายคน และหน้าที่ลิงก์นี้เปิดก็เป็นหน้า
+ *    ที่ไม่มีข้อมูลนักศึกษาเช่นกัน
+ * ⛔ ปลายทางมาจากทะเบียนเสมอ ห้ามรับจากคำขอ (ดู `JobOfferModel.contactEmail`)
+ */
+export const sendJobOfferSurveyEmail = async (
+  toEmail: string,
+  answerLink: string,
+  info: { companyName: string; semesterLabel: string; dueDate: string | null }
+): Promise<void> => {
+  const content = `
+    <p>งานสหกิจศึกษาและการฝึกงานวิชาชีพประจำคณะ ขอสำรวจความต้องการรับนักศึกษาสหกิจศึกษา
+       ของ <b>${esc(info.companyName)}</b> ประจำ<b>${esc(info.semesterLabel)}</b></p>
+    <p>ท่านตอบแบบเสนองานสหกิจศึกษา (สหกิจ 02) ได้จากลิงก์ด้านล่างโดย<b>ไม่ต้องเข้าสู่ระบบ</b>
+       — ระบบกรอกคำตอบของภาคเรียนที่แล้วไว้ให้แล้ว หากไม่มีอะไรเปลี่ยน กดยืนยันได้ทันที</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${answerLink}"
+         style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        ตอบแบบเสนองานสหกิจศึกษา
+      </a>
+    </div>
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: `แบบเสนองานสหกิจศึกษา (สหกิจ 02) ${info.semesterLabel} - มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก`,
+    html: renderEmailHtml({
+      title: 'ขอสำรวจความต้องการรับนักศึกษาสหกิจศึกษา',
+      themeColor: '#1a73e8',
+      content,
+      highlightBox: info.dueDate
+        ? `กรุณาส่งคำตอบกลับ<b>ก่อนวันที่ ${esc(formatThaiDate(info.dueDate))}</b>`
+        : undefined,
+      footnote: `
+        <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+          ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${JOB_OFFER_TOKEN_TTL_LABEL}<br/>
+          หากลิงก์หมดอายุแล้ว ให้เปิดลิงก์เดิมแล้วกดขอลิงก์ใหม่ ระบบจะส่งกลับมาที่อีเมลฉบับนี้เท่านั้น<br/>
+          หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษาประจำคณะ
+        </p>
+      `,
+    }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Job offer survey email successfully sent to: ${toEmail}`);
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] JOB OFFER SURVEY (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
+    console.error(`  To: ${toEmail}`);
+    console.error(`  Link: ${answerLink}`);
+    console.error('════════════════════════════════════════════════════');
   }
 };

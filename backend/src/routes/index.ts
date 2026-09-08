@@ -6,6 +6,7 @@ import userRoutes from './user';
 import companyRoutes from './company';
 import jobRoutes from './job';
 import jobOfferRoutes from './jobOffer';
+import publicJobOfferRoutes from './publicJobOffer';
 import intentRoutes from './intent';
 import documentRoutes from './document';
 import acceptanceRoutes from './acceptance';
@@ -39,6 +40,9 @@ router.use('/companies', companyRoutes);
 router.use('/jobs', jobRoutes);
 // แบบเสนองานสหกิจ (สหกิจ 02) — คนละเรื่องกับ /jobs ซึ่งเป็นรายการตำแหน่งที่นักศึกษาเห็น
 router.use('/job-offers', jobOfferRoutes);
+// ⛔ เส้นเดียวในระบบที่ไม่ต้องล็อกอิน — เปิดได้แค่แบบเสนองาน (สหกิจ 02)
+//    ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย · เหตุผลเต็มอยู่ใน routes/publicJobOffer.ts
+router.use('/public/job-offer', publicJobOfferRoutes);
 router.use('/intents', intentRoutes);
 router.use('/documents', documentRoutes);
 router.use('/acceptances', acceptanceRoutes);
