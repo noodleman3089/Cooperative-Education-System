@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
+import { MentorController } from '../controllers/mentor';
 import { checkStudentEligibility } from '../middlewares/validation';
 import { uploadRequestForm, validateUploadedFile } from '../middlewares/multer';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
@@ -105,6 +106,14 @@ router.get('/:id/request-form', IntentFormController.getRequestForm);
 // เอกสารหมายเลข 2 — แบบยืนยันแบบตอบรับที่สถานประกอบการเป็นผู้กรอก
 // ไม่ระบุ role ด้วยเหตุผลเดียวกับ request-form ด้านบน
 router.get('/:id/acceptance-form', IntentFormController.getAcceptanceForm);
+
+// Route: PATCH /api/intents/:id/daily-log-required (พี่เลี้ยงเปิด/ปิดการบันทึกรายวัน สหกิจ 08)
+// ⛔ role `mentor` เท่านั้น — นักศึกษาปิดเองไม่ได้ เพราะเป็นการยกเลิกภาระงานของตัวเอง
+router.patch(
+  '/:id/daily-log-required',
+  authorizeRoles('mentor'),
+  MentorController.setDailyLogRequired
+);
 
 // Route: PATCH /api/intents/:id/company-log-form (นักศึกษาเปิด/ปิดสวิตช์ใช้แบบฟอร์มของบริษัท)
 router.patch(

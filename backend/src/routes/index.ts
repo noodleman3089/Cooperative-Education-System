@@ -7,6 +7,7 @@ import companyRoutes from './company';
 import jobRoutes from './job';
 import jobOfferRoutes from './jobOffer';
 import publicJobOfferRoutes from './publicJobOffer';
+import mentorRoutes from './mentor';
 import intentRoutes from './intent';
 import documentRoutes from './document';
 import acceptanceRoutes from './acceptance';
@@ -43,6 +44,8 @@ router.use('/job-offers', jobOfferRoutes);
 // ⛔ เส้นเดียวในระบบที่ไม่ต้องล็อกอิน — เปิดได้แค่แบบเสนองาน (สหกิจ 02)
 //    ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย · เหตุผลเต็มอยู่ใน routes/publicJobOffer.ts
 router.use('/public/job-offer', publicJobOfferRoutes);
+// ฝ่ายพี่เลี้ยง — คิวงานค้างและการรับรองบันทึก
+router.use('/mentor', mentorRoutes);
 router.use('/intents', intentRoutes);
 router.use('/documents', documentRoutes);
 router.use('/acceptances', acceptanceRoutes);
