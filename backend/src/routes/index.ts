@@ -5,6 +5,7 @@ import profileRoutes from './profile';
 import userRoutes from './user';
 import companyRoutes from './company';
 import jobRoutes from './job';
+import jobOfferRoutes from './jobOffer';
 import intentRoutes from './intent';
 import documentRoutes from './document';
 import acceptanceRoutes from './acceptance';
@@ -36,6 +37,8 @@ router.use('/profile', profileRoutes);
 router.use('/users', userRoutes);
 router.use('/companies', companyRoutes);
 router.use('/jobs', jobRoutes);
+// แบบเสนองานสหกิจ (สหกิจ 02) — คนละเรื่องกับ /jobs ซึ่งเป็นรายการตำแหน่งที่นักศึกษาเห็น
+router.use('/job-offers', jobOfferRoutes);
 router.use('/intents', intentRoutes);
 router.use('/documents', documentRoutes);
 router.use('/acceptances', acceptanceRoutes);
