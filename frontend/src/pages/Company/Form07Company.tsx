@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Mentor {
   mentor_id?: number;
@@ -295,9 +296,8 @@ const Form07Company: React.FC = () => {
       setError(null);
       await api.put('/form07', formData);
       setSuccess('บันทึกร่างแบบแจ้งรายละเอียดงานและพนักงานที่ปรึกษา (สหกิจ 07) เรียบร้อยแล้ว');
-    } catch {
-      // ponytail: fail-open fallback
-      setSuccess('บันทึกร่างแบบแจ้งรายละเอียดงานและพนักงานที่ปรึกษา (สหกิจ 07) เรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกร่างแบบแจ้งรายละเอียดงานและพนักงานที่ปรึกษาได้'));
     } finally {
       setIsSaving(false);
     }
@@ -309,8 +309,8 @@ const Form07Company: React.FC = () => {
       setError(null);
       await api.put('/form07', { ...formData, submitted: true });
       setSuccess('ส่งข้อมูล สหกิจ 07 ให้มหาวิทยาลัยเรียบร้อยแล้ว');
-    } catch {
-      setSuccess('ส่งข้อมูล สหกิจ 07 ให้มหาวิทยาลัยเรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถส่งข้อมูล สหกิจ 07 ให้มหาวิทยาลัยได้'));
     } finally {
       setIsSubmitting(false);
     }

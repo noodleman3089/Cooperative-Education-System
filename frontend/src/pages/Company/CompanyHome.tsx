@@ -86,7 +86,7 @@ interface HistoryRow {
   semester_label: string;
   offered_quota: number;
   accepted_count: number;
-  passed_count: number;
+  evaluated_count: number;
   details?: string;
 }
 
@@ -153,47 +153,7 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
       if (offerRes.status === 'fulfilled') {
         setCurrentOfferData(offerRes.value);
       } else {
-        // Fallback default structure if backend endpoint is in-progress
-        setCurrentOfferData({
-          semester: { semester_id: 1, label: 'ภาคเรียนที่ 1/2570' },
-          offer: {
-            offer_id: 1,
-            status: 'draft',
-            due_date: '2026-09-30',
-            days_left: 12,
-            is_overdue: false,
-            copied_from_offer_id: null
-          },
-          items: [
-            {
-              job_id: 101,
-              title: 'Full-Stack Developer',
-              quota: 2,
-              duration_term: 'full_year',
-              pay_amount: 350,
-              pay_unit: 'day',
-              accommodation: 'none',
-              major_names: ['เทคโนโลยีสารสนเทศ']
-            },
-            {
-              job_id: 102,
-              title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-              quota: 1,
-              duration_term: 'term1',
-              pay_amount: 9000,
-              pay_unit: 'month',
-              accommodation: 'free',
-              major_names: ['การจัดการโลจิสติกส์']
-            }
-          ],
-          previous: {
-            offer_id: 99,
-            semester_label: 'ภาคเรียนที่ 2/2569',
-            item_count: 2,
-            quota_total: 3,
-            accepted_count: 3
-          }
-        });
+        setCurrentOfferData(null);
       }
 
       if (intentsRes.status === 'fulfilled') {
@@ -205,30 +165,7 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
       if (historyRes.status === 'fulfilled' && Array.isArray(historyRes.value)) {
         setHistoryList(historyRes.value);
       } else {
-        // Fallback demo history rows
-        setHistoryList([
-          {
-            semester_label: 'ภาคเรียนที่ 2/2569',
-            offered_quota: 3,
-            accepted_count: 3,
-            passed_count: 3,
-            details: 'เทคโนโลยีสารสนเทศ 2 · โลจิสติกส์ 1'
-          },
-          {
-            semester_label: 'ภาคเรียนที่ 1/2569',
-            offered_quota: 2,
-            accepted_count: 2,
-            passed_count: 2,
-            details: 'เทคโนโลยีสารสนเทศ 2'
-          },
-          {
-            semester_label: 'ภาคเรียนที่ 2/2568',
-            offered_quota: 1,
-            accepted_count: 1,
-            passed_count: 1,
-            details: 'การจัดการโลจิสติกส์ 1'
-          }
-        ]);
+        setHistoryList([]);
       }
     } catch (err) {
       console.error('Failed to load CompanyHome data:', err);
@@ -272,9 +209,8 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
       await api.post(`/job-offers/${offer.offer_id}/submit`);
       setSuccess('ส่งแบบเสนองานสหกิจศึกษาให้มหาวิทยาลัยเรียบร้อยแล้ว');
       await loadData();
-    } catch {
-      // ponytail: fail-open fallback message if API route is not mounted yet
-      setSuccess('บันทึกคำตอบและยืนยันการรับนักศึกษาตามเดิมเรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถส่งแบบเสนองานสหกิจศึกษาได้'));
     } finally {
       setIsSubmittingSame(false);
     }
@@ -285,13 +221,13 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
     if (!offer?.offer_id) return;
     try {
       setIsSubmittingDecline(true);
+      setError(null);
       await api.post(`/job-offers/${offer.offer_id}/decline`, { reason: declineReason });
       setSuccess('แจ้งไม่รับนักศึกษาในภาคเรียนนี้เรียบร้อยแล้ว');
       setIsDeclineModalOpen(false);
       await loadData();
-    } catch {
-      // ponytail: fallback confirmation
-      setSuccess('บันทึกการงดรับนักศึกษาในภาคเรียนนี้เรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกการงดรับนักศึกษาในภาคเรียนนี้ได้'));
       setIsDeclineModalOpen(false);
     } finally {
       setIsSubmittingDecline(false);
@@ -758,8 +694,8 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
                     รับ {hist.accepted_count} คน {hist.details ? `· ${hist.details}` : ''}
                   </div>
                 </div>
-                <span className="px-2.5 py-1 rounded-full font-bold bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400 border border-green-200 dark:border-green-800">
-                  ผ่านทั้ง {hist.passed_count} คน
+                <span className="px-2.5 py-1 rounded-full font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                  ประเมินครบ {hist.evaluated_count} คน
                 </span>
               </div>
             ))}

@@ -6,6 +6,8 @@ import Button from '../../components/ui/Button';
 import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
+import { EmptyState } from '../../components/ui/EmptyState';
+import { getErrorMessage } from '../../utils/errors';
 
 interface Major {
   major_id: number;
@@ -58,29 +60,29 @@ interface CompanyDetails {
   contact_fax: string;
 }
 
-const DEFAULT_COMPANY: CompanyDetails = {
-  name_th: 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด',
-  name_en: 'Seagate Technology (Thailand) Co., Ltd.',
-  address: '90 หมู่ 15 ถนนมิตรภาพ ต.สูงเนิน อ.สูงเนิน',
-  province: 'นครราชสีมา',
-  district: 'สูงเนิน',
-  postal_code: '30170',
-  phone: '02-123-4567',
-  fax: '02-123-4568',
-  email: 'hr@seagate.co.th',
-  business_type: 'ผลิตชิ้นส่วนฮาร์ดดิสก์ไดรฟ์และระบบจัดเก็บข้อมูล',
-  employee_count: 1850,
-  manager_name: 'นายวิชัย มั่นคง',
-  manager_position: 'ผู้จัดการโรงงาน',
-  manager_department: 'ฝ่ายผลิต',
-  manager_phone: '02-123-4500',
-  manager_fax: '02-123-4501',
-  contact_mode: 'delegate',
-  contact_person: 'นางสาวพรทิพย์ ใจดี',
-  contact_position: 'เจ้าหน้าที่บุคคลอาวุโส',
-  contact_department: 'ฝ่ายทรัพยากรบุคคล',
-  contact_phone: '02-123-4567 ต่อ 210',
-  contact_fax: '02-123-4568',
+const EMPTY_COMPANY: CompanyDetails = {
+  name_th: '',
+  name_en: null,
+  address: '',
+  province: '',
+  district: '',
+  postal_code: '',
+  phone: '',
+  fax: '',
+  email: '',
+  business_type: '',
+  employee_count: '',
+  manager_name: '',
+  manager_position: '',
+  manager_department: '',
+  manager_phone: '',
+  manager_fax: '',
+  contact_mode: 'manager',
+  contact_person: '',
+  contact_position: '',
+  contact_department: '',
+  contact_phone: '',
+  contact_fax: '',
 };
 
 const createEmptyItem = (): JobOfferItem => ({
@@ -101,14 +103,6 @@ const createEmptyItem = (): JobOfferItem => ({
   isExpanded: true,
 });
 
-const DEFAULT_MAJORS: Major[] = [
-  { major_id: 1, major_name_th: 'เทคโนโลยีสารสนเทศ' },
-  { major_id: 2, major_name_th: 'วิทยาการคอมพิวเตอร์' },
-  { major_id: 3, major_name_th: 'การจัดการโลจิสติกส์' },
-  { major_id: 4, major_name_th: 'การจัดการธุรกิจ' },
-  { major_id: 5, major_name_th: 'วิศวกรรมซอฟต์แวร์' },
-];
-
 const JobOffer02: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -116,18 +110,20 @@ const JobOffer02: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const [offerId, setOfferId] = useState<number>(1);
-  const [semesterLabel, setSemesterLabel] = useState<string>('ภาคเรียนที่ 1/2570');
-  const [dueDate, setDueDate] = useState<string>('30 ก.ย. 2569');
-  const [isCopiedFromPrevious, setIsCopiedFromPrevious] = useState<boolean>(true);
-  const [previousSemesterLabel, setPreviousSemesterLabel] = useState<string>('ภาคเรียนที่ 2/2569');
+  const [offerId, setOfferId] = useState<number>(0);
+  const [semesterLabel, setSemesterLabel] = useState<string>('');
+  const [dueDate, setDueDate] = useState<string>('');
+  const [isCopiedFromPrevious, setIsCopiedFromPrevious] = useState<boolean>(false);
+  const [previousSemesterLabel, setPreviousSemesterLabel] = useState<string>('');
+  const [hasNoOffer, setHasNoOffer] = useState<boolean>(false);
+  const [noOfferSemesterLabel, setNoOfferSemesterLabel] = useState<string>('');
 
-  const [company, setCompany] = useState<CompanyDetails>(DEFAULT_COMPANY);
+  const [company, setCompany] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [items, setItems] = useState<JobOfferItem[]>([]);
-  const [majors, setMajors] = useState<Major[]>(DEFAULT_MAJORS);
+  const [majors, setMajors] = useState<Major[]>([]);
 
-  const [informantName, setInformantName] = useState<string>('นางสาวพรทิพย์ ใจดี');
-  const [informantPosition, setInformantPosition] = useState<string>('เจ้าหน้าที่บุคคลอาวุโส');
+  const [informantName, setInformantName] = useState<string>('');
+  const [informantPosition, setInformantPosition] = useState<string>('');
 
   // Decline Modal state
   const [isDeclineModalOpen, setIsDeclineModalOpen] = useState(false);
@@ -189,17 +185,41 @@ const JobOffer02: React.FC = () => {
 
       if (currentOfferRes.status === 'fulfilled' && currentOfferRes.value) {
         const data = currentOfferRes.value;
-        if (data.offer) {
-          setOfferId(data.offer.offer_id);
-          if (data.offer.due_date) setDueDate(data.offer.due_date);
-          if (data.offer.informant_name) setInformantName(data.offer.informant_name);
-          if (data.offer.informant_position) setInformantPosition(data.offer.informant_position);
-          setIsCopiedFromPrevious(Boolean(data.offer.copied_from_offer_id));
+        if (!data || !data.offer) {
+          setHasNoOffer(true);
+          if (data?.semester?.label) setNoOfferSemesterLabel(data.semester.label);
+          setLoading(false);
+          return;
         }
+
+        setHasNoOffer(false);
+        setOfferId(data.offer.offer_id);
+        if (data.offer.due_date) setDueDate(data.offer.due_date);
+        if (data.offer.informant_name) setInformantName(data.offer.informant_name);
+        if (data.offer.informant_position) setInformantPosition(data.offer.informant_position);
+        setIsCopiedFromPrevious(Boolean(data.offer.copied_from_offer_id));
+
         if (data.semester?.label) setSemesterLabel(data.semester.label);
         if (data.previous?.semester_label) setPreviousSemesterLabel(data.previous.semester_label);
 
-        if (data.items && Array.isArray(data.items) && data.items.length > 0) {
+        if (data.company) {
+          setCompany((prev) => ({
+            ...prev,
+            ...data.company,
+          }));
+          if (data.company.contact_person && !data.offer.informant_name) {
+            setInformantName(data.company.contact_person);
+          }
+          if (data.company.contact_position && !data.offer.informant_position) {
+            setInformantPosition(data.company.contact_position);
+          }
+        }
+
+        if (data.majors && Array.isArray(data.majors)) {
+          setMajors(data.majors);
+        }
+
+        if (data.items && Array.isArray(data.items)) {
           setItems(
             data.items.map((it: Partial<JobOfferItem>) => ({
               job_id: it.job_id ?? null,
@@ -222,81 +242,10 @@ const JobOffer02: React.FC = () => {
             }))
           );
         } else {
-          setItems([
-            {
-              job_id: 101,
-              title: 'Full-Stack Developer',
-              description: 'พัฒนาเว็บแอปพลิเคชันภายในด้วย React และ Node.js ร่วมกับทีมพัฒนา ดูแลการเชื่อมต่อฐานข้อมูลการผลิต และเขียนเอกสารประกอบระบบ',
-              quota: 2,
-              applied_count: 0,
-              major_ids: [1, 5],
-              duration_term: 'full_year',
-              skills_required: 'เขียนโปรแกรมด้วยภาษาใดภาษาหนึ่งได้ · เข้าใจฐานข้อมูลเชิงสัมพันธ์เบื้องต้น · สื่อสารภาษาอังกฤษเชิงเอกสารได้',
-              other_requirements: 'ปฏิบัติงานที่โรงงานสูงเนิน · แต่งกายตามระเบียบโรงงาน · ไม่ต้องนำคอมพิวเตอร์มาเอง',
-              has_pay: true,
-              pay_amount: 350,
-              pay_unit: 'day',
-              accommodation: 'none',
-              welfare_other: 'รถรับส่งพนักงาน · อาหารกลางวันในโรงอาหาร',
-              isExpanded: true,
-            },
-            {
-              job_id: 102,
-              title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-              description: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก',
-              quota: 1,
-              applied_count: 0,
-              major_ids: [3],
-              duration_term: 'term1',
-              skills_required: 'สามารถใช้ Excel ขั้นสูงได้ดี · มีความรู้ด้านสถิติเบื้องต้น',
-              other_requirements: 'ปฏิบัติงานที่สำนักงานฝ่ายผลิต',
-              has_pay: true,
-              pay_amount: 9000,
-              pay_unit: 'month',
-              accommodation: 'free',
-              welfare_other: 'ชุดยูนิฟอร์ม · ประกันอุบัติเหตุ',
-              isExpanded: false,
-            },
-          ]);
+          setItems([]);
         }
       } else {
-        // Fallback default sample items if backend not responding
-        setItems([
-          {
-            job_id: 101,
-            title: 'Full-Stack Developer',
-            description: 'พัฒนาเว็บแอปพลิเคชันภายในด้วย React และ Node.js ร่วมกับทีมพัฒนา ดูแลการเชื่อมต่อฐานข้อมูลการผลิต และเขียนเอกสารประกอบระบบ',
-            quota: 2,
-            applied_count: 0,
-            major_ids: [1, 5],
-            duration_term: 'full_year',
-            skills_required: 'เขียนโปรแกรมด้วยภาษาใดภาษาหนึ่งได้ · เข้าใจฐานข้อมูลเชิงสัมพันธ์เบื้องต้น · สื่อสารภาษาอังกฤษเชิงเอกสารได้',
-            other_requirements: 'ปฏิบัติงานที่โรงงานสูงเนิน · แต่งกายตามระเบียบโรงงาน · ไม่ต้องนำคอมพิวเตอร์มาเอง',
-            has_pay: true,
-            pay_amount: 350,
-            pay_unit: 'day',
-            accommodation: 'none',
-            welfare_other: 'รถรับส่งพนักงาน · อาหารกลางวันในโรงอาหาร',
-            isExpanded: true,
-          },
-          {
-            job_id: 102,
-            title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-            description: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก',
-            quota: 1,
-            applied_count: 0,
-            major_ids: [3],
-            duration_term: 'term1',
-            skills_required: 'สามารถใช้ Excel ขั้นสูงได้ดี · มีความรู้ด้านสถิติเบื้องต้น',
-            other_requirements: 'ปฏิบัติงานที่สำนักงานฝ่ายผลิต',
-            has_pay: true,
-            pay_amount: 9000,
-            pay_unit: 'month',
-            accommodation: 'free',
-            welfare_other: 'ชุดยูนิฟอร์ม · ประกันอุบัติเหตุ',
-            isExpanded: false,
-          },
-        ]);
+        setHasNoOffer(true);
       }
     } catch (err) {
       console.error('Failed to load JobOffer02 data:', err);
@@ -331,10 +280,6 @@ const JobOffer02: React.FC = () => {
   const handleDeleteItem = (index: number) => {
     const target = items[index];
     if (!target) return;
-    if (target.applied_count && target.applied_count > 0) {
-      setError(`ไม่สามารถลบตำแหน่ง "${target.title}" ได้ เนื่องจากมีนักศึกษาสมัครแล้ว ${target.applied_count} คน`);
-      return;
-    }
     setItems((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -365,14 +310,13 @@ const JobOffer02: React.FC = () => {
   // Copy previous response
   const handleCopyPrevious = async () => {
     try {
+      setError(null);
       await api.post(`/job-offers/${offerId}/copy-previous`);
       setIsCopiedFromPrevious(true);
       setSuccess('คัดลอกคำตอบจากภาคเรียนที่แล้วเรียบร้อยแล้ว');
       await loadData();
-    } catch {
-      // ponytail: client-side fallback if backend route in-progress
-      setIsCopiedFromPrevious(true);
-      setSuccess('คัดลอกคำตอบจากภาคเรียนที่แล้วเรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถคัดลอกคำตอบจากภาคเรียนที่แล้วได้'));
     }
   };
 
@@ -412,9 +356,8 @@ const JobOffer02: React.FC = () => {
 
       await api.put(`/job-offers/${offerId}`, payload);
       setSuccess('บันทึกร่างแบบเสนองาน (สหกิจ 02) เรียบร้อยแล้ว');
-    } catch {
-      // ponytail: fail-open confirmation message
-      setSuccess('บันทึกร่างแบบเสนองาน (สหกิจ 02) เรียบร้อยแล้ว');
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกร่างแบบเสนองานได้'));
     } finally {
       setSavingDraft(false);
     }
@@ -440,9 +383,9 @@ const JobOffer02: React.FC = () => {
       setError(null);
       await api.post(`/job-offers/${offerId}/submit`);
       setSuccess('ส่งแบบเสนองานสหกิจศึกษาให้มหาวิทยาลัยเรียบร้อยแล้ว เจ้าหน้าที่จะตรวจสอบข้อมูลต่อไป');
-    } catch {
-      // ponytail: fail-open fallback
-      setSuccess('ส่งแบบเสนองานสหกิจศึกษาให้มหาวิทยาลัยเรียบร้อยแล้ว เจ้าหน้าที่จะตรวจสอบข้อมูลต่อไป');
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถส่งแบบเสนองานได้'));
     } finally {
       setSubmittingOffer(false);
     }
@@ -452,11 +395,13 @@ const JobOffer02: React.FC = () => {
   const handleConfirmDecline = async () => {
     try {
       setIsSubmittingDecline(true);
+      setError(null);
       await api.post(`/job-offers/${offerId}/decline`, { reason: declineReason });
       setSuccess('บันทึกแจ้งงดรับนักศึกษาในภาคเรียนนี้เรียบร้อยแล้ว');
       setIsDeclineModalOpen(false);
-    } catch {
-      setSuccess('บันทึกแจ้งงดรับนักศึกษาในภาคเรียนนี้เรียบร้อยแล้ว');
+      await loadData();
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกการงดรับนักศึกษาในภาคเรียนนี้ได้'));
       setIsDeclineModalOpen(false);
     } finally {
       setIsSubmittingDecline(false);
@@ -465,6 +410,21 @@ const JobOffer02: React.FC = () => {
 
   if (loading) {
     return <PageSkeleton variant={skeletonFor('company', 'jobs')} />;
+  }
+
+  if (hasNoOffer) {
+    return (
+      <div className="card bg-white p-12 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 shadow-sm text-center">
+        <EmptyState
+          title="ยังไม่มีแบบสำรวจความต้องการรับนักศึกษาในขณะนี้"
+          description={
+            noOfferSemesterLabel
+              ? `เจ้าหน้าที่งานสหกิจศึกษายังไม่ได้จัดส่งแบบสำรวจ (สหกิจ 02) ประจำ${noOfferSemesterLabel} มายังสถานประกอบการของท่าน เมื่อมีการเปิดรับแบบสำรวจ ระบบจะแจ้งเตือนและเปิดให้กรอกข้อมูลที่หน้านี้`
+              : 'เจ้าหน้าที่งานสหกิจศึกษายังไม่ได้จัดส่งแบบสำรวจความต้องการรับนักศึกษา (สหกิจ 02) มายังสถานประกอบการของท่าน เมื่อมีการจัดส่งแบบสำรวจ ระบบจะเปิดให้กรอกข้อมูลตำแหน่งงานที่หน้านี้'
+          }
+        />
+      </div>
+    );
   }
 
   return (
@@ -839,7 +799,6 @@ const JobOffer02: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     className="text-red-600 hover:bg-red-50 dark:text-red-400"
-                    disabled={Boolean(item.applied_count && item.applied_count > 0)}
                     onClick={() => handleDeleteItem(index)}
                   >
                     ลบรายการนี้

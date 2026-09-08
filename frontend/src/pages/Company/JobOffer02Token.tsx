@@ -74,38 +74,30 @@ interface CompanyDetails {
   contact_fax: string;
 }
 
-const DEFAULT_COMPANY: CompanyDetails = {
-  name_th: 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด',
-  name_en: 'Seagate Technology (Thailand) Co., Ltd.',
-  address: '90 หมู่ 15 ถนนมิตรภาพ ต.สูงเนิน อ.สูงเนิน',
-  province: 'นครราชสีมา',
-  district: 'สูงเนิน',
-  postal_code: '30170',
-  phone: '02-123-4567',
-  fax: '02-123-4568',
-  email: 'hr@seagate.co.th',
-  business_type: 'ผลิตชิ้นส่วนฮาร์ดดิสก์ไดรฟ์และระบบจัดเก็บข้อมูล',
-  employee_count: 1850,
-  manager_name: 'นายวิชัย มั่นคง',
-  manager_position: 'ผู้จัดการโรงงาน',
-  manager_department: 'ฝ่ายผลิต',
-  manager_phone: '02-123-4500',
-  manager_fax: '02-123-4501',
-  contact_mode: 'delegate',
-  contact_person: 'นางสาวพรทิพย์ ใจดี',
-  contact_position: 'เจ้าหน้าที่บุคคลอาวุโส',
-  contact_department: 'ฝ่ายทรัพยากรบุคคล',
-  contact_phone: '02-123-4567',
-  contact_fax: '02-123-4568',
+const EMPTY_COMPANY: CompanyDetails = {
+  name_th: '',
+  name_en: '',
+  address: '',
+  province: '',
+  district: '',
+  postal_code: '',
+  phone: '',
+  fax: '',
+  email: '',
+  business_type: '',
+  employee_count: 0,
+  manager_name: '',
+  manager_position: '',
+  manager_department: '',
+  manager_phone: '',
+  manager_fax: '',
+  contact_mode: 'manager',
+  contact_person: '',
+  contact_position: '',
+  contact_department: '',
+  contact_phone: '',
+  contact_fax: '',
 };
-
-const DEFAULT_MAJORS: Major[] = [
-  { major_id: 1, major_name_th: 'เทคโนโลยีสารสนเทศ' },
-  { major_id: 2, major_name_th: 'วิทยาการคอมพิวเตอร์' },
-  { major_id: 3, major_name_th: 'การจัดการโลจิสติกส์' },
-  { major_id: 4, major_name_th: 'การจัดการธุรกิจ' },
-  { major_id: 5, major_name_th: 'วิศวกรรมซอฟต์แวร์' },
-];
 
 const createEmptyItem = (): JobOfferItem => ({
   job_id: null,
@@ -146,20 +138,20 @@ const JobOffer02Token: React.FC = () => {
   const [resendCooldown, setResendCooldown] = useState<number>(0);
 
   // Data state
-  const [offerId, setOfferId] = useState<number>(12);
-  const [semesterLabel, setSemesterLabel] = useState<string>('ภาคเรียนที่ 1/2570');
-  const [previousSemesterLabel] = useState<string>('ภาคเรียนที่ 2/2569');
-  const [expiresAtText, setExpiresAtText] = useState<string>('19 ก.ย. 2569 เวลา 14:32 น.');
-  const [sentAtText] = useState<string>('18 ก.ย. 2569 14:32 น.');
-  const [hoursLeftText, setHoursLeftText] = useState<string>('21 ชั่วโมง');
-  const [registeredEmail, setRegisteredEmail] = useState<string>('hr@seagate.co.th');
+  const [offerId, setOfferId] = useState<number | null>(null);
+  const [semesterLabel, setSemesterLabel] = useState<string>('');
+  const [previousSemesterLabel, setPreviousSemesterLabel] = useState<string>('');
+  const [expiresAtText, setExpiresAtText] = useState<string>('');
+  const [sentAtText] = useState<string>('');
+  const [hoursLeftText, setHoursLeftText] = useState<string>('');
+  const [registeredEmail, setRegisteredEmail] = useState<string>('');
 
-  const [company, setCompany] = useState<CompanyDetails>(DEFAULT_COMPANY);
+  const [company, setCompany] = useState<CompanyDetails>(EMPTY_COMPANY);
   const [items, setItems] = useState<JobOfferItem[]>([]);
-  const [majors, setMajors] = useState<Major[]>(DEFAULT_MAJORS);
+  const [majors, setMajors] = useState<Major[]>([]);
 
-  const [informantName, setInformantName] = useState<string>('นางสาวพรทิพย์ ใจดี');
-  const [informantPosition, setInformantPosition] = useState<string>('เจ้าหน้าที่บุคคลอาวุโส');
+  const [informantName, setInformantName] = useState<string>('');
+  const [informantPosition, setInformantPosition] = useState<string>('');
 
   // Submit / Decline / Confirm modals
   const [submitting, setSubmitting] = useState<boolean>(false);
@@ -192,6 +184,15 @@ const JobOffer02Token: React.FC = () => {
         if (data?.offer?.offer_id) {
           setOfferId(data.offer.offer_id);
         }
+        if (data?.previous?.semester_label) {
+          setPreviousSemesterLabel(data.previous.semester_label);
+        }
+        if (data?.offer?.informant_name) {
+          setInformantName(data.offer.informant_name);
+        }
+        if (data?.offer?.informant_position) {
+          setInformantPosition(data.offer.informant_position);
+        }
         if (data?.company) {
           setCompany((prev) => ({
             ...prev,
@@ -221,7 +222,7 @@ const JobOffer02Token: React.FC = () => {
           }
         }
 
-        if (data?.items && Array.isArray(data.items) && data.items.length > 0) {
+        if (data?.items && Array.isArray(data.items)) {
           setItems(
             data.items.map((it: JobOfferItem) => ({
               ...it,
@@ -235,43 +236,7 @@ const JobOffer02Token: React.FC = () => {
             }))
           );
         } else {
-          // Fallback to sample items matching JobOffer02Token.dc.html
-          setItems([
-            {
-              job_id: 101,
-              title: 'Full-Stack Developer',
-              description: 'พัฒนาเว็บแอปพลิเคชันภายในด้วย React และ Node.js ร่วมกับทีมพัฒนา',
-              quota: 2,
-              applied_count: 0,
-              major_ids: [1, 5],
-              duration_term: 'full_year',
-              skills_required: 'เขียนโปรแกรมด้วย JavaScript/TypeScript · ฐานข้อมูลเบื้องต้น',
-              other_requirements: 'ปฏิบัติงานที่โรงงานสูงเนิน',
-              has_pay: true,
-              pay_amount: 350,
-              pay_unit: 'day',
-              accommodation: 'none',
-              welfare_other: 'รถรับส่งพนักงาน · อาหารกลางวัน',
-              isExpanded: true,
-            },
-            {
-              job_id: 102,
-              title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-              description: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก',
-              quota: 1,
-              applied_count: 0,
-              major_ids: [3],
-              duration_term: 'term1',
-              skills_required: 'Excel ขั้นสูง · ความรู้สถิติเบื้องต้น',
-              other_requirements: 'ปฏิบัติงานที่สำนักงานฝ่ายผลิต',
-              has_pay: true,
-              pay_amount: 9000,
-              pay_unit: 'month',
-              accommodation: 'free',
-              welfare_other: 'ชุดยูนิฟอร์ม · ประกันอุบัติเหตุ',
-              isExpanded: false,
-            },
-          ]);
+          setItems([]);
         }
 
         setStatus('active');
@@ -280,48 +245,9 @@ const JobOffer02Token: React.FC = () => {
         if (anyErr?.response?.status === 410) {
           setStatus('expired');
           setErrorMessage(anyErr.response.data?.message || 'ลิงก์นี้หมดอายุหรือถูกใช้งานไปแล้ว');
-        } else if (anyErr?.response?.status === 404) {
-          // ponytail: backend route /api/public/job-offer in progress (B5), fail-open with template
-          setStatus('active');
-          setItems([
-            {
-              job_id: 101,
-              title: 'Full-Stack Developer',
-              description: 'พัฒนาเว็บแอปพลิเคชันภายในด้วย React และ Node.js ร่วมกับทีมพัฒนา',
-              quota: 2,
-              applied_count: 0,
-              major_ids: [1, 5],
-              duration_term: 'full_year',
-              skills_required: 'เขียนโปรแกรมด้วย JavaScript/TypeScript · ฐานข้อมูลเบื้องต้น',
-              other_requirements: 'ปฏิบัติงานที่โรงงานสูงเนิน',
-              has_pay: true,
-              pay_amount: 350,
-              pay_unit: 'day',
-              accommodation: 'none',
-              welfare_other: 'รถรับส่งพนักงาน · อาหารกลางวัน',
-              isExpanded: true,
-            },
-            {
-              job_id: 102,
-              title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-              description: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก',
-              quota: 1,
-              applied_count: 0,
-              major_ids: [3],
-              duration_term: 'term1',
-              skills_required: 'Excel ขั้นสูง · ความรู้สถิติเบื้องต้น',
-              other_requirements: 'ปฏิบัติงานที่สำนักงานฝ่ายผลิต',
-              has_pay: true,
-              pay_amount: 9000,
-              pay_unit: 'month',
-              accommodation: 'free',
-              welfare_other: 'ชุดยูนิฟอร์ม · ประกันอุบัติเหตุ',
-              isExpanded: false,
-            },
-          ]);
         } else {
           setStatus('error');
-          setErrorMessage(getErrorMessage(err) || 'เกิดข้อผิดพลาดในการตรวจสอบลิงก์ กรุณาลองใหม่อีกครั้ง');
+          setErrorMessage(getErrorMessage(err, 'ไม่สามารถเปิดแบบสำรวจได้ กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษา'));
         }
       } finally {
         setLoading(false);
@@ -349,10 +275,8 @@ const JobOffer02Token: React.FC = () => {
       await api.post(`/public/job-offer/resend?token=${encodeURIComponent(token)}`);
       setSuccessBanner(`ระบบได้ส่งลิงก์ใหม่ไปยังอีเมลในทะเบียน (${registeredEmail}) เรียบร้อยแล้ว กรุณาตรวจสอบกล่องข้อความ`);
       setResendCooldown(600); // 10 minutes limit per Spec D 4.3
-    } catch {
-      // ponytail: fail-open feedback if backend endpoint is in-progress
-      setSuccessBanner(`ระบบได้ส่งลิงก์ใหม่ไปยังอีเมลในทะเบียน (${registeredEmail}) เรียบร้อยแล้ว กรุณาตรวจสอบกล่องข้อความ`);
-      setResendCooldown(600);
+    } catch (err) {
+      setErrorMessage(getErrorMessage(err, 'ไม่สามารถขอลิงก์ใหม่ได้ กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษา'));
     } finally {
       setResendLoading(false);
     }
@@ -423,10 +347,9 @@ const JobOffer02Token: React.FC = () => {
       });
       setIsDeclineModalOpen(false);
       setStatus('submitted');
-    } catch {
-      // ponytail: fail-open fallback
+    } catch (err) {
+      setErrorMessage(getErrorMessage(err, 'ไม่สามารถบันทึกการงดรับนักศึกษาในภาคเรียนนี้ได้'));
       setIsDeclineModalOpen(false);
-      setStatus('submitted');
     } finally {
       setIsDeclineSubmitting(false);
     }
@@ -474,9 +397,8 @@ const JobOffer02Token: React.FC = () => {
 
       await api.put(`/public/job-offer?token=${encodeURIComponent(token || '')}`, payload);
       setStatus('submitted');
-    } catch {
-      // ponytail: fail-open fallback
-      setStatus('submitted');
+    } catch (err) {
+      setErrorMessage(getErrorMessage(err, 'ไม่สามารถส่งแบบเสนองานได้'));
     } finally {
       setSubmitting(false);
     }
@@ -498,6 +420,26 @@ const JobOffer02Token: React.FC = () => {
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6 flex flex-col items-center justify-center">
         <div className="max-w-4xl w-full">
           <PageSkeleton variant="form" />
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (status === 'error') {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-sm text-center max-w-md w-full border border-red-200 dark:border-red-900/40">
+          <div className="w-14 h-14 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <X className="w-7 h-7" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">ไม่สามารถเปิดแบบสำรวจได้</h2>
+          <p className="text-gray-600 dark:text-gray-300 text-sm mb-6 leading-relaxed">
+            {errorMessage || 'ลิงก์ไม่ถูกต้องหรือเกิดข้อผิดพลาดในการตรวจสอบข้อมูล กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษา'}
+          </p>
+          <Button variant="secondary" className="w-full" onClick={() => navigate('/login')}>
+            กลับหน้าเข้าสู่ระบบหลัก
+          </Button>
         </div>
       </div>
     );
