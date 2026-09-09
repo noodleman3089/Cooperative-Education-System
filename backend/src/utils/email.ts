@@ -760,12 +760,17 @@ export const sendFinalReportNotificationEmail = async (
  *    ฝ่ายบุคคล (hr@, contact@) ที่มีคนเข้าถึงหลายคน และหน้าที่ลิงก์นี้เปิดก็เป็นหน้า
  *    ที่ไม่มีข้อมูลนักศึกษาเช่นกัน
  * ⛔ ปลายทางมาจากทะเบียนเสมอ ห้ามรับจากคำขอ (ดู `JobOfferModel.contactEmail`)
+ *
+ * คืน `true` เมื่อ SMTP รับจดหมายไปแล้ว · `false` เมื่อส่งไม่ออก — **ไม่โยน error**
+ * เพราะการส่งเมลล้มเหลวไม่ควรทำให้สิ่งที่บันทึกลงฐานไปแล้วกลายเป็น 500
+ * ตอนเจ้าหน้าที่ส่งเป็นชุด ค่านี้คือตัวที่ทำให้ตัวเลข `emailed` พูดความจริง
+ * (ผู้เรียกที่ไม่สนใจก็ไม่ต้องรับค่า — พฤติกรรมเดิมไม่เปลี่ยน)
  */
 export const sendJobOfferSurveyEmail = async (
   toEmail: string,
   answerLink: string,
   info: { companyName: string; semesterLabel: string; dueDate: string | null }
-): Promise<void> => {
+): Promise<boolean> => {
   const content = `
     <p>งานสหกิจศึกษาและการฝึกงานวิชาชีพประจำคณะ ขอสำรวจความต้องการรับนักศึกษาสหกิจศึกษา
        ของ <b>${esc(info.companyName)}</b> ประจำ<b>${esc(info.semesterLabel)}</b></p>
@@ -803,6 +808,7 @@ export const sendJobOfferSurveyEmail = async (
   try {
     await transporter.sendMail(mailOptions);
     console.log(`Job offer survey email successfully sent to: ${toEmail}`);
+    return true;
   } catch (err: unknown) {
     const error = err as { message?: string; response?: string };
     console.error('════════════════════════════════════════════════════');
@@ -811,5 +817,6 @@ export const sendJobOfferSurveyEmail = async (
     console.error(`  To: ${toEmail}`);
     console.error(`  Link: ${answerLink}`);
     console.error('════════════════════════════════════════════════════');
+    return false;
   }
 };

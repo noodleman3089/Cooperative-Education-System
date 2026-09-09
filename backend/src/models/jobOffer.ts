@@ -296,6 +296,69 @@ export class JobOfferModel {
       : null;
   }
 
+  /* ── ฝั่งเจ้าหน้าที่: เปิดใบแล้วส่งไปถาม ──────────────────────────── */
+
+  /**
+   * รายชื่อที่เจ้าหน้าที่เลือกไว้ พร้อมทุกอย่างที่ต้องใช้ตัดสินว่าส่งได้ไหม
+   *
+   * คืน **เฉพาะบริษัทที่มีอยู่จริง** — id ที่หายไปจากผลลัพธ์คือ id ที่ไม่มีในทะเบียน
+   * ซึ่ง controller ต้องรายงานกลับใน `skipped[]` ไม่ใช่เงียบหายไป
+   *
+   * ⛔ ปลายทางคือ `companies.email` **เท่านั้น ไม่ตกไปที่ `users.email` ของ `created_by`**
+   *    ต่างจาก `contactEmail` ที่ใช้ตอนขอลิงก์ใหม่ — ตรงนั้นผู้เรียกถือ token ของบริษัท
+   *    ที่มีบัญชีของตัวเองอยู่แล้ว `created_by` จึงเป็นบัญชีของบริษัทเอง
+   *    แต่แถวที่ **เจ้าหน้าที่เพิ่มเข้าทำเนียบเอง** มี `created_by` เป็นตัวเจ้าหน้าที่ —
+   *    ถ้าตกไปใช้ค่านั้น แบบสำรวจจะถูกส่งกลับเข้าเมลของเจ้าหน้าที่แทนที่จะไปถึงบริษัท
+   *    และเจ้าหน้าที่จะเห็นว่า "ส่งสำเร็จ" ทั้งที่ไม่มีใครที่บริษัทได้รับอะไรเลย
+   *    (เจอตอนทดสอบ B4 — บริษัทที่เจ้าหน้าที่เพิ่มเองทุกแถวเข้าเงื่อนไขนี้)
+   */
+  static async listSendTargets(companyIds: number[], semesterId: number) {
+    const res = await query(
+      `SELECT c.company_id,
+              c.name_th,
+              NULLIF(btrim(c.email), '') AS email,
+              o.offer_id AS existing_offer_id,
+              o.status   AS existing_status
+         FROM companies c
+         LEFT JOIN coop_job_offers o
+                ON o.company_id = c.company_id AND o.semester_id = $2
+        WHERE c.company_id = ANY($1::int[])
+        ORDER BY c.name_th`,
+      [companyIds, semesterId]
+    );
+    return res.rows as {
+      company_id: number;
+      name_th: string;
+      email: string | null;
+      existing_offer_id: number | null;
+      existing_status: string | null;
+    }[];
+  }
+
+  /**
+   * เปิดใบเปล่าสถานะ `draft` ให้บริษัทหนึ่งราย
+   *
+   * `ON CONFLICT DO NOTHING` ไม่ใช่ของประดับ — เจ้าหน้าที่สองคนกดส่งภาคเดียวกัน
+   * พร้อมกันได้จริง และ `listSendTargets` อ่านไปก่อนหน้านี้แล้ว ช่องว่างระหว่าง
+   * "อ่านว่ายังไม่มี" กับ "เขียน" จึงต้องมีตัวกันชนที่ระดับฐาน
+   * คืน `null` = มีใบอยู่แล้ว (คนอื่นชิงสร้างไปก่อน) ให้ controller นับเป็นข้าม
+   */
+  static async createDraftOffer(
+    client: PoolClient,
+    companyId: number,
+    semesterId: number,
+    dueDate: string
+  ): Promise<number | null> {
+    const res = await client.query(
+      `INSERT INTO coop_job_offers (company_id, semester_id, due_date, status)
+       VALUES ($1, $2, $3, 'draft')
+       ON CONFLICT ON CONSTRAINT coop_job_offers_company_semester_key DO NOTHING
+       RETURNING offer_id`,
+      [companyId, semesterId, dueDate]
+    );
+    return (res.rowCount ?? 0) > 0 ? (res.rows[0].offer_id as number) : null;
+  }
+
   /**
    * เขียนรายการตำแหน่งทั้งชุดของใบหนึ่งใบ (แทนที่ของเดิม)
    *

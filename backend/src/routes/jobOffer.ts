@@ -14,6 +14,14 @@ const router = Router();
  *    และการปฏิเสธคำตอบที่ส่งช้าคือการทำให้คณะไม่ได้คำตอบเลย ซึ่งแย่กว่าได้ช้า
  */
 router.use(authenticateToken);
+
+// POST /api/job-offers/send — เจ้าหน้าที่ส่งแบบสำรวจให้บริษัทที่เลือกจากทำเนียบ
+//
+// ⛔ **ต้องอยู่เหนือ `router.use(authorizeRoles('company'))` บรรทัดล่าง** — ไม่งั้นบัญชี
+//    เจ้าหน้าที่จะถูกด่านนั้นปฏิเสธก่อนถึงที่นี่ · เส้นนี้เป็นเส้นเดียวในไฟล์ที่ไม่ใช่ของบริษัท
+//    เพราะ "การเปิดใบ" เป็นการกระทำของมหาวิทยาลัย ส่วนที่เหลือทั้งไฟล์คือ "การตอบ" ของบริษัท
+router.post('/send', authorizeRoles('staff'), JobOfferController.sendSurvey);
+
 router.use(authorizeRoles('company'));
 
 // GET /api/job-offers/current — ใบของภาคที่กำลังถูกสำรวจ + คำตอบเดิมไว้เทียบ
