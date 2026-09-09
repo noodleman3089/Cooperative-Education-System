@@ -108,11 +108,14 @@ export class ReportOutlineController {
       const userId = req.user.userId;
       const { roles } = req.user;
       
-      const isMentor = roles.includes('mentor') || roles.includes('company');
+      // ⛔ `company` ไม่นับเป็นพี่เลี้ยงอีกแล้ว (spec-D 14.1) — เส้นนี้ปิดบัญชีบริษัท
+      //    ที่ระดับ route ไปแล้ว บรรทัดนี้จึงเป็นของตายที่เหลือค้าง แต่ถ้าวันหนึ่งมีคน
+      //    เติม 'company' กลับเข้า authorizeRoles มันจะกลายเป็นประตูหลังทันทีโดยไม่มีใครเห็น
+      const isMentor = roles.includes('mentor');
       const isAdvisor = roles.includes('advisor');
-      
+
       if (!isMentor && !isAdvisor) {
-        res.status(403).json({ message: 'Forbidden. Only mentor, company, or advisor can update status.' });
+        res.status(403).json({ message: 'Forbidden. Only mentor or advisor can update status.' });
         return;
       }
 

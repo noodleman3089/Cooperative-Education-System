@@ -9,6 +9,11 @@ export interface JobPostWithCompany extends JobPost {
 export class JobPostModel {
   /**
    * Create a new job post. Defaults to 'pending_approval'.
+   *
+   * ⛔ **ต้องมี semester_id เสมอ** — ตั้งเป็นภาคเรียนที่กำลังเปิดอยู่ให้เอง
+   *    เส้นนี้เหลือไว้ให้เจ้าหน้าที่คีย์ตำแหน่งของบริษัทที่ตอบกลับมาทางกระดาษ
+   *    ซึ่งก็คือตำแหน่งของภาคที่กำลังสำรวจอยู่ · ถ้าปล่อยเป็น NULL แถวที่คีย์เข้าไป
+   *    จะตกตัวกรองของ getAvailableJobs แล้วหายไปเงียบ ๆ โดยไม่มีใครรู้ว่าทำไม
    */
   static async create(jobData: {
     company_id: number;
@@ -19,8 +24,10 @@ export class JobPostModel {
     expire_date: Date | string;
   }): Promise<JobPost> {
     const res = await query(
-      `INSERT INTO job_posts (company_id, title, description, created_by, quota, applied_count, expire_date, status)
-       VALUES ($1, $2, $3, $4, $5, 0, $6, 'pending_approval')
+      `INSERT INTO job_posts (company_id, title, description, created_by, quota, applied_count, expire_date, status, semester_id)
+       VALUES ($1, $2, $3, $4, $5, 0, $6, 'pending_approval',
+               (SELECT semester_id FROM coop_semesters
+                 WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1))
        RETURNING job_id, company_id, title, description, created_by, quota, applied_count, expire_date, status`,
       [
         jobData.company_id,
@@ -99,13 +106,13 @@ export class JobPostModel {
          -- ⛔ ต้องเป็นตำแหน่งของภาคเรียนที่กำลังเปิดรับ ไม่ใช่ของภาคที่ผ่านไปแล้ว
          --    ก่อนหน้านี้ job_posts ไม่มี semester_id เลย กระดานหางานจึงสะสมของทุกภาค
          --    ปนกันไปเรื่อย ๆ และนักศึกษาสมัครตำแหน่งของปีที่แล้วได้
-         --    · แถวที่ semester_id เป็น NULL คือของเก่าก่อนมีระบบใบสำรวจ ยอมให้ผ่าน
-         --      เพราะการซ่อนทั้งกระดานเสียหายกว่าการโชว์ของเก่าไม่กี่รายการ
-         AND (
-           j.semester_id IS NULL
-           OR j.semester_id = (SELECT semester_id FROM coop_semesters
-                                WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1)
-         )
+         -- ⛔ **ไม่ยอมให้ NULL ผ่านแล้ว** — ตอนทำ B12 ผมเปิดช่องนี้ไว้กันประกาศเก่าหาย
+         --    แต่ migration 023 backfill ให้ทุกแถวไปแล้ว (WHERE semester_id IS NULL)
+         --    NULL จึงเกิดใหม่ได้ทางเดียวคือ POST /api/jobs ซึ่งปิดไม่ให้บริษัทเรียกแล้ว
+         --    เงื่อนไขนี้ไม่ได้ปกป้องอะไร มีแต่จะปล่อยให้ประกาศที่ไม่สังกัดภาคเรียนไหนเลย
+         --    ค้างอยู่บนกระดานตลอดไปโดยไม่มีวันหมดอายุ
+         AND j.semester_id = (SELECT semester_id FROM coop_semesters
+                               WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1)
          -- ⛔ บริษัทที่ตอบว่า "ภาคเรียนนี้ยังไม่รับ" ต้องไม่โผล่ในกระดาน
          --    แม้จะมีรายการค้างจากตอนที่ยังไม่ได้ตอบก็ตาม
          AND NOT EXISTS (

@@ -1,7 +1,24 @@
 -- PostgreSQL Database Schema for Online Cooperative Education Management System (Consolidated Base Schema)
 
 -- Drop existing tables to start clean in development environment
+--
+-- ⛔ **ตารางใหม่ทุกตัวต้องมีชื่ออยู่ในรายการนี้ด้วย** ไม่ใช่แค่มี CREATE ข้างล่าง
+--    ตารางที่ไม่ได้ถูก DROP จะรอดจากการรีเซ็ต แล้ว `CREATE TABLE IF NOT EXISTS`
+--    ก็ข้ามมันไป → **แถวเก่าค้างข้ามการรีเซ็ตทุกครั้ง** และที่ร้ายกว่าคือ
+--    `DROP TABLE <ตารางแม่> CASCADE` จะ**ลบ foreign key ของมันทิ้งเงียบ ๆ**
+--    เหลือตารางที่ไม่มีด่านอ้างอิงอะไรเลย โดยที่ schema-drift ตรวจไม่เจอ
+--    เพราะฐานสองตัวที่เอามาเทียบกันถูกสร้างด้วยวิธีเดียวกันทั้งคู่
+--    · เจอ 8 ตารางที่ตกหล่นแบบนี้เมื่อ 2026-09-09 (เทสต์ล้มเพราะแถวของเทสต์ก่อนหน้าค้างอยู่)
+--    · ตรวจซ้ำได้ด้วยการเทียบรายชื่อ DROP กับรายชื่อ CREATE ในไฟล์นี้ให้ตรงกัน
 DROP TABLE IF EXISTS audit_log CASCADE;
+DROP TABLE IF EXISTS job_offer_tokens CASCADE;
+DROP TABLE IF EXISTS job_post_majors CASCADE;
+DROP TABLE IF EXISTS coop_job_offers CASCADE;
+DROP TABLE IF EXISTS daily_logs CASCADE;
+DROP TABLE IF EXISTS work_plan_topics CASCADE;
+DROP TABLE IF EXISTS work_plan_approvals CASCADE;
+DROP TABLE IF EXISTS monthly_work_plans CASCADE;
+DROP TABLE IF EXISTS report_confirmations CASCADE;
 DROP TABLE IF EXISTS final_reports CASCADE;
 DROP TABLE IF EXISTS final_evaluations CASCADE;
 DROP TABLE IF EXISTS mentor_notifications CASCADE;
