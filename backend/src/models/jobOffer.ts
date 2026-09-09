@@ -40,6 +40,42 @@ export const COMPANY_WRITABLE_FIELDS = [
  *    การให้บัญชีบริษัทเขียนทับเองคือการปล่อยให้แก้ชื่อบนหนังสือที่เซ็นไปแล้ว
  */
 
+/**
+ * นิพจน์ SQL ที่ประกอบ `company_snapshot` — **สร้างจาก allow-list ข้างบนโดยตรง**
+ *
+ * เขียนรายชื่อฟิลด์ซ้ำอีกชุดหนึ่งด้วยมือแปลว่าวันที่มีคนเพิ่มฟิลด์ที่บริษัทเขียนได้
+ * สำเนาจะขาดฟิลด์นั้นเงียบ ๆ แล้ว `changed_fields` จะไม่มีวันรายงานมันเลย
+ * (ค่าที่หายไปจากสำเนาถูกอ่านเป็น "เหมือนเดิม" เสมอ)
+ * ⛔ ค่าที่แทรกมาจากอาร์เรย์ค่าคงที่ในไฟล์นี้เท่านั้น ไม่มีอะไรมาจากคำขอ
+ */
+const COMPANY_SNAPSHOT_EXPR = `jsonb_build_object(${COMPANY_WRITABLE_FIELDS.map(
+  (f) => `'${f}', c.${f}`
+).join(', ')})`;
+
+/** ค่าที่ต่างชนิดกันแต่หมายถึงสิ่งเดียวกัน ต้องไม่ถูกนับว่า "เปลี่ยน" */
+function normValue(v: unknown): string {
+  if (v === null || v === undefined) return '';
+  const s = String(v).trim();
+  const n = Number(s);
+  return s !== '' && Number.isFinite(n) ? String(n) : s;
+}
+
+/**
+ * ช่องที่บริษัทแก้จากค่าที่คณะมีอยู่ตอนส่งไปถาม
+ *
+ * ⛔ ไม่มีสำเนา (ใบเก่าก่อน migration 029) = **`[]` แปลว่า "ไม่รู้"** ไม่ใช่ "ไม่มีอะไรเปลี่ยน"
+ *    หน้าจอจึงแค่ไม่ระบายสี ห้ามเขียนป้ายว่า "บริษัทไม่ได้แก้อะไร"
+ */
+export function diffCompanySnapshot(
+  snapshot: Record<string, unknown> | null,
+  current: Record<string, unknown> | null
+): string[] {
+  if (!snapshot || !current) return [];
+  return COMPANY_WRITABLE_FIELDS.filter(
+    (f) => normValue(snapshot[f]) !== normValue(current[f])
+  );
+}
+
 export interface JobOfferRow {
   offer_id: number;
   company_id: number;
@@ -350,8 +386,9 @@ export class JobOfferModel {
     dueDate: string
   ): Promise<number | null> {
     const res = await client.query(
-      `INSERT INTO coop_job_offers (company_id, semester_id, due_date, status)
-       VALUES ($1, $2, $3, 'draft')
+      `INSERT INTO coop_job_offers (company_id, semester_id, due_date, status, company_snapshot)
+       SELECT $1, $2, $3, 'draft', ${COMPANY_SNAPSHOT_EXPR}
+         FROM companies c WHERE c.company_id = $1
        ON CONFLICT ON CONSTRAINT coop_job_offers_company_semester_key DO NOTHING
        RETURNING offer_id`,
       [companyId, semesterId, dueDate]
@@ -474,5 +511,157 @@ export class JobOfferModel {
         );
       }
     }
+  }
+
+  /* ── ฝั่งเจ้าหน้าที่: ตรวจใบและเปิดตำแหน่ง ────────────────────────── */
+
+  /**
+   * ทำเนียบทั้งหมดพร้อมสถานะ "ส่งได้ไหม" ของภาคเรียนที่ระบุ (SB1)
+   *
+   * ⛔ `status` คำนวณที่นี่ **ตามลำดับเดียวกับ `sendSurvey` เป๊ะ ๆ**: มีใบแล้วมาก่อน
+   *    แล้วค่อยไม่มีอีเมล · ถ้าหน้าจอเดาเองจาก `email === null` มันจะบอกว่า
+   *    "ส่งได้" ในกรณีที่ปุ่มส่งจะข้ามให้จริง แล้วคนกดจะไม่เข้าใจว่าทำไมตัวเลขไม่ตรง
+   * ⛔ ประวัติสามตัวใช้ subquery แยกกัน ห้ามยุบเป็น JOIN แล้ว COUNT — ใบหลายภาค
+   *    คูณกับคำร้องหลายใบแล้วตัวเลขบานทันที (บทเรียนเดียวกับ `history` ข้างบน)
+   */
+  static async listRecipients(semesterId: number) {
+    const res = await query(
+      `SELECT c.company_id, c.name_th, c.province, c.district,
+              NULLIF(btrim(c.email), '') AS email,
+              c.contact_person,
+              o.offer_id, o.created_at AS sent_at, o.status AS offer_status,
+              (SELECT COUNT(*)::int FROM coop_job_offers h
+                WHERE h.company_id = c.company_id
+                  AND h.status IN ('submitted', 'reviewed')) AS semesters_offered,
+              (SELECT COUNT(*)::int FROM intent_forms i
+                WHERE i.company_id = c.company_id
+                  AND i.status = 'accepted') AS accepted_total,
+              (SELECT 'ภาคเรียนที่ ' || s2.semester || '/' || s2.academic_year
+                 FROM coop_job_offers h2
+                 JOIN coop_semesters s2 ON s2.semester_id = h2.semester_id
+                WHERE h2.company_id = c.company_id
+                  AND h2.status IN ('submitted', 'reviewed')
+                ORDER BY h2.semester_id DESC
+                LIMIT 1) AS last_semester_label
+         FROM companies c
+         LEFT JOIN coop_job_offers o
+                ON o.company_id = c.company_id AND o.semester_id = $1
+        ORDER BY c.name_th`,
+      [semesterId]
+    );
+    return res.rows;
+  }
+
+  /** จำนวนใบแยกตามสถานะของภาคเรียนหนึ่ง — ตัวเลขบนแถบกรองหน้า E3 (SB2) */
+  static async staffStatusCounts(semesterId: number) {
+    const res = await query(
+      `SELECT status, COUNT(*)::int AS n
+         FROM coop_job_offers WHERE semester_id = $1 GROUP BY status`,
+      [semesterId]
+    );
+    const counts = { draft: 0, submitted: 0, reviewed: 0, declined: 0 };
+    for (const row of res.rows) {
+      if (row.status in counts) counts[row.status as keyof typeof counts] = row.n;
+    }
+    return counts;
+  }
+
+  /**
+   * รายการใบของภาคเรียนหนึ่งสำหรับเจ้าหน้าที่ (SB2)
+   *
+   * ⛔ `days_left` / `is_overdue` คิดจาก `CURRENT_DATE` ของ Postgres เสมอ
+   *    หน้าจอห้ามคิดวันเอง (กฎเดียวกับ `fetchDueDateFacts`)
+   */
+  static async listStaffOffers(semesterId: number, status: string | null) {
+    const res = await query(
+      `SELECT o.offer_id, o.company_id, c.name_th AS company_name_th, o.status,
+              o.due_date::text AS due_date,
+              (o.due_date - (NOW() AT TIME ZONE 'Asia/Bangkok')::date) AS days_left,
+              (o.due_date IS NOT NULL
+               AND o.due_date < (NOW() AT TIME ZONE 'Asia/Bangkok')::date) AS is_overdue,
+              o.submitted_at, o.informant_name,
+              COUNT(j.job_id)::int            AS item_count,
+              COALESCE(SUM(j.quota), 0)::int  AS quota_total
+         FROM coop_job_offers o
+         JOIN companies c ON c.company_id = o.company_id
+         LEFT JOIN job_posts j ON j.offer_id = o.offer_id
+        WHERE o.semester_id = $1
+          AND ($2::text IS NULL OR o.status = $2)
+        GROUP BY o.offer_id, c.name_th
+        ORDER BY (o.status = 'submitted') DESC, o.due_date NULLS LAST, c.name_th`,
+      [semesterId, status]
+    );
+    return res.rows.map((r) => ({
+      ...r,
+      days_left: r.days_left === null || r.days_left === undefined ? null : Number(r.days_left),
+      is_overdue: r.is_overdue === true,
+    }));
+  }
+
+  /**
+   * ภาคเรียนล่าสุดที่มีใบสำรวจอยู่จริง — ค่าตั้งต้นของหน้า E3 ตอนเปิดครั้งแรก
+   * คืน `null` เมื่อยังไม่เคยส่งแบบสำรวจเลย · ⛔ ห้ามตกไปใช้ภาคที่ `is_active`
+   *    คณะส่งแบบสำรวจล่วงหน้าหนึ่งภาค ใบที่ต้องตรวจจึงเป็นของภาคหน้าเสมอ
+   */
+  static async latestSemesterWithOffers(): Promise<number | null> {
+    const res = await query(`SELECT MAX(semester_id) AS id FROM coop_job_offers`);
+    const id = res.rows[0]?.id;
+    return id === null || id === undefined ? null : Number(id);
+  }
+
+  /**
+   * ใบนี้ถูกส่งไปถามเมื่อไหร่ โดยใคร (SB3)
+   *
+   * ⛔ ไม่ได้เก็บเป็นคอลัมน์ `sent_by` เพราะไม่ต้องเก็บ — token ใบแรกของใบนี้
+   *    ถูกออกใน**ทรานแซกชันเดียวกับที่ใบถูกสร้าง** โดยเจ้าหน้าที่ที่กดส่ง
+   *    (`sendSurvey` → `createJobOfferToken(offerId, req.user.userId, client)`)
+   *    เอาใบแรกเสมอ ไม่ใช่ใบล่าสุด — ใบหลัง ๆ มาจากปุ่ม "ขอลิงก์ใหม่" ซึ่งคนกดอาจเป็นคนอื่น
+   */
+  static async sendInfo(offerId: number) {
+    const res = await query(
+      `SELECT o.created_at AS sent_at,
+              (SELECT COALESCE(
+                        NULLIF(btrim(COALESCE(p.first_name, '') || ' ' || COALESCE(p.last_name, '')), ''),
+                        u.email)
+                 FROM job_offer_tokens t
+                 JOIN users u ON u.user_id = t.created_by
+                 LEFT JOIN personnel p ON p.personnel_id = u.user_id
+                WHERE t.offer_id = o.offer_id
+                ORDER BY t.token_id
+                LIMIT 1) AS sent_by_name
+         FROM coop_job_offers o
+        WHERE o.offer_id = $1`,
+      [offerId]
+    );
+    const row = res.rows[0];
+    return {
+      sent_at: row?.sent_at ?? null,
+      sent_by_name: (row?.sent_by_name as string | null) ?? null,
+    };
+  }
+
+  /** สำเนาข้อมูลบริษัท ณ วันที่ส่งไปถาม — `null` คือใบเก่าที่ไม่มีสำเนา ไม่ใช่ "ไม่เปลี่ยน" */
+  static async companySnapshot(offerId: number): Promise<Record<string, unknown> | null> {
+    const res = await query(
+      `SELECT company_snapshot FROM coop_job_offers WHERE offer_id = $1`,
+      [offerId]
+    );
+    return (res.rows[0]?.company_snapshot as Record<string, unknown> | null) ?? null;
+  }
+
+  /**
+   * รายการในใบที่มีนักศึกษายื่นเข้ามาแล้ว — ตัวกันไม่ให้ตีกลับทั้งใบ (SB5)
+   *
+   * ⛔ ตีกลับรายการที่มีคนสมัครแล้วคือทำให้คำร้องที่อ้าง `job_id` นั้นชี้ไปที่ตำแหน่ง
+   *    ที่ถูกปฏิเสธ และตรรกะโควตาใน `controllers/acceptance.ts` กับ `models/intent.ts`
+   *    ยังอ่าน `applied_count` ของแถวนั้นอยู่ (บทเรียนเดียวกับ `replaceItems`)
+   */
+  static async itemsWithApplicants(offerId: number) {
+    const res = await query(
+      `SELECT job_id, title, applied_count
+         FROM job_posts WHERE offer_id = $1 AND applied_count > 0 ORDER BY job_id`,
+      [offerId]
+    );
+    return res.rows as { job_id: number; title: string; applied_count: number }[];
   }
 }

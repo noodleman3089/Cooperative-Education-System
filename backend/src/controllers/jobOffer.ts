@@ -621,7 +621,7 @@ async function loadOwnOffer(
   return offer;
 }
 
-async function fetchCompany(companyId: number) {
+export async function fetchCompany(companyId: number) {
   const res = await query(
     `SELECT company_id, name_th, name_en, address, province, district, postal_code,
             phone, fax, email, is_verified, business_type, employee_count,
@@ -634,7 +634,7 @@ async function fetchCompany(companyId: number) {
   return res.rows[0] ?? null;
 }
 
-async function fetchSemesterLabel(semesterId: number) {
+export async function fetchSemesterLabel(semesterId: number) {
   const res = await query(
     `SELECT semester_id, academic_year, semester FROM coop_semesters WHERE semester_id = $1`,
     [semesterId]
@@ -649,7 +649,7 @@ async function fetchSemesterLabel(semesterId: number) {
  * เหลืออีกกี่วัน / เลยกำหนดหรือยัง — **คิดจาก CURRENT_DATE ของ Postgres เสมอ**
  * เคยมีบั๊กวันเพี้ยนจาก timezone มาแล้ว การให้เบราว์เซอร์คิดเองคือเปิดประตูให้มันกลับมา
  */
-async function fetchDueDateFacts(offerId: number) {
+export async function fetchDueDateFacts(offerId: number) {
   const res = await query(
     `SELECT (due_date - (NOW() AT TIME ZONE 'Asia/Bangkok')::date) AS days_left,
             (due_date IS NOT NULL AND due_date < (NOW() AT TIME ZONE 'Asia/Bangkok')::date) AS is_overdue

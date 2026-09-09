@@ -177,9 +177,9 @@ export class IntentFormModel {
       if (intentData.job_id !== null) {
         // Query job post with row-locking FOR UPDATE to handle concurrent requests safely
         const jobRes = await client.query(
-          `SELECT job_id, company_id, status, quota, applied_count, expire_date 
-           FROM job_posts 
-           WHERE job_id = $1 
+          `SELECT job_id, company_id, status, quota, applied_count, semester_id
+           FROM job_posts
+           WHERE job_id = $1
            FOR UPDATE`,
           [intentData.job_id]
         );
@@ -200,9 +200,22 @@ export class IntentFormModel {
           throw new Error(`Job post is not currently accepting applications. Current status: ${job.status}`);
         }
 
-        // Validate expiration
-        if (new Date(job.expire_date).getTime() <= Date.now()) {
-          throw new Error('Job post has expired.');
+        /**
+         * ⛔ **เลิกกรองด้วย `expire_date` แล้ว** — คอลัมน์นี้เปลี่ยนความหมายไปตั้งแต่
+         *    รอบรื้อฝ่ายสถานประกอบการ จาก "วันที่ประกาศหมดอายุ" เป็น
+         *    **"กำหนดส่งแบบสำรวจกลับ"** (บรรทัดท้ายกระดาษ สหกิจ 02)
+         *    ตำแหน่งจะถูกเปิดให้นักศึกษาเห็นก็ต่อเมื่อเจ้าหน้าที่ตรวจใบผ่าน ซึ่งเกิด
+         *    **หลัง** วันนั้นเสมอ — เงื่อนไขเดิมจึงปฏิเสธการยื่นทุกใบที่เดินมาถูกทาง
+         *    (`models/job.ts` ถอดเงื่อนไขนี้ออกจากกระดานหางานไปแล้ว เหลือค้างที่นี่
+         *    ที่เดียว: นักศึกษาเห็นตำแหน่งบนกระดาน กดยื่น แล้วได้ "Job post has expired.")
+         *    ตัวที่คุมว่ายังรับอยู่ไหมคือ `status` กับโควตา ส่วนภาคเรียนคุมด้วยบรรทัดล่าง
+         *
+         * ⛔ ตำแหน่งต้องเป็นของภาคเรียนเดียวกับที่นักศึกษายื่น — ตรงกับเงื่อนไขของ
+         *    กระดานหางาน (`getAvailableJobs`) และ `semester_id` ของคำร้องถูกตรวจ
+         *    ว่า `is_active` ไปแล้วข้างบน ตำแหน่งของภาคที่ผ่านไปแล้วจึงยื่นไม่ได้
+         */
+        if (job.semester_id !== null && job.semester_id !== intentData.semester_id) {
+          throw new Error('ตำแหน่งนี้เป็นของภาคการศึกษาอื่น ไม่สามารถยื่นความจำนงในภาคนี้ได้');
         }
 
         // Validate quota

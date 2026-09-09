@@ -35,6 +35,11 @@ export const AuditAction = {
   REGISTRY_CHANGED: 'student.registry_changed',
   JOB_POST_PUBLISHED: 'job_post.published',
   JOB_POST_REJECTED: 'job_post.rejected',
+  // สหกิจ 02: การกดตรวจผ่านทั้งใบคือสิ่งเดียวที่พาตำแหน่งขึ้นกระดานหางาน
+  // — เขียนเป็นบรรทัดเดียวพร้อม `published_job_ids` ไม่แตกเป็น job_post.published รายอัน
+  //   เพราะที่ต้องตามย้อนคือ "ใครปล่อยใบนี้ผ่าน" ไม่ใช่ "แถวไหนถูก UPDATE"
+  JOB_OFFER_REVIEWED: 'job_offer.reviewed',
+  JOB_OFFER_REJECTED: 'job_offer.rejected',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   FINAL_REPORT_REVIEWED: 'final_report.reviewed',
   COMPANY_VERIFIED: 'company.verified',
