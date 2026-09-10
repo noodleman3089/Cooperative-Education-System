@@ -312,6 +312,22 @@ export class JobOfferModel {
     return res.rows[0]?.email ?? null;
   }
 
+  /**
+   * อีเมลในทะเบียนของบริษัท — **`companies.email` เท่านั้น ไม่ตกไปที่ `created_by`**
+   *
+   * ⛔ ต่างจาก `contactEmail` ข้างบนโดยตั้งใจ · ใช้กับการส่งที่ **เจ้าหน้าที่เป็นคนกด**
+   *    แถวที่เจ้าหน้าที่เพิ่มเข้าทำเนียบเองมี `created_by` เป็นตัวเจ้าหน้าที่ ถ้าตกไปใช้ค่านั้น
+   *    ลิงก์จะถูกส่งกลับเข้าเมลของเจ้าหน้าที่แล้วหน้าจอขึ้นว่า "ส่งแล้ว" ทั้งที่ไม่มีใคร
+   *    ที่บริษัทได้รับอะไรเลย (เหตุผลเดียวกับที่เขียนไว้บน `listSendTargets`)
+   */
+  static async registryEmail(companyId: number): Promise<string | null> {
+    const res = await query(
+      `SELECT NULLIF(btrim(email), '') AS email FROM companies WHERE company_id = $1`,
+      [companyId]
+    );
+    return res.rows[0]?.email ?? null;
+  }
+
   /** ชื่อบริษัทและป้ายภาคเรียน — ใช้ประกอบเนื้ออีเมล */
   static async offerHeadline(offerId: number) {
     const res = await query(

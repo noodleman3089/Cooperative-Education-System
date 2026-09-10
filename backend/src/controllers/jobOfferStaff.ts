@@ -3,6 +3,12 @@ import pool, { query } from '../config/database';
 import { JobOfferModel, diffCompanySnapshot } from '../models/jobOffer';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
+import { sendJobOfferSurveyEmail } from '../utils/email';
+import {
+  JOB_OFFER_RESEND_COOLDOWN_MS,
+  JOB_OFFER_TOKEN_TTL_LABEL,
+  createJobOfferToken,
+} from '../utils/jobOfferToken';
 import { fetchCompany, fetchDueDateFacts, fetchSemesterLabel } from './jobOffer';
 
 /**
@@ -385,6 +391,93 @@ export class JobOfferStaffController {
       sendUnexpectedError(res, error, 'Reject job offer error', 'ไม่สามารถส่งแบบเสนองานกลับได้');
     } finally {
       client.release();
+    }
+  }
+
+  /**
+   * ส่งลิงก์ตอบแบบสำรวจไปให้บริษัทใหม่อีกครั้ง (SB6)
+   * Route: POST /api/job-offers/:offerId/resend-link
+   * Access: staff
+   *
+   * คู่แฝดของ `POST /public/job-offer/resend` แต่คนละคนกด: ตัวนั้นบริษัทกดเองจากหน้า
+   * ที่เปิดด้วยลิงก์เดิม ส่วนตัวนี้ **เจ้าหน้าที่กดจากในระบบ** — ซึ่งจำเป็น เพราะบริษัท
+   * ที่ลิงก์หมดอายุแล้วและปิดอีเมลทิ้งไปแล้วไม่มีปุ่มไหนให้กดอีกเลย
+   *
+   * ⛔ ปลายทางคือ **`companies.email` เท่านั้น** ไม่ตกไปที่อีเมลของ `created_by`
+   *    เหมือน `contactEmail` — แถวที่เจ้าหน้าที่เพิ่มเองมี `created_by` เป็นตัวเจ้าหน้าที่
+   *    ถ้าตกไปใช้ค่านั้น ลิงก์จะวิ่งกลับเข้าเมลของคนกดแล้วขึ้นว่า "ส่งแล้ว"
+   * ⛔ ส่งเมลไม่ออก = **ตอบว่าไม่สำเร็จ** ห้ามตอบ 200 เพราะออก token ได้แล้ว
+   *    token ที่ไม่มีใครได้รับ ไม่ต่างอะไรกับไม่ได้กด
+   */
+  static async resendLink(req: Request, res: Response): Promise<void> {
+    try {
+      const offerId = parseInt(req.params.offerId, 10);
+      if (!Number.isInteger(offerId) || offerId <= 0) {
+        res.status(400).json({ message: 'รหัสแบบเสนองานไม่ถูกต้อง' });
+        return;
+      }
+      const offer = await JobOfferModel.findById(offerId);
+      if (!offer) {
+        res.status(404).json({ message: 'ไม่พบแบบเสนองานฉบับนี้' });
+        return;
+      }
+      if (offer.status === 'reviewed') {
+        // ใบที่ตรวจแล้วแก้ผ่านลิงก์ไม่ได้ — ลิงก์ที่ส่งไปจะพาไปหน้าที่กดอะไรไม่ได้
+        res.status(409).json({
+          message: 'แบบเสนองานฉบับนี้ถูกตรวจและเปิดให้นักศึกษาเห็นไปแล้ว จึงส่งลิงก์ให้แก้ไขไม่ได้',
+        });
+        return;
+      }
+
+      const lastIssued = await JobOfferModel.lastTokenIssuedAt(offerId);
+      if (lastIssued && Date.now() - lastIssued.getTime() < JOB_OFFER_RESEND_COOLDOWN_MS) {
+        const waitMinutes = Math.ceil(
+          (JOB_OFFER_RESEND_COOLDOWN_MS - (Date.now() - lastIssued.getTime())) / 60000
+        );
+        res.status(429).json({
+          message: `เพิ่งส่งลิงก์ไปเมื่อสักครู่ กรุณารออีก ${waitMinutes} นาทีแล้วลองใหม่`,
+        });
+        return;
+      }
+
+      const email = await JobOfferModel.registryEmail(offer.company_id);
+      const headline = await JobOfferModel.offerHeadline(offerId);
+      if (!email || !headline) {
+        res.status(400).json({
+          message:
+            'สถานประกอบการรายนี้ยังไม่มีอีเมลผู้ประสานงานในทะเบียน กรุณากรอกอีเมลในทำเนียบก่อนส่งลิงก์',
+        });
+        return;
+      }
+
+      const issued = await createJobOfferToken(offerId, req.user!.userId);
+      const delivered = await sendJobOfferSurveyEmail(email, issued.url, {
+        companyName: headline.companyName,
+        semesterLabel: headline.semesterLabel,
+        dueDate: headline.dueDate,
+      });
+      if (!delivered) {
+        res.status(502).json({
+          message: 'ส่งอีเมลไม่สำเร็จ ยังไม่มีใครที่สถานประกอบการได้รับลิงก์ กรุณาลองใหม่อีกครั้ง',
+        });
+        return;
+      }
+
+      writeAudit(
+        {
+          action: AuditAction.JOB_OFFER_LINK_RESENT,
+          entityType: 'coop_job_offer',
+          entityId: offerId,
+          detail: { company_id: offer.company_id, sent_to: email, by: 'staff' },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: `ส่งลิงก์ตอบแบบสำรวจไปที่ ${email} แล้ว ลิงก์ใช้ได้ ${JOB_OFFER_TOKEN_TTL_LABEL}`,
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Staff resend job offer link error', 'ไม่สามารถส่งลิงก์ใหม่ได้');
     }
   }
 }

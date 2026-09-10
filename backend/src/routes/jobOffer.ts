@@ -38,6 +38,7 @@ router.get('/staff/:offerId', authorizeRoles('staff'), JobOfferStaffController.g
 // ปุ่มที่ปิดวงจร: ตรวจผ่านทั้งใบ = ตำแหน่งข้างในขึ้นกระดานหางาน
 router.put('/:offerId/review', authorizeRoles('staff'), JobOfferStaffController.reviewOffer);
 router.post('/:offerId/reject', authorizeRoles('staff'), JobOfferStaffController.rejectOffer);
+router.post('/:offerId/resend-link', authorizeRoles('staff'), JobOfferStaffController.resendLink);
 
 router.use(authorizeRoles('company'));
 

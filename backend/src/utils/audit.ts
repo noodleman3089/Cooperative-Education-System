@@ -40,6 +40,17 @@ export const AuditAction = {
   //   เพราะที่ต้องตามย้อนคือ "ใครปล่อยใบนี้ผ่าน" ไม่ใช่ "แถวไหนถูก UPDATE"
   JOB_OFFER_REVIEWED: 'job_offer.reviewed',
   JOB_OFFER_REJECTED: 'job_offer.rejected',
+  // ต่างจาก `job_offer.token_resent` ที่บริษัทกดเองจากหน้าที่เปิดด้วยลิงก์เดิม
+  // — บรรทัดนี้คือเจ้าหน้าที่สั่งยิงเมลออกจากในระบบ ซึ่งมีคนรับผิดชอบให้ตามย้อนได้
+  JOB_OFFER_LINK_RESENT: 'job_offer.link_resent_by_staff',
+  // ทะเบียนคณะ/สาขา: ชื่อคณะและชื่อสาขาถูกพิมพ์ลงหนังสือราชการที่คณบดีลงนาม
+  // และการลบคณะพาสาขาใต้คณะหายไปด้วย (CASCADE) — "ใครแก้อะไรเมื่อไหร่" ต้องตามย้อนได้
+  MASTER_FACULTY_CREATED: 'master_data.faculty_created',
+  MASTER_FACULTY_UPDATED: 'master_data.faculty_updated',
+  MASTER_FACULTY_DELETED: 'master_data.faculty_deleted',
+  MASTER_MAJOR_CREATED: 'master_data.major_created',
+  MASTER_MAJOR_UPDATED: 'master_data.major_updated',
+  MASTER_MAJOR_DELETED: 'master_data.major_deleted',
   EVALUATION_SUBMITTED: 'evaluation.submitted',
   FINAL_REPORT_REVIEWED: 'final_report.reviewed',
   COMPANY_VERIFIED: 'company.verified',
