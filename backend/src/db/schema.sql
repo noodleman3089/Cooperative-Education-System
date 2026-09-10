@@ -605,6 +605,11 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- (job_posts.title/description คือตำแหน่งที่ "เสนอ" ส่วนนี่คือสิ่งที่ "ได้ทำจริง")
     job_position VARCHAR(255),
     job_description TEXT,
+    -- "ใบนี้เข้าคิวมาตั้งแต่เมื่อไหร่" — หน้าแรกของเจ้าหน้าที่นับ "คำร้องค้างเกิน 7 วัน"
+    -- (`officer_approved_at` เกิดตอน *จบ* คิว จึงตอบคำถามนี้ไม่ได้)
+    -- ⛔ NULL ได้ = แถวที่มีก่อน migration 030 ซึ่งไม่มีใครรู้อายุจริง → อ่านเป็น
+    --    "ไม่ทราบ" และ **ห้ามนับเป็นเลยกำหนด** (นับจากค่าที่เดาเอง = ตัวเลขบนจอโกหก)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
     -- ฐานเก็บแค่ข้อเท็จจริง "ส่งช้าต้องมีเหตุผล" ส่วนความยาวขั้นต่ำเป็นกติกาหน้าจอ
     -- อยู่ที่ controller ปรับได้โดยไม่ต้องมี migration ใหม่
     CONSTRAINT intent_forms_late_reason_required
@@ -636,7 +641,10 @@ CREATE TABLE IF NOT EXISTS official_documents (
     dean_signature_date TIMESTAMP,
     -- ⚠️ DocuSign ถูกถอดออกทั้งหมดเมื่อ 2026-08-26 (คณบดีกดยืนยันในระบบแทน)
     -- คอลัมน์นี้เก็บไว้เพราะฐานจริงอาจมีค่าเก่าค้างอยู่ ไม่มีใครเขียนลงไปอีกแล้ว
-    docusign_envelope_id VARCHAR(255)
+    docusign_envelope_id VARCHAR(255),
+    -- "ใบนี้ถูกออกเมื่อไหร่" — กองงาน "ค้างที่คณบดี" บนหน้าแรกของเจ้าหน้าที่ต้องบอกได้ว่า
+    -- ค้างมากี่วัน ไม่ใช่แค่ว่ามีกี่ใบ · ⛔ NULL ได้ด้วยเหตุผลเดียวกับ intent_forms.created_at
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 10. Staging Table for Eligible Students

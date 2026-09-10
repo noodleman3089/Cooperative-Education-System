@@ -30,6 +30,7 @@ import coopProgressRoutes from './coopProgress';
 import announcementRoutes from './announcement';
 import coopCalendarRoutes from './coopCalendar';
 import memoRoutes from './memo';
+import staffRoutes from './staff';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
@@ -78,6 +79,8 @@ router.use('/coop-progress', coopProgressRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/calendar', coopCalendarRoutes);
 router.use('/memos', memoRoutes);
+// หน้าแรกของเจ้าหน้าที่ — ตัวเลขข้ามหลายตารางที่ไม่ได้เป็นของตารางไหนเลย
+router.use('/staff', staffRoutes);
 
 
 if (process.env.ENABLE_TEST_ROUTES === 'true') {
