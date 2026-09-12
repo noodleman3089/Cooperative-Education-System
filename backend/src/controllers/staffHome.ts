@@ -86,7 +86,14 @@ export class StaffHomeController {
         semester: semester
           ? {
               semester_id: semester.semester_id,
-              label: `ภาคเรียนที่ ${semester.semester}/${semester.academic_year}`,
+              /**
+               * `academic_year` ในฐานเก็บปนกันทั้ง ค.ศ. และ พ.ศ. (seed เป็น 2026)
+               * แปะลงป้ายดิบ ๆ จะได้ “ภาคเรียนที่ 1/2026” นั่งอยู่ข้าง “วันนี้ 12 ก.ย. 2569”
+               * บนหน้าจอเดียวกัน — กติกา `> 2500` นี้เป็นอันเดียวกับที่หน้าจออื่นใช้อยู่แล้ว
+               */
+              label: `ภาคเรียนที่ ${semester.semester}/${
+                semester.academic_year > 2500 ? semester.academic_year : semester.academic_year + 543
+              }`,
               is_active: semester.is_active,
             }
           : null,
