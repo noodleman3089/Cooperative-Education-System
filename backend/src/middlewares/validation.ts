@@ -207,9 +207,17 @@ export const validateProfileSetup = (req: Request, res: Response, next: NextFunc
 };
 
 /**
- * Middleware to strictly check student eligibility & orientation status before intent submission.
+ * ต้องมีโปรไฟล์นักศึกษาก่อนยื่นใบความจำนง
+ *
+ * ⛔ SEC-02 — **ระบบไม่ตรวจสิทธิ์สหกิจของนักศึกษา** (เจ้าของตัดสิน 2026-09-04 · ยืนยัน 2026-09-14
+ *    ว่าไม่อยู่ในขอบเขต · migration 031 ลบคอลัมน์ `is_eligible` / `is_orientation_passed` แล้ว)
+ *    ใครเหมาะจะออกสหกิจอาจารย์จัดการนอกระบบ · ด่านที่เหลือคือเจ้าหน้าที่รับคำร้องพร้อม
+ *    เอกสารหมายเลข 1 ที่ลงนามแล้ว (SEC-04)
+ *    · ชื่อเดิม `checkStudentEligibility` — เปลี่ยนเพราะชื่อเดิมสัญญาสิ่งที่มันไม่ได้ทำแล้ว
+ *    · จะเพิ่มเกณฑ์ใหม่ (เช่นเกรด) ให้แก้ `security_invariants.md` ข้อ SEC-02 ก่อน
+ *      เทสต์ SEC-02 ใน `security-hardening.spec.ts` จะแดงเพื่อเตือน
  */
-export const checkStudentEligibility = async (
+export const requireStudentProfile = async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -226,29 +234,15 @@ export const checkStudentEligibility = async (
       return;
     }
 
-    const studentId = req.user.userId;
-    const student = await StudentModel.findByStudentId(studentId);
+    const student = await StudentModel.findByStudentId(req.user.userId);
     if (!student) {
       res.status(404).json({ message: 'ไม่พบโปรไฟล์นักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อนยื่นคำร้อง' });
       return;
     }
 
-    /**
-     * ⛔ SEC-02 เปลี่ยนแล้ว — **ระบบไม่ตรวจสิทธิ์สหกิจของนักศึกษา** (เจ้าของตัดสิน 2026-09-04
-     *    ยืนยันซ้ำ 2026-09-14): ใครเหมาะจะออกสหกิจเป็นเรื่องที่อาจารย์จัดการนอกระบบ
-     *    ด่านที่เหลือคือเจ้าหน้าที่รับคำร้องพร้อมเอกสารหมายเลข 1 ที่ลงนามแล้ว (SEC-04)
-     *
-     * ตรงนี้จึงไม่ปฏิเสธใคร แค่ยกธงของแถวเก่า (ก่อน migration 018) ให้ตรงกับค่า DEFAULT ใหม่
-     * · จะเพิ่มเกณฑ์ใหม่ (เช่นเกรด) ให้แก้ `security_invariants.md` ข้อ SEC-02 ก่อน
-     *   และเทสต์ SEC-02 ใน `security-hardening.spec.ts` จะแดงเพื่อเตือน
-     */
-    if (!student.is_eligible || !student.is_orientation_passed) {
-      await StudentModel.updateEligibility(studentId, true, true);
-    }
-
     next();
   } catch (error) {
-    sendUnexpectedError(res, error, 'Check Student Eligibility Error', 'An internal server error occurred while verifying eligibility.');
+    sendUnexpectedError(res, error, 'Require Student Profile Error', 'An internal server error occurred while checking the student profile.');
   }
 };
 

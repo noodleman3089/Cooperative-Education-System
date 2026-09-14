@@ -461,7 +461,10 @@ const StudentDashboard: React.FC = () => {
 
   const step4_1Done = step3_3Done && false;
   const step4_2Done = step4_1Done && false;
-  const step4_3Done = student?.is_eligible || false;
+  // ⛔ เดิมอ่าน `is_eligible` ซึ่งไม่เกี่ยวกับเกรดเลย และหลัง SEC-02 เปลี่ยน (ทุกคนมีสิทธิ์)
+  //    มันทำให้ขั้น "ยืนยันเกรด S/U" ขึ้นว่าเสร็จให้นักศึกษาทุกคนตั้งแต่วันแรก
+  //    ระบบยังไม่มีข้อมูลเกรดสุดท้าย จึงยึดแบบเดียวกับขั้น 3.x/4.x ข้างบนไปก่อน (รอรีเมคฝ่ายนักศึกษา)
+  const step4_3Done = step4_2Done && false;
 
   let activePhaseId = 1;
   // เฟส 2 คือ "สัปดาห์แรกของการทำงาน" — เข้าได้ต่อเมื่อ **สถานประกอบการตอบรับแล้ว**

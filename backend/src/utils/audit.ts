@@ -31,7 +31,8 @@ export const AuditAction = {
   DOCUMENT_SIGNED: 'document.signed',
   APPLICATION_EVALUATED: 'application.evaluated_by_advisor',
   APPLICATION_DECIDED: 'application.decided_by_dept_head',
-  ELIGIBILITY_CHANGED: 'student.eligibility_changed',
+  // ⛔ ELIGIBILITY_CHANGED ('student.eligibility_changed') ถูกลบ 2026-09-14 พร้อม verify-eligibility
+  //    — แถวเก่าในตารางยังอ่านได้ ห้ามเอาชื่อ action นี้ไปใช้กับเรื่องอื่น
   REGISTRY_CHANGED: 'student.registry_changed',
   JOB_POST_PUBLISHED: 'job_post.published',
   JOB_POST_REJECTED: 'job_post.rejected',

@@ -57,8 +57,9 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   // Search & filter for the two long student tables. Same three controls the
   // advisor's roster has had all along — the head oversees more students than
   // any single advisor and had none of them.
+  // ⛔ ตัวกรอง “สิทธิ์สะสม” และหน้าจอ “ตรวจสอบคุณสมบัตินักศึกษา” ถูกตัดออก 2026-09-14
+  //    ระบบไม่มีการตรวจสิทธิ์และไม่มีขั้นปฐมนิเทศ (ไม่อยู่ในขอบเขต · ดู SEC-02)
   const [searchText, setSearchText] = useState('');
-  const [eligibilityFilter, setEligibilityFilter] = useState('all');
   const [advisorFilter, setAdvisorFilter] = useState('all');
 
   const loadData = async (isBackground = false) => {
@@ -158,17 +159,12 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
     ].filter(Boolean).join(' ').toLowerCase();
     const matchesSearch = searchText === '' || haystack.includes(searchText.toLowerCase());
 
-    const matchesEligibility =
-      eligibilityFilter === 'all'
-      || (eligibilityFilter === 'eligible' && student.is_eligible === true)
-      || (eligibilityFilter === 'ineligible' && student.is_eligible === false);
-
     const matchesAdvisor =
       advisorFilter === 'all'
       || (advisorFilter === 'assigned' && !!student.advisor_id)
       || (advisorFilter === 'unassigned' && !student.advisor_id);
 
-    return matchesSearch && matchesEligibility && matchesAdvisor;
+    return matchesSearch && matchesAdvisor;
   });
 
   /**
@@ -181,7 +177,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
   const visibleIdSet = new Set(filteredStudents.map(s => s.student_id));
   const selectedVisibleIds = selectedStudentIds.filter(id => visibleIdSet.has(id));
   const hiddenSelectedCount = selectedStudentIds.length - selectedVisibleIds.length;
-  const isFiltering = searchText !== '' || eligibilityFilter !== 'all' || advisorFilter !== 'all';
+  const isFiltering = searchText !== '' || advisorFilter !== 'all';
 
   // Single student initial values lookup
   const singleStudent = isSingleEdit && selectedStudentIds.length === 1
@@ -199,13 +195,11 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
             {activeMenu === 'dashboard' && 'ภาพรวมนักศึกษาสหกิจสาขาวิชา'}
             {activeMenu === 'approval' && 'ติดตามคำร้องใบความจำนงของสาขาวิชา'}
             {activeMenu === 'assignment' && 'จัดสรรอาจารย์ที่ปรึกษาสหกิจศึกษา'}
-            {activeMenu === 'students' && 'ตรวจสอบสถานะคุณสมบัติและสิทธิ์นักศึกษา'}
           </h2>
           <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
             {activeMenu === 'dashboard' && 'สถิติการดำเนินการสหกิจศึกษาและข่าวสารภาพรวมภายในภาควิชา'}
             {activeMenu === 'approval' && 'การลงนามอนุมัติอยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น — หน้านี้ไว้ดูว่าคำร้องไปถึงขั้นไหนแล้ว'}
             {activeMenu === 'assignment' && 'กำหนดอาจารย์ที่ปรึกษาและอาจารย์นิเทศหลักรายกลุ่มและบุคคล'}
-            {activeMenu === 'students' && 'ตรวจสอบความพร้อม สิทธิ์สะสม และข้อมูลการปฐมนิเทศของนักศึกษา'}
           </p>
         </div>
 
@@ -234,7 +228,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
       {/* Search and filters for the two tables that list every student in the
           department. Neither had any, while the advisor's shorter roster has
           had all three since round 8. */}
-      {(activeMenu === 'assignment' || activeMenu === 'students') && (
+      {activeMenu === 'assignment' && (
         <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 md:flex-row md:items-center dark:border-gray-800 dark:bg-gray-900">
           <div className="relative w-full flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-600 dark:text-gray-400" />
@@ -248,16 +242,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
           </div>
 
           <div className="flex w-full shrink-0 gap-3 md:w-auto">
-            <Select
-              value={eligibilityFilter}
-              onChange={(e) => setEligibilityFilter(e.target.value)}
-              className="flex-1 md:flex-initial" size="sm"
-            >
-              <option value="all">สิทธิ์สะสม: ทั้งหมด</option>
-              <option value="eligible">ผ่านเกณฑ์</option>
-              <option value="ineligible">ไม่ผ่านเกณฑ์</option>
-            </Select>
-
             {/* "Who still has nobody" is the question this screen exists to
                 answer, so it is a filter rather than something to eyeball. */}
             <Select
@@ -341,7 +325,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'students' }))}
+                  onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'assignment' }))}
                 >
                   ดูทั้งหมด →
                 </Button>
@@ -352,7 +336,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
                     <th className="p-4 font-semibold">รหัสนักศึกษา</th>
-                    <th className="p-4 font-semibold">สถานะสิทธิ์</th>
                     <th className="p-4 font-semibold">อาจารย์ที่ปรึกษา</th>
                     <th className="p-4 font-semibold">อาจารย์นิเทศ</th>
                   </tr>
@@ -366,15 +349,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
                           <span className="block font-bold">{studentDisplayName(student)}</span>
                           <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
-                        </td>
-                        <td className="p-4">
-                          <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                            student.is_eligible 
-                              ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400' 
-                              : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
-                          }`}>
-                            {student.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ไม่ผ่านเกณฑ์'}
-                          </span>
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
                           {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่ระบุ</span>}
@@ -410,7 +384,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                   </th>
                   <th className="p-4 font-semibold">รหัสนักศึกษา</th>
                   <th className="p-4 font-semibold">สถานประกอบการ</th>
-                  <th className="p-4 font-semibold">สิทธิ์สะสม</th>
                   <th className="p-4 font-semibold">อาจารย์ที่ปรึกษา (Advisor)</th>
                   <th className="p-4 font-semibold">อาจารย์นิเทศ (Supervisor)</th>
                   <th className="p-4 font-semibold text-right">สลับปรับเปลี่ยน</th>
@@ -440,15 +413,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                         <span className="block text-xs font-semibold">{student.company_name || <span className="text-gray-600 dark:text-gray-400 font-normal">ยังไม่มีสถานประกอบการ</span>}</span>
                         <span className="block text-xs text-gray-500 mt-0.5 dark:text-gray-400">{student.company_province || ''}</span>
                       </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          student.is_eligible
-                            ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400'
-                            : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
-                        }`}>
-                          {student.is_eligible ? 'ผ่านเกณฑ์' : 'ไม่ผ่านเกณฑ์'}
-                        </span>
-                      </td>
                       <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
                         {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่กำหนด</span>}
                       </td>
@@ -467,73 +431,6 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                           </svg>
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          {filteredStudents.length === 0 && (
-            <div className="px-6 py-12 text-center">
-              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-600 dark:text-gray-400 dark:bg-gray-800">
-                <Users className="h-6 w-6" />
-              </div>
-              <p className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                {isFiltering ? 'ไม่พบนักศึกษาที่ตรงกับเงื่อนไขที่เลือก' : 'ยังไม่มีนักศึกษาในสาขาวิชานี้'}
-              </p>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                {isFiltering
-                  ? 'ลองล้างคำค้นหาหรือเปลี่ยนตัวกรองด้านบน'
-                  : 'รายชื่อจะปรากฏเมื่อนักศึกษากรอกประวัติเข้าสู่ระบบแล้ว'}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── VIEW 3: STUDENT STATUS CHECK ── */}
-      {activeMenu === 'students' && (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-xs">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-400">
-                  <th className="p-4 font-semibold">รหัสนักศึกษา</th>
-                  <th className="p-4 font-semibold">สิทธิ์สะสม (Eligibility)</th>
-                  <th className="p-4 font-semibold">สถานะปฐมนิเทศ (Orientation)</th>
-                  <th className="p-4 font-semibold">อาจารย์ที่ปรึกษา</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {filteredStudents.map((student) => {
-                  const advisor = advisors.find(a => a.personnel_id === student.advisor_id);
-                  return (
-                    <tr key={student.student_id} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                      <td className="p-4 font-medium text-gray-800 dark:text-gray-200">
-                        <span className="block font-bold">{studentDisplayName(student)}</span>
-                        <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">รหัส: {student.student_code}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          student.is_eligible 
-                            ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400' 
-                            : 'bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400'
-                        }`}>
-                          {student.is_eligible ? 'ผ่านเกณฑ์สหกิจศึกษา' : 'ไม่ผ่านเกณฑ์สหกิจศึกษา'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
-                          student.is_orientation_passed 
-                            ? 'bg-green-50 text-green-700 dark:bg-green-950/20 dark:text-green-400' 
-                            : 'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/20 dark:text-yellow-400'
-                        }`}>
-                          {student.is_orientation_passed ? 'ผ่านการปฐมนิเทศแล้ว' : 'ยังไม่ปฐมนิเทศ'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-600 dark:text-gray-400 font-medium">
-                        {advisor ? personnelDisplayName(advisor) : <span className="text-gray-600 dark:text-gray-400">ยังไม่ระบุอาจารย์ที่ปรึกษา</span>}
                       </td>
                     </tr>
                   );

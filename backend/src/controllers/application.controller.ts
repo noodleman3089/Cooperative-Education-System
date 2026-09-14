@@ -281,7 +281,6 @@ export class ApplicationController {
           detail: {
             conclusion,
             remark: remark || null,
-            is_eligible_set: conclusion === 'approved',
             cumulative_gpa_applied: result.gpaApplied,
           },
         },
@@ -292,7 +291,7 @@ export class ApplicationController {
         success: true,
         message:
           conclusion === 'approved'
-            ? 'อนุมัติใบสมัครเรียบร้อยแล้ว นักศึกษาได้รับสิทธิ์เข้าร่วมสหกิจศึกษา'
+            ? 'อนุมัติใบสมัครเรียบร้อยแล้ว เกรดที่นักศึกษาแจ้งถูกบันทึกเป็นเกรดทางการ'
             : 'บันทึกผลการพิจารณาเรียบร้อยแล้ว',
       });
     } catch (error) {

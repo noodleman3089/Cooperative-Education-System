@@ -63,12 +63,7 @@ router.post(
   StaffImportController.importStudents
 );
 
-// Route: PUT /api/students/:id/verify-eligibility (Staff & Dept Head only)
-router.put(
-  '/:id/verify-eligibility',
-  authorizeRoles('staff', 'dept_head'),
-  StudentController.verifyEligibility
-);
+// ⛔ PUT /:id/verify-eligibility ถูกลบ 2026-09-14 — ระบบไม่ตรวจสิทธิ์สหกิจ (SEC-02 · migration 031)
 
 // Route: PUT /api/students/:id/registry (Staff & Dept Head only)
 // Registry fields are no longer student-editable; this is the supported way to

@@ -3,14 +3,13 @@ import PageSkeleton, { skeletonFor } from './ui/Skeleton';
 import { useDashboardData } from '../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../services/api';
 import type { IntentForm } from '../types/api';
-import { Users, FileText, CheckCircle, Search, Filter, ExternalLink, Calendar } from 'lucide-react';
+import { Users, FileText, CheckCircle, Search, ExternalLink, Calendar } from 'lucide-react';
 import WeeklyLogViewModal from './WeeklyLogViewModal';
 import AlertBanner from './ui/AlertBanner';
 import StatusBadge from './ui/StatusBadge';
 import { intentDisplayStatus } from '../utils/intentStatus';
 import { getErrorMessage } from '../utils/errors';
 import type { ReportOutlineRow, StudentRow } from '../types/api';
-import { Select } from './ui/Input';
 import ReportOutlineReviewModal from './ReportOutlineReviewModal';
 
 interface AdvisorDashboardProps {
@@ -72,8 +71,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
   
   // Search & Filter State for Student List
   const [searchText, setSearchText] = useState('');
-  const [eligibilityFilter, setEligibilityFilter] = useState('all');
-  const [orientationFilter, setOrientationFilter] = useState('all');
 
 
   const loadData = async (isBackground = false) => {
@@ -203,15 +200,9 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
       studentCode.includes(searchText.toLowerCase()) ||
       nickname.includes(searchText.toLowerCase());
 
-    const eligibleMatch = eligibilityFilter === 'all' || 
-      (eligibilityFilter === 'eligible' && student.is_eligible === true) || 
-      (eligibilityFilter === 'ineligible' && student.is_eligible === false);
-
-    const orientationMatch = orientationFilter === 'all' || 
-      (orientationFilter === 'passed' && student.is_orientation_passed === true) || 
-      (orientationFilter === 'failed' && student.is_orientation_passed === false);
-
-    return searchMatch && eligibleMatch && orientationMatch;
+    // ⛔ ตัวกรอง “เกณฑ์สมัคร” กับ “ปฐมนิเทศ” ถูกตัดออก 2026-09-14 — ระบบไม่มีการตรวจสิทธิ์
+    //    และไม่มีขั้นปฐมนิเทศ (ไม่อยู่ในขอบเขต) · ห้ามเอากลับมาโดยไม่แก้ SEC-02 ก่อน
+    return searchMatch;
   });
 
   // Render Student List View
@@ -221,7 +212,7 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
         <div>
           <h2 className="text-xl font-bold text-gray-800 dark:text-white">รายชื่อนักศึกษาในสาขาวิชา</h2>
           <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-            ตรวจสอบรายชื่อ ประวัติการสหกิจศึกษา และคุณสมบัติพื้นฐานของนักศึกษาในสาขาที่ท่านดูแล
+            ตรวจสอบรายชื่อ เกรดเฉลี่ย และสถานะคำขอสหกิจศึกษาของนักศึกษาในสาขาที่ท่านดูแล
           </p>
         </div>
 
@@ -241,32 +232,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
               className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-gray-200 focus:outline-none focus:border-brand-blue bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
           </div>
-
-          <div className="flex gap-3 w-full md:w-auto shrink-0">
-            {/* Eligibility filter */}
-            <div className="flex items-center gap-1.5 flex-1 md:flex-initial">
-              <Filter className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-              <Select
-                value={eligibilityFilter}
-                onChange={(e) => setEligibilityFilter(e.target.value)} size="sm"
-              >
-                <option value="all">เกณฑ์สมัคร: ทั้งหมด</option>
-                <option value="eligible">ผ่านเกณฑ์สะสม</option>
-                <option value="ineligible">ไม่ผ่านเกณฑ์</option>
-              </Select>
-            </div>
-
-            {/* Orientation Filter */}
-            <Select
-              value={orientationFilter}
-              onChange={(e) => setOrientationFilter(e.target.value)}
-              className="flex-1 md:flex-initial" size="sm"
-            >
-              <option value="all">ปฐมนิเทศ: ทั้งหมด</option>
-              <option value="passed">ผ่านปฐมนิเทศ</option>
-              <option value="failed">ยังไม่ผ่าน</option>
-            </Select>
-          </div>
         </div>
 
         {/* Student Table */}
@@ -278,8 +243,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                   <tr className="bg-gray-50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800 dark:border-gray-800">
                     <th className="p-4 font-semibold">นักศึกษา</th>
                     <th className="p-4 font-semibold">สาขาวิชา / เกรดเฉลี่ย</th>
-                    <th className="p-4 font-semibold text-center">สิทธิ์สมัคร</th>
-                    <th className="p-4 font-semibold text-center">ผ่านปฐมนิเทศ</th>
                     <th className="p-4 font-semibold">สถานะคำขอปัจจุบัน</th>
                   </tr>
                 </thead>
@@ -300,28 +263,6 @@ const AdvisorDashboard: React.FC<AdvisorDashboardProps> = ({ activeMenu }) => {
                         <td className="p-4 text-gray-600 dark:text-gray-400">
                           <span className="block font-medium">{student.major_name_th}</span>
                           <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">GPA: {student.cumulative_gpa ? Number(student.cumulative_gpa).toFixed(2) : 'N/A'}</span>
-                        </td>
-                        <td className="p-4 text-center">
-                          {student.is_eligible ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
-                              ผ่านเกณฑ์
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/20 px-2 py-0.5 rounded-full border border-red-200 dark:border-red-900/50">
-                              ไม่ผ่าน
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-4 text-center">
-                          {student.is_orientation_passed ? (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-950/20 px-2 py-0.5 rounded-full border border-green-200 dark:border-green-900/50">
-                              ผ่านแล้ว
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-xs font-bold text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 px-2 py-0.5 rounded-full border border-gray-200 dark:border-gray-800">
-                              ยังไม่ผ่าน
-                            </span>
-                          )}
                         </td>
                         <td className="p-4">
                           {studentIntent ? (

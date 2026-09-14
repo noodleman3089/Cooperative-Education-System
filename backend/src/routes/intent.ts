@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { MentorController } from '../controllers/mentor';
-import { checkStudentEligibility } from '../middlewares/validation';
+import { requireStudentProfile } from '../middlewares/validation';
 import { uploadRequestForm, validateUploadedFile } from '../middlewares/multer';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
 
@@ -43,9 +43,9 @@ router.get(
 router.post(
   '/',
   authorizeRoles('student'),
-  // ปฏิทินมาหลังคุณสมบัติโดยตั้งใจ — "คุณสมบัติไม่ผ่านเกณฑ์" เป็นคำตอบที่ตรงกว่า
-  // สำหรับคนที่ยังไม่ผ่านคัดกรอง ต่อให้ตอนนี้จะอยู่ในช่วงเปิดรับพอดีก็ตาม
-  checkStudentEligibility,
+  // โปรไฟล์มาก่อนปฏิทิน — คนที่ยังไม่มีโปรไฟล์ควรได้คำตอบว่า "ไปตั้งโปรไฟล์" ไม่ใช่ "ปิดรับ"
+  // ⛔ ไม่มีด่านคุณสมบัติ/สิทธิ์สหกิจแล้ว (SEC-02 · ตัดออก 2026-09-14)
+  requireStudentProfile,
   requireCalendarWindow('intent_submission'),
   IntentFormController.submitIntent
 );

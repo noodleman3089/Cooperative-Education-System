@@ -350,7 +350,7 @@ export class IntentFormController {
 
       const result = await query(
         `SELECT i.form_id, i.status, i.start_date, i.acceptance_evidence_path,
-                s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.is_eligible, s.is_orientation_passed,
+                s.student_id, s.student_code, s.cumulative_gpa, s.resume_file,
                 m_maj.major_name_th, m_maj.major_code, f.faculty_name_th,
                 u_std.email as student_email,
                 c.company_id, c.name_th as company_name_th, c.name_en as company_name_en, c.address as company_address,

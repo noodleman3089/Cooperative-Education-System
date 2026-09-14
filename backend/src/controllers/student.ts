@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { StudentModel } from '../models/student';
 import { MasterModel } from '../models/master';
-import { VerifyEligibilityBody } from '../types';
 import pool, { query } from '../config/database';
 import {
   assertCanAccessStudent,
@@ -54,7 +53,7 @@ export class StudentController {
 
       // 1. Fetch student profile with major, faculty, province, advisor email, and supervisor email
       const studentQuery = await query(
-        `SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.profile_image, s.is_eligible, s.is_orientation_passed,
+        `SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.profile_image,
                 s.major_id, m.major_name_th, m.major_code, f.faculty_name_th, s.province_id, p.province_name_th,
                 s.first_name, s.last_name,
                 s.advisor_id, u_adv.email as advisor_email, p_adv.first_name as advisor_first_name, p_adv.last_name as advisor_last_name,
@@ -160,8 +159,6 @@ export class StudentController {
           resume_file: student.resume_file,
           // รูปโปรไฟล์ — หน้าแรกแสดงแทนตัวอักษรแรกของชื่อเมื่อมีค่า
           profile_image: student.profile_image,
-          is_eligible: student.is_eligible,
-          is_orientation_passed: student.is_orientation_passed,
           major_id: student.major_id,
           major_name_th: student.major_name_th,
           major_code: student.major_code,
@@ -682,65 +679,11 @@ export class StudentController {
     }
   }
 
-  /**
-   * Manually verify student eligibility and orientation status.
-   * Route: PUT /api/students/:id/verify-eligibility
-   * Access: staff, dept_head
+  /*
+   * ⛔ `PUT /api/students/:id/verify-eligibility` ถูกลบ 2026-09-14 — ระบบไม่มีการตรวจสิทธิ์สหกิจ
+   *    และไม่มีขั้นปฐมนิเทศ (ไม่อยู่ในขอบเขต · SEC-02 · migration 031 ลบคอลัมน์ทิ้งแล้ว)
+   *    แถว `student.eligibility_changed` เก่าใน audit_log ยังอยู่เป็นประวัติ
    */
-  static async verifyEligibility(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const studentId = parseInt(req.params.id, 10);
-      if (isNaN(studentId)) {
-        res.status(400).json({ message: 'Invalid student ID format.' });
-        return;
-      }
-
-      const { is_eligible, is_orientation_passed } = req.body as VerifyEligibilityBody;
-
-      // Validate fields are provided and are booleans
-      if (is_eligible === undefined || is_orientation_passed === undefined) {
-        res.status(400).json({ message: 'Required fields: is_eligible, is_orientation_passed.' });
-        return;
-      }
-
-      if (typeof is_eligible !== 'boolean' || typeof is_orientation_passed !== 'boolean') {
-        res.status(400).json({ message: 'is_eligible and is_orientation_passed must be boolean values.' });
-        return;
-      }
-
-      // SEC-06: this endpoint had no scope check at all, so any department head
-      // could grant co-op eligibility to a student in another department.
-      await assertCanAccessStudent(req.user.userId, req.user.roles, studentId);
-
-      const updatedStudent = await StudentModel.updateEligibility(studentId, is_eligible, is_orientation_passed);
-
-      if (!updatedStudent) {
-        res.status(404).json({ message: 'Student profile not found.' });
-        return;
-      }
-
-      writeAudit({
-        action: AuditAction.ELIGIBILITY_CHANGED,
-        entityType: 'student',
-        entityId: studentId,
-        subjectId: studentId,
-        detail: { is_eligible, is_orientation_passed },
-      }, req).catch(() => undefined);
-
-      res.status(200).json({
-        message: 'Student eligibility and orientation status updated successfully.',
-        student: updatedStudent,
-      });
-    } catch (error) {
-      if (sendAccessError(res, error)) return;
-      sendUnexpectedError(res, error, 'Verify Student Eligibility Error', 'An internal server error occurred while verifying student eligibility.');
-    }
-  }
 
   /**
    * Correct registry-owned student fields.
@@ -875,7 +818,6 @@ export class StudentController {
       }
 
       const majorIdParam = req.query.major_id;
-      const isEligibleParam = req.query.is_eligible;
 
       const { roles, userId } = req.user;
       // SEC-06: resolveMajorScope throws instead of silently returning an
@@ -883,7 +825,7 @@ export class StudentController {
       const userMajorId = (await resolveMajorScope(userId, roles)).majorId;
 
       let queryStr = `
-        SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file, s.is_eligible, s.is_orientation_passed,
+        SELECT s.student_id, s.student_code, s.cumulative_gpa, s.resume_file,
                s.major_id, m.major_name_th, m.major_code, f.faculty_name_th, s.province_id, p.province_name_th,
                s.advisor_id, u_adv.email as advisor_email,
                s.supervisor_id, u_sup.email as supervisor_email,
@@ -907,11 +849,6 @@ export class StudentController {
       } else if (majorIdParam) {
         queryParams.push(parseInt(majorIdParam as string, 10));
         queryStr += ` AND s.major_id = $${queryParams.length}`;
-      }
-
-      if (isEligibleParam !== undefined) {
-        queryParams.push(isEligibleParam === 'true');
-        queryStr += ` AND s.is_eligible = $${queryParams.length}`;
       }
 
       queryStr += ` ORDER BY s.student_code ASC`;

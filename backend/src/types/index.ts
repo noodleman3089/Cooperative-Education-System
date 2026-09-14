@@ -39,8 +39,6 @@ export interface Student {
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` เหมือน resume_file — NULL = ยังไม่เคยอัปโหลด */
   profile_image?: string | null;
-  is_eligible: boolean;
-  is_orientation_passed: boolean;
   first_name: string | null;
   last_name: string | null;
   nickname: string | null;
@@ -270,11 +268,6 @@ export interface StudentAcceptPayload {
   position?: string;
   department?: string;
   start_date: string; // YYYY-MM-DD
-}
-
-export interface VerifyEligibilityBody {
-  is_eligible: boolean;
-  is_orientation_passed: boolean;
 }
 
 // Sprint 5 (System 2) Entities

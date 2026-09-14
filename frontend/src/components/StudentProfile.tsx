@@ -403,12 +403,6 @@ const StudentProfile: React.FC = () => {
                 {displayAdvisor}
               </div>
             </div>
-            <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">สิทธิ์สมัครสหกิจ</div>
-              <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400 mt-1">
-                {profile?.is_eligible ? 'ผ่านการคัดกรองแล้ว' : 'รอการคัดกรอง'}
-              </div>
-            </div>
           </div>
 
           {/* Dual GPA Comparison Boxes */}
@@ -421,10 +415,11 @@ const StudentProfile: React.FC = () => {
                 data-testid="profile-gpa-registry"
                 className="text-2xl font-black text-gray-900 dark:text-white block"
               >
-                {cumulativeGpa || '3.21'}
+                {/* ⛔ เดิม fallback เป็น '3.21' — เกรดปลอมบนหน้าที่บอกว่า "ใช้พิมพ์ลงเอกสารราชการ" */}
+                {cumulativeGpa || '—'}
               </span>
               <span className="text-xs text-gray-500 dark:text-gray-400 block leading-relaxed">
-                ค่าที่เจ้าหน้าที่นำเข้าจากรายชื่อผู้มีสิทธิ์ — ใช้พิมพ์ลงเอกสารราชการ
+                ค่าที่เจ้าหน้าที่นำเข้าจากรายชื่อนักศึกษา — ใช้พิมพ์ลงเอกสารราชการ
               </span>
             </div>
 

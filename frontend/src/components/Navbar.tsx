@@ -39,7 +39,6 @@ interface MyProfile {
   profile_image?: string | null;
   student_code?: string | null;
   cumulative_gpa?: number | string | null;
-  is_eligible?: boolean | null;
 }
 
 interface NavbarProps {
@@ -490,18 +489,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                         {profile?.student_code ? ` · ${profile.student_code}` : ''}
                       </p>
 
-                      {/* สิทธิ์กับเกรด — ย้ายมาจากแถบตัวตนกลางหน้าแรก ไม่ได้ตัดทิ้ง */}
+                      {/* เกรดเฉลี่ย · ⛔ ป้าย "ผ่านเกณฑ์สหกิจ" ถูกตัดออก 2026-09-14 (ไม่มีการตรวจสิทธิ์ · SEC-02) */}
                       {currentRole === 'student' && profile && (
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-xs font-bold ${
-                              profile.is_eligible
-                                ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-900/20 dark:text-green-400'
-                                : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-400'
-                            }`}
-                          >
-                            {profile.is_eligible ? 'ผ่านเกณฑ์สหกิจ' : 'ยังไม่ผ่านเกณฑ์'}
-                          </span>
                           <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-xs font-bold text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200">
                             เกรดเฉลี่ย{' '}
                             {profile.cumulative_gpa != null

@@ -134,22 +134,21 @@ export async function setupDatabase(quiet = false) {
           const provinceId = provinceRes.rows[0].province_id;
           
           await client.query(
-            `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa, is_eligible, is_orientation_passed,
-                                  first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone) 
-             VALUES ($1, $2, $3, $4, $5, TRUE, TRUE, 'สมชาย', 'สายดี', 'ชาย', 3, '2005-05-15', 'somchai@alt.com', '0812345678', '123/45 ถนนเจริญกรุง กรุงเทพฯ', 'สมพร สายดี', '0898765432')
+            `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
+                                  first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone)
+             VALUES ($1, $2, $3, $4, $5, 'สมชาย', 'สายดี', 'ชาย', 3, '2005-05-15', 'somchai@alt.com', '0812345678', '123/45 ถนนเจริญกรุง กรุงเทพฯ', 'สมพร สายดี', '0898765432')
              ON CONFLICT (student_id) DO NOTHING`,
             // GPA matches the eligible_students_list row seeded just below, since
             // that staging table is now the authoritative source for it.
             [userId, '640101001', majorId, provinceId, 3.75]
           );
-          // Eligibility is owned by the staging list — mirror the seeded student
-          // there so the dev database matches how production grants eligibility.
+          // The registry GPA and account-binding email live in the staff roster —
+          // mirror the seeded student there so dev matches production.
           await client.query(
-            `INSERT INTO eligible_students_list (student_code, cumulative_gpa, is_eligible, email)
-             VALUES ($1, 3.75, TRUE, $2)
+            `INSERT INTO eligible_students_list (student_code, cumulative_gpa, email)
+             VALUES ($1, 3.75, $2)
              ON CONFLICT (student_code) DO UPDATE SET
                cumulative_gpa = EXCLUDED.cumulative_gpa,
-               is_eligible = EXCLUDED.is_eligible,
                email = EXCLUDED.email`,
             ['640101001', u.email]
           );
@@ -185,9 +184,6 @@ export async function setupDatabase(quiet = false) {
         }
       }
     }
-
-    // ponytail: Ensure all enrolled students have co-op eligibility active
-    await client.query('UPDATE students SET is_eligible = TRUE, is_orientation_passed = TRUE');
 
     client.release();
 

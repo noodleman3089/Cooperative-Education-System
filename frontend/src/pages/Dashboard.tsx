@@ -374,6 +374,9 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
+        //   แทนที่จะเปิดหน้าว่าง · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
+        if (activeMenu === 'students') return <DeptHeadDashboard activeMenu="assignment" />;
         return <DeptHeadDashboard activeMenu={activeMenu} />;
         
       case 'dean':

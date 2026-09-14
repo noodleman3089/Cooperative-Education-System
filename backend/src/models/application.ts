@@ -200,17 +200,15 @@ export class ApplicationModel {
         [conclusion, conclusion, remark || null, deptHeadId, applicationId]
       );
 
-      // 3. การอนุมัติของหัวหน้าสาขาคือ *ทางเดียว* ที่ students.is_eligible ถูกตั้งเป็น TRUE
-      //    การนำเข้า CSV เขียนได้แค่ eligible_students_list เท่านั้น จึงไม่มีสองแหล่ง
-      //    ที่เขียนทับกันเงียบๆ อีก · เกรดที่นักศึกษาแจ้งจะกลายเป็นเกรดทางการตรงนี้
-      //    เพราะตรงนี้คือจุดที่มีมนุษย์รับผิดชอบและถูกบันทึกลง audit_log
+      // 3. เกรดที่นักศึกษาแจ้งจะกลายเป็นเกรดทางการตรงนี้ (SEC-05) เพราะตรงนี้คือจุดที่มีมนุษย์
+      //    รับผิดชอบและถูกบันทึกลง audit_log
+      //    ⛔ ไม่ตั้ง "สิทธิ์สหกิจ" แล้ว — คอลัมน์ is_eligible ถูกลบ 2026-09-14 (SEC-02 · migration 031)
       let gpaApplied: number | null = null;
       if (conclusion === 'approved') {
         gpaApplied = app.claimed_gpa !== null ? Number(app.claimed_gpa) : null;
         await client.query(
           `UPDATE students
-           SET is_eligible = TRUE,
-               cumulative_gpa = COALESCE($2, cumulative_gpa)
+           SET cumulative_gpa = COALESCE($2, cumulative_gpa)
            WHERE student_id = $1`,
           [app.student_id, gpaApplied]
         );

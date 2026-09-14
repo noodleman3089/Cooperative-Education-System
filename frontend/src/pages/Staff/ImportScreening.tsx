@@ -8,19 +8,19 @@ import { getErrorMessage } from '../../utils/errors';
 import type { ImportSummary } from '../../types/api';
 
 /**
- * E6 · รายชื่อผู้มีสิทธิ์สมัคร & ผลการเรียน (ImportScreening.dc.html)
+ * E6 · รายชื่อนักศึกษา & ผลการเรียน (ImportScreening.dc.html)
  *
- * SEC-02: การอัปไฟล์ที่นี่ไม่ทับสิทธิ์ที่หัวหน้าสาขาวิชาอนุมัติไว้
- * แหล่งความจริงมีสองที่ และแยกกันโดยตั้งใจ:
- * - ไฟล์นี้ → ใครมีสิทธิ์ *สมัคร* + อีเมลที่ใช้ผูกบัญชี + เกรดจากทะเบียน
- * - สหกิจ 01 → ใครผ่านการ *คัดกรอง* แล้ว (การอนุมัติของหัวหน้าสาขา)
+ * ไฟล์นี้บอกสองอย่าง: **เกรดจากทะเบียน** และ **อีเมลที่ใช้ผูกรหัสนักศึกษาเข้ากับบัญชี**
+ *
+ * ⛔ **ไม่มีเรื่องสิทธิ์สหกิจอีกแล้ว** (ตัดออก 2026-09-14 · SEC-02) — ระบบไม่ตรวจว่าใคร
+ *    มีสิทธิ์หรือผ่านคัดกรอง อาจารย์จัดการนอกระบบ · คอลัมน์ `is_eligible` / `ผ่านเกณฑ์`
+ *    ในไฟล์เดิมจะถูกเมินเงียบ ๆ (ไม่ตีเป็นแถวเสีย เพราะไฟล์เก่าของคณะยังมีคอลัมน์นั้นอยู่)
  *
  * SEC-05: แก้ทะเบียนรายคน (PUT /students/:id/registry)
  */
 
 interface ParsedStudent {
   student_code: string;
-  is_eligible: boolean | null;
   cumulative_gpa: string;
   email: string;
 }
@@ -31,7 +31,6 @@ interface StudentRegistryRow {
   first_name: string;
   last_name: string;
   cumulative_gpa: number | string | null;
-  is_eligible: boolean | null;
   advisor_email?: string;
   supervisor_email?: string;
   major_id?: number;
@@ -44,10 +43,6 @@ interface MajorOption {
   major_name_th: string;
   major_code: string;
 }
-
-const ELIGIBLE_HEADERS = ['is_eligible', 'ผ่านเกณฑ์', 'สถานะผ่านเกณฑ์'];
-const ELIGIBLE_TRUE = ['true', '1', 'yes', 'y', 'ผ่าน'];
-const ELIGIBLE_FALSE = ['false', '0', 'no', 'n', 'ไม่ผ่าน'];
 
 export const ImportScreening: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -79,7 +74,6 @@ export const ImportScreening: React.FC = () => {
 
   // Manual student add state
   const [manualStudentCode, setManualStudentCode] = useState('');
-  const [manualStudentEligible, setManualStudentEligible] = useState(true);
   const [manualStudentGpa, setManualStudentGpa] = useState('');
   const [manualStudentEmail, setManualStudentEmail] = useState('');
   const [isAddingStudent, setIsAddingStudent] = useState(false);
@@ -199,23 +193,6 @@ export const ImportScreening: React.FC = () => {
           const rowNo = idx + 2;
           const student_code = String(row.student_code || row['รหัสนักศึกษา'] || '').trim();
 
-          const eligValue = ELIGIBLE_HEADERS.map((h) => row[h]).find(
-            (v) => v !== undefined && String(v).trim() !== ''
-          );
-
-          let is_eligible: boolean | null = null;
-          if (eligValue !== undefined) {
-            const normalized = String(eligValue).trim().toLowerCase();
-            if (ELIGIBLE_TRUE.includes(normalized)) {
-              is_eligible = true;
-            } else if (ELIGIBLE_FALSE.includes(normalized)) {
-              is_eligible = false;
-            } else {
-              rejected.push(`${student_code || `แถวที่ ${rowNo}`}: ค่าสิทธิ์ '${eligValue}' ไม่ใช่ true/false`);
-              return;
-            }
-          }
-
           if (!student_code) {
             rejected.push(`แถวที่ ${rowNo}: ไม่พบรหัสนักศึกษา`);
             return;
@@ -243,7 +220,7 @@ export const ImportScreening: React.FC = () => {
             return;
           }
 
-          formatted.push({ student_code, is_eligible, cumulative_gpa, email });
+          formatted.push({ student_code, cumulative_gpa, email });
         });
 
         if (formatted.length === 0) {
@@ -280,15 +257,13 @@ export const ImportScreening: React.FC = () => {
     setSuccess(null);
 
     try {
-      const csvHeader = 'student_code,is_eligible,cumulative_gpa,email';
-      const csvLines = parsedStudents.map(
-        (s) => `${s.student_code},${s.is_eligible === null ? '' : s.is_eligible},${s.cumulative_gpa},${s.email}`
-      );
+      const csvHeader = 'student_code,cumulative_gpa,email';
+      const csvLines = parsedStudents.map((s) => `${s.student_code},${s.cumulative_gpa},${s.email}`);
       const csvString = [csvHeader, ...csvLines].join('\n');
 
       const res = await api.post('/students/import', { csv: csvString });
       setImportSummary(res.summary);
-      setSuccess('นำเข้าและซิงโครไนซ์รายชื่อผู้มีสิทธิ์สมัครเรียบร้อยแล้ว');
+      setSuccess('นำเข้ารายชื่อนักศึกษาและเกรดเรียบร้อยแล้ว');
       setParsedStudents([]);
       setRejectedRows([]);
       await loadData();
@@ -311,7 +286,7 @@ export const ImportScreening: React.FC = () => {
     setSuccess(null);
 
     try {
-      const csvString = `student_code,is_eligible,cumulative_gpa,email\n${manualStudentCode.trim()},${manualStudentEligible},${manualStudentGpa.trim()},${manualStudentEmail.trim().toLowerCase()}`;
+      const csvString = `student_code,cumulative_gpa,email\n${manualStudentCode.trim()},${manualStudentGpa.trim()},${manualStudentEmail.trim().toLowerCase()}`;
       await api.post('/students/import', { csv: csvString });
 
       setSuccess(`เพิ่มรายชื่อนักศึกษา ${manualStudentCode} สำเร็จเรียบร้อยแล้ว`);
@@ -333,24 +308,10 @@ export const ImportScreening: React.FC = () => {
       {/* 1. Header Bar matching ImportScreening.dc.html */}
       <div className="space-y-1">
         <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
-          รายชื่อผู้มีสิทธิ์สมัคร &amp; ผลการเรียน
+          รายชื่อนักศึกษา &amp; ผลการเรียน
         </h1>
         <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
-          ไฟล์นี้ตอบคำถามเดียวคือ <strong className="font-bold text-gray-800 dark:text-gray-200">“ใครสมัครสหกิจได้บ้าง และเกรดที่ทะเบียนแจ้งมาคือเท่าไร”</strong> — ไม่ใช่ “ใครผ่านการคัดกรองแล้ว”
-        </p>
-      </div>
-
-      {/* 2. SEC-02 Notice Box matching ImportScreening.dc.html */}
-      <div className="border border-red-200 dark:border-red-900/50 bg-[#FEF2F2] dark:bg-red-950/30 rounded-2xl p-4 sm:p-5 text-red-900 dark:text-red-200 shadow-sm space-y-1.5">
-        <div className="text-[15px] font-bold text-[#B91C1C] dark:text-red-400">
-          การอัปไฟล์ที่นี่ไม่ทับสิทธิ์ที่หัวหน้าสาขาวิชาอนุมัติไว้
-        </div>
-        <div className="text-xs sm:text-[13px] leading-relaxed text-[#991B1B] dark:text-red-300">
-          แหล่งความจริงมีสองที่ และแยกกันโดยตั้งใจ:<br />
-          • <strong className="font-bold">ไฟล์นี้</strong> → “ใครมีสิทธิ์ <em>สมัคร</em>” + อีเมลที่ใช้ผูกบัญชี + เกรดจากทะเบียน<br />
-          • <strong className="font-bold">การอนุมัติของหัวหน้าสาขาวิชา</strong> → “ใครผ่านการ <em>คัดกรอง</em> แล้ว”<br />
-          เดิมสองอย่างนี้เขียนทับกัน อัปไฟล์รอบใหม่ทีไรสิทธิ์ที่อนุมัติไว้หายเงียบ ๆ โดยไม่มีใครรู้
-        </div>
+          ไฟล์นี้บอกสองอย่างคือ <strong className="font-bold text-gray-800 dark:text-gray-200">เกรดที่ทะเบียนแจ้งมา</strong> และ <strong className="font-bold text-gray-800 dark:text-gray-200">อีเมลที่ใช้ผูกรหัสนักศึกษาเข้ากับบัญชี</strong> — ระบบไม่ได้ใช้ไฟล์นี้ตัดสินว่าใครมีสิทธิ์ออกสหกิจ</p>
       </div>
 
       <AlertBanner variant="error" message={error} />
@@ -447,11 +408,6 @@ export const ImportScreening: React.FC = () => {
                       <td className="p-2.5">รหัสนักศึกษา (12-1 หลัก)</td>
                     </tr>
                     <tr>
-                      <td className="p-2.5 font-mono text-blue-600 dark:text-blue-400">is_eligible</td>
-                      <td className="p-2.5 text-gray-500">ไม่</td>
-                      <td className="p-2.5">true/1/yes/ผ่าน · false/0/no/ไม่ผ่าน</td>
-                    </tr>
-                    <tr>
                       <td className="p-2.5 font-mono text-blue-600 dark:text-blue-400">cumulative_gpa</td>
                       <td className="p-2.5 text-gray-500">ไม่</td>
                       <td className="p-2.5">ตัวเลข เช่น 3.24</td>
@@ -465,7 +421,7 @@ export const ImportScreening: React.FC = () => {
                 </table>
               </div>
               <span className="hint text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed block">
-                <strong className="font-bold text-gray-800 dark:text-gray-200">ช่องว่าง = “ไฟล์นี้ไม่ได้บอกอะไรเรื่องนี้” ไม่ใช่ “ไม่ผ่าน” และไม่ใช่ “ผ่าน”</strong> — ค่าเดิมในระบบไม่ถูกแตะ · ค่าที่อ่านไม่ออกจะถูกรายงานเป็นแถวที่ตกไป ไม่ใช่ตีเป็นไม่ผ่านเงียบ ๆ
+                <strong className="font-bold text-gray-800 dark:text-gray-200">ช่องเกรดว่าง = “ไฟล์นี้ไม่ได้บอกเกรด”</strong> — เกรดเดิมในระบบไม่ถูกแตะ · ค่าที่อ่านไม่ออกจะถูกรายงานเป็นแถวที่ตกไป · คอลัมน์อื่นในไฟล์ (เช่น ผ่านเกณฑ์) ระบบเมิน
               </span>
             </div>
 
@@ -474,7 +430,7 @@ export const ImportScreening: React.FC = () => {
                 ทำไมต้องมีคอลัมน์อีเมล
               </span>
               <span className="hint text-[12px] text-gray-500 dark:text-gray-400 leading-relaxed block">
-                อีเมลผูกรหัสนักศึกษาเข้ากับบัญชีหนึ่งบัญชี — แถวที่ไม่มีอีเมล เพื่อนร่วมรุ่นจะอ้างรหัสนั้นเพื่อสืบสิทธิ์แทนไม่ได้ <strong className="font-bold text-gray-800 dark:text-gray-200">แต่เจ้าของรหัสก็ผูกบัญชีไม่ได้เหมือนกัน</strong>
+                อีเมลผูกรหัสนักศึกษาเข้ากับบัญชีหนึ่งบัญชี — แถวที่ไม่มีอีเมล เพื่อนร่วมรุ่นจะอ้างรหัสนั้นเพื่อสืบเกรดแทนไม่ได้ <strong className="font-bold text-gray-800 dark:text-gray-200">แต่เจ้าของรหัสก็ผูกบัญชีไม่ได้เหมือนกัน</strong>
               </span>
             </div>
           </div>
@@ -690,30 +646,6 @@ export const ImportScreening: React.FC = () => {
                 className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                สิทธิ์สมัครสหกิจศึกษา
-              </label>
-              <div className="flex gap-4">
-                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={manualStudentEligible === true}
-                    onChange={() => setManualStudentEligible(true)}
-                  />
-                  มีสิทธิ์สมัคร
-                </label>
-                <label className="inline-flex items-center gap-1.5 text-xs text-gray-700 dark:text-gray-300 cursor-pointer">
-                  <input
-                    type="radio"
-                    checked={manualStudentEligible === false}
-                    onChange={() => setManualStudentEligible(false)}
-                  />
-                  ไม่มีสิทธิ์
-                </label>
-              </div>
-            </div>
-
             <button
               type="submit"
               disabled={isAddingStudent}
@@ -744,14 +676,12 @@ export const ImportScreening: React.FC = () => {
                 <th className="p-3 sm:px-4">ชื่อ - นามสกุล</th>
                 <th className="p-3 sm:px-4">สาขาวิชา</th>
                 <th className="p-3 sm:px-4">เกรดจากทะเบียน</th>
-                <th className="p-3 sm:px-4">สิทธิ์สมัคร (ไฟล์)</th>
-                <th className="p-3 sm:px-4">ผ่านคัดกรอง (หัวหน้าสาขา)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-xs">
               {registeredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="p-6 text-center text-gray-400">
+                  <td colSpan={4} className="p-6 text-center text-gray-600 dark:text-gray-400">
                     ยังไม่มีข้อมูลนักศึกษาในทะเบียน
                   </td>
                 </tr>
@@ -772,28 +702,6 @@ export const ImportScreening: React.FC = () => {
                     </td>
                     <td className="p-3 sm:px-4 font-mono text-gray-800 dark:text-gray-200">
                       {st.cumulative_gpa ?? '—'}
-                    </td>
-                    <td className="p-3 sm:px-4">
-                      {/* สิทธิ์สมัครจากไฟล์ */}
-                      <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0] dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
-                        มีสิทธิ์
-                      </span>
-                    </td>
-                    <td className="p-3 sm:px-4">
-                      {/* สิทธิ์ผ่านการคัดกรองจากหัวหน้าสาขาวิชา */}
-                      {st.is_eligible === true ? (
-                        <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0] dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
-                          อนุมัติแล้ว
-                        </span>
-                      ) : st.is_eligible === false ? (
-                        <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800">
-                          ไม่ผ่าน
-                        </span>
-                      ) : (
-                        <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#FFFBEB] text-[#B45309] border-[#FDE68A] dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
-                          ยังไม่พิจารณา
-                        </span>
-                      )}
                     </td>
                   </tr>
                 ))

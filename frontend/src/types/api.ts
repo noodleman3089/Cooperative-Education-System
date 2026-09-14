@@ -169,8 +169,6 @@ export interface StudentRow {
   nickname?: string | null;
   major_name_th?: string | null;
   cumulative_gpa?: number | string | null;
-  is_eligible: boolean;
-  is_orientation_passed: boolean;
 }
 
 /** โครงร่างรายงาน (สหกิจ 11) หนึ่งฉบับ ในคิวตรวจของพี่เลี้ยง/อาจารย์ */
@@ -221,8 +219,6 @@ export interface StudentProfile {
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` (เช่น `avatars/avatar-user-2-…jpg`) ไม่ใช่ URL เต็ม */
   profile_image?: string | null;
-  is_eligible: boolean;
-  is_orientation_passed: boolean;
   advisor_id?: number | null;
   advisor_email?: string | null;
   advisor_first_name?: string | null;

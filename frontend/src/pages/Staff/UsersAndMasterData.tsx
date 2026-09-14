@@ -951,7 +951,7 @@ export const UsersAndMasterData: React.FC = () => {
           <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
             ก่อนหน้านี้แก้รายชื่อสาขาได้ทางเดียวคือเข้าไปแก้ในฐานข้อมูลตรง ๆ · การเพิ่ม/แก้/ลบ คณะและสาขาอยู่บนหน้าจอนี้แล้ว
             <span className="block mt-0.5 text-gray-500 dark:text-gray-400">
-              ⛔ การย้ายนักศึกษารายคนไปสาขาอื่น <strong className="font-bold">ไม่ได้ทำที่นี่</strong> — ทำที่หน้า “รายชื่อผู้มีสิทธิ์ &amp; เกรด”
+              ⛔ การย้ายนักศึกษารายคนไปสาขาอื่น <strong className="font-bold">ไม่ได้ทำที่นี่</strong> — ทำที่หน้า “รายชื่อนักศึกษา &amp; เกรด”
             </span>
           </p>
 

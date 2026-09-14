@@ -5,7 +5,7 @@ export class StudentModel {
   static async findByStudentId(studentId: number): Promise<Student | null> {
     const res = await query(
       `SELECT s.student_id, s.student_code, s.major_id, s.province_id, s.cumulative_gpa, s.claimed_gpa, s.section,
-              s.resume_file, s.profile_image, s.is_eligible, s.is_orientation_passed, s.advisor_id, s.supervisor_id,
+              s.resume_file, s.profile_image, s.advisor_id, s.supervisor_id,
               s.first_name, s.last_name, s.nickname, s.year_level, s.birth_date, s.alt_email, s.phone,
               s.current_address, s.parent_name, s.parent_phone, s.enrollment_year,
               s.skills_and_activities, s.language_proficiency, s.preferred_work_region, s.interested_job_types,
@@ -54,17 +54,15 @@ export class StudentModel {
     currentAddress: string | null = null,
     parentName: string | null = null,
     parentPhone: string | null = null,
-    enrollmentYear: number | null = null,
-    isEligible: boolean = true,
-    isOrientationPassed: boolean = true
+    enrollmentYear: number | null = null
   ): Promise<Student> {
-    // ponytail: Enrolled co-op students are eligible by default
+    // ⛔ ไม่มีธงสิทธิ์สหกิจ/ปฐมนิเทศแล้ว (ตัดออก 2026-09-14 · migration 031 · SEC-02)
     const res = await query(
-      `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, is_eligible, is_orientation_passed, advisor_id, supervisor_id,
+      `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, advisor_id, supervisor_id,
                             first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone, enrollment_year)
-       VALUES ($1, $2, $3, $4, $5, NULL, $17, $18, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+       VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
-      [studentId, studentCode, majorId, provinceId, cumulativeGpa, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear, isEligible, isOrientationPassed]
+      [studentId, studentCode, majorId, provinceId, cumulativeGpa, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear]
     );
     return res.rows[0] as Student;
   }
@@ -81,14 +79,16 @@ export class StudentModel {
   }
 
   /**
-   * Look up a student_code in the staff-managed eligibility staging list.
+   * Look up a student_code in the staff-imported roster (`eligible_students_list`).
    * Returns null when the code was never imported by staff.
+   *
+   * ชื่อตารางยังเป็น "eligible_" ตามประวัติ แต่ตอนนี้เก็บแค่เกรดจากทะเบียน + อีเมลผูกบัญชี
    */
   static async findEligibilityRecord(
     studentCode: string
-  ): Promise<{ cumulative_gpa: number; is_eligible: boolean; email: string | null } | null> {
+  ): Promise<{ cumulative_gpa: number; email: string | null } | null> {
     const res = await query(
-      'SELECT cumulative_gpa, is_eligible, email FROM eligible_students_list WHERE student_code = $1 LIMIT 1',
+      'SELECT cumulative_gpa, email FROM eligible_students_list WHERE student_code = $1 LIMIT 1',
       [studentCode]
     );
     if ((res.rowCount ?? 0) === 0) return null;
@@ -175,22 +175,6 @@ export class StudentModel {
     return res.rows[0] as Student;
   }
 
-  static async updateEligibility(
-    studentId: number,
-    isEligible: boolean,
-    isOrientationPassed: boolean
-  ): Promise<Student | null> {
-    const res = await query(
-      `UPDATE students 
-       SET is_eligible = $2, is_orientation_passed = $3
-       WHERE student_id = $1 
-       RETURNING *`,
-      [studentId, isEligible, isOrientationPassed]
-    );
-    if ((res.rowCount ?? 0) === 0) return null;
-    return res.rows[0] as Student;
-  }
-
   /**
    * Assign advisor and supervisor for a student.
    */
@@ -203,7 +187,7 @@ export class StudentModel {
       `UPDATE students 
        SET advisor_id = $2, supervisor_id = $3
        WHERE student_id = $1 
-       RETURNING student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, is_eligible, is_orientation_passed, advisor_id, supervisor_id`,
+       RETURNING student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, advisor_id, supervisor_id`,
       [studentId, advisorId, supervisorId]
     );
     if ((res.rowCount ?? 0) === 0) return null;

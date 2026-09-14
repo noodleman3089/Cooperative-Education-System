@@ -468,7 +468,7 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
                     นักศึกษา {pendingDecisions.length} คนที่คณะส่งมาให้ท่านพิจารณา
                   </h2>
                   <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 mt-1">
-                    รายชื่อตาม <strong>สหกิจ 04</strong> — ทุกคนผ่านการคัดกรองคุณสมบัติจากคณะแล้ว และแนบ <strong>ใบสมัคร สหกิจ 03</strong>
+                    รายชื่อตาม <strong>สหกิจ 04</strong> — คณะออกหนังสือขอความอนุเคราะห์ให้แล้ว และแนบ <strong>ใบสมัคร สหกิจ 03</strong>
                   </p>
                 </div>
               </div>

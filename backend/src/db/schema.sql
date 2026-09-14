@@ -125,8 +125,8 @@ CREATE TABLE IF NOT EXISTS students (
     --    ทะเบียนที่ถูกพิมพ์ลงหนังสือราชการที่คณบดีเซ็น เลขที่ยังไม่มีมนุษย์ยืนยันลงไม่ได้
     --    · เดิมค่านี้อยู่ที่ `coop_applications.claimed_gpa` (สหกิจ 01) ซึ่งถูกข้ามไปแล้ว
     claimed_gpa NUMERIC(3, 2),
-    is_eligible BOOLEAN NOT NULL DEFAULT TRUE,
-    is_orientation_passed BOOLEAN NOT NULL DEFAULT TRUE,
+    -- ⛔ is_eligible / is_orientation_passed ถูกลบ 2026-09-14 (migration 031 · SEC-02)
+    --    ระบบไม่ตรวจสิทธิ์สหกิจและไม่มีขั้นปฐมนิเทศ — ไม่อยู่ในขอบเขต · ห้ามเพิ่มกลับโดยไม่แก้ SEC-02
     advisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
     supervisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
     first_name VARCHAR(255),
@@ -647,16 +647,14 @@ CREATE TABLE IF NOT EXISTS official_documents (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 10. Staging Table for Eligible Students
--- This is the authoritative source for is_eligible and cumulative_gpa; students
--- can never set either on themselves. `email` optionally binds a student_code to
--- one account so a classmate's code cannot be claimed to inherit their eligibility.
+-- 10. Staging Table for the Student Roster (ชื่อตารางยังเป็น eligible_ ตามประวัติ)
+-- This is the authoritative source for the registry cumulative_gpa; students can
+-- never set it on themselves. `email` optionally binds a student_code to one
+-- account so a classmate's code cannot be claimed to inherit their GPA.
+-- ⛔ คอลัมน์ is_eligible ถูกลบ 2026-09-14 (migration 031 · SEC-02)
 CREATE TABLE IF NOT EXISTS eligible_students_list (
     student_code VARCHAR(50) PRIMARY KEY,
     cumulative_gpa NUMERIC(3, 2) NOT NULL,
-    -- SEC-02: defaults to FALSE. Every insert supplies this column explicitly
-    -- today, so the default is only a trap waiting for the next one that doesn't.
-    is_eligible BOOLEAN NOT NULL DEFAULT FALSE,
     email VARCHAR(255)
 );
 

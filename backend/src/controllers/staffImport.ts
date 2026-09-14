@@ -5,12 +5,19 @@ import { sendUnexpectedError } from '../utils/httpError';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const ELIGIBLE_TRUE = ['true', '1', 'yes', 'y', 'ผ่าน'];
-const ELIGIBLE_FALSE = ['false', '0', 'no', 'n', 'ไม่ผ่าน'];
+/**
+ * ตำแหน่งคอลัมน์เมื่อไฟล์ไม่มีหัวตาราง: `student_code,cumulative_gpa,email`
+ *
+ * ⛔ **เดิมเป็น 4 คอลัมน์ (`student_code,is_eligible,cumulative_gpa,email`)** — สิทธิ์สหกิจถูกตัด
+ *    ออก 2026-09-14 (SEC-02) · ไฟล์ที่มีหัวตารางอ่านตาม **ชื่อคอลัมน์** จึงใช้ไฟล์ 4 คอลัมน์เก่าต่อได้
+ *    (คอลัมน์ is_eligible ถูกเมิน) แต่ไฟล์ **ไม่มีหัว** แบบ 4 คอลัมน์จะอ่านเกรดผิดช่อง —
+ *    ไฟล์แบบนั้นต้องมีหัวตาราง
+ */
+const POSITIONAL = { student_code: 0, cumulative_gpa: 1, email: 2 };
 
 export class StaffImportController {
   /**
-   * Import eligible students from a CSV payload.
+   * Import the student roster (registry GPA + account-binding email) from a CSV payload.
    * Route: POST /api/students/import
    * Access: staff, dept_head
    */
@@ -19,8 +26,6 @@ export class StaffImportController {
       interface StudentImportRow {
         student_code: string;
         cumulative_gpa: number | null;
-        /** null means "this file says nothing about eligibility" — leave it be. */
-        is_eligible: boolean | null;
         email: string | null;
       }
 
@@ -40,7 +45,21 @@ export class StaffImportController {
 
       if (csvContent) {
         const lines = csvContent.split(/\r?\n/);
-        const startIdx = lines[0].toLowerCase().includes('student_code') ? 1 : 0;
+        const hasHeader = lines[0].toLowerCase().includes('student_code');
+        const startIdx = hasHeader ? 1 : 0;
+
+        // มีหัวตาราง = อ่านตามชื่อคอลัมน์ · คอลัมน์ที่ไม่รู้จัก (เช่น is_eligible ของไฟล์เก่า) ถูกเมิน
+        let col = POSITIONAL;
+        if (hasHeader) {
+          const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+          col = {
+            student_code: header.indexOf('student_code'),
+            cumulative_gpa: header.indexOf('cumulative_gpa'),
+            email: header.indexOf('email'),
+          };
+        }
+        const cell = (parts: string[], idx: number): string =>
+          idx >= 0 && parts[idx] ? sanitizeCsvCell(parts[idx]) : '';
 
         for (let i = startIdx; i < lines.length; i++) {
           const line = lines[i].trim();
@@ -48,32 +67,13 @@ export class StaffImportController {
 
           const parts = line.split(',');
           if (parts.length >= 1) {
-            const student_code = sanitizeCsvCell(parts[0] || '');
+            const student_code = cell(parts, col.student_code);
             if (!student_code) continue;
-
-            // SEC-02: a blank cell used to mean "eligible", so a roster with no
-            // eligibility column granted co-op eligibility to everyone in the
-            // file. Blank now means "not stated" and changes nothing — the same
-            // rule the GPA column two lines down has always followed. Only an
-            // explicit value decides, and an unrecognised one is reported rather
-            // than quietly read as a refusal.
-            const isEligibleStr = parts[1] ? sanitizeCsvCell(parts[1]).toLowerCase() : '';
-            let is_eligible: boolean | null = null;
-            if (isEligibleStr) {
-              if (ELIGIBLE_TRUE.includes(isEligibleStr)) {
-                is_eligible = true;
-              } else if (ELIGIBLE_FALSE.includes(isEligibleStr)) {
-                is_eligible = false;
-              } else {
-                invalidRows.push(`${student_code} (ค่าสิทธิ์ '${isEligibleStr}' ไม่ใช่ true/false)`);
-                continue;
-              }
-            }
 
             // DATA-01: the GPA column used to be ignored and every imported row was
             // written as a flat 3.00, overwriting real transcript values on re-import.
             // It is now parsed, range-checked, and left untouched when the cell is blank.
-            const gpaStr = parts[2] ? sanitizeCsvCell(parts[2]) : '';
+            const gpaStr = cell(parts, col.cumulative_gpa);
             let cumulative_gpa: number | null = null;
             if (gpaStr) {
               const parsedGpa = parseFloat(gpaStr);
@@ -84,8 +84,9 @@ export class StaffImportController {
               cumulative_gpa = parsedGpa;
             }
 
-            // SEC-02: binds this student_code to one account at profile-setup time.
-            const emailStr = parts[3] ? sanitizeCsvCell(parts[3]).toLowerCase() : '';
+            // binds this student_code to one account at profile-setup time, so a
+            // classmate cannot claim the code to inherit its registry GPA.
+            const emailStr = cell(parts, col.email).toLowerCase();
             if (emailStr && !EMAIL_REGEX.test(emailStr)) {
               invalidRows.push(`${student_code} (รูปแบบอีเมลไม่ถูกต้อง)`);
               continue;
@@ -94,7 +95,6 @@ export class StaffImportController {
             studentsToImport.push({
               student_code,
               cumulative_gpa,
-              is_eligible,
               email: emailStr || null,
             });
           }
@@ -120,7 +120,6 @@ export class StaffImportController {
         for (const row of studentsToImport) {
           const studentCode = row.student_code;
           const gpa = row.cumulative_gpa; // null means "leave the existing value alone"
-          const isEligible = row.is_eligible;
 
           // Start a transaction for each student upsert to ensure isolation
           try {
@@ -130,26 +129,21 @@ export class StaffImportController {
             //    COALESCE keeps a previously imported GPA when this row omits one,
             //    so a roster-only re-import never destroys transcript data.
             await client.query(
-               `INSERT INTO eligible_students_list (student_code, cumulative_gpa, is_eligible, email)
-               VALUES ($1, COALESCE($2, 0.00), COALESCE($3, FALSE), $4)
+               `INSERT INTO eligible_students_list (student_code, cumulative_gpa, email)
+               VALUES ($1, COALESCE($2, 0.00), $3)
                ON CONFLICT (student_code)
                DO UPDATE SET
                  cumulative_gpa = COALESCE($2, eligible_students_list.cumulative_gpa),
-                 is_eligible = COALESCE($3, eligible_students_list.is_eligible),
                  email = COALESCE(EXCLUDED.email, eligible_students_list.email)
                RETURNING student_code`,
-              [studentCode, gpa, isEligible, row.email]
+              [studentCode, gpa, row.email]
             );
 
             // 2. ตรวจว่านักศึกษาคนนี้ลงทะเบียนในระบบแล้วหรือยัง — ใช้รายงานผลเท่านั้น
             //
-            //    การนำเข้าไฟล์ *ไม่* เขียนทับ students.is_eligible / cumulative_gpa อีกต่อไป
-            //    เดิมมันทับ ทำให้สิทธิ์ที่หัวหน้าสาขาอนุมัติไว้หายไปเงียบๆ เมื่อมีการอัปไฟล์รอบใหม่
-            //    และไม่มีใครรู้ว่าถูกทับ · ตอนนี้แหล่งความจริงแยกชัด:
-            //      - ไฟล์รายชื่อ  → eligible_students_list (ใครเป็นนักศึกษาที่มีสิทธิ์ *สมัคร*)
-            //      - สหกิจ 01     → students.is_eligible   (ใครผ่านการ *คัดกรอง* แล้ว)
-            //    เจ้าหน้าที่ที่ต้องแก้สิทธิ์ของคนที่ลงทะเบียนแล้วใช้เมนู "ตรวจสอบคุณสมบัตินักศึกษา"
-            //    (PUT /students/:id/verify-eligibility) ซึ่งบันทึกลง audit_log เสมอ
+            //    ⛔ การนำเข้าไฟล์ *ไม่* เขียนทับ students.cumulative_gpa — เกรดของคนที่ลงทะเบียนแล้ว
+            //    แก้ที่ PUT /students/:id/registry ซึ่งลง audit_log (SEC-05) · ไฟล์นี้เติมได้แค่
+            //    ตอนนักศึกษาตั้งโปรไฟล์ครั้งแรก (profile.ts อ่าน eligible_students_list)
             const profileCheck = await client.query(
               'SELECT student_id FROM students WHERE student_code = $1 LIMIT 1',
               [studentCode]

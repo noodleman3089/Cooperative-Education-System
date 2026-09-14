@@ -241,7 +241,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
       { id: 'approval', label: 'ติดตามคำร้อง', icon: icons.approval },
       { id: 'assignment', label: 'จัดสรรอาจารย์ที่ปรึกษา', icon: icons.assignment },
-      { id: 'students', label: 'ตรวจสอบคุณสมบัตินักศึกษา', icon: icons.students },
+      // ⛔ เมนู 'students' (ตรวจสอบคุณสมบัตินักศึกษา) ถูกถอดออก 2026-09-14 — หน้านั้นมีแค่
+      //    สิทธิ์สะสมกับปฐมนิเทศ ซึ่งไม่อยู่ในขอบเขต · รายชื่อ+อาจารย์ดูได้ที่ 'assignment'
       { id: 'final_progress', label: 'สรุปผลการประเมินสาขาวิชา', icon: icons.summary },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
     ],
@@ -257,7 +258,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
       { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },
       { id: 'calendar', label: 'ปฏิทินสหกิจศึกษา', icon: icons.calendar, group: 'ตั้งค่าของคณะ' },
-      { id: 'import', label: 'รายชื่อผู้มีสิทธิ์ & เกรด', icon: icons.import, group: 'ตั้งค่าของคณะ' },
+      { id: 'import', label: 'รายชื่อนักศึกษา & เกรด', icon: icons.import, group: 'ตั้งค่าของคณะ' },
       { id: 'users', label: 'บัญชี สิทธิ์ และข้อมูลหลัก', icon: icons.users, group: 'ตั้งค่าของคณะ' },
       { id: 'announcements', label: 'ข่าวประชาสัมพันธ์', icon: icons.announcements, group: 'ตั้งค่าของคณะ' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }

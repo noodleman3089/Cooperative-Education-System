@@ -122,8 +122,6 @@ export class ProfileController {
 
         const inheritsEligibility = !!eligibilityRecord && codeIsBoundToCaller;
         const seededGpa = inheritsEligibility ? Number(eligibilityRecord!.cumulative_gpa) : null;
-        // ponytail: All enrolled students are eligible by default
-        const seededEligible = inheritsEligibility ? eligibilityRecord!.is_eligible : true;
 
         /**
          * ช่องติดต่อที่หน้ากรอกครั้งแรกเก็บมาด้วย (2026-09-07)
@@ -160,9 +158,7 @@ export class ProfileController {
           null, // current_address
           null, // parent_name
           null, // parent_phone
-          Number(enrollment_year),
-          seededEligible,
-          false // orientation is confirmed by staff after the briefing session
+          Number(enrollment_year)
         );
 
         /**
