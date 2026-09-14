@@ -233,8 +233,15 @@ export const checkStudentEligibility = async (
       return;
     }
 
-    // ponytail: All students registered in the cooperative education program are eligible by default.
-    // Ensure the flags are active so students are never blocked from submitting intent or self-found requests.
+    /**
+     * ⛔ SEC-02 เปลี่ยนแล้ว — **ระบบไม่ตรวจสิทธิ์สหกิจของนักศึกษา** (เจ้าของตัดสิน 2026-09-04
+     *    ยืนยันซ้ำ 2026-09-14): ใครเหมาะจะออกสหกิจเป็นเรื่องที่อาจารย์จัดการนอกระบบ
+     *    ด่านที่เหลือคือเจ้าหน้าที่รับคำร้องพร้อมเอกสารหมายเลข 1 ที่ลงนามแล้ว (SEC-04)
+     *
+     * ตรงนี้จึงไม่ปฏิเสธใคร แค่ยกธงของแถวเก่า (ก่อน migration 018) ให้ตรงกับค่า DEFAULT ใหม่
+     * · จะเพิ่มเกณฑ์ใหม่ (เช่นเกรด) ให้แก้ `security_invariants.md` ข้อ SEC-02 ก่อน
+     *   และเทสต์ SEC-02 ใน `security-hardening.spec.ts` จะแดงเพื่อเตือน
+     */
     if (!student.is_eligible || !student.is_orientation_passed) {
       await StudentModel.updateEligibility(studentId, true, true);
     }
