@@ -29,8 +29,8 @@ export const AuditAction = {
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',
-  APPLICATION_EVALUATED: 'application.evaluated_by_advisor',
-  APPLICATION_DECIDED: 'application.decided_by_dept_head',
+  // ⛔ APPLICATION_EVALUATED / APPLICATION_DECIDED (สหกิจ 01) ถูกลบ 2026-09-14 พร้อมทั้งชุด
+  //    แถวเก่าใน audit_log ยังอยู่เป็นประวัติ ห้ามเอาชื่อ action สองอันนั้นไปใช้กับเรื่องอื่น
   // ⛔ ELIGIBILITY_CHANGED ('student.eligibility_changed') ถูกลบ 2026-09-14 พร้อม verify-eligibility
   //    — แถวเก่าในตารางยังอ่านได้ ห้ามเอาชื่อ action นี้ไปใช้กับเรื่องอื่น
   REGISTRY_CHANGED: 'student.registry_changed',

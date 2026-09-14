@@ -47,9 +47,6 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   students: 'stats',
   approval: 'stats',
   assignment: 'stats',
-  // สหกิจ 01: ฝั่งนักศึกษาเป็นฟอร์ม ฝั่งผู้ตรวจเป็นตารางรายชื่อ
-  application: 'form',
-  applications: 'table',
 };
 
 /**

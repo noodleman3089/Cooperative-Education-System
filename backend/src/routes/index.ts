@@ -22,7 +22,6 @@ import supervisionRecordRoutes from './supervisionRecord';
 import weeklyLogRoutes from './weeklyLog';
 import monthlyLogRoutes from './monthlyLog';
 import dailyLogRoutes from './dailyLog';
-import applicationRoutes from './application';
 import finalReportRoutes from './finalReport';
 import reportConfirmationRoutes from './reportConfirmation';
 import finalEvaluationRoutes from './finalEvaluation';
@@ -68,7 +67,8 @@ router.use('/weekly-logs', weeklyLogRoutes);
 router.use('/monthly-logs', monthlyLogRoutes);
 // สหกิจ 08 — เปิดใช้เมื่อพี่เลี้ยงกดสวิตช์ daily_log_required เท่านั้น
 router.use('/daily-logs', dailyLogRoutes);
-router.use('/applications', applicationRoutes);
+// ⛔ /applications (สหกิจ 01 ใบสมัครเข้าร่วมโครงการ) ถูกตัดทั้งชุด 2026-09-14 — เจ้าของตัดสินว่า
+//    ไม่อยู่ในขอบเขต · migration 032 ลบตาราง coop_applications
 
 
 // Phase 4 Routes

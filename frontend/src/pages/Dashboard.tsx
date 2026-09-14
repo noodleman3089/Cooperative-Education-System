@@ -48,9 +48,7 @@ const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
-const CoopApplicationForm = lazy(() => import('./Student/CoopApplicationForm'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
-const ApplicationReview = lazy(() => import('./Advisor/ApplicationReview'));
 const Form07Company = lazy(() => import('./Company/Form07Company'));
 const MentorHome = lazy(() => import('./Company/MentorHome'));
 const MentorCertify = lazy(() => import('./Company/MentorCertify'));
@@ -350,7 +348,7 @@ const Dashboard: React.FC = () => {
             />
           );
         }
-        if (activeMenu === 'application') return <CoopApplicationForm />;
+        // ⛔ 'application' (สหกิจ 01) และ 'applications' ของอาจารย์/หัวหน้าสาขา ถูกตัดทั้งชุด 2026-09-14
         if (activeMenu === 'jobs') return <SmartJobBoard />;
         if (activeMenu === 'profile') return <StudentProfile />;
         if (activeMenu === 'job_application') return <CoopJobApplication />;
@@ -363,7 +361,6 @@ const Dashboard: React.FC = () => {
         return <StudentDashboard />;
         
       case 'advisor':
-        if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
@@ -371,7 +368,6 @@ const Dashboard: React.FC = () => {
         return <AdvisorDashboard activeMenu={activeMenu} />;
         
       case 'dept_head':
-        if (activeMenu === 'applications') return <ApplicationReview />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่

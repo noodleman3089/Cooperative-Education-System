@@ -138,10 +138,6 @@ const AppRoutes: React.FC = () => {
         } 
       />
 
-      {/* สหกิจ 01 (Program Enrollment) เข้าผ่านเมนูใน Dashboard เท่านั้น —
-          สองหน้านี้ถูกเขียนให้อยู่ในเลย์เอาต์ของ Dashboard (มี Sidebar/Navbar อยู่แล้ว)
-          route แยกจึงถูกถอดออก ไม่งั้นจะได้หน้าเปล่าที่ไม่มีทางกลับ */}
-
       {/* Phase 4 Routes */}
       <Route 
         path="/student/final-report" 

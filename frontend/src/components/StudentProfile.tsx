@@ -645,7 +645,7 @@ const StudentProfile: React.FC = () => {
           <div className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
             <span className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
               ชื่อภาษาอังกฤษ · เพศ · สัญชาติ · ผู้ติดต่อฉุกเฉิน อยู่ที่{' '}
-              <a href="/dashboard?menu=coop_application" className="font-bold text-brand-blue dark:text-blue-400 hover:underline">
+              <a href="/dashboard?menu=job_application" className="font-bold text-brand-blue dark:text-blue-400 hover:underline">
                 ใบสมัครงานสหกิจ (สหกิจ 03)
               </a>{' '}
               เพราะเป็นช่องที่มีเฉพาะบนใบนั้น — ไม่ทำซ้ำสองที่เพื่อไม่ให้ค่าขัดกัน

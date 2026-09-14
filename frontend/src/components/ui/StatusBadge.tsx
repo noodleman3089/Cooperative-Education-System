@@ -26,9 +26,9 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   // who it is now waiting on. A student reading only "รอหัวหน้าสาขาวิชา" cannot
   // tell whether their advisor has looked at it yet, and that is the question
   // they open the page to answer.
-  // ⚠️ `pending_advisor` ถูกใช้ **สามโดเมน**: coop_applications (สหกิจ 01) ·
-  // intent_forms (ใบความจำนง) · report_outlines (สหกิจ 11) — สองโดเมนแรกและโดเมน
-  // สุดท้ายยังรออาจารย์กดจริง มีแต่ใบความจำนงที่ย้ายไปลงนามบนกระดาษเมื่อ 2026-08-26
+  // ⚠️ `pending_advisor` ถูกใช้ **สองโดเมน**: intent_forms (ใบความจำนง) · report_outlines
+  // (สหกิจ 11) — โครงร่างยังรออาจารย์กดจริง มีแต่ใบความจำนงที่ย้ายไปลงนามบนกระดาษเมื่อ 2026-08-26
+  // (เดิมมีโดเมนที่สามคือ coop_applications ของ สหกิจ 01 ซึ่งถูกตัดทั้งชุด 2026-09-14)
   // ข้อความกลางจึงต้องเป็นของ "รออาจารย์" ต่อไป และให้ใบความจำนงทับด้วย
   // `DOMAIN_OVERRIDES` ข้างล่างแทน (นี่คือกับดัก key ชนข้ามโดเมนที่ CLAUDE.md เตือนไว้)
   pending_advisor: { text: 'รออาจารย์ที่ปรึกษาพิจารณา', tone: 'waiting' },
@@ -47,10 +47,6 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   published: { text: 'เผยแพร่แล้ว', tone: 'done' },
   closed: { text: 'ปิดรับสมัครแล้ว', tone: 'neutral' },
 
-  // coop_applications (Co-op 01) — a separate flow with its own statuses
-  pending_dept_head: { text: 'รอหัวหน้าสาขาวิชาพิจารณา', tone: 'waiting' },
-  waitlisted: { text: 'รอพิจารณาเพิ่มเติม', tone: 'review' },
-
   // report outlines / documents
   draft: { text: 'ฉบับร่าง', tone: 'neutral' },
   submitted: { text: 'ส่งแล้ว', tone: 'progress' },
@@ -66,7 +62,7 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
  * **ไม่ได้แปลว่ารออาจารย์กดปุ่ม** อีกแล้วตั้งแต่ 2026-08-26 — มันแปลว่านักศึกษา
  * ต้องเอาแบบคำร้องไปให้ลงนามด้วยปากกาแล้วอัปโหลดกลับ
  *
- * ⛔ อย่าย้ายข้อความนี้ขึ้นไปทับใน `STATUS_LABELS` — สหกิจ 01 กับโครงร่างรายงาน
+ * ⛔ อย่าย้ายข้อความนี้ขึ้นไปทับใน `STATUS_LABELS` — โครงร่างรายงาน
  * ใช้ key เดียวกันและยังรออาจารย์กดจริงๆ
  */
 type StatusDomain = 'intent';

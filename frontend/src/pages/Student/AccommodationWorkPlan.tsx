@@ -815,7 +815,7 @@ const AccommodationWorkPlan: React.FC = () => {
             บุคคลที่ติดต่อได้ในกรณีฉุกเฉิน
           </h3>
           <a
-            href="/dashboard?menu=coop_application"
+            href="/dashboard?menu=job_application"
             className="text-xs font-bold text-brand-blue dark:text-blue-400 flex items-center gap-1 hover:underline"
           >
             แก้ที่ใบสมัครงานสหกิจ (สหกิจ 03) <ExternalLink className="w-3 h-3" />

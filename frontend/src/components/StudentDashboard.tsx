@@ -728,7 +728,7 @@ const StudentDashboard: React.FC = () => {
                 <div className="flex items-center gap-2">
                   {/* domain="intent": `pending_advisor` ของใบความจำนงแปลว่า
                       "เอาแบบคำร้องไปให้ลงนาม" ไม่ใช่ "รออาจารย์กดปุ่ม" เหมือน
-                      สหกิจ 01 กับโครงร่างรายงานที่ใช้ key เดียวกัน */}
+                      โครงร่างรายงานที่ใช้ key เดียวกัน */}
                   <StatusBadge status={intentDisplayStatus(activeIntent.status, coverLetter?.status)} domain="intent" />
                 </div>
               </div>

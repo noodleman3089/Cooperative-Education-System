@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS final_evaluations CASCADE;
 DROP TABLE IF EXISTS mentor_notifications CASCADE;
 DROP TABLE IF EXISTS official_documents CASCADE;
 DROP TABLE IF EXISTS document_templates CASCADE;
+-- coop_applications (สหกิจ 01) ถูกตัดทั้งชุด 2026-09-14 · migration 032 — บรรทัด DROP เก็บไว้ล้างฐาน dev เก่า
 DROP TABLE IF EXISTS coop_applications CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
@@ -123,7 +124,8 @@ CREATE TABLE IF NOT EXISTS students (
     -- เกรดที่นักศึกษาแจ้งเองตอนกรอกข้อมูลครั้งแรก
     -- ⛔ **คนละคอลัมน์กับ `cumulative_gpa` ด้านบนโดยตั้งใจ** (SEC-05) — ตัวนั้นคือเลข
     --    ทะเบียนที่ถูกพิมพ์ลงหนังสือราชการที่คณบดีเซ็น เลขที่ยังไม่มีมนุษย์ยืนยันลงไม่ได้
-    --    · เดิมค่านี้อยู่ที่ `coop_applications.claimed_gpa` (สหกิจ 01) ซึ่งถูกข้ามไปแล้ว
+    --    · เดิมค่านี้อยู่ที่ `coop_applications.claimed_gpa` (สหกิจ 01) ซึ่งถูกตัดทั้งชุดแล้ว (032)
+    --    · ทางเดียวที่ค่านี้เข้าทะเบียนคือเจ้าหน้าที่แก้ผ่าน PUT /students/:id/registry
     claimed_gpa NUMERIC(3, 2),
     -- ⛔ is_eligible / is_orientation_passed ถูกลบ 2026-09-14 (migration 031 · SEC-02)
     --    ระบบไม่ตรวจสิทธิ์สหกิจและไม่มีขั้นปฐมนิเทศ — ไม่อยู่ในขอบเขต · ห้ามเพิ่มกลับโดยไม่แก้ SEC-02
@@ -493,44 +495,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_coop_calendar_activity_once
 -- and those have no place in a date ordering. The gate already rides the
 -- unique index above.
 CREATE INDEX IF NOT EXISTS idx_coop_calendar_semester_order ON coop_calendar_events (semester_id, sort_order);
-
--- 6.5. Coop Applications Table (System 1)
-CREATE TABLE IF NOT EXISTS coop_applications (
-    application_id SERIAL PRIMARY KEY,
-    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
-    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
-    
-    -- ข้อมูลจากนักศึกษา
-    expected_region VARCHAR(255),
-    special_skills TEXT,
-
-    -- เกรดที่นักศึกษา *แจ้ง* เอง ตามที่กรอกใน สหกิจ 01 — ยังไม่ใช่เกรดทางการ
-    -- SEC-05: students.cumulative_gpa ยังเป็นของเซิร์ฟเวอร์เหมือนเดิม ค่านี้จะถูก
-    -- คัดลอกไปที่นั่นก็ต่อเมื่อหัวหน้าสาขาอนุมัติใบสมัคร (มีคนรับผิดชอบใน audit_log)
-    claimed_gpa NUMERIC(3, 2),
-
-    -- สถานะปัจจุบัน (pending_advisor, pending_dept_head, approved, waitlisted, other)
-    status VARCHAR(50) NOT NULL DEFAULT 'pending_advisor',
-    
-    -- Step 1: Advisor Evaluation (วิชาการ, ความประพฤติ, วุฒิภาวะ -> 'appropriate' / 'inappropriate')
-    academic_evaluation VARCHAR(50),
-    academic_remark TEXT,
-    behavior_evaluation VARCHAR(50),
-    behavior_remark TEXT,
-    maturity_evaluation VARCHAR(50),
-    maturity_remark TEXT,
-    advisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
-    advisor_evaluated_at TIMESTAMP,
-    
-    -- Step 2: Final Conclusion (Dept Head)
-    overall_conclusion VARCHAR(50), -- 'approved', 'waitlisted', 'other'
-    conclusion_remark TEXT,
-    dept_head_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
-    dept_head_approved_at TIMESTAMP,
-    
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (student_id, semester_id)
-);
 
 -- 7. Intent Forms Table
 CREATE TABLE IF NOT EXISTS intent_forms (

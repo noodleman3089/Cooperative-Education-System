@@ -23,7 +23,6 @@ export interface CalendarMenuTarget {
 }
 
 export const CALENDAR_MENU_BY_ACTIVITY: Record<string, CalendarMenuTarget> = {
-  coop_application: { menu: 'application', locksMenu: true },
   // การยื่นความจำนงเริ่มจากเลือกตำแหน่งงาน — แต่หน้ารายการงานยังต้องเปิดให้ดูเสมอ
   intent_submission: { menu: 'jobs', locksMenu: false },
   // แบบตอบรับ (เอกสารหมายเลข 2) อัปโหลดที่กล่องสถานะบนหน้าแรก ไม่มีเมนูของตัวเอง

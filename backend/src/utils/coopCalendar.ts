@@ -19,8 +19,8 @@
  * เพิ่มกิจกรรมใหม่จึงแก้ไฟล์นี้ไฟล์เดียว หน้าจอขึ้นเอง
  */
 
+// ⛔ 'coop_application' (สหกิจ 01) ถูกลบ 2026-09-14 พร้อมทั้งชุด — migration 032 ลบแถวปฏิทินของมัน
 export const COOP_ACTIVITY_KEYS = [
-  'coop_application',
   'intent_submission',
   'acceptance_form',
   'accommodation_plan',
@@ -168,24 +168,9 @@ export const COOP_ACTIVITIES: CoopActivity[] = [
   },
 ];
 
-// ponytail: coop_application เป็นขั้นตอนเดิมของสาขาที่ถูก bypass ออกจากปฏิทินคณะแล้ว
-// เก็บไว้ใน ACTIVITY_BY_KEY เพื่อ backward compatibility กับ endpoint ภายในที่อาจอ้างถึง
-const LEGACY_ACTIVITIES: CoopActivity[] = [
-  {
-    key: 'coop_application',
-    label: 'ยื่นใบสมัครเข้าโครงการสหกิจศึกษา (สหกิจ 01)',
-    dateKind: 'range',
-    locks: true,
-    paperRow: null,
-    allowLate: true,
-    hint: null,
-  },
-];
-
-const ACTIVITY_BY_KEY = new Map<string, CoopActivity>([
-  ...COOP_ACTIVITIES.map((a): [string, CoopActivity] => [a.key, a]),
-  ...LEGACY_ACTIVITIES.map((a): [string, CoopActivity] => [a.key, a]),
-]);
+const ACTIVITY_BY_KEY = new Map<string, CoopActivity>(
+  COOP_ACTIVITIES.map((a): [string, CoopActivity] => [a.key, a])
+);
 
 /**
  * กิจกรรมที่ช่วงเวลามาจากกิจกรรมอื่น เจ้าหน้าที่ไม่ต้องกรอกซ้ำ
