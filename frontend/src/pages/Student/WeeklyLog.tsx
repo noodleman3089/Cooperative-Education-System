@@ -17,6 +17,7 @@ import {
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import CalendarGate, { useCalendarGate } from '../../components/ui/CalendarGate';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLogItem {
@@ -59,6 +60,31 @@ interface MonthlyLogItem {
   submitted_at: string | null;
 }
 
+interface DailyLogDay {
+  daily_log_id: number;
+  log_date: string;
+  work_detail: string | null;
+  remark: string | null;
+}
+
+interface DailyLogWeek {
+  week_number: number;
+  status: 'draft' | 'submitted' | 'returned';
+  returned_comment: string | null;
+  mentor_certified_at: string | null;
+  certified_by_name: string | null;
+  days: DailyLogDay[];
+}
+
+interface DailyIntent {
+  form_id: number;
+  start_date: string | null;
+  end_date: string | null;
+  daily_log_required: boolean;
+  mentor_id: number | null;
+  mentor_name: string | null;
+}
+
 interface IntentData {
   form_id: number;
   start_date: string | null;
@@ -76,13 +102,17 @@ const THAI_MONTHS_SHORT = [
   'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'
 ];
 
+const THAI_WEEKDAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
 const WeeklyLog: React.FC = () => {
   const auth = useContext(AuthContext);
-  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly'>('weekly');
+  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
 
   const [intent, setIntent] = useState<IntentData | null>(null);
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyLogItem[]>([]);
   const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogItem[]>([]);
+  const [dailyIntent, setDailyIntent] = useState<DailyIntent | null>(null);
+  const [dailyWeeks, setDailyWeeks] = useState<DailyLogWeek[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +145,11 @@ const WeeklyLog: React.FC = () => {
   const [selectedMonthIndex, setSelectedMonthIndex] = useState<number>(0);
   const [monthlyDrafts, setMonthlyDrafts] = useState<Record<string, MonthlyFormFields>>({});
   const [monthlyFile, setMonthlyFile] = useState<File | null>(null);
+
+  // Daily log (สหกิจ 08) — key เป็น `${week_number}:${log_date}` เก็บค่าที่กำลังพิมพ์
+  const [dailyDrafts, setDailyDrafts] = useState<Record<string, string>>({});
+  // แก้สัปดาห์ที่พี่เลี้ยงรับรองแล้ว = ล้างการรับรองทั้งสัปดาห์ทิ้ง — เตือนก่อนเสมอ
+  const [pendingDailyAction, setPendingDailyAction] = useState<'draft' | 'submitted' | null>(null);
 
   // Calculate Weeks & Months from Intent dates
   const { totalWeeks, weekRanges, monthsList } = (() => {
@@ -172,9 +207,10 @@ const WeeklyLog: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const [weeklyRes, monthlyRes] = await Promise.all([
+        const [weeklyRes, monthlyRes, dailyRes] = await Promise.all([
           api.get('/weekly-logs/me'),
           api.get('/monthly-logs/me'),
+          api.get('/daily-logs/me'),
         ]);
 
         if (!active) return;
@@ -182,6 +218,10 @@ const WeeklyLog: React.FC = () => {
         setIntent(weeklyData.intent || null);
         setWeeklyLogs(weeklyData.logs || []);
         setMonthlyLogs((monthlyRes as { data?: MonthlyLogItem[] })?.data || []);
+
+        const dailyData = dailyRes as { intent?: DailyIntent | null; weeks?: DailyLogWeek[] } | null;
+        setDailyIntent(dailyData?.intent || null);
+        setDailyWeeks(dailyData?.weeks || []);
 
         const maxSubmittedWeek = (weeklyData.logs || []).reduce(
           (max: number, l: WeeklyLogItem) => (l.status === 'submitted' ? Math.max(max, l.week_number) : max),
@@ -220,6 +260,78 @@ const WeeklyLog: React.FC = () => {
         [field]: val,
       },
     }));
+  };
+
+  // ── บันทึกรายวัน (สหกิจ 08) ──────────────────────────────────────────
+  // ⛔ ใช้เลขสัปดาห์และช่วงวันเดียวกับแท็บรายสัปดาห์ (weekRanges คำนวณจาก
+  //    intent.start_date ตัวเดียวกัน) — ห้ามคิดสูตรสัปดาห์แยกอีกชุด
+  const currentDailyWeek = dailyWeeks.find((w) => w.week_number === selectedWeek);
+
+  const currentWeekDays = (() => {
+    const range = weekRanges[selectedWeek - 1];
+    if (!range) return [];
+    const todayIso = new Date().toISOString().slice(0, 10);
+    return Array.from({ length: 5 }, (_, i) => {
+      const d = new Date(range.start);
+      d.setDate(range.start.getDate() + i);
+      const logDate = d.toISOString().slice(0, 10);
+      const existing = currentDailyWeek?.days.find((day) => day.log_date === logDate);
+      const draftKey = `${selectedWeek}:${logDate}`;
+      return {
+        logDate,
+        weekday: THAI_WEEKDAYS[d.getDay()],
+        label: `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear() + 543}`,
+        isFuture: logDate > todayIso,
+        workDetail: dailyDrafts[draftKey] ?? existing?.work_detail ?? '',
+      };
+    });
+  })();
+
+  const updateDailyField = (logDate: string, value: string) => {
+    setDailyDrafts((prev) => ({ ...prev, [`${selectedWeek}:${logDate}`]: value }));
+  };
+
+  const handleSaveDaily = async (status: 'draft' | 'submitted') => {
+    setError(null);
+    setSuccess(null);
+
+    if (status === 'submitted' && (calendarStatus === 'upcoming' || calendarStatus === 'closed')) {
+      setError('ไม่อยู่ในช่วงเวลาที่เปิดให้ส่งตามปฏิทินสหกิจศึกษา (สามารถบันทึกร่างไว้ก่อนได้)');
+      return;
+    }
+    if (status === 'submitted' && currentWeekDays.every((d) => !d.workDetail.trim())) {
+      setError('กรุณากรอกบันทึกอย่างน้อยหนึ่งวันก่อนส่งให้พนักงานที่ปรึกษารับรอง');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      const res = await api.post('/daily-logs', {
+        week_number: selectedWeek,
+        status,
+        days: currentWeekDays.map((d) => ({ log_date: d.logDate, work_detail: d.workDetail })),
+      });
+      setSuccess((res as { message?: string })?.message || (status === 'submitted' ? 'ส่งบันทึกรายวันเรียบร้อยแล้ว' : 'บันทึกร่างสำเร็จ'));
+      setDailyDrafts((prev) => {
+        const next = { ...prev };
+        for (const d of currentWeekDays) delete next[`${selectedWeek}:${d.logDate}`];
+        return next;
+      });
+      setRefreshTrigger((prev) => prev + 1);
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถบันทึกรายวันได้'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /** แก้สัปดาห์ที่พี่เลี้ยงรับรองแล้ว = ล้างการรับรองทิ้ง (backend ทำแบบนี้เสมอ) — เตือนก่อนเสมอ */
+  const requestSaveDaily = (status: 'draft' | 'submitted') => {
+    if (currentDailyWeek?.mentor_certified_at) {
+      setPendingDailyAction(status);
+      return;
+    }
+    handleSaveDaily(status);
   };
 
   const targetMonth = monthsList[selectedMonthIndex];
@@ -508,8 +620,24 @@ const WeeklyLog: React.FC = () => {
       {/* 3. Main Form Container with 3 Tabs */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden flex flex-col">
         {/* Tab Headers */}
-        <div className="flex border-b border-gray-200 dark:border-gray-700 px-3 bg-gray-50/80 dark:bg-gray-900/40 items-center justify-between overflow-x-auto">
+        <div className="flex border-b border-gray-200 dark:border-gray-700 px-3 bg-gray-50/80 dark:bg-gray-900/40 items-center overflow-x-auto">
           <div className="flex shrink-0">
+            {/* ⛔ โผล่เฉพาะเมื่อพี่เลี้ยงเปิดสวิตช์ intent.daily_log_required — นักศึกษาปิดเองไม่ได้
+                จึงไม่มีอะไรให้ซ่อนไว้เตือนตอนปิด (14.8) */}
+            {dailyIntent?.daily_log_required && (
+              <button
+                type="button"
+                data-testid="worklog-tab-daily"
+                onClick={() => setActiveTab('daily')}
+                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition ${
+                  activeTab === 'daily'
+                    ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent'
+                }`}
+              >
+                รายวัน · สหกิจ 08
+              </button>
+            )}
             <button
               type="button"
               data-testid="worklog-tab-weekly"
@@ -534,17 +662,7 @@ const WeeklyLog: React.FC = () => {
             >
               รายเดือน · สหกิจ 10
             </button>
-            <span
-              data-testid="worklog-tab-daily"
-              className="flex items-center gap-2 px-5 py-3.5 text-sm font-semibold text-gray-300 dark:text-gray-600 cursor-default"
-              title="เก็บไว้ทำพร้อมฝ่ายพี่เลี้ยง"
-            >
-              รายวัน · สหกิจ 08 — ยังไม่ทำในรอบนี้
-            </span>
           </div>
-          <span className="text-xs text-gray-500 dark:text-gray-400 hidden lg:inline pr-3">
-            รอบนี้มี 2 แท็บ · แท็บรายวันจะมาพร้อมฝ่ายพี่เลี้ยง
-          </span>
         </div>
 
         {/* Content Area */}
@@ -554,6 +672,156 @@ const WeeklyLog: React.FC = () => {
 
           {/* Calendar Gate Alert banner */}
           <CalendarGate activityKey="weekly_log" actionLabel="ส่งบันทึกการปฏิบัติงาน" className="mb-2" />
+
+          {/* TAB 0: DAILY LOG (สหกิจ 08) — โผล่เฉพาะพี่เลี้ยงเปิดสวิตช์แล้วเท่านั้น */}
+          {activeTab === 'daily' && dailyIntent?.daily_log_required && (
+            <div className="space-y-6">
+              <div className="flex items-start gap-3.5 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/30">
+                <CheckCircle2 className="w-5 h-5 text-blue-800 dark:text-blue-300 shrink-0 mt-0.5" />
+                <span className="text-sm leading-relaxed text-blue-900 dark:text-blue-200">
+                  พนักงานที่ปรึกษา{dailyIntent.mentor_name ? ` (${dailyIntent.mentor_name})` : ''}
+                  {' '}เปิดให้บันทึกรายวันสำหรับการปฏิบัติงานครั้งนี้ — ท่านปิดเองไม่ได้เพราะเป็นการยกเลิกภาระงานของตัวเอง
+                </span>
+              </div>
+
+              {/* Week Selector Bar — เลขสัปดาห์เดียวกับแท็บรายสัปดาห์ */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/60 dark:bg-blue-950/30">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div>
+                    <span className="text-lg font-extrabold text-blue-900 dark:text-blue-200 block">
+                      สัปดาห์ที่ {selectedWeek}
+                    </span>
+                    <span className="text-xs text-blue-700 dark:text-blue-300">
+                      {weekRanges[selectedWeek - 1]?.label || `ช่วงสัปดาห์ที่ ${selectedWeek}`}
+                    </span>
+                  </div>
+                  <select
+                    data-testid="daily-week-select"
+                    value={selectedWeek}
+                    onChange={(e) => setSelectedWeek(Number(e.target.value))}
+                    className="w-56 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-blue-500 shadow-sm"
+                  >
+                    {Array.from({ length: totalWeeks }, (_, idx) => idx + 1).map((w) => (
+                      <option key={w} value={w}>สัปดาห์ที่ {w}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {currentDailyWeek?.status === 'submitted' ? (
+                  currentDailyWeek.mentor_certified_at ? (
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 text-xs font-bold border border-emerald-200 dark:border-emerald-800">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      พี่เลี้ยงรับรองแล้ว ({currentDailyWeek.certified_by_name || 'พี่เลี้ยง'})
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 text-xs font-bold border border-amber-200 dark:border-amber-800">
+                      <Clock className="w-3.5 h-3.5" />
+                      รอพี่เลี้ยงรับรอง
+                    </span>
+                  )
+                ) : currentDailyWeek?.status === 'returned' ? (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-rose-100 dark:bg-rose-900/50 text-rose-800 dark:text-rose-200 text-xs font-bold border border-rose-200 dark:border-rose-800">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    ถูกส่งกลับมาแก้ไข
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 text-xs font-bold border border-gray-200 dark:border-gray-600">
+                    ร่าง · ยังไม่ได้ส่ง
+                  </span>
+                )}
+              </div>
+
+              {/* Returned comment banner */}
+              {currentDailyWeek?.status === 'returned' && currentDailyWeek.returned_comment && (
+                <div
+                  data-testid="worklog-returned-comment"
+                  className="p-4 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 space-y-1 text-sm"
+                >
+                  <span className="font-bold flex items-center gap-1.5 text-rose-900 dark:text-rose-100">
+                    <AlertCircle className="w-4 h-4" />
+                    ข้อเสนอแนะจากพี่เลี้ยง (ส่งกลับมาแก้ไข):
+                  </span>
+                  <p className="leading-relaxed pl-5.5">{currentDailyWeek.returned_comment}</p>
+                </div>
+              )}
+
+              {/* 5 วันทำงาน */}
+              <div className="space-y-2.5">
+                {currentWeekDays.map((day) => (
+                  <div
+                    key={day.logDate}
+                    data-testid={`daily-row-${day.logDate}`}
+                    className={`grid grid-cols-1 sm:grid-cols-[128px_1fr_108px] gap-3 sm:items-center ${day.isFuture ? 'opacity-60' : ''}`}
+                  >
+                    <div className="flex sm:flex-col gap-1.5 sm:gap-0">
+                      <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{day.weekday}</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500">{day.label}</span>
+                    </div>
+                    <input
+                      type="text"
+                      data-testid={`daily-input-${day.logDate}`}
+                      value={day.workDetail}
+                      disabled={day.isFuture}
+                      onChange={(e) => updateDailyField(day.logDate, e.target.value)}
+                      placeholder={day.isFuture ? 'ยังไม่ถึงวัน' : 'วันนี้ทำอะไรบ้าง — เขียนสั้นๆ พอให้พี่เลี้ยงตามได้'}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition disabled:bg-gray-50 dark:disabled:bg-gray-900"
+                    />
+                    <span
+                      className={`justify-self-start px-3 py-1 rounded-full text-xs font-bold border ${
+                        day.isFuture
+                          ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500'
+                          : day.workDetail.trim()
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500'
+                      }`}
+                    >
+                      {day.isFuture ? 'ยังไม่ถึง' : day.workDetail.trim() ? 'กรอกแล้ว' : 'ยังว่าง'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-start gap-2.5 p-3.5 rounded-xl border border-blue-100 dark:border-blue-900/50 bg-blue-50/50 dark:bg-blue-950/20 text-xs text-blue-800 dark:text-blue-300 leading-relaxed">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  บันทึกรายวัน<strong>ส่งให้พี่เลี้ยงรับรองทีเดียวทั้งสัปดาห์</strong> ไม่ใช่วันละครั้ง
+                </span>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
+                </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    data-testid="daily-save-draft"
+                    disabled={submitting}
+                    onClick={() => requestSaveDaily('draft')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
+                  >
+                    <Save className="w-4 h-4" />
+                    บันทึกร่าง
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="daily-submit"
+                    disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+                    onClick={() => requestSaveDaily('submitted')}
+                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
+                      submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
+                        ? 'bg-blue-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
+                    }`}
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    ส่งบันทึกสัปดาห์นี้ให้พี่เลี้ยงรับรอง
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* TAB 1: WEEKLY LOG */}
           {activeTab === 'weekly' && (
@@ -1090,6 +1358,21 @@ const WeeklyLog: React.FC = () => {
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={pendingDailyAction !== null}
+        title="สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว"
+        message="การบันทึกครั้งนี้จะล้างการรับรองของพี่เลี้ยงทิ้งทั้งสัปดาห์ และต้องรอให้พี่เลี้ยงรับรองใหม่ ยืนยันที่จะบันทึกหรือไม่?"
+        confirmLabel="ยืนยันบันทึก"
+        confirmTestId="daily-confirm-overwrite"
+        busy={submitting}
+        onConfirm={() => {
+          const action = pendingDailyAction;
+          setPendingDailyAction(null);
+          if (action) handleSaveDaily(action);
+        }}
+        onCancel={() => setPendingDailyAction(null)}
+      />
     </div>
   );
 };
