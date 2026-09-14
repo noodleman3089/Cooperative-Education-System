@@ -31,7 +31,6 @@ const JobOfferManager = lazy(() => import('./Staff/JobOfferManager'));
 const UsersAndMasterData = lazy(() => import('./Staff/UsersAndMasterData'));
 const ImportScreening = lazy(() => import('./Staff/ImportScreening'));
 const AnnouncementsManager = lazy(() => import('./Staff/AnnouncementsManager'));
-const CompanyDashboard = lazy(() => import('../components/CompanyDashboard'));
 const PersonnelProfile = lazy(() => import('../components/PersonnelProfile'));
 const AccommodationWorkPlan = lazy(() => import('./Student/AccommodationWorkPlan'));
 const CoopJobApplication = lazy(() => import('./Student/CoopJobApplication'));
@@ -54,6 +53,8 @@ const MentorHome = lazy(() => import('./Company/MentorHome'));
 const MentorCertify = lazy(() => import('./Company/MentorCertify'));
 const CompanyHome = lazy(() => import('./Company/CompanyHome'));
 const JobOffer02 = lazy(() => import('./Company/JobOffer02'));
+const ReportOutlineQueue = lazy(() => import('./Company/ReportOutlineQueue'));
+const CompanyProfile = lazy(() => import('./Company/CompanyProfile'));
 
 /**
  * The four student screens that belong to the co-op itself rather than to
@@ -395,14 +396,14 @@ const Dashboard: React.FC = () => {
       case 'company':
         if (activeMenu === 'jobs') return <JobOffer02 />;
         if (activeMenu === 'form07') return <Form07Company />;
-        if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
+        if (activeMenu === 'report_outlines') return <ReportOutlineQueue />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
-        if (activeMenu === 'profile') return <CompanyDashboard activeMenu="profile" />;
+        if (activeMenu === 'profile') return <CompanyProfile />;
         return <CompanyHome onNavigate={(menu) => setActiveMenu(menu)} />;
 
       case 'mentor':
         if (activeMenu === 'certify') return <MentorCertify />;
-        if (activeMenu === 'report_outlines') return <CompanyDashboard activeMenu="report_outlines" />;
+        if (activeMenu === 'report_outlines') return <ReportOutlineQueue />;
         if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
         // Not PersonnelProfile: a mentor is not university staff and has no row
         // in `personnel`, so that screen could only ever show them an error.
