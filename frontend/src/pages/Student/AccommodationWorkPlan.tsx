@@ -6,11 +6,15 @@ import {
   CheckCircle2,
   ExternalLink,
   Printer,
-  Copy,
   Info,
   ChevronDown,
+  Check,
+  Plus,
+  Trash2,
+  CalendarClock,
 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import EmptyState from '../../components/ui/EmptyState';
 import { getErrorMessage } from '../../utils/errors';
 import type { WeeklyPlan } from '../../types/api';
 import { loadThaiAddressData, type ProvinceItem } from '../../data/thaiAddress';
@@ -90,6 +94,33 @@ interface ApprovalItem {
   mentor_name?: string | null;
 }
 
+/** เดือนของแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) — เลขล้วนจาก backend หน้าจอแปลงเป็นชื่อไทย/พ.ศ. เอง */
+interface PlanMonth {
+  index: number;
+  year: number;
+  month: number;
+}
+
+/** หนึ่งแถวของเมทริกซ์ "หัวข้องาน × เดือน" — งานหนึ่งชิ้นติ๊กได้หลายเดือน */
+interface WorkPlanTopicRow {
+  topic_id?: number;
+  seq?: number;
+  topic: string;
+  months: number[];
+}
+
+const THAI_MONTHS_SHORT = [
+  'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+  'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+];
+
+/** จำนวนสัปดาห์จากช่วงวันจริง — ห้ามฮาร์ดโค้ด 16 (ฝึกสั้นกว่านั้นก็ต้องได้น้อยกว่า) */
+const computeWeeksCount = (start?: string | null, end?: string | null): number => {
+  if (!start || !end) return 0;
+  const days = Math.ceil((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1;
+  return days > 0 ? Math.max(1, Math.ceil(days / 7)) : 0;
+};
+
 const matchName = (candidates: string[], names: string[]): string => {
   const strip = (s: string) =>
     s.replace(/^(จังหวัด|จ\.|อำเภอ|อ\.|เขต|ตำบล|ต\.|แขวง)\s*/, '').trim();
@@ -120,8 +151,8 @@ const AccommodationWorkPlan: React.FC = () => {
     address: '',
   });
 
-  const [monthsCount, setMonthsCount] = useState<number>(4);
-  const [monthlyPlans, setMonthlyPlans] = useState<Record<number, string>>({});
+  const [planMonths, setPlanMonths] = useState<PlanMonth[]>([]);
+  const [topics, setTopics] = useState<WorkPlanTopicRow[]>([]);
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
 
@@ -129,20 +160,16 @@ const AccommodationWorkPlan: React.FC = () => {
   const DRAFT_KEY = `accommodation_plan_draft_${auth?.user?.userId ?? 'anon'}`;
   const savedSnapshot = useRef<string>('');
 
-  const snapshotOf = (a: Accommodation, mPlans: Record<number, string>, wPlans: WeeklyPlan[]) =>
-    JSON.stringify({ accommodation: a, monthlyPlans: mPlans, weeklyPlans: wPlans });
+  const snapshotOf = (a: Accommodation, topicsList: WorkPlanTopicRow[], wPlans: WeeklyPlan[]) =>
+    JSON.stringify({ accommodation: a, topics: topicsList, weeklyPlans: wPlans });
 
   const loadData = async () => {
     setIsLoading(true);
     let loadedAcc: Accommodation = BLANK_ACCOMMODATION;
     let loadedLegacy = '';
-    let loadedWeeks: WeeklyPlan[] = Array.from({ length: 16 }, (_, i) => ({
-      week_number: i + 1,
-      start_date: '',
-      end_date: '',
-      tasks: '',
-    }));
-    const loadedMonthMap: Record<number, string> = {};
+    let loadedWeeks: WeeklyPlan[] = [];
+    let loadedMonths: PlanMonth[] = [];
+    let loadedTopics: WorkPlanTopicRow[] = [];
 
     try {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
@@ -188,16 +215,28 @@ const AccommodationWorkPlan: React.FC = () => {
         loadedAcc.emergency_phone = res.emergency_contact.phone || '';
       }
 
-      if (res.months_count) {
-        setMonthsCount(res.months_count);
-      }
+      // ⛔ ของจริงตามกระดาษ — เมทริกซ์หัวข้องาน x เดือน คำนวณเดือนจากช่วงวันจริง
+      //    เดือนว่าง = ยังไม่มีวันเริ่ม/สิ้นสุดจากสถานประกอบการ ห้ามแต่งเป็น 4/5 เดือน
+      loadedMonths = Array.isArray(res.months) ? res.months : [];
+      loadedTopics =
+        Array.isArray(res.work_plan_topics) && res.work_plan_topics.length > 0
+          ? res.work_plan_topics.map((t: { topic_id?: number; seq?: number; topic: string; months?: number[] }) => ({
+              topic_id: t.topic_id,
+              seq: t.seq,
+              topic: t.topic || '',
+              months: Array.isArray(t.months) ? t.months : [],
+            }))
+          : [];
 
-      if (res.monthly_plans && res.monthly_plans.length > 0) {
-        res.monthly_plans.forEach((mp: { month_index: number; topic: string }) => {
-          loadedMonthMap[mp.month_index] = mp.topic || '';
-        });
-      }
-
+      // แผนรายสัปดาห์ (ข้อมูลสนับสนุน ไม่ได้พิมพ์ลงหน้า 3) — จำนวนสัปดาห์คำนวณจาก
+      // ช่วงวันจริงของ intent เสมอ ห้ามฮาร์ดโค้ด 16
+      const weeksCount = computeWeeksCount(res.intent?.start_date, res.intent?.end_date);
+      loadedWeeks = Array.from({ length: weeksCount }, (_, i) => ({
+        week_number: i + 1,
+        start_date: '',
+        end_date: '',
+        tasks: '',
+      }));
       if (res.weekly_plans && res.weekly_plans.length > 0) {
         loadedWeeks = res.weekly_plans.map((p: WeeklyPlan) => ({
           plan_id: p.plan_id,
@@ -213,13 +252,15 @@ const AccommodationWorkPlan: React.FC = () => {
       }
     } catch (err) {
       console.error('Failed to load accommodation and plan:', err);
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลที่พักและแผนปฏิบัติงานได้'));
     } finally {
       setAccommodation(loadedAcc);
       setLegacyAddress(loadedLegacy);
-      setMonthlyPlans(loadedMonthMap);
+      setPlanMonths(loadedMonths);
+      setTopics(loadedTopics);
       setWeeklyPlans(loadedWeeks);
 
-      savedSnapshot.current = snapshotOf(loadedAcc, loadedMonthMap, loadedWeeks);
+      savedSnapshot.current = snapshotOf(loadedAcc, loadedTopics, loadedWeeks);
 
       // Check draft
       try {
@@ -227,7 +268,7 @@ const AccommodationWorkPlan: React.FC = () => {
         if (raw && raw !== savedSnapshot.current) {
           const draft = JSON.parse(raw);
           if (draft.accommodation) setAccommodation(draft.accommodation);
-          if (draft.monthlyPlans) setMonthlyPlans(draft.monthlyPlans);
+          if (draft.topics) setTopics(draft.topics);
           if (draft.weeklyPlans) setWeeklyPlans(draft.weeklyPlans);
           setRestoredDraft(true);
         }
@@ -310,7 +351,7 @@ const AccommodationWorkPlan: React.FC = () => {
   // Local draft sync
   useEffect(() => {
     if (isLoading) return;
-    const current = snapshotOf(accommodation, monthlyPlans, weeklyPlans);
+    const current = snapshotOf(accommodation, topics, weeklyPlans);
     try {
       if (current === savedSnapshot.current) {
         localStorage.removeItem(DRAFT_KEY);
@@ -320,7 +361,7 @@ const AccommodationWorkPlan: React.FC = () => {
     } catch {
       /* ignore */
     }
-  }, [accommodation, monthlyPlans, weeklyPlans, isLoading, DRAFT_KEY]);
+  }, [accommodation, topics, weeklyPlans, isLoading, DRAFT_KEY]);
 
   const discardDraft = () => {
     try {
@@ -332,26 +373,30 @@ const AccommodationWorkPlan: React.FC = () => {
     loadData();
   };
 
-  // Pull weekly plans into a monthly topic
-  const pullWeeklyPlanForMonth = (monthIndex: number) => {
-    // Weeks associated with monthIndex: (monthIndex - 1)*4 + 1 to monthIndex*4
-    const startWeek = (monthIndex - 1) * 4 + 1;
-    const endWeek = monthIndex * 4;
-    const weeksInThisMonth = weeklyPlans.filter(
-      (w) => w.week_number >= startWeek && w.week_number <= endWeek
-    );
-    const joined = weeksInThisMonth
-      .filter((w) => w.tasks?.trim())
-      .map((w) => `สัปดาห์ที่ ${w.week_number}: ${w.tasks.trim()}`)
-      .join('\n');
+  // ── เมทริกซ์หัวข้องาน × เดือน ────────────────────────────────────────
+  const addTopicRow = () => setTopics((prev) => [...prev, { topic: '', months: [] }]);
 
-    if (joined) {
-      setMonthlyPlans((prev) => ({
-        ...prev,
-        [monthIndex]: joined,
-      }));
-    }
-  };
+  const removeTopicRow = (idx: number) => setTopics((prev) => prev.filter((_, i) => i !== idx));
+
+  const updateTopicText = (idx: number, value: string) =>
+    setTopics((prev) => prev.map((t, i) => (i === idx ? { ...t, topic: value } : t)));
+
+  const toggleTopicMonth = (idx: number, monthIndex: number) =>
+    setTopics((prev) =>
+      prev.map((t, i) => {
+        if (i !== idx) return t;
+        const has = t.months.includes(monthIndex);
+        return {
+          ...t,
+          months: has ? t.months.filter((m) => m !== monthIndex) : [...t.months, monthIndex].sort((a, b) => a - b),
+        };
+      })
+    );
+
+  const monthColumnLabel = (m: PlanMonth) => ({
+    label: `เดือนที่ ${m.index}`,
+    shortLabel: `${THAI_MONTHS_SHORT[m.month - 1] || '–'} ${String((m.year + 543) % 100).padStart(2, '0')}`,
+  });
 
   const updateWeeklyTask = (weekNum: number, tasks: string) => {
     setWeeklyPlans((plans) =>
@@ -378,10 +423,10 @@ const AccommodationWorkPlan: React.FC = () => {
         return;
       }
 
-      // Check if at least 1 month is filled
-      const filledMonths = Object.values(monthlyPlans).filter((t) => t?.trim()).length;
-      if (filledMonths === 0) {
-        setError('กรุณากรอกแผนปฏิบัติงานอย่างน้อย 1 เดือนก่อนส่งให้พี่เลี้ยง');
+      // ต้องมีอย่างน้อย 1 หัวข้องานที่กรอกชื่อไว้และติ๊กอย่างน้อย 1 เดือน
+      const filledTopics = topics.filter((t) => t.topic.trim() && t.months.length > 0);
+      if (filledTopics.length === 0) {
+        setError('กรุณากรอกหัวข้องานอย่างน้อย 1 รายการ พร้อมติ๊กเดือนที่ทำ ก่อนส่งให้พี่เลี้ยง');
         window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
@@ -391,18 +436,15 @@ const AccommodationWorkPlan: React.FC = () => {
     setError(null);
     setSuccessMsg(null);
 
-    const monthlyPayload = Object.entries(monthlyPlans)
-      .filter(([, topic]) => topic !== undefined)
-      .map(([idx, topic]) => ({
-        month_index: parseInt(idx, 10),
-        topic: topic.trim(),
-      }));
+    const topicsPayload = topics
+      .filter((t) => t.topic.trim())
+      .map((t) => ({ topic: t.topic.trim(), months: t.months }));
 
     try {
       await api.post(`/students/${auth?.user?.userId}/accommodation-plan`, {
         accommodation,
         weekly_plans: weeklyPlans,
-        monthly_plans: monthlyPayload,
+        work_plan_topics: topicsPayload,
         submit_to_mentor: submitToMentor,
       });
 
@@ -412,7 +454,7 @@ const AccommodationWorkPlan: React.FC = () => {
           : 'บันทึกฉบับร่างข้อมูลที่พักและแผนปฏิบัติงานเรียบร้อยแล้ว'
       );
 
-      savedSnapshot.current = snapshotOf(accommodation, monthlyPlans, weeklyPlans);
+      savedSnapshot.current = snapshotOf(accommodation, topics, weeklyPlans);
       try {
         localStorage.removeItem(DRAFT_KEY);
       } catch {
@@ -434,9 +476,7 @@ const AccommodationWorkPlan: React.FC = () => {
   }
 
   const isAccSubmitted = Boolean(accommodation.house_no && accommodation.province);
-  const filledMonthsCount = Array.from({ length: monthsCount }, (_, i) => i + 1).filter(
-    (m) => monthlyPlans[m]?.trim()
-  ).length;
+  const filledTopicsCount = topics.filter((t) => t.topic.trim() && t.months.length > 0).length;
 
   const mentorApproval = approvals.find((a) => a.approver_role === 'mentor');
   const advisorApproval = approvals.find((a) => a.approver_role === 'advisor');
@@ -886,106 +926,148 @@ const AccommodationWorkPlan: React.FC = () => {
               แผนปฏิบัติงานสหกิจศึกษา (สหกิจ 07 หน้า 3)
             </h3>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
-              กระดาษกำหนดเป็น<strong className="text-gray-800 dark:text-gray-200">หัวข้องานรายเดือน เดือนที่ 1–{monthsCount}</strong> และต้องตกลงร่วมกับพี่เลี้ยงก่อนลงนามทั้งสองฝ่าย
+              กระดาษเป็น<strong className="text-gray-800 dark:text-gray-200">เมทริกซ์หัวข้องาน × เดือนที่ปฏิบัติงาน</strong> — จำนวนเดือนคำนวณจากวันจริงที่สถานประกอบการแจ้งไว้ และต้องตกลงร่วมกับพี่เลี้ยงก่อนลงนามทั้งสองฝ่าย
             </p>
           </div>
-          <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-brand-blue border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 shrink-0">
-            กรอกแล้ว {filledMonthsCount} จาก {monthsCount} เดือน
-          </span>
+          {planMonths.length > 0 && (
+            <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-50 text-brand-blue border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 shrink-0">
+              กรอกแล้ว {filledTopicsCount} หัวข้องาน
+            </span>
+          )}
         </div>
 
-        {/* Dynamic Month Boxes */}
-        <div className="space-y-4">
-          {Array.from({ length: monthsCount }, (_, i) => i + 1).map((m) => {
-            const startW = (m - 1) * 4 + 1;
-            const endW = m * 4;
-            const monthWeeks = weeklyPlans.filter((w) => w.week_number >= startW && w.week_number <= endW);
-            const isFilled = Boolean(monthlyPlans[m]?.trim());
-
-            return (
-              <div
-                key={m}
-                className={`rounded-xl border transition-all overflow-hidden ${
-                  isFilled
-                    ? 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900'
-                    : 'border-amber-200 dark:border-amber-900/60 bg-amber-50/40 dark:bg-amber-950/10'
-                }`}
-              >
-                <div
-                  className={`px-4 py-3 border-b flex items-center justify-between gap-3 ${
-                    isFilled
-                      ? 'bg-gray-50/70 dark:bg-gray-800/40 border-gray-200 dark:border-gray-800'
-                      : 'bg-amber-100/50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`text-xs font-bold ${
-                        isFilled ? 'text-gray-900 dark:text-white' : 'text-amber-900 dark:text-amber-300'
-                      }`}
-                    >
-                      เดือนที่ {m}
-                    </span>
-                    {!isFilled && (
-                      <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">
-                        (ยังไม่ได้กรอก)
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => pullWeeklyPlanForMonth(m)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-gray-500" />
-                    ดึงจากแผนรายสัปดาห์
-                  </button>
-                </div>
-
-                <div className="p-4 space-y-3">
-                  <textarea
-                    rows={2}
-                    data-testid={`monthly-plan-${m}`}
-                    value={monthlyPlans[m] || ''}
-                    onChange={(e) => setMonthlyPlans({ ...monthlyPlans, [m]: e.target.value })}
-                    placeholder="ตกลงกับพี่เลี้ยงว่าเดือนนี้จะทำอะไร หรือกดปุ่ม 'ดึงจากแผนรายสัปดาห์' ด้านบน"
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue resize-vertical"
-                  />
-
-                  {/* Collapsible weekly breakdown */}
-                  <details className="text-xs group">
-                    <summary className="cursor-pointer font-bold text-brand-blue dark:text-blue-400 hover:underline inline-flex items-center gap-1">
-                      <span>แผนรายสัปดาห์ของเดือนนี้ ({monthWeeks.length} สัปดาห์)</span>
-                      <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
-                    </summary>
-                    <div className="mt-3 space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                      {monthWeeks.map((w) => (
-                        <div
-                          key={w.week_number}
-                          data-testid="week-row"
-                          aria-expanded="true"
-                          className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs"
-                        >
-                          <span className="sm:col-span-3 font-semibold text-gray-700 dark:text-gray-300">
-                            สัปดาห์ที่ {w.week_number}
-                          </span>
+        {planMonths.length === 0 ? (
+          <EmptyState
+            icon={CalendarClock}
+            title="รอวันเริ่ม/สิ้นสุดจากสถานประกอบการ"
+            description="ระบบยังคำนวณเดือนปฏิบัติงานไม่ได้ เพราะยังไม่มีวันเริ่ม/สิ้นสุดจากสถานประกอบการ — กรุณาติดต่อพี่เลี้ยงหรือเจ้าหน้าที่งานสหกิจศึกษา"
+          />
+        ) : (
+          <>
+            {/* Matrix: หัวข้องาน × เดือน */}
+            <div
+              data-testid="plan-matrix"
+              className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs"
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-600 dark:text-gray-300">
+                      <th className="py-3 px-4 w-10 text-center">ลำดับ</th>
+                      <th className="py-3 px-4">หัวข้องาน</th>
+                      {planMonths.map((m) => {
+                        const col = monthColumnLabel(m);
+                        return (
+                          <th key={m.index} className="py-3 px-2.5 text-center w-20">
+                            {col.label}
+                            <span className="block text-2xs font-normal text-gray-400">({col.shortLabel})</span>
+                          </th>
+                        );
+                      })}
+                      <th className="py-3 px-2 w-10" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                    {topics.map((t, idx) => (
+                      <tr key={idx} data-testid={`plan-topic-row-${idx}`} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
+                        <td className="py-2.5 px-4 text-center font-bold text-gray-500 text-xs">{idx + 1}</td>
+                        <td className="py-2.5 px-4">
                           <input
                             type="text"
-                            data-testid={`weekly-plan-task-${w.week_number}`}
-                            value={w.tasks || ''}
-                            onChange={(e) => updateWeeklyTask(w.week_number, e.target.value)}
-                            placeholder="ระบุหัวข้องานรายสัปดาห์"
-                            className="sm:col-span-9 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                            data-testid={`plan-topic-input-${idx}`}
+                            value={t.topic}
+                            onChange={(e) => updateTopicText(idx, e.target.value)}
+                            placeholder="เช่น ออกแบบและพัฒนาหน้าจอรายงานยอดผลิตรายวัน"
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                           />
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                </div>
+                        </td>
+                        {planMonths.map((m) => {
+                          const isMarked = t.months.includes(m.index);
+                          return (
+                            <td key={m.index} className="py-2.5 px-2.5 text-center">
+                              <button
+                                type="button"
+                                data-testid={`plan-cell-${idx}-${m.index}`}
+                                onClick={() => toggleTopicMonth(idx, m.index)}
+                                aria-pressed={isMarked}
+                                className={`inline-flex items-center justify-center w-6 h-6 rounded-md border transition-colors ${
+                                  isMarked
+                                    ? 'bg-blue-100 dark:bg-blue-900/40 text-brand-blue dark:text-blue-400 border-blue-200 dark:border-blue-800'
+                                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-transparent hover:border-blue-300'
+                                }`}
+                              >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                              </button>
+                            </td>
+                          );
+                        })}
+                        <td className="py-2.5 px-2 text-center">
+                          <button
+                            type="button"
+                            data-testid={`plan-remove-topic-${idx}`}
+                            onClick={() => removeTopicRow(idx)}
+                            className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            title="ลบหัวข้องานนี้"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {topics.length === 0 && (
+                      <tr>
+                        <td colSpan={planMonths.length + 3} className="py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+                          ยังไม่มีหัวข้องาน — กด &quot;เพิ่มหัวข้องาน&quot; ด้านล่างเพื่อเริ่มกรอก
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            );
-          })}
-        </div>
+            </div>
+
+            <button
+              type="button"
+              data-testid="plan-add-topic"
+              onClick={addTopicRow}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              เพิ่มหัวข้องาน
+            </button>
+
+            {/* แผนรายสัปดาห์ (ข้อมูลสนับสนุน ไม่ได้พิมพ์ลงหน้า 3 — ให้พี่เลี้ยงดูประกอบตอนตรวจ) */}
+            {weeklyPlans.length > 0 && (
+              <details className="text-xs group border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-gray-50/30 dark:bg-gray-800/20">
+                <summary className="cursor-pointer font-bold text-brand-blue dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+                  <span>แผนรายสัปดาห์ประกอบ ({weeklyPlans.length} สัปดาห์ — ไม่บังคับ)</span>
+                  <ChevronDown className="w-3.5 h-3.5 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="mt-3 space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
+                  {weeklyPlans.map((w) => (
+                    <div
+                      key={w.week_number}
+                      data-testid="week-row"
+                      className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center text-xs"
+                    >
+                      <span className="sm:col-span-3 font-semibold text-gray-700 dark:text-gray-300">
+                        สัปดาห์ที่ {w.week_number}
+                      </span>
+                      <input
+                        type="text"
+                        data-testid={`weekly-plan-task-${w.week_number}`}
+                        value={w.tasks || ''}
+                        onChange={(e) => updateWeeklyTask(w.week_number, e.target.value)}
+                        placeholder="ระบุหัวข้องานรายสัปดาห์ (ไม่บังคับ)"
+                        className="sm:col-span-9 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </>
+        )}
 
         {/* 3-Person Approval Chain */}
         <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 space-y-3">
