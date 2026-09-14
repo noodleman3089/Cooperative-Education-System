@@ -1194,6 +1194,10 @@ export class StudentController {
         work_plan_topics: topicsRes.rows || [],
         approvals: approvalsRes.rows || [],
         months_count: monthsCount,
+        // คอลัมน์เดือนของตาราง สหกิจ 07 หน้า 3 — ตัวเดียวกับที่ผู้ตรวจเห็นใน GET /:id/work-plan
+        // หน้าจอใหม่ให้อ่านตัวนี้ · `months_count` ข้างบนเก็บไว้ให้หน้าจอเดิมที่ยังอ่านอยู่
+        // (มันถอยไปเป็น 4 เมื่อไม่มีวันที่ ซึ่ง `months` ไม่ทำ — ไม่มีวันที่ = [])
+        months: await StudentModel.placementMonths(studentId),
         intent: intent
           ? {
               start_date: intent.start_date,
@@ -1446,13 +1450,7 @@ export class StudentController {
         `SELECT s.student_id, s.student_code,
                 btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS full_name,
                 mj.major_name_th, f.faculty_name_th, c.name_th AS company_name,
-                i.start_date, i.end_date,
-                -- จำนวนเดือนที่ช่วงปฏิบัติงานคร่อม (นับตามเดือนปฏิทิน ไม่ใช่ 30 วัน
-                -- เพราะกระดาษเขียนว่า "เดือนที่ 1..4" ซึ่งคนอ่านเข้าใจเป็นเดือนปฏิทิน)
-                (EXTRACT(YEAR FROM age(date_trunc('month', i.end_date),
-                                       date_trunc('month', i.start_date))) * 12
-                 + EXTRACT(MONTH FROM age(date_trunc('month', i.end_date),
-                                          date_trunc('month', i.start_date))) + 1)::int AS month_count
+                i.start_date, i.end_date
            FROM students s
            LEFT JOIN master_major mj ON mj.major_id = s.major_id
            LEFT JOIN master_faculty f ON f.faculty_id = mj.faculty_id
@@ -1481,14 +1479,9 @@ export class StudentController {
         ),
       ]);
 
-      const months = [];
-      if (head.start_date && head.month_count) {
-        const start = new Date(head.start_date);
-        for (let i = 0; i < head.month_count; i++) {
-          const d = new Date(start.getFullYear(), start.getMonth() + i, 1);
-          months.push({ index: i + 1, year: d.getFullYear(), month: d.getMonth() + 1 });
-        }
-      }
+      // เดือนปฏิทินที่คร่อม (ไม่ใช่ 30 วัน — กระดาษเขียน "เดือนที่ 1..N") · สูตรเดียวกับหน้านักศึกษา
+      // (`getAccommodationAndPlan`) ผ่าน `StudentModel.placementMonths` — ห้ามคิดแยกที่นี่อีก
+      const months = await StudentModel.placementMonths(studentId);
 
       const approvals: Record<string, unknown> = {};
       for (const row of approvalsRes.rows) approvals[row.approver_role] = row;

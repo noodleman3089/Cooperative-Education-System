@@ -79,6 +79,36 @@ export class StudentModel {
   }
 
   /**
+   * เดือนปฏิทินที่ช่วงปฏิบัติงานคร่อม — คอลัมน์ "เดือนที่ 1..N" ของตาราง สหกิจ 07 หน้า 3
+   *
+   * คิดใน Postgres ทั้งหมดจากใบความจำนงที่ตอบรับแล้วใบล่าสุด · คืนตัวเลขล้วน
+   * (หน้าจอแปลงเป็นชื่อเดือนไทย/พ.ศ. เอง) · ไม่มีวันเริ่ม/สิ้นสุด = `[]` ไม่ใช่เดาว่า 4 เดือน
+   *
+   * ⛔ ที่เดียวที่คำนวณเรื่องนี้ — เดิมมีสองสำเนา (หน้านักศึกษานับจาก `new Date()` ใน Node
+   *    หน้าผู้ตรวจนับจาก SQL) ถ้าสองสูตรเพี้ยนกัน นักศึกษาจะติ๊กเดือนที่ผู้ตรวจไม่เห็น
+   *    · ⛔ ห้ามคิดด้วย `new Date(string)` — ตีความตามโซนเครื่องแล้วเลื่อนวันได้
+   */
+  static async placementMonths(
+    studentId: number
+  ): Promise<{ index: number; year: number; month: number }[]> {
+    const res = await query(
+      `SELECT (ROW_NUMBER() OVER (ORDER BY m))::int AS index,
+              EXTRACT(YEAR FROM m)::int AS year,
+              EXTRACT(MONTH FROM m)::int AS month
+         FROM intent_forms i,
+              generate_series(date_trunc('month', i.start_date),
+                              date_trunc('month', i.end_date),
+                              interval '1 month') AS m
+        WHERE i.form_id = (SELECT MAX(form_id) FROM intent_forms
+                            WHERE student_id = $1 AND status = 'accepted')
+          AND i.start_date IS NOT NULL AND i.end_date IS NOT NULL
+        ORDER BY m`,
+      [studentId]
+    );
+    return res.rows;
+  }
+
+  /**
    * Look up a student_code in the staff-imported roster (`eligible_students_list`).
    * Returns null when the code was never imported by staff.
    *
