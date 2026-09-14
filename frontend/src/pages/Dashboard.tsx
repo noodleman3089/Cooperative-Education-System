@@ -26,7 +26,11 @@ const StudentProfile = lazy(() => import('../components/StudentProfile'));
 const AdvisorDashboard = lazy(() => import('../components/AdvisorDashboard'));
 const DeptHeadDashboard = lazy(() => import('../components/DeptHeadDashboard'));
 const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
-const StaffDashboard = lazy(() => import('../components/StaffDashboard'));
+const StaffHome = lazy(() => import('./Staff/StaffHome'));
+const JobOfferManager = lazy(() => import('./Staff/JobOfferManager'));
+const UsersAndMasterData = lazy(() => import('./Staff/UsersAndMasterData'));
+const ImportScreening = lazy(() => import('./Staff/ImportScreening'));
+const AnnouncementsManager = lazy(() => import('./Staff/AnnouncementsManager'));
 const CompanyDashboard = lazy(() => import('../components/CompanyDashboard'));
 const PersonnelProfile = lazy(() => import('../components/PersonnelProfile'));
 const AccommodationWorkPlan = lazy(() => import('./Student/AccommodationWorkPlan'));
@@ -127,6 +131,8 @@ const Dashboard: React.FC = () => {
           const next = new URLSearchParams(prev);
           next.set('role', role);
           next.delete('menu'); // รีเซ็ต menu เป็นหน้าแรกเมื่อสลับบทบาท (พฤติกรรมเดิม)
+          // ล้าง sub-queries ของบทบาทเดิมเพื่อไม่ให้ค้างข้ามบทบาท
+          ['queue', 'form', 'tab', 'offer', 'company'].forEach(q => next.delete(q));
           return next;
         },
         { replace: false }
@@ -143,6 +149,8 @@ const Dashboard: React.FC = () => {
           // หน้าแรกไม่ต้องมีพารามิเตอร์ ให้ `/dashboard` เปล่าๆ ยังเป็น URL ของหน้าแรก
           if (menu === 'dashboard') next.delete('menu');
           else next.set('menu', menu);
+          // ล้าง sub-queries ของเมนูเดิมเมื่อสลับเมนูหลัก
+          ['queue', 'form', 'tab', 'offer', 'company'].forEach(q => next.delete(q));
           return next;
         },
         // ตั้งใจให้ push เข้าประวัติ ไม่ใช่ replace — ปุ่ม Back ต้องย้อนเมนูได้
@@ -375,15 +383,15 @@ const Dashboard: React.FC = () => {
         
       case 'staff':
         if (activeMenu === 'appointments') return <AppointmentAudit />;
-        if (activeMenu === 'jobs') return <StaffDashboard activeMenu="jobs" />;
-        if (activeMenu === 'announcements') return <StaffDashboard activeMenu="announcements" />;
-        if (activeMenu === 'users') return <StaffDashboard activeMenu="users" />;
-        if (activeMenu === 'import') return <StaffDashboard activeMenu="import" />;
+        if (activeMenu === 'jobs') return <JobOfferManager />;
+        if (activeMenu === 'announcements') return <AnnouncementsManager />;
+        if (activeMenu === 'users') return <UsersAndMasterData />;
+        if (activeMenu === 'import') return <ImportScreening />;
         if (activeMenu === 'companies') return <CompanyDirectory />;
         if (activeMenu === 'calendar') return <CoopCalendarManager />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
-        return <StaffDashboard activeMenu="dashboard" />;
+        return <StaffHome />;
         
       case 'company':
         if (activeMenu === 'jobs') return <JobOffer02 />;

@@ -35,6 +35,8 @@ interface DataTableProps<T> {
   testId?: string;
   /** คลาสเพิ่มเติมของแถว เช่นเน้นแถวที่ต้องรีบจัดการ */
   rowClassName?: (row: T) => string;
+  /** ฟังก์ชันคืน data-testid สำหรับแต่ละแถว <tr> */
+  rowTestId?: (row: T) => string;
 }
 
 const ALIGN: Record<'left' | 'center' | 'right', string> = {
@@ -64,6 +66,7 @@ export function DataTable<T>({
   refreshing = false,
   testId,
   rowClassName,
+  rowTestId,
 }: DataTableProps<T>) {
   if (rows.length === 0) {
     return <>{empty}</>;
@@ -101,6 +104,7 @@ export function DataTable<T>({
             {rows.map(row => (
               <tr
                 key={rowKey(row)}
+                data-testid={rowTestId?.(row)}
                 className={`align-top hover:bg-gray-50/40 dark:hover:bg-gray-800/20 ${
                   rowClassName?.(row) ?? ''
                 }`.trim()}

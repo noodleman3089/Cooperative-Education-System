@@ -251,20 +251,16 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
     ],
     staff: [
-      // ⛔ เมนู 'dispatch_letters' (ออกหนังสือส่งตัวนักศึกษา) ถูกถอดออก 2026-08-27
-      //    หน้านั้นถูกลบไปตั้งแต่ 2026-08-26 พร้อม POST /documents/generate-dispatch
-      //    แต่เมนูยังค้างอยู่ — กดแล้วเด้งกลับแดชบอร์ดเงียบๆ เพราะ StaffDashboard
-      //    ตีเมนูที่ไม่รู้จักเป็น 'dashboard' · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
-      { id: 'dashboard', label: 'คำร้องขอหนังสือ & การออกเลข', icon: icons.dashboard },
-      { id: 'jobs', label: 'อนุมัติประกาศงาน', icon: icons.jobs },
-      { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies },
-      { id: 'announcements', label: 'จัดการข่าวประชาสัมพันธ์', icon: icons.announcements },
-      { id: 'calendar', label: 'ปฏิทินสหกิจศึกษา', icon: icons.calendar },
-      { id: 'appointments', label: 'ตรวจสอบการนัดหมาย', icon: icons.appointments },
-      { id: 'users', label: 'จัดการสิทธิ์ & บัญชีผู้ใช้', icon: icons.users },
-      { id: 'import', label: 'นำเข้าเกรด & คัดกรองนักศึกษา', icon: icons.import },
-      { id: 'final_progress', label: 'สรุปผลการประเมินสาขาวิชา', icon: icons.summary },
-      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'jobs', label: 'แบบเสนองาน (สหกิจ 02)', icon: icons.jobs, group: 'งานตามฤดูกาล' },
+      { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies, group: 'งานตามฤดูกาล' },
+      { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
+      { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },
+      { id: 'calendar', label: 'ปฏิทินสหกิจศึกษา', icon: icons.calendar, group: 'ตั้งค่าของคณะ' },
+      { id: 'import', label: 'รายชื่อผู้มีสิทธิ์ & เกรด', icon: icons.import, group: 'ตั้งค่าของคณะ' },
+      { id: 'users', label: 'บัญชี สิทธิ์ และข้อมูลหลัก', icon: icons.users, group: 'ตั้งค่าของคณะ' },
+      { id: 'announcements', label: 'ข่าวประชาสัมพันธ์', icon: icons.announcements, group: 'ตั้งค่าของคณะ' },
+      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     company: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },

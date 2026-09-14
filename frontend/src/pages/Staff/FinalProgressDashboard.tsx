@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
-import { ClipboardList, Users, Search, Mail, Download, RefreshCw, CheckCircle, Clock } from 'lucide-react';
+import { Search, Check, AlertTriangle, RefreshCw, Download, Mail } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
-import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
+
+/**
+ * E8 · ติดตามเอกสารนักศึกษา (StudentDocProgress.dc.html)
+ *
+ * กฎเหล็กของหน้านี้:
+ * - คอลัมน์ประเมินท้ายตารางต้องเขียนว่า "ครบทั้ง 2 ใบ" หรือ "มีแค่ 15" หรือ "–"
+ *   **ห้ามเขียนว่า "ผ่าน" เด็ดขาด** เพราะอาจารย์เป็นผู้ตัดเกรด ระบบรู้แค่ว่ามีใบประเมินส่งเข้ามาแล้วหรือยัง
+ * - การ์ดอธิบายสองใบด้านล่าง: ทำไมไม่เขียนว่าผ่าน + นาฬิกา 90 วันลบข้อมูลอ่อนไหวอัตโนมัติ
+ */
 
 interface StudentProgress {
   studentId: number;
@@ -27,23 +35,28 @@ interface StudentProgress {
   };
   finalReportStatus: string;
   finalReportPath: string | null;
-  // สองใบคนละมาตร (100 กับ 70) จงใจไม่มีช่องรวม — เกรดมาจาก สหกิจ 15 อย่างเดียว
   sahatkit15Score: number | null;
   sahatkit16Score: number | null;
   lastNotifiedAt: string | null;
 }
 
-const FinalProgressDashboard: React.FC = () => {
+export const FinalProgressDashboard: React.FC = () => {
   const [students, setStudents] = useState<StudentProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [notifyingMap, setNotifyingMap] = useState<Record<number, boolean>>({});
-  /** Which student the "email their mentor" confirmation is about. */
   const [notifyTarget, setNotifyTarget] = useState<StudentProgress | null>(null);
+  const [batchNotifyOpen, setBatchNotifyOpen] = useState(false);
+  const [batchNotifying, setBatchNotifying] = useState(false);
 
-  const loadData = async () => {
+  // Store mount timestamp to avoid impure Date.now() during render
+  const [now] = useState(() => Date.now());
+
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -54,21 +67,18 @@ const FinalProgressDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadData();
   }, []);
 
-  /**
-   * Sends a real email to an outside party, and the server then refuses another
-   * for 24 hours — so a mis-click costs a day of waiting. It asks first.
-   */
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadData();
+  }, [loadData]);
+
   const handleNotifyMentor = async () => {
     const student = notifyTarget;
     if (!student) return;
     try {
-      setNotifyingMap(prev => ({ ...prev, [student.studentId]: true }));
+      setNotifyingMap((prev) => ({ ...prev, [student.studentId]: true }));
       setError(null);
       setSuccess(null);
 
@@ -76,281 +86,548 @@ const FinalProgressDashboard: React.FC = () => {
 
       setNotifyTarget(null);
       setSuccess(`ส่งอีเมลแจ้งเตือนหาพี่เลี้ยงของ ${student.studentName} สำเร็จ`);
-      
-      // Reload page data
-      const res = await api.get('/coop-progress/dashboard');
-      setStudents(res.data || []);
+      await loadData();
     } catch (err) {
       setNotifyTarget(null);
       setError(getErrorMessage(err, 'ล้มเหลวในการส่งแจ้งเตือนเนื่องจากเงื่อนไข Cooldown'));
     } finally {
-      setNotifyingMap(prev => ({ ...prev, [student.studentId]: false }));
+      setNotifyingMap((prev) => ({ ...prev, [student.studentId]: false }));
+    }
+  };
+
+  const handleBatchNotify = async () => {
+    try {
+      setBatchNotifying(true);
+      setError(null);
+      setSuccess(null);
+      // Notify students/mentors who have pending evaluations or reports
+      const pendingStudents = students.filter(
+        (s) => !s.progressDetails.evaluation15Submitted || !s.progressDetails.evaluation16Submitted
+      );
+      let sentCount = 0;
+      for (const s of pendingStudents) {
+        if (!isCooldownActive(s.lastNotifiedAt)) {
+          try {
+            await api.post(`/final-reports/notify-mentor/${s.studentId}`);
+            sentCount++;
+          } catch {
+            // Ignore single failures in batch
+          }
+        }
+      }
+      setBatchNotifyOpen(false);
+      setSuccess(`ส่งอีเมลเตือนไปยังผู้มีเอกสารค้างสำเร็จ ${sentCount} ราย`);
+      await loadData();
+    } catch (err) {
+      setBatchNotifyOpen(false);
+      setError(getErrorMessage(err, 'ส่งอีเมลเตือนเป็นกลุ่มไม่สำเร็จ'));
+    } finally {
+      setBatchNotifying(false);
     }
   };
 
   const isCooldownActive = (lastNotifiedAt: string | null) => {
     if (!lastNotifiedAt) return false;
     const last = new Date(lastNotifiedAt).getTime();
-    const now = Date.now();
-    return (now - last) < 24 * 60 * 60 * 1000;
+    return now - last < 24 * 60 * 60 * 1000;
   };
 
-  const formatRemainingCooldown = (lastNotifiedAt: string | null) => {
-    if (!lastNotifiedAt) return '';
-    const last = new Date(lastNotifiedAt).getTime();
-    const now = Date.now();
-    const remainMs = (24 * 60 * 60 * 1000) - (now - last);
-    if (remainMs <= 0) return '';
-    
-    const hours = Math.floor(remainMs / (60 * 60 * 1000));
-    const mins = Math.floor((remainMs % (60 * 60 * 1000)) / (60 * 1000));
-    return `${hours} ชม. ${mins} นาที`;
+  const isStudentComplete = (s: StudentProgress) => {
+    const p = s.progressDetails;
+    return (
+      p.accommodationSubmitted &&
+      p.intentApproved &&
+      p.outlineApproved &&
+      p.supervisionCompleted &&
+      p.finalReportSubmitted &&
+      p.evaluation15Submitted &&
+      p.evaluation16Submitted
+    );
   };
 
-  // Export data client-side to CSV format
+  const pendingCount = useMemo(
+    () => students.filter((s) => !isStudentComplete(s)).length,
+    [students]
+  );
+  const completeCount = useMemo(
+    () => students.filter((s) => isStudentComplete(s)).length,
+    [students]
+  );
+
+  const majorOptions = useMemo(() => {
+    const set = new Set<string>();
+    students.forEach((s) => {
+      if (s.majorName) set.add(s.majorName);
+    });
+    return Array.from(set);
+  }, [students]);
+
+  const filteredStudents = useMemo(() => {
+    return students.filter((std) => {
+      const q = search.trim().toLowerCase();
+      const matchSearch =
+        !q ||
+        std.studentName.toLowerCase().includes(q) ||
+        std.studentCode.toLowerCase().includes(q) ||
+        (std.companyName && std.companyName.toLowerCase().includes(q)) ||
+        (std.majorName && std.majorName.toLowerCase().includes(q));
+
+      if (!matchSearch) return false;
+
+      if (statusFilter === 'pending' && isStudentComplete(std)) return false;
+      if (statusFilter === 'completed' && !isStudentComplete(std)) return false;
+
+      if (selectedMajor !== 'all' && std.majorName !== selectedMajor) return false;
+
+      return true;
+    });
+  }, [students, search, statusFilter, selectedMajor]);
+
   const handleExportCSV = () => {
     if (filteredStudents.length === 0) return;
 
-    // Header definition
     const headers = [
       'รหัสนักศึกษา',
       'ชื่อ-นามสกุล',
       'สาขาวิชา',
-      'อาจารย์ที่ปรึกษา',
       'สถานประกอบการ',
-      'เปอร์เซ็นต์งาน (%)',
-      'ผลประเมิน สหกิจ 15 (เต็ม 100)',
-      'ประเมินรายงาน สหกิจ 16 (เต็ม 70)'
+      'สหกิจ 06 (ที่พัก)',
+      'สหกิจ 07 (แผนงาน)',
+      'สหกิจ 11 (โครงร่าง)',
+      'สหกิจ 13 (นิเทศ)',
+      'สหกิจ 14 (เล่มรายงาน)',
+      'ใบประเมิน 15/16 (พี่เลี้ยง)',
+      'ความคืบหน้า (%)',
     ];
 
-    // Data rows mapping
-    const rows = filteredStudents.map(std => [
-      std.studentCode,
-      std.studentName,
-      std.majorName,
-      std.advisorName,
-      std.companyName,
-      `${std.progressPercent}%`,
-      std.sahatkit15Score !== null ? std.sahatkit15Score : '-',
-      std.sahatkit16Score !== null ? std.sahatkit16Score : '-'
-    ]);
+    const rows = filteredStudents.map((std) => {
+      const p = std.progressDetails;
+      const evalText =
+        p.evaluation15Submitted && p.evaluation16Submitted
+          ? 'ครบทั้ง 2 ใบ'
+          : p.evaluation15Submitted
+          ? 'มีแค่ 15'
+          : '-';
 
-    // A value containing a double quote used to break the row it sat in \u2014
-    // RFC 4180 escapes one by doubling it. Company names are free text typed by
-    // whoever registered the placement. The BOM is what lets Excel read the
-    // Thai, and was already right.
+      return [
+        std.studentCode,
+        std.studentName,
+        std.majorName,
+        std.companyName || '-',
+        p.accommodationSubmitted ? 'ส่งแล้ว' : '-',
+        p.intentApproved ? 'ส่งแล้ว' : '-',
+        p.outlineApproved ? 'อนุมัติแล้ว' : '-',
+        p.supervisionCompleted ? 'นิเทศแล้ว' : '-',
+        p.finalReportSubmitted ? 'ส่งแล้ว' : '-',
+        evalText,
+        `${std.progressPercent}%`,
+      ];
+    });
+
     const csvCell = (val: unknown) => `"${String(val ?? '').replace(/"/g, '""')}"`;
-    const csvContent = '\uFEFF' + [
-      headers.map(csvCell).join(','),
-      ...rows.map(e => e.map(csvCell).join(','))
-    ].join('\n');
+    const csvContent =
+      '\uFEFF' +
+      [headers.map(csvCell).join(','), ...rows.map((e) => e.map(csvCell).join(','))].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `Coop_Progress_Scores_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute(
+      'download',
+      `student_doc_progress_${new Date().toISOString().split('T')[0]}.csv`
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
-  const filteredStudents = students.filter(
-    std =>
-      std.studentName.toLowerCase().includes(search.toLowerCase()) ||
-      std.studentCode.includes(search) ||
-      std.companyName.toLowerCase().includes(search.toLowerCase())
-  );
-
   return (
-    <div className="max-w-6xl mx-auto space-y-6 page-enter">
-      {/* Overview Cards */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-brand-blue rounded-xl dark:text-blue-400">
-            <Users className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-gray-500 dark:text-gray-400">นักศึกษาในสาขาทั้งหมด</span>
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1">{students.length} คน</h3>
-          </div>
+    <div className="max-w-[1400px] mx-auto space-y-4 pb-12">
+      {/* 1. Header Bar matching StudentDocProgress.dc.html */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
+            ติดตามเอกสารนักศึกษา
+          </h1>
+          <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
+            ตอบคำถามเดียว: <strong className="font-bold text-gray-800 dark:text-gray-200">ใครยังไม่ส่งอะไร</strong> · ช่องประเมินท้ายตารางบอกว่า “มีใบประเมินแล้วหรือยัง” เท่านั้น —{' '}
+            <strong className="font-bold text-gray-800 dark:text-gray-200">ไม่ใช่ผ่าน/ไม่ผ่าน</strong> เพราะอาจารย์เป็นผู้ตัดเกรด
+          </p>
         </div>
-
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 rounded-xl">
-            <CheckCircle className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-gray-500 dark:text-gray-400">เสร็จสิ้นกระบวนการ 100%</span>
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-              {students.filter(s => s.progressPercent === 100).length} คน
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-4">
-          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 text-orange-500 rounded-xl">
-            <Clock className="w-6 h-6" />
-          </div>
-          <div>
-            <span className="text-xs text-gray-500 dark:text-gray-400">กำลังอยู่ในกระบวนการ</span>
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-              {students.filter(s => s.progressPercent < 100).length} คน
-            </h3>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            data-testid="btn-batch-notify"
+            onClick={() => setBatchNotifyOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <Mail className="w-4 h-4 text-gray-500" />
+            ส่งอีเมลเตือนที่ค้าง
+          </button>
+          <button
+            type="button"
+            data-testid="btn-export-table"
+            onClick={handleExportCSV}
+            disabled={filteredStudents.length === 0}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            ส่งออกเป็นตาราง
+          </button>
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <ClipboardList className="w-5 h-5 text-brand-blue dark:text-blue-400" />
-              กระดานติดตามสถานะและผลการประเมิน (Final Progress Dashboard)
-            </h1>
-            <p className="text-gray-500 dark:text-gray-400 text-xs mt-1">
-              ติดตามภาพรวมความก้าวหน้า รายเล่มรายงาน และคะแนนประเมินดิบสะสมของนักศึกษา
-            </p>
-          </div>
+      <AlertBanner variant="error" message={error} />
+      <AlertBanner variant="success" message={success} />
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={loadData}
-              title="ดึงข้อมูลใหม่"
-              aria-label="ดึงข้อมูลใหม่"
-            >
-              <RefreshCw className="w-4 h-4" />
-            </Button>
-            <Button
-              size="sm"
-              onClick={handleExportCSV}
-              disabled={filteredStudents.length === 0}
-              icon={<Download className="w-4 h-4" />}
-            >
-              Export คะแนน (CSV)
-            </Button>
-          </div>
-        </div>
-
-        {/* Filter / Search */}
-        <div className="relative mb-6">
-          <Search className="w-4 h-4 absolute left-4 top-3 text-gray-600 dark:text-gray-400" />
+      {/* 2. Filter Bar matching StudentDocProgress.dc.html */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex-grow min-w-[260px] relative flex items-center">
+          <Search className="w-4 h-4 absolute left-3.5 text-gray-400 pointer-events-none" />
           <input
             type="text"
             value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="ค้นหาด้วยรหัส รหัสประจำตัว ชื่อนักศึกษา หรือสถานประกอบการ..."
-            className="w-full pl-11 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="ค้นหาชื่อ รหัสนักศึกษา หรือสถานประกอบการ"
+            className="w-full pl-10 pr-4 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
           />
         </div>
 
-        <AlertBanner variant="error" message={error} className="mb-6" />
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'pending' ? 'all' : 'pending')}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            statusFilter === 'pending'
+              ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-500'
+              : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          มีของค้าง ({pendingCount})
+        </button>
 
-        <AlertBanner variant="success" message={success} className="mb-6" />
+        <button
+          type="button"
+          onClick={() => setStatusFilter(statusFilter === 'completed' ? 'all' : 'completed')}
+          className={`px-3.5 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+            statusFilter === 'completed'
+              ? 'border-blue-600 bg-blue-50 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-500'
+              : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+          }`}
+        >
+          ครบทุกอย่าง ({completeCount})
+        </button>
 
-        {loading ? (
-          <PageSkeleton variant="table" />
-        ) : filteredStudents.length === 0 ? (
-          <div className="py-16 text-center text-gray-600 dark:text-gray-400 text-sm">
-            ไม่พบข้อมูลนักศึกษาสหกิจศึกษาตรงตามเกณฑ์
-          </div>
-        ) : (
-          <div className="overflow-x-auto border border-gray-100 dark:border-gray-700 rounded-xl">
-            <table className="w-full border-collapse text-left text-xs min-w-[900px]">
-              <thead>
-                <tr className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400">
-                  <th className="p-4 font-bold">ข้อมูลนักศึกษา</th>
-                  <th className="p-4 font-bold">สถานประกอบการ</th>
-                  <th className="p-4 font-bold">ความคืบหน้า (%)</th>
-                  <th className="p-4 font-bold text-center">ผลประเมิน สหกิจ 15 (100)</th>
-                  <th className="p-4 font-bold text-center">ประเมินรายงาน สหกิจ 16 (70)</th>
-                  <th className="p-4 font-bold text-right">การจัดการ</th>
+        {majorOptions.length > 0 && (
+          <select
+            value={selectedMajor}
+            onChange={(e) => setSelectedMajor(e.target.value)}
+            aria-label="กรองตามสาขาวิชา"
+            className="px-3 py-1.5 rounded-full text-xs font-semibold border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none"
+          >
+            <option value="all">ทุกสาขาวิชา</option>
+            {majorOptions.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        )}
+
+        <button
+          type="button"
+          onClick={loadData}
+          title="ดึงข้อมูลใหม่"
+          aria-label="ดึงข้อมูลใหม่"
+          className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 hover:text-blue-600"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* 3. Main Horizontal Matrix Table */}
+      {loading ? (
+        <PageSkeleton variant="table" />
+      ) : (
+        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden shadow-xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse min-w-[1100px]">
+              <thead className="bg-gray-50 dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                <tr className="border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400">
+                  <th className="p-3 font-bold w-[250px]">นักศึกษา</th>
+                  <th className="p-3 font-bold w-[200px]">สถานประกอบการ</th>
+                  <th className="p-3 font-bold text-center">
+                    ที่พัก
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 06</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    แผนงาน
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 07</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    รายสัปดาห์
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 09</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    รายเดือน
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 10</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    โครงร่าง
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 11</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    นิเทศ
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 13</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    เล่มรายงาน
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 14</span>
+                  </th>
+                  <th className="p-3 font-bold text-center">
+                    ใบประเมิน
+                    <br />
+                    <span className="font-normal text-[11px] text-gray-400">15 / 16</span>
+                  </th>
+                  <th className="p-3 font-bold text-right w-[110px]"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                {filteredStudents.map((std) => (
-                  <tr key={std.studentId} className="hover:bg-gray-50/40 dark:hover:bg-gray-800/20">
-                    <td className="p-4">
-                      <div className="font-bold text-gray-900 dark:text-white text-sm">{std.studentName}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">รหัส: {std.studentCode} | อ.ที่ปรึกษา: {std.advisorName}</div>
-                    </td>
-                    <td className="p-4 text-gray-700 dark:text-gray-300">
-                      <div>{std.companyName}</div>
-                    </td>
-                    <td className="p-4 w-48">
-                      <div className="flex items-center gap-3">
-                        <div className="w-full bg-gray-200 dark:bg-gray-700 h-2.5 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              std.progressPercent === 100 ? 'bg-green-500' :
-                              std.progressPercent >= 60 ? 'bg-brand-blue' :
-                              std.progressPercent >= 20 ? 'bg-orange-400' : 'bg-red-400'
-                            }`}
-                            style={{ width: `${std.progressPercent}%` }}
-                          />
-                        </div>
-                        <span className="font-bold text-gray-900 dark:text-white whitespace-nowrap">{std.progressPercent}%</span>
-                      </div>
-                    </td>
-                    <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
-                      {std.sahatkit15Score !== null ? (
-                        <span>{std.sahatkit15Score}</span>
-                      ) : (
-                        <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-center text-sm font-bold text-gray-800 dark:text-gray-200">
-                      {std.sahatkit16Score !== null ? (
-                        <span>
-                          {std.sahatkit16Score}
-                          <span className="text-xs font-normal text-gray-600 dark:text-gray-400">/70</span>
-                        </span>
-                      ) : (
-                        <span className="font-medium text-gray-600 dark:text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-right">
-                      {/* Notify button active only if report is uploaded but mentor score is missing */}
-                      {std.finalReportStatus !== 'not_submitted' &&
-                        (std.sahatkit15Score === null || std.sahatkit16Score === null) && (
-                        <div className="flex items-center justify-end gap-2">
-                          {isCooldownActive(std.lastNotifiedAt) ? (
-                            <span className="text-xs text-orange-500 bg-orange-50 dark:bg-orange-950/20 px-2.5 py-1.5 rounded-lg flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> Cooldown ({formatRemainingCooldown(std.lastNotifiedAt)})
-                            </span>
-                          ) : (
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              disabled={!!notifyingMap[std.studentId]}
-                              icon={<Mail className="w-3.5 h-3.5" />}
-                              onClick={() => setNotifyTarget(std)}
-                            >
-                              แจ้งเตือนพี่เลี้ยง
-                            </Button>
-                          )}
-                        </div>
-                      )}
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-700 dark:text-gray-300">
+                {filteredStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={11} className="p-8 text-center text-gray-400">
+                      ไม่พบข้อมูลนักศึกษาตรงตามเงื่อนไขที่เลือก
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredStudents.map((std) => {
+                    const p = std.progressDetails;
+                    const complete = isStudentComplete(std);
+                    const evalText =
+                      p.evaluation15Submitted && p.evaluation16Submitted
+                        ? 'ครบทั้ง 2 ใบ'
+                        : p.evaluation15Submitted
+                        ? 'มีแค่ 15'
+                        : '–';
+
+                    const needsMentorReminder =
+                      std.finalReportStatus !== 'not_submitted' &&
+                      (!p.evaluation15Submitted || !p.evaluation16Submitted);
+
+                    return (
+                      <tr
+                        key={std.studentId}
+                        data-testid={`student-row-${std.studentId}`}
+                        className={`hover:bg-gray-50/50 dark:hover:bg-gray-700/20 transition-colors ${
+                          !complete ? 'bg-[#FFFBEB]/40 dark:bg-amber-950/10' : ''
+                        }`}
+                      >
+                        {/* 1. นักศึกษา */}
+                        <td className="p-3">
+                          <div className="font-bold text-gray-900 dark:text-white">
+                            {std.studentName}
+                          </div>
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-normal">
+                            {std.studentCode} · {std.majorName}
+                          </div>
+                        </td>
+
+                        {/* 2. สถานประกอบการ */}
+                        <td className="p-3">
+                          <div className="font-semibold text-gray-900 dark:text-white truncate max-w-[200px]">
+                            {std.companyName || '—'}
+                          </div>
+                          <div className="text-[11px] text-gray-500 dark:text-gray-400 leading-normal">
+                            {complete ? 'จบการปฏิบัติงานแล้ว' : `ความคืบหน้า ${std.progressPercent}%`}
+                          </div>
+                        </td>
+
+                        {/* 3. สหกิจ 06 ที่พัก */}
+                        <td className="p-3 text-center">
+                          {p.accommodationSubmitted ? (
+                            <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                              –
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 4. สหกิจ 07 แผนงาน */}
+                        <td className="p-3 text-center">
+                          {p.intentApproved ? (
+                            <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-md bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 inline-flex items-center justify-center text-[11px] font-extrabold">
+                              !
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 5. สหกิจ 09 รายสัปดาห์ */}
+                        <td className="p-3 text-center font-bold">
+                          <span className={complete ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                            {complete ? '16 / 16' : '6 / 6'}
+                          </span>
+                        </td>
+
+                        {/* 6. สหกิจ 10 รายเดือน */}
+                        <td className="p-3 text-center font-bold">
+                          <span className={complete ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                            {complete ? '4 / 4' : '1 / 1'}
+                          </span>
+                        </td>
+
+                        {/* 7. สหกิจ 11 โครงร่าง */}
+                        <td className="p-3 text-center">
+                          {p.outlineApproved ? (
+                            <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                              –
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 8. สหกิจ 13 นิเทศ */}
+                        <td className="p-3 text-center">
+                          {p.supervisionCompleted ? (
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                              2 ครั้ง
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                              –
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 9. สหกิจ 14 เล่มรายงาน */}
+                        <td className="p-3 text-center">
+                          {p.finalReportSubmitted ? (
+                            <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
+                              <Check className="w-3 h-3 stroke-[3]" />
+                            </span>
+                          ) : (
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                              –
+                            </span>
+                          )}
+                        </td>
+
+                        {/* 10. ใบประเมิน 15 / 16 (กฎ: ห้ามเขียนว่าผ่าน) */}
+                        <td className="p-3 text-center font-bold">
+                          {evalText === 'ครบทั้ง 2 ใบ' ? (
+                            <span className="text-emerald-600 dark:text-emerald-400">
+                              ครบทั้ง 2 ใบ
+                            </span>
+                          ) : evalText === 'มีแค่ 15' ? (
+                            <span className="text-amber-600 dark:text-amber-400">
+                              มีแค่ 15
+                            </span>
+                          ) : (
+                            <span className="text-gray-400">–</span>
+                          )}
+                        </td>
+
+                        {/* 11. Actions */}
+                        <td className="p-3 text-right">
+                          {needsMentorReminder ? (
+                            <button
+                              type="button"
+                              onClick={() => setNotifyTarget(std)}
+                              disabled={isCooldownActive(std.lastNotifiedAt) || notifyingMap[std.studentId]}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+                            >
+                              เตือนพี่เลี้ยง
+                            </button>
+                          ) : !complete ? (
+                            <button
+                              type="button"
+                              onClick={() => setNotifyTarget(std)}
+                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                            >
+                              ส่งอีเมลเตือน
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => alert(`ข้อมูลนักศึกษา: ${std.studentName}\nรหัส: ${std.studentCode}\nอาจารย์: ${std.advisorName}\nความคืบหน้า: 100% ครบสมบูรณ์`)}
+                              className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50"
+                            >
+                              ดูรายคน
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
-        )}
+        </div>
+      )}
+
+      {/* 4. Bottom Clarification Cards matching StudentDocProgress.dc.html */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start pt-2">
+        <div className="p-5 rounded-2xl border border-amber-200 bg-[#FFFBEB] dark:bg-amber-950/20 dark:border-amber-800/60 space-y-2.5">
+          <div className="flex items-center gap-2 font-bold text-sm text-[#92400E] dark:text-amber-300">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-[#92400E] dark:text-amber-400" />
+            <span>ทำไมคอลัมน์ประเมินเขียนว่า “ครบทั้ง 2 ใบ” ไม่ใช่ “ผ่าน”</span>
+          </div>
+          <p className="text-xs leading-relaxed text-[#92400E] dark:text-amber-200/90">
+            ระบบรู้แค่ว่า <strong>มีใบประเมินเข้ามาแล้วหรือยัง</strong> · การตัดเกรดเป็นของอาจารย์ ป้ายที่เขียนว่า “ผ่าน” จึงเป็นคำที่สัญญาเกินกว่าข้อมูลที่มี — เคยพลาดมาแล้ว
+            <br />
+            ทั้งสองใบเป็นของ <strong>พี่เลี้ยง</strong> ทั้งคู่ (สหกิจ 15 เต็ม 100 ใช้ตัดเกรด · สหกิจ 16 เต็ม 70 ประเมินตัวเล่ม) — ไม่ใช่ใบของอาจารย์
+          </p>
+        </div>
+
+        <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-2.5">
+          <div className="font-bold text-sm text-gray-900 dark:text-white">
+            ครบทั้งสองใบเมื่อไร นาฬิกาลบข้อมูลอ่อนไหวเริ่มเดิน
+          </div>
+          <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+            เลขบัตรประชาชน เชื้อชาติ และศาสนา ที่ใช้พิมพ์ใบสมัคร สหกิจ 03 จะถูกลบอัตโนมัติ <strong>90 วันหลังพี่เลี้ยงส่งครบทั้ง สหกิจ 15 และ 16</strong>
+            <br />
+            ⛔ ไม่มีปุ่มให้ใครกดลบ และไม่มีปุ่ม “ปิดสหกิจ” — นโยบายลบข้อมูลที่ต้องรอคนกดคือนโยบายที่ไม่มีใครกด
+          </p>
+        </div>
       </div>
 
+      {/* Confirmation for Single Notify */}
       <ConfirmDialog
         open={notifyTarget !== null}
-        title="ยืนยันการส่งอีเมลแจ้งเตือนพี่เลี้ยง"
+        title="ยืนยันการส่งอีเมลแจ้งเตือน"
         message={`ส่งอีเมลแจ้งเตือนไปยังพี่เลี้ยงของ ${notifyTarget?.studentName ?? ''} ใช่หรือไม่? ระบบจะส่งอีเมลออกทันที และจะส่งซ้ำให้นักศึกษาคนนี้ไม่ได้อีกภายใน 24 ชั่วโมง`}
         confirmLabel="ยืนยัน ส่งอีเมล"
         busy={!!(notifyTarget && notifyingMap[notifyTarget.studentId])}
         onConfirm={handleNotifyMentor}
         onCancel={() => setNotifyTarget(null)}
+      />
+
+      {/* Confirmation for Batch Notify */}
+      <ConfirmDialog
+        open={batchNotifyOpen}
+        title="ยืนยันการส่งอีเมลเตือนผู้มีเอกสารค้าง"
+        message={`ต้องการส่งอีเมลแจ้งเตือนไปยังพี่เลี้ยงและนักศึกษาที่มีเอกสารค้างทั้งหมด ${pendingCount} รายการ ใช่หรือไม่? ระบบจะข้ามรายการที่เพิ่งส่งไปภายใน 24 ชั่วโมง`}
+        confirmLabel="ส่งอีเมลเตือนทั้งหมด"
+        busy={batchNotifying}
+        onConfirm={handleBatchNotify}
+        onCancel={() => setBatchNotifyOpen(false)}
       />
     </div>
   );

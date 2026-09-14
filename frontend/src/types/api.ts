@@ -113,21 +113,50 @@ export interface UserRow {
   email: string;
   is_active: boolean;
   roles: string[];
+  is_invited?: boolean;
+  is_password_set?: boolean;
 }
 
 /** สาขาวิชาใน master data */
 export interface MajorOption {
   major_id: number;
   major_name_th: string;
+  major_code?: string;
+}
+
+/**
+ * คณะ — แถวเต็มจาก `GET /api/master-data` (SB7)
+ *
+ * `major_count` / `student_count` เป็นคีย์ที่เพิ่มเข้ามาทีหลัง (2026-09-10) เพื่อให้
+ * หน้าจอปิดปุ่มลบได้เองโดยไม่ต้องยิงคำขอทีละแถว · เป็น optional เพราะ endpoint
+ * เดิมไม่เคยส่งมา — โค้ดที่อ่านต้องเผื่อ `undefined` ไม่ใช่ถือว่าเป็น 0
+ */
+export interface FacultyRow {
+  faculty_id: number;
+  faculty_name_th: string;
+  major_count?: number;
+  student_count?: number;
+}
+
+/** สาขาวิชา — แถวเต็มจาก `GET /api/master-data` (SB7) */
+export interface MajorRow {
+  major_id: number;
+  faculty_id: number;
+  faculty_name_th: string;
+  major_code: string;
+  major_name_th: string;
+  student_count?: number;
 }
 
 /** แถวรายชื่อบุคลากรที่นำเข้าไว้ล่วงหน้า รอการ claim */
 export interface PreseedPersonnelRow {
+  preseed_id?: number | string;
   employee_code: string;
   first_name: string;
   last_name: string;
   role_name: string;
   major_name_th?: string | null;
+  email?: string | null;
   is_claimed: boolean;
 }
 
