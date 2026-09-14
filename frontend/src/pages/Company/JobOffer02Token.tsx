@@ -170,8 +170,8 @@ const JobOffer02Token: React.FC = () => {
       try {
         setErrorMessage(null);
 
-        const res = await api.get(`/public/job-offer?token=${encodeURIComponent(token)}`);
-        const data = res.data;
+        // ⛔ /public/job-offer คืน body ตรง ๆ ไม่มี `.data` ห่ออีกชั้น (ต่างจาก endpoint อื่นในไฟล์นี้)
+        const data = await api.get(`/public/job-offer?token=${encodeURIComponent(token)}`);
 
         if (data?.status === 'submitted') {
           setStatus('submitted');

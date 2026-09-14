@@ -66,31 +66,44 @@ interface WorkPlanTopic {
   months: number[];
 }
 
+// เดือนจริงจาก backend เป็นตัวเลขล้วน (ปี ค.ศ. + เดือน) — หน้าจอเป็นคนแปลงเป็นชื่อเดือนไทย/พ.ศ. เอง
 interface WorkPlanMonth {
   index: number;
-  label: string;
-  shortLabel?: string;
+  year: number;
+  month: number;
 }
 
 interface WorkPlanApproval {
+  approver_role: string;
   status: 'pending' | 'approved' | 'rejected';
-  approved_at?: string;
-  comment?: string;
-  approver_name?: string;
+  approved_at?: string | null;
+  comment?: string | null;
+  created_at?: string;
+  approver_name?: string | null;
+}
+
+interface WorkPlanWeeklyItem {
+  week_number: number;
+  start_date: string | null;
+  end_date: string | null;
+  tasks: string | null;
 }
 
 interface WorkPlanData {
-  student?: {
-    full_name?: string;
+  student: {
+    student_id?: number;
     student_code?: string;
-    major_name_th?: string;
-    faculty_name_th?: string;
-    company_name?: string;
+    full_name?: string;
+    major_name_th?: string | null;
+    faculty_name_th?: string | null;
+    company_name?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
   };
   months: WorkPlanMonth[];
   topics: WorkPlanTopic[];
-  weekly_plans?: Array<{ week_number: number; task_description: string }>;
-  student_signed_at?: string;
+  weekly: WorkPlanWeeklyItem[];
+  student_signed_at: string | null;
   approvals: {
     mentor?: WorkPlanApproval;
     advisor?: WorkPlanApproval;
@@ -106,6 +119,9 @@ interface FinalReportDraft {
   reviewer_comment: string | null;
   submitted_at: string;
   reviewed_at: string | null;
+  report_title: string | null;
+  draft_due_date: string | null;
+  is_overdue: boolean;
 }
 
 const MentorCertify: React.FC = () => {
@@ -148,6 +164,16 @@ const MentorCertify: React.FC = () => {
   const [outlineTopic, setOutlineTopic] = useState<string>('');
   const [draftComment, setDraftComment] = useState<string>('');
   const [isDraftReviewing, setIsDraftReviewing] = useState<boolean>(false);
+
+  // เดือนจาก backend เป็นเลข 1–12 ล้วน (ไม่ได้ผูกกับปฏิทินตายตัวว่าเริ่ม พ.ย.) — แปลงเป็นชื่อย่อไทย + ปี พ.ศ. ที่นี่
+  const THAI_MONTH_SHORT = [
+    '', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
+    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
+  ];
+  const formatMonthColumn = (m: WorkPlanMonth) => {
+    const shortLabel = `${THAI_MONTH_SHORT[m.month] || '–'} ${String((m.year + 543) % 100).padStart(2, '0')}`;
+    return { label: `เดือนที่ ${m.index}`, shortLabel };
+  };
 
   // Format date helper
   const formatThaiDate = (dateStr?: string | null) => {
@@ -301,167 +327,35 @@ const MentorCertify: React.FC = () => {
   }, []);
 
   // Load work plan for current student (Tab 2)
+  // ⛔ เส้นเดียวคือ GET /students/:id/work-plan — ไม่มีทาง fallback ไปที่อื่นและไม่มีการแต่งข้อมูลปลอม
+  //    ไม่มีหัวข้อ/ไม่มีเดือน = EmptyState ที่ฝั่ง render (ดู activeTab === 'plan' ด้านล่าง)
   const loadStudentWorkPlan = useCallback(async (studentId: number) => {
     try {
       setError(null);
-      // Try GET /students/:id/work-plan
-      const res = await api.get(`/students/${studentId}/work-plan`).catch(() => null);
-      if (res?.data) {
-        setWorkPlan(res.data);
-      } else {
-        // Fallback to accommodation-plan
-        const accRes = await api.get(`/students/${studentId}/accommodation-plan`).catch(() => null);
-        if (accRes?.data) {
-          const raw = accRes.data;
-          // Format matrix topics
-          const topics: WorkPlanTopic[] = (raw.monthly_plans || []).map((mp: { topic: string; month_index: number }, idx: number) => ({
-            topic_id: idx + 1,
-            seq: idx + 1,
-            topic: mp.topic || `งานที่ ${idx + 1}`,
-            months: [mp.month_index || idx + 1],
-          }));
-
-          const monthsCount = raw.months_count || 5;
-          const monthLabels = ['พ.ย.', 'ธ.ค.', 'ม.ค.', 'ก.พ.', 'มี.ค.'];
-          const months: WorkPlanMonth[] = Array.from({ length: monthsCount }, (_, i) => ({
-            index: i + 1,
-            label: `เดือนที่ ${i + 1}`,
-            shortLabel: monthLabels[i % monthLabels.length],
-          }));
-
-          const mentorApp = (raw.approvals || []).find((a: { approver_role: string }) => a.approver_role === 'mentor');
-
-          setWorkPlan({
-            student: {
-              full_name: raw.student?.first_name ? `${raw.student.first_name} ${raw.student.last_name}` : 'นักศึกษา',
-              student_code: raw.student?.student_code,
-              major_name_th: raw.student?.major_name_th,
-              faculty_name_th: 'บริหารธุรกิจและเทคโนโลยีสารสนเทศ',
-              company_name: raw.company_job_info?.company_name || 'สถานประกอบการ',
-            },
-            months,
-            topics: topics.length > 0 ? topics : [
-              { topic_id: 1, seq: 1, topic: 'ศึกษาระบบงานเดิมและเก็บความต้องการ', months: [1] },
-              { topic_id: 2, seq: 2, topic: 'ออกแบบและพัฒนาระบบตามที่ได้รับมอบหมาย', months: [2, 3] },
-              { topic_id: 3, seq: 3, topic: 'ทดสอบระบบร่วมกับผู้ใช้งานจริงและแก้ไข', months: [3, 4] },
-              { topic_id: 4, seq: 4, topic: 'จัดทำคู่มือการใช้งานและส่งมอบงาน', months: [4, 5] },
-              { topic_id: 5, seq: 5, topic: 'จัดทำรายงานฉบับสมบูรณ์และนำเสนอผลงาน', months: [5] },
-            ],
-            weekly_plans: raw.weekly_plans || [],
-            student_signed_at: raw.company_job_info?.submitted_at || '2026-08-01T09:00:00Z',
-            approvals: {
-              mentor: mentorApp
-                ? {
-                    status: mentorApp.status,
-                    approved_at: mentorApp.approved_at,
-                    comment: mentorApp.comment,
-                    approver_name: mentorApp.approver_name,
-                  }
-                : { status: 'pending' },
-            },
-          });
-        } else {
-          // Default plan matrix matching Spec 8.1
-          setWorkPlan({
-            student: {
-              full_name: selectedStudent?.full_name || 'นักศึกษา',
-              student_code: selectedStudent?.student_code || '640101001',
-              major_name_th: selectedStudent?.major_name_th || 'เทคโนโลยีสารสนเทศ',
-              faculty_name_th: 'บริหารธุรกิจและเทคโนโลยีสารสนเทศ',
-              company_name: 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด',
-            },
-            months: [
-              { index: 1, label: 'เดือนที่ 1', shortLabel: 'พ.ย.' },
-              { index: 2, label: 'เดือนที่ 2', shortLabel: 'ธ.ค.' },
-              { index: 3, label: 'เดือนที่ 3', shortLabel: 'ม.ค.' },
-              { index: 4, label: 'เดือนที่ 4', shortLabel: 'ก.พ.' },
-              { index: 5, label: 'เดือนที่ 5', shortLabel: 'มี.ค.' },
-            ],
-            topics: [
-              { topic_id: 1, seq: 1, topic: 'ศึกษาระบบงานเดิมของฝ่ายวางแผนและเก็บความต้องการ', months: [1] },
-              { topic_id: 2, seq: 2, topic: 'ออกแบบและพัฒนาหน้าจอรายงานยอดผลิตรายวัน', months: [2, 3] },
-              { topic_id: 3, seq: 3, topic: 'ทดสอบระบบร่วมกับผู้ใช้จริงและแก้ไขตามผลทดสอบ', months: [3, 4] },
-              { topic_id: 4, seq: 4, topic: 'จัดทำคู่มือการใช้งานและส่งมอบงานให้ฝ่ายวางแผน', months: [4, 5] },
-              { topic_id: 5, seq: 5, topic: 'จัดทำรายงานฉบับสมบูรณ์และนำเสนอผลงาน', months: [5] },
-            ],
-            weekly_plans: [
-              { week_number: 1, task_description: 'ปฐมนิเทศภายในบริษัท เรียนรู้ระบบความปลอดภัยและโครงสร้างฝ่ายผลิต' },
-              { week_number: 2, task_description: 'เก็บความต้องการจากฝ่ายวางแผน และเข้าถึงข้อมูลการผลิตย้อนหลัง' },
-              { week_number: 3, task_description: 'ออกแบบโครงสร้างข้อมูลของรายงาน และตกลงรูปแบบกับผู้ใช้' },
-            ],
-            student_signed_at: '2026-08-05T16:04:00Z',
-            approvals: {
-              mentor: { status: 'pending' },
-            },
-          });
-        }
-      }
+      const res = await api.get(`/students/${studentId}/work-plan`);
+      setWorkPlan(res);
     } catch (err) {
       console.error('Failed to load work plan:', err);
+      setWorkPlan(null);
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดแผนปฏิบัติงานได้'));
     }
-  }, [selectedStudent]);
+  }, []);
 
-  // Load report draft (Tab 3)
+  // Load report draft (Tab 3) — เส้นเดียวคือ GET /final-reports/mentor (spec-D 15.7 · B10)
+  // ⛔ ไม่มีการแต่งเวอร์ชัน/ไฟล์/ความเห็นปลอมอีกต่อไป — คืนเฉพาะร่างจริงของนักศึกษาคนนี้
+  //    หัวข้อรายงาน (report_title) มากับแถวนี้อยู่แล้ว ไม่ต้องยิง /outlines/company แยก
   const loadStudentDraft = useCallback(async (studentId: number) => {
     try {
       setError(null);
-      // Fetch report outlines for topic title
-      const outlineRes = await api.get('/outlines/company').catch(() => null);
-      if (outlineRes?.data?.data) {
-        const found = outlineRes.data.data.find(
-          (o: { student_id: number; topic_th?: string }) => o.student_id === studentId
-        );
-        if (found?.topic_th) setOutlineTopic(found.topic_th);
-      }
-
-      // Check pending items for report draft
-      const pendingRes = await api.get('/mentor/pending').catch(() => null);
-      const pendingItems = pendingRes?.data?.items || [];
-      const draftItem = pendingItems.find(
-        (it: { kind: string; student_id: number }) => it.kind === 'report_draft' && it.student_id === studentId
-      );
-
-      if (draftItem) {
-        setDrafts([
-          {
-            report_id: draftItem.id,
-            student_id: studentId,
-            version: 2,
-            file_path: 'coop-report-draft-v2.pdf',
-            status: 'pending',
-            reviewer_comment: null,
-            submitted_at: draftItem.submitted_at || '2026-09-07T12:00:00Z',
-            reviewed_at: null,
-          },
-          {
-            report_id: 999,
-            student_id: studentId,
-            version: 1,
-            file_path: 'coop-report-draft-v1.pdf',
-            status: 'rejected',
-            reviewer_comment:
-              'บทที่ 3 ยังไม่ได้ระบุว่าข้อมูลชุดไหนเป็นข้อมูลภายในที่ห้ามเผยแพร่ ขอให้ตัดตัวเลขยอดผลิตจริงออกก่อน',
-            submitted_at: '2026-08-20T10:00:00Z',
-            reviewed_at: '2026-08-22T14:30:00Z',
-          },
-        ]);
-      } else {
-        // Fallback default versions if no pending draft
-        setDrafts([
-          {
-            report_id: 14,
-            student_id: studentId,
-            version: 1,
-            file_path: 'coop-report-draft-v1.pdf',
-            status: 'pending',
-            reviewer_comment: null,
-            submitted_at: '2026-09-07T12:20:40Z',
-            reviewed_at: null,
-          },
-        ]);
-      }
+      const rows: FinalReportDraft[] = await api.get('/final-reports/mentor');
+      const studentDrafts = rows.filter((r) => r.student_id === studentId);
+      setDrafts(studentDrafts);
+      setOutlineTopic(studentDrafts[0]?.report_title || '');
     } catch (err) {
       console.error('Failed to load student draft:', err);
+      setDrafts([]);
+      setOutlineTopic('');
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดร่างรายงานได้'));
     }
   }, []);
 
@@ -546,7 +440,7 @@ const MentorCertify: React.FC = () => {
         items: selectedBatchIds,
       });
 
-      setSuccess(res.data?.message || `รับรองบันทึกที่เลือกเรียบร้อยแล้ว ${selectedBatchIds.length} รายการ`);
+      setSuccess(res?.message || `รับรองบันทึกที่เลือกเรียบร้อยแล้ว ${selectedBatchIds.length} รายการ`);
       setSelectedBatchIds([]);
       if (selectedStudent) {
         await loadStudentLogs(selectedStudent.student_id);
@@ -1117,218 +1011,248 @@ const MentorCertify: React.FC = () => {
         {/* Tab 2: Work Plan (07 Page 3) */}
         {activeTab === 'plan' && (
           <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            {/* Header info card */}
-            <div className="border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/60 dark:bg-gray-800/30 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                  ชื่อ – นามสกุล นักศึกษา
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                  {workPlan?.student?.full_name || selectedStudent?.full_name}
-                </span>
+            {!workPlan || workPlan.months.length === 0 ? (
+              <div className="p-12 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                <EmptyState
+                  title="ยังไม่มีวันเริ่ม/สิ้นสุดปฏิบัติงาน"
+                  description="ระบบยังคำนวณเดือนปฏิบัติงานไม่ได้ เพราะสถานประกอบการยังไม่ได้ยืนยันวันเริ่ม/สิ้นสุด"
+                />
               </div>
-              <div>
-                <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                  รหัสประจำตัวนักศึกษา
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                  {workPlan?.student?.student_code || selectedStudent?.student_code}
-                </span>
+            ) : workPlan.topics.length === 0 ? (
+              <div className="p-12 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                <EmptyState
+                  title="นักศึกษายังไม่ได้ส่งแผนปฏิบัติงาน"
+                  description="เมื่อนักศึกษากรอกและส่งแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) แล้ว รายการจะปรากฏที่นี่ให้ท่านตรวจและลงนาม"
+                />
               </div>
-              <div>
-                <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                  สาขาวิชา
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                  {workPlan?.student?.major_name_th || selectedStudent?.major_name_th}
-                </span>
-              </div>
-              <div className="sm:col-span-2 lg:col-span-3">
-                <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                  สถานประกอบการ
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">
-                  {workPlan?.student?.company_name || 'สถานประกอบการ'}
-                </span>
-              </div>
-            </div>
+            ) : (
+              <>
+                {/* Header info card */}
+                <div className="border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/60 dark:bg-gray-800/30 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
+                      ชื่อ – นามสกุล นักศึกษา
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {workPlan.student.full_name || selectedStudent?.full_name}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
+                      รหัสประจำตัวนักศึกษา
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {workPlan.student.student_code || selectedStudent?.student_code}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
+                      สาขาวิชา
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {workPlan.student.major_name_th || selectedStudent?.major_name_th}
+                    </span>
+                  </div>
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
+                      สถานประกอบการ
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">
+                      {workPlan.student.company_name || '–'}
+                    </span>
+                  </div>
+                </div>
 
-            {/* Matrix Table */}
-            <div className="space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-                <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  เมทริกซ์หัวข้องาน × เดือนที่ปฏิบัติงาน
-                </h3>
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  จำนวนเดือนคำนวณจากวันจริง ไม่ได้ตายตัวที่ 4 เดือน (สเปก D ข้อ 8.1)
-                </span>
-              </div>
+                {/* Matrix Table */}
+                <div className="space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
+                      เมทริกซ์หัวข้องาน × เดือนที่ปฏิบัติงาน
+                    </h3>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      จำนวนเดือนคำนวณจากวันจริง ไม่ได้ตายตัวที่ 4 เดือน (สเปก D ข้อ 8.1)
+                    </span>
+                  </div>
 
-              <div
-                data-testid="plan-matrix"
-                className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs"
-              >
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-sm">
-                    <thead>
-                      <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-600 dark:text-gray-300">
-                        <th className="py-3.5 px-4 w-12 text-center">ลำดับ</th>
-                        <th className="py-3.5 px-4">หัวข้องาน</th>
-                        {workPlan?.months.map((m) => (
-                          <th key={m.index} className="py-3.5 px-3 text-center w-24">
-                            {m.label}
-                            {m.shortLabel && (
-                              <span className="block text-2xs font-normal text-gray-400">
-                                ({m.shortLabel})
-                              </span>
-                            )}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {workPlan?.topics.map((t) => (
-                        <tr
-                          key={t.seq}
-                          data-testid={`plan-topic-${t.seq}`}
-                          className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20"
-                        >
-                          <td className="py-3.5 px-4 text-center font-bold text-gray-500 text-xs">
-                            {t.seq}
-                          </td>
-                          <td className="py-3.5 px-4 font-semibold text-gray-900 dark:text-gray-100">
-                            {t.topic}
-                          </td>
-                          {workPlan.months.map((m) => {
-                            const isMarked = t.months.includes(m.index);
-                            return (
-                              <td
-                                key={m.index}
-                                data-testid={`plan-cell-${t.seq}-${m.index}`}
-                                className="py-3.5 px-3 text-center"
-                              >
-                                {isMarked ? (
-                                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-900/40 text-brand-blue dark:text-blue-400">
-                                    <Check className="w-4 h-4 stroke-[3]" />
+                  <div
+                    data-testid="plan-matrix"
+                    className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs"
+                  >
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-sm">
+                        <thead>
+                          <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-600 dark:text-gray-300">
+                            <th className="py-3.5 px-4 w-12 text-center">ลำดับ</th>
+                            <th className="py-3.5 px-4">หัวข้องาน</th>
+                            {workPlan.months.map((m) => {
+                              const col = formatMonthColumn(m);
+                              return (
+                                <th key={m.index} className="py-3.5 px-3 text-center w-24">
+                                  {col.label}
+                                  <span className="block text-2xs font-normal text-gray-400">
+                                    ({col.shortLabel})
                                   </span>
-                                ) : (
-                                  <span className="text-gray-300 dark:text-gray-600 font-bold">–</span>
-                                )}
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                          {workPlan.topics.map((t) => (
+                            <tr
+                              key={t.seq}
+                              data-testid={`plan-topic-${t.seq}`}
+                              className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20"
+                            >
+                              <td className="py-3.5 px-4 text-center font-bold text-gray-500 text-xs">
+                                {t.seq}
                               </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Expandable weekly plans if available */}
-            {workPlan?.weekly_plans && workPlan.weekly_plans.length > 0 && (
-              <details className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-gray-50/30 dark:bg-gray-800/20">
-                <summary className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                  ดูแผนรายสัปดาห์ประกอบ (ข้อมูลสนับสนุน ไม่ได้พิมพ์ลงหน้า 3)
-                </summary>
-                <div className="mt-3 space-y-2 text-xs text-gray-600 dark:text-gray-400">
-                  {workPlan.weekly_plans.map((wp) => (
-                    <div key={wp.week_number} className="flex gap-2">
-                      <span className="font-bold shrink-0">สัปดาห์ที่ {wp.week_number}:</span>
-                      <span>{wp.task_description}</span>
+                              <td className="py-3.5 px-4 font-semibold text-gray-900 dark:text-gray-100">
+                                {t.topic}
+                              </td>
+                              {workPlan.months.map((m) => {
+                                const isMarked = t.months.includes(m.index);
+                                return (
+                                  <td
+                                    key={m.index}
+                                    data-testid={`plan-cell-${t.seq}-${m.index}`}
+                                    className="py-3.5 px-3 text-center"
+                                  >
+                                    {isMarked ? (
+                                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-900/40 text-brand-blue dark:text-blue-400">
+                                        <Check className="w-4 h-4 stroke-[3]" />
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-300 dark:text-gray-600 font-bold">–</span>
+                                    )}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  ))}
+                  </div>
                 </div>
-              </details>
-            )}
 
-            {/* Signatures Section */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              {/* Student Signature */}
-              <div
-                data-testid="plan-sign-student"
-                className="border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20 rounded-xl p-4 space-y-1.5"
-              >
-                <span className="text-xs font-bold text-green-700 dark:text-green-400 block">
-                  ฝ่ายนักศึกษา
-                </span>
-                <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                  {workPlan?.student?.full_name || selectedStudent?.full_name}
-                </span>
-                <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                  <CheckCircle className="w-3.5 h-3.5" />
-                  ยืนยันแผนนี้แล้วเมื่อ {formatThaiDateTime(workPlan?.student_signed_at)}
-                </span>
-              </div>
-
-              {/* Mentor Signature */}
-              <div
-                data-testid="plan-sign-mentor"
-                className={`border rounded-xl p-4 space-y-1.5 ${
-                  workPlan?.approvals.mentor?.status === 'approved'
-                    ? 'border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20'
-                    : 'border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20'
-                }`}
-              >
-                <span
-                  className={`text-xs font-bold block ${
-                    workPlan?.approvals.mentor?.status === 'approved'
-                      ? 'text-green-700 dark:text-green-400'
-                      : 'text-amber-700 dark:text-amber-400'
-                  }`}
-                >
-                  ฝ่ายพนักงานที่ปรึกษา (พี่เลี้ยง)
-                </span>
-                {workPlan?.approvals.mentor?.status === 'approved' ? (
-                  <>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                      {workPlan.approvals.mentor.approver_name || 'ลงนามแล้ว'}
-                    </span>
-                    <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      ลงนามรับรองแล้วเมื่อ {formatThaiDateTime(workPlan.approvals.mentor.approved_at)}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                      รอท่านลงนาม
-                    </span>
-                    <span className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed block">
-                      เมื่อท่านลงนาม แผนงานนี้จะถูกส่งต่อไปยังอาจารย์ที่ปรึกษาเพื่อพิจารณาต่อโดยอัตโนมัติ
-                    </span>
-                  </>
+                {/* Expandable weekly plans if available */}
+                {workPlan.weekly.length > 0 && (
+                  <details className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-gray-50/30 dark:bg-gray-800/20">
+                    <summary className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
+                      ดูแผนรายสัปดาห์ประกอบ (ข้อมูลสนับสนุน ไม่ได้พิมพ์ลงหน้า 3)
+                    </summary>
+                    <div className="mt-3 space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                      {workPlan.weekly.map((wp) => (
+                        <div key={wp.week_number} className="flex gap-2">
+                          <span className="font-bold shrink-0">สัปดาห์ที่ {wp.week_number}:</span>
+                          <span>{wp.tasks || '–'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 )}
-              </div>
-            </div>
 
-            {/* Actions for Work Plan */}
-            {workPlan?.approvals.mentor?.status !== 'approved' && (
-              <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  ท่านเป็นด่านแรก · อาจารย์ที่ปรึกษาจะเห็นแผนนี้หลังจากท่านลงนามแล้วเท่านั้น
-                </span>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="secondary"
-                    data-testid="plan-reject"
-                    disabled={isPlanApproving || isPlanRejecting}
-                    onClick={() => setIsPlanRejectModalOpen(true)}
-                    className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                {/* Signatures Section */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                  {/* Student Signature */}
+                  <div
+                    data-testid="plan-sign-student"
+                    className="border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20 rounded-xl p-4 space-y-1.5"
                   >
-                    ขอให้นักศึกษาแก้ไข
-                  </Button>
-                  <Button
-                    variant="primary"
-                    data-testid="plan-approve"
-                    disabled={isPlanApproving || isPlanRejecting}
-                    onClick={handleApproveWorkPlan}
-                    className="shadow-sm"
+                    <span className="text-xs font-bold text-green-700 dark:text-green-400 block">
+                      ฝ่ายนักศึกษา
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white block">
+                      {workPlan.student.full_name || selectedStudent?.full_name}
+                    </span>
+                    {workPlan.student_signed_at ? (
+                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        ยืนยันแผนนี้แล้วเมื่อ {formatThaiDateTime(workPlan.student_signed_at)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        ยังไม่ได้ส่งให้ท่านลงนาม
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Mentor Signature */}
+                  <div
+                    data-testid="plan-sign-mentor"
+                    className={`border rounded-xl p-4 space-y-1.5 ${
+                      workPlan.approvals.mentor?.status === 'approved'
+                        ? 'border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20'
+                        : 'border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20'
+                    }`}
                   >
-                    {isPlanApproving ? 'กำลังลงนาม...' : 'ลงนามรับรองแผนนี้'}
-                  </Button>
+                    <span
+                      className={`text-xs font-bold block ${
+                        workPlan.approvals.mentor?.status === 'approved'
+                          ? 'text-green-700 dark:text-green-400'
+                          : 'text-amber-700 dark:text-amber-400'
+                      }`}
+                    >
+                      ฝ่ายพนักงานที่ปรึกษา (พี่เลี้ยง)
+                    </span>
+                    {workPlan.approvals.mentor?.status === 'approved' ? (
+                      <>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white block">
+                          {workPlan.approvals.mentor.approver_name || 'ลงนามแล้ว'}
+                        </span>
+                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          ลงนามรับรองแล้วเมื่อ {formatThaiDateTime(workPlan.approvals.mentor.approved_at)}
+                        </span>
+                      </>
+                    ) : !workPlan.student_signed_at ? (
+                      <span className="text-sm font-bold text-gray-900 dark:text-white block">
+                        รอนักศึกษาส่งแผนงานก่อน
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-gray-900 dark:text-white block">
+                          รอท่านลงนาม
+                        </span>
+                        <span className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed block">
+                          เมื่อท่านลงนาม แผนงานนี้จะถูกส่งต่อไปยังอาจารย์ที่ปรึกษาเพื่อพิจารณาต่อโดยอัตโนมัติ
+                        </span>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
+
+                {/* Actions for Work Plan — กดได้ก็ต่อเมื่อนักศึกษาส่งแล้วเท่านั้น */}
+                {workPlan.approvals.mentor?.status !== 'approved' && workPlan.student_signed_at && (
+                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      ท่านเป็นด่านแรก · อาจารย์ที่ปรึกษาจะเห็นแผนนี้หลังจากท่านลงนามแล้วเท่านั้น
+                    </span>
+                    <div className="flex items-center gap-3">
+                      <Button
+                        variant="secondary"
+                        data-testid="plan-reject"
+                        disabled={isPlanApproving || isPlanRejecting}
+                        onClick={() => setIsPlanRejectModalOpen(true)}
+                        className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                      >
+                        ขอให้นักศึกษาแก้ไข
+                      </Button>
+                      <Button
+                        variant="primary"
+                        data-testid="plan-approve"
+                        disabled={isPlanApproving || isPlanRejecting}
+                        onClick={handleApproveWorkPlan}
+                        className="shadow-sm"
+                      >
+                        {isPlanApproving ? 'กำลังลงนาม...' : 'ลงนามรับรองแผนนี้'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -1343,7 +1267,7 @@ const MentorCertify: React.FC = () => {
                   หัวข้อรายงานที่อาจารย์ที่ปรึกษาเห็นชอบในโครงร่าง (สหกิจ 11)
                 </span>
                 <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                  {outlineTopic || 'การพัฒนาระบบสนับสนุนการปฏิบัติงานจริงในสถานประกอบการ'}
+                  {outlineTopic || 'ยังไม่มีโครงร่างที่อาจารย์ที่ปรึกษาอนุมัติ'}
                 </h3>
               </div>
               <span className="shrink-0 px-3 py-1 rounded-full text-xs font-bold bg-white text-brand-blue dark:bg-gray-800 dark:text-blue-300 border border-blue-200 dark:border-blue-700">
@@ -1362,96 +1286,113 @@ const MentorCertify: React.FC = () => {
                 </span>
               </div>
 
-              {drafts.map((d) => (
-                <div
-                  key={d.report_id}
-                  className={`border rounded-xl p-4 sm:p-5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                    d.status === 'pending'
-                      ? 'border-blue-300 dark:border-blue-800 bg-blue-50/20 dark:bg-blue-950/10'
-                      : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900'
-                  }`}
-                >
-                  <div className="flex items-start sm:items-center gap-3.5">
-                    <FileText className="w-8 h-8 text-red-500 shrink-0 mt-1 sm:mt-0" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-sm sm:text-base text-gray-900 dark:text-white">
-                          ร่างรายงาน ครั้งที่ {d.version} ({d.file_path})
-                        </span>
-                        {d.status === 'pending' ? (
-                          <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                            รอท่านตรวจ
+              {drafts.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
+                  <EmptyState
+                    title="ยังไม่มีร่างรายงานส่งเข้ามา"
+                    description="เมื่อนักศึกษาส่งร่างรายงานฉบับสมบูรณ์ให้ท่านตรวจ รายการจะปรากฏที่นี่"
+                  />
+                </div>
+              ) : (
+                drafts.map((d) => (
+                  <div
+                    key={d.report_id}
+                    className={`border rounded-xl p-4 sm:p-5 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                      d.status === 'pending'
+                        ? 'border-blue-300 dark:border-blue-800 bg-blue-50/20 dark:bg-blue-950/10'
+                        : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900'
+                    }`}
+                  >
+                    <div className="flex items-start sm:items-center gap-3.5">
+                      <FileText className="w-8 h-8 text-red-500 shrink-0 mt-1 sm:mt-0" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm sm:text-base text-gray-900 dark:text-white">
+                            ร่างรายงาน ครั้งที่ {d.version} ({d.file_path})
                           </span>
-                        ) : d.status === 'approved' ? (
-                          <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-green-50 text-green-800 border border-green-200">
-                            ตรวจแล้ว
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-red-50 text-red-800 border border-red-200">
-                            ส่งกลับแก้ไข
-                          </span>
-                        )}
+                          {d.status === 'pending' ? (
+                            <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                              รอท่านตรวจ
+                            </span>
+                          ) : d.status === 'approved' ? (
+                            <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-green-50 text-green-800 border border-green-200">
+                              ตรวจแล้ว
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-red-50 text-red-800 border border-red-200">
+                              ส่งกลับแก้ไข
+                            </span>
+                          )}
+                          {d.status === 'pending' && d.is_overdue && (
+                            <span className="px-2 py-0.5 rounded-full text-2xs font-bold bg-red-50 text-red-700 border border-red-200">
+                              เลยกำหนดส่งร่างแล้ว
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          ส่งเมื่อ {formatThaiDateTime(d.submitted_at)}
+                          {d.draft_due_date && ` · กำหนดส่งร่าง ${formatThaiDate(d.draft_due_date)}`}
+                          {d.reviewer_comment && ` · ความเห็น: “${d.reviewer_comment}”`}
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        ส่งเมื่อ {formatThaiDateTime(d.submitted_at)}
-                        {d.reviewer_comment && ` · ความเห็น: “${d.reviewer_comment}”`}
-                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => window.open(`/api/documents/${d.file_path}`, '_blank')}
+                        className="text-xs"
+                      >
+                        <Download className="w-3.5 h-3.5 mr-1" />
+                        เปิดอ่านไฟล์ร่าง
+                      </Button>
                     </div>
                   </div>
+                ))
+              )}
+            </div>
 
-                  <div className="flex items-center gap-2">
+            {/* Comment & Review Box — แสดงก็ต่อเมื่อมีร่างจริงให้ตรวจ */}
+            {drafts.length > 0 && (
+              <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 bg-white dark:bg-gray-900 space-y-3">
+                <span className="text-sm font-bold text-gray-900 dark:text-white block">
+                  ความเห็นของท่านต่อร่างรายงาน
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  นักศึกษาจะเห็นข้อความนี้โดยตรง · หากส่งกลับให้แก้ไข กรุณาระบุจุดที่ต้องปรับปรุงเสมอ
+                </p>
+                <Textarea
+                  rows={3}
+                  value={draftComment}
+                  onChange={(e) => setDraftComment(e.target.value)}
+                  placeholder="เช่น เนื้อหาบทที่ 3 อธิบายการทำงานครบถ้วนดี ให้ปรับปรุงคำผิดในบทสรุปเล็กน้อย หรือ ผ่านในส่วนของสถานประกอบการ"
+                />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <span className="text-2xs text-gray-400 dark:text-gray-500">
+                    การตรวจร่างของพี่เลี้ยงเป็นการตรวจความถูกต้องเชิงการปฏิบัติงานและข้อมูลความลับของสถานประกอบการ
+                  </span>
+                  <div className="flex items-center gap-3">
                     <Button
-                      size="sm"
                       variant="secondary"
-                      onClick={() => window.open(`/api/documents/${d.file_path}`, '_blank')}
-                      className="text-xs"
+                      disabled={isDraftReviewing}
+                      onClick={() => handleReviewDraft('rejected')}
+                      className="text-amber-700 border-amber-300 hover:bg-amber-50"
                     >
-                      <Download className="w-3.5 h-3.5 mr-1" />
-                      เปิดอ่านไฟล์ร่าง
+                      ส่งกลับให้แก้ไข
+                    </Button>
+                    <Button
+                      variant="primary"
+                      disabled={isDraftReviewing}
+                      onClick={() => handleReviewDraft('approved')}
+                      className="shadow-sm"
+                    >
+                      {isDraftReviewing ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจแล้ว'}
                     </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Comment & Review Box */}
-            <div className="border border-gray-200 dark:border-gray-800 rounded-xl p-5 bg-white dark:bg-gray-900 space-y-3">
-              <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                ความเห็นของท่านต่อร่างรายงาน
-              </span>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                นักศึกษาจะเห็นข้อความนี้โดยตรง · หากส่งกลับให้แก้ไข กรุณาระบุจุดที่ต้องปรับปรุงเสมอ
-              </p>
-              <Textarea
-                rows={3}
-                value={draftComment}
-                onChange={(e) => setDraftComment(e.target.value)}
-                placeholder="เช่น เนื้อหาบทที่ 3 อธิบายการทำงานครบถ้วนดี ให้ปรับปรุงคำผิดในบทสรุปเล็กน้อย หรือ ผ่านในส่วนของสถานประกอบการ"
-              />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                <span className="text-2xs text-gray-400 dark:text-gray-500">
-                  การตรวจร่างของพี่เลี้ยงเป็นการตรวจความถูกต้องเชิงการปฏิบัติงานและข้อมูลความลับของสถานประกอบการ
-                </span>
-                <div className="flex items-center gap-3">
-                  <Button
-                    variant="secondary"
-                    disabled={isDraftReviewing}
-                    onClick={() => handleReviewDraft('rejected')}
-                    className="text-amber-700 border-amber-300 hover:bg-amber-50"
-                  >
-                    ส่งกลับให้แก้ไข
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={isDraftReviewing}
-                    onClick={() => handleReviewDraft('approved')}
-                    className="shadow-sm"
-                  >
-                    {isDraftReviewing ? 'กำลังบันทึก...' : 'บันทึกว่าตรวจแล้ว'}
-                  </Button>
-                </div>
               </div>
-            </div>
+            )}
 
             {/* Bridge to Final Evaluation 15/16 Warning */}
             <div className="border border-amber-200 dark:border-amber-900/40 bg-amber-50/50 dark:bg-amber-950/20 rounded-xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
