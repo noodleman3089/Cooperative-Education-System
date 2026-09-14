@@ -1,0 +1,16 @@
+-- 033 · ถอดตาราง monthly_work_plans ทิ้ง (สหกิจ 07 หน้า 3 — จบที่เมทริกซ์ work_plan_topics)
+--
+-- ใบสั่งงาน PROMPT-sonnet-R1-close-company.md ข้อ 6 · spec-D 16.2.1 · ทำหลังหน้าจอนักศึกษา
+-- (AccommodationWorkPlan.tsx) เปลี่ยนไปอ่าน/เขียน work_plan_topics แล้วเท่านั้น
+--
+-- เหตุผล: monthly_work_plans เก็บ "หนึ่งหัวข้อต่อหนึ่งเดือน" (UNIQUE student_id, month_index)
+-- แต่กระดาษ สหกิจ 07 หน้า 3 เป็นเมทริกซ์ หัวข้องาน × เดือน — หนึ่งหัวข้องานกินได้หลายเดือน
+-- โครงเดิมเก็บของจริงไม่ได้ตั้งแต่ต้น migration 024 จึงย้ายของจริงไปตาราง work_plan_topics
+-- และตารางนี้ถูกเก็บไว้อีกหนึ่งรอบเป็นทางเข้ากันชนให้หน้าจอเก่าไม่พังระหว่างที่ยังไม่ได้แก้
+--
+-- ⚠️ **ข้อมูลทุกแถวใน monthly_work_plans หายถาวรเมื่อรันไฟล์นี้** — ถ้าต้องการเก็บไว้ดูย้อนหลัง
+--    ให้ export ก่อนรัน `db:migrate` (โครงร่างเดิมอยู่ที่ migration 022)
+--
+-- ของที่ไม่แตะ: work_plan_topics (024) · work_plan_approvals (022) · weekly_work_plans (ของจริง
+-- ที่ยังใช้อยู่ ตามที่เคาะไว้ใน spec-C 1.2 — "คงตาราง weekly_work_plans ไว้ตามเดิม ห้ามลบ")
+DROP TABLE IF EXISTS monthly_work_plans CASCADE;

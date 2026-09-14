@@ -1088,17 +1088,8 @@ export class StudentController {
 
       const accRes = await query('SELECT * FROM accommodations WHERE student_id = $1', [studentId]);
       const plansRes = await query('SELECT * FROM weekly_work_plans WHERE student_id = $1 ORDER BY week_number ASC', [studentId]);
-      const monthlyPlansRes = await query(
-        'SELECT plan_id, month_index, topic, created_at, updated_at FROM monthly_work_plans WHERE student_id = $1 ORDER BY month_index ASC',
-        [studentId]
-      );
-      /**
-       * แผนปฏิบัติงานตัวจริงตามกระดาษ สหกิจ 07 หน้า 3 — **เมทริกซ์ หัวข้องาน x เดือน**
-       *
-       * `monthly_work_plans` ด้านบนเป็นโครงเก่าที่เก็บหนึ่งหัวข้อต่อหนึ่งเดือน ซึ่งเก็บ
-       * ของจริงไม่ได้ (งานหนึ่งชิ้นกินได้หลายเดือน) · ยังคืนมันมาด้วยหนึ่งรอบเพื่อไม่ให้
-       * หน้าจอเดิมพังระหว่างที่ยังไม่ได้แก้ ⛔ ของใหม่ให้อ่าน `work_plan_topics` เท่านั้น
-       */
+      // แผนปฏิบัติงานตัวจริงตามกระดาษ สหกิจ 07 หน้า 3 — เมทริกซ์ หัวข้องาน x เดือน
+      // (โครงเก่า `monthly_work_plans` หนึ่งหัวข้อต่อหนึ่งเดือน ถูกถอดออกแล้ว — spec-D 16.2.1)
       const topicsRes = await query(
         'SELECT topic_id, seq, topic, months FROM work_plan_topics WHERE student_id = $1 ORDER BY seq ASC',
         [studentId]
@@ -1131,14 +1122,6 @@ export class StudentController {
         [studentId]
       );
       const intent = intentRes.rows[0] ?? null;
-
-      let monthsCount = 4;
-      if (intent?.start_date && intent?.end_date) {
-        const s = new Date(intent.start_date);
-        const e = new Date(intent.end_date);
-        const diff = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth()) + 1;
-        if (diff >= 1 && diff <= 12) monthsCount = diff;
-      }
 
       // ⛔ ผู้ติดต่อฉุกเฉินอยู่บนโปรไฟล์นักศึกษาแล้ว ไม่ใช่บนแถวที่พัก (migration 013)
       //    — มันเป็นคุณสมบัติของคน และทั้ง สหกิจ 03 กับ 06 ถามช่องเดียวกัน
@@ -1180,23 +1163,12 @@ export class StudentController {
           address: emg.emergency_address ?? null,
         },
         weekly_plans: plansRes.rows || [],
-        /**
-         * รูปเก่า "หนึ่งหัวข้อต่อหนึ่งเดือน" — **สร้างสดจาก `work_plan_topics` ทุกครั้ง**
-         *
-         * ⛔ ห้ามอ่านจากตาราง `monthly_work_plans` ตรง ๆ อีก เพราะฝั่งเขียนย้ายไปที่
-         *    `work_plan_topics` แล้ว การอ่านตารางเก่าจะทำให้นักศึกษากรอกแล้วกดบันทึก
-         *    สำเร็จ แต่พอรีเฟรชข้อมูลหายไปทั้งหมด (เกือบพลาดตรงนี้ตอนทำ B9)
-         * หลายหัวข้อในเดือนเดียวกันถูกต่อด้วย " · " เพราะรูปเก่ารับได้เดือนละหัวข้อเดียว
-         * ➡️ ถอดทิ้งเมื่อหน้าจอนักศึกษาเปลี่ยนไปอ่าน `work_plan_topics` แล้ว
-         */
-        monthly_plans: legacyMonthlyPlans(topicsRes.rows, monthlyPlansRes.rows),
-        // ⛔ ของจริงตามกระดาษ — หน้าจอใหม่ให้อ่านตัวนี้ ไม่ใช่ monthly_plans ด้านบน
+        // ⛔ ของจริงตามกระดาษ — เมทริกซ์หัวข้องาน x เดือน (โครงเก่า monthly_plans/
+        //    months_count ถูกถอดออกแล้ว ไม่มีหน้าจอไหนอ่านอีก — spec-D 16.2.1)
         work_plan_topics: topicsRes.rows || [],
         approvals: approvalsRes.rows || [],
-        months_count: monthsCount,
         // คอลัมน์เดือนของตาราง สหกิจ 07 หน้า 3 — ตัวเดียวกับที่ผู้ตรวจเห็นใน GET /:id/work-plan
-        // หน้าจอใหม่ให้อ่านตัวนี้ · `months_count` ข้างบนเก็บไว้ให้หน้าจอเดิมที่ยังอ่านอยู่
-        // (มันถอยไปเป็น 4 เมื่อไม่มีวันที่ ซึ่ง `months` ไม่ทำ — ไม่มีวันที่ = [])
+        // ไม่มีวันที่ = [] (ห้ามเดาจำนวนเดือนให้)
         months: await StudentModel.placementMonths(studentId),
         intent: intent
           ? {
@@ -1233,7 +1205,7 @@ export class StudentController {
         res.status(403).json({ message: 'Forbidden. You can only submit accommodation and plans for yourself.' });
         return;
       }
-      const { accommodation, weekly_plans, monthly_plans, work_plan_topics, submit_to_mentor } = req.body;
+      const { accommodation, weekly_plans, work_plan_topics, submit_to_mentor } = req.body;
 
       if (!accommodation || typeof accommodation !== 'object') {
         res.status(400).json({ message: 'กรุณากรอกข้อมูลที่พักระหว่างปฏิบัติงานให้ครบถ้วน' });
@@ -1342,15 +1314,9 @@ export class StudentController {
           }
         }
 
-        /**
-         * แผนปฏิบัติงาน (สหกิจ 07 หน้า 3) — เมทริกซ์ หัวข้องาน x เดือน
-         *
-         * รับได้สองรูปแบบระหว่างที่หน้าจอฝั่งนักศึกษายังไม่ได้แก้:
-         *   work_plan_topics : [{ topic, months: [1,2] }]  ← ของจริงตามกระดาษ
-         *   monthly_plans    : [{ month_index, topic }]    ← โครงเก่า หนึ่งหัวข้อต่อเดือน
-         * ⛔ ของเก่าถูกแปลงเป็นหัวข้อที่ติ๊กเดือนเดียว ไม่ได้เก็บสองที่ให้ขัดกันเอง
-         *    และ **จะเลิกรับเมื่อหน้าจอฝั่งนักศึกษาแก้เป็นเมทริกซ์แล้ว**
-         */
+        // แผนปฏิบัติงาน (สหกิจ 07 หน้า 3) — เมทริกซ์ หัวข้องาน x เดือน
+        // work_plan_topics: [{ topic, months: [1,2] }] เท่านั้น (โครงเก่า monthly_plans
+        // หนึ่งหัวข้อต่อเดือน ถูกถอดออกแล้ว — spec-D 16.2.1)
         const topicRows: { topic: string; months: number[] }[] = [];
         if (Array.isArray(work_plan_topics)) {
           for (const t of work_plan_topics) {
@@ -1362,12 +1328,6 @@ export class StudentController {
                   .filter((m) => Number.isInteger(m) && m > 0)
               : [];
             topicRows.push({ topic, months: Array.from(new Set(months)).sort((a, b) => a - b) });
-          }
-        } else if (Array.isArray(monthly_plans)) {
-          for (const mp of monthly_plans) {
-            const mIdx = parseInt(mp.month_index, 10);
-            const topic = String(mp.topic || '').trim();
-            if (!isNaN(mIdx) && mIdx > 0 && topic) topicRows.push({ topic, months: [mIdx] });
           }
         }
 
@@ -1643,26 +1603,4 @@ export class StudentController {
       sendUnexpectedError(res, error, 'Reject Work Plan Error', 'เกิดข้อผิดพลาดในการส่งกลับแผนงาน');
     }
   }
-}
-
-/**
- * แปลงเมทริกซ์ `work_plan_topics` กลับเป็นรูปเก่า "หนึ่งหัวข้อต่อหนึ่งเดือน"
- * ไว้ให้หน้าจอที่ยังไม่ได้แก้ · ไม่มีหัวข้อเลยจึงค่อยตกไปที่ตารางเก่า
- */
-function legacyMonthlyPlans(
-  topics: { seq: number; topic: string; months: number[] }[],
-  legacyRows: { month_index: number; topic: string }[]
-): { month_index: number; topic: string }[] {
-  if (!topics || topics.length === 0) return legacyRows || [];
-
-  const byMonth = new Map<number, string[]>();
-  for (const t of topics) {
-    for (const month of t.months || []) {
-      if (!byMonth.has(month)) byMonth.set(month, []);
-      byMonth.get(month)!.push(t.topic);
-    }
-  }
-  return Array.from(byMonth.entries())
-    .sort((a, b) => a[0] - b[0])
-    .map(([month_index, list]) => ({ month_index, topic: list.join(' · ') }));
 }

@@ -989,22 +989,13 @@ CREATE TABLE IF NOT EXISTS mentor_notifications (
 
 -- 22. Monthly Work Plans (สหกิจ 07 หน้า 3 แผนปฏิบัติงานรายเดือน)
 --
--- ⛔ **เลิกใช้แล้ว — ของจริงย้ายไปที่ work_plan_topics ข้างล่าง (ข้อ 22.1)**
---    ตารางนี้เก็บ "หนึ่งหัวข้อต่อหนึ่งเดือน" (UNIQUE student_id, month_index)
---    แต่กระดาษ สหกิจ 07 หน้า 3 เป็น **เมทริกซ์ หัวข้องาน × เดือน** คือหนึ่งหัวข้องาน
---    กินได้หลายเดือน (แบบ Gantt อย่างง่าย) โครงเดิมจึงเก็บของจริงไม่ได้
---    ยังไม่ลบทิ้งในรอบนี้โดยตั้งใจ เพื่อให้ฐานที่ migrate แล้วยังมีข้อมูลเดิมให้ย้อนดูได้
---    หนึ่งรอบ · ลบเมื่อยืนยันว่าไม่มีโค้ดไหนอ่านมันแล้ว
-CREATE TABLE IF NOT EXISTS monthly_work_plans (
-    plan_id SERIAL PRIMARY KEY,
-    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
-    month_index INT NOT NULL,
-    topic TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (student_id, month_index)
-);
-
+-- ⛔ **ถูกลบแล้ว (migration 033) — ของจริงอยู่ที่ work_plan_topics ข้างล่าง (ข้อ 22.1)**
+--    ตารางนี้เคยเก็บ "หนึ่งหัวข้อต่อหนึ่งเดือน" (UNIQUE student_id, month_index) แต่กระดาษ
+--    สหกิจ 07 หน้า 3 เป็น **เมทริกซ์ หัวข้องาน × เดือน** คือหนึ่งหัวข้องานกินได้หลายเดือน
+--    (แบบ Gantt อย่างง่าย) โครงเดิมจึงเก็บของจริงไม่ได้ · หน้าจอนักศึกษาเปลี่ยนไปอ่าน
+--    work_plan_topics แล้วตั้งแต่ spec-D 16.2.1 — ข้อมูลเก่าในตารางนี้หายถาวรไปกับ migration 033
+--    (บรรทัด DROP ด้านบนคงไว้เพื่อล้างฐาน dev เก่าที่ยังไม่เคยรัน 033)
+--
 -- 22.1 Work Plan Topics — **แผนปฏิบัติงานตัวจริงตาม สหกิจ 07 หน้า 3**
 --
 -- กระดาษเป็นตารางเมทริกซ์: แถวคือหัวข้องาน คอลัมน์คือเดือน · งานหนึ่งชิ้นติ๊กได้หลายเดือน
