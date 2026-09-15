@@ -53,8 +53,12 @@ const FULL_NAME = `COALESCE(NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name
 
 export class FacultyHomeController {
   /**
-   * Route: GET /api/faculty/home/advisor
+   * Route: GET /api/faculty/home/advisor?view=advisor|supervisor
    * Access: advisor
+   *
+   * `view` เลือกฝ่าย (SB-F8 · `utils/facultyViews.ts`) — ฝ่ายที่ปรึกษาได้กองของสหกิจ 11 · เล่ม · สหกิจ 14
+   * ฝ่ายนิเทศได้กองของสหกิจ 12 · 13 · นักศึกษาที่ยังไม่มีนัด · ⛔ ไม่ส่งปนกัน อาจารย์นิเทศอย่างเดียว
+   * ต้องไม่เห็นกองของที่ปรึกษาที่ว่างตลอด
    */
   static async getAdvisorHome(req: Request, res: Response): Promise<void> {
     try {
@@ -62,14 +66,65 @@ export class FacultyHomeController {
         res.status(401).json({ message: 'Unauthorized.' });
         return;
       }
+      const view = req.query.view;
+      if (view !== 'advisor' && view !== 'supervisor') {
+        res.status(400).json({ message: 'ต้องระบุ view เป็น advisor หรือ supervisor' });
+        return;
+      }
       const me = req.user.userId;
       // SEC-06: ไม่มีโปรไฟล์บุคลากร = 403 ไม่ใช่หน้าแรกที่ไม่ถูกกรอง
       const { majorId } = await resolveMajorScope(me, ['advisor']);
       const today = await CoopCalendarModel.today();
 
-      const [outline, reschedule, unrecorded, report, confirmation, noAppointment, paper] = await Promise.all([
-        // สหกิจ 11 — ใบที่พี่เลี้ยงเห็นชอบแล้วและรออาจารย์ที่ปรึกษา (updateStatus ตรวจ advisor_id)
-        query(
+      if (view === 'advisor') {
+        const [outline, report, confirmation, paper] = await Promise.all([
+          FacultyHomeController.outlineRows(me, today),
+          FacultyHomeController.reportRows(me, today),
+          FacultyHomeController.confirmationRows(me, today),
+          // เอกสารหมายเลข 1 ในสาขาที่ยังรอลงนามบนกระดาษ — แถบข้อมูล ไม่ใช่กองงาน (SEC-04)
+          query(
+            `SELECT COUNT(*)::int AS n
+               FROM intent_forms i JOIN students s ON s.student_id = i.student_id
+              WHERE i.status = 'pending_advisor' AND s.major_id = $1`,
+            [majorId]
+          ),
+        ]);
+        res.status(200).json({
+          today,
+          view,
+          tiles: {
+            outline: tile(outline.rows, 'ไม่มีโครงร่างที่รอคุณเห็นชอบ'),
+            report: tile(report.rows, 'ยังไม่มีเล่มที่ส่งเข้ามารอตรวจรับ'),
+            confirmation: tile(confirmation.rows, 'ยังไม่มีนักศึกษายื่นขอ'),
+          },
+          paper_pending_major: paper.rows[0].n,
+        });
+        return;
+      }
+
+      const [reschedule, unrecorded, noAppointment] = await Promise.all([
+        FacultyHomeController.rescheduleRows(me, today),
+        FacultyHomeController.unrecordedRows(me, today),
+        FacultyHomeController.noAppointmentRows(me),
+      ]);
+      res.status(200).json({
+        today,
+        view,
+        tiles: {
+          reschedule: tile(reschedule.rows, 'ไม่มีนัดที่พี่เลี้ยงขอเลื่อน'),
+          unrecorded_visit: tile(unrecorded.rows, 'ไม่มีการนิเทศที่ค้างบันทึก'),
+          no_appointment: tile(noAppointment.rows, 'นักศึกษาที่คุณนิเทศและได้ที่ฝึกแล้วมีนัดนิเทศทุกคน'),
+        },
+      });
+    } catch (error) {
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(res, error, 'Advisor home error', 'เกิดข้อผิดพลาดขณะโหลดหน้าแรกของอาจารย์');
+    }
+  }
+
+  // สหกิจ 11 — ใบที่พี่เลี้ยงเห็นชอบแล้วและรออาจารย์ที่ปรึกษา (updateStatus ตรวจ advisor_id)
+  private static outlineRows(me: number, today: string) {
+    return query(
           `SELECT ro.outline_id AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
                   c.name_th AS company_name_th, v.report_title AS detail,
                   (ro.updated_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date::text AS since,
@@ -84,9 +139,13 @@ export class FacultyHomeController {
             WHERE ro.status = 'pending_advisor' AND s.advisor_id = $1
             ORDER BY ro.updated_at ASC`,
           [me, today]
-        ),
-        // สหกิจ 12 — พี่เลี้ยงขอเลื่อน รออาจารย์ผู้ร่างนัดตอบ · detail = วันที่พี่เลี้ยงเสนอ
-        query(
+        );
+  }
+
+  // สหกิจ 12 — พี่เลี้ยงขอเลื่อน รออาจารย์ผู้ร่างนัดตอบ · detail = วันที่พี่เลี้ยงเสนอ
+  //   ผู้ร่างนัดคืออาจารย์นิเทศ (SB-F9) และเส้นตอบรับตรวจ `a.advisor_id` = ผู้ร่าง จึงกรองด้วยคอลัมน์เดียวกัน
+  private static rescheduleRows(me: number, today: string) {
+    return query(
           `WITH v AS (
              SELECT appointment_id,
                     ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY created_at, appointment_id)::int AS visit_number
@@ -104,9 +163,12 @@ export class FacultyHomeController {
             WHERE a.status = 'rescheduled' AND a.advisor_id = $1
             ORDER BY a.updated_at ASC`,
           [me, today]
-        ),
-        // สหกิจ 13 — นัดของฉันที่ตกลงแล้ว วันนัดผ่านไปแล้ว แต่ยังไม่มีแบบบันทึกของครั้งนั้น
-        query(
+        );
+  }
+
+  // สหกิจ 13 — นัดของฉันที่ตกลงแล้ว วันนัดผ่านไปแล้ว แต่ยังไม่มีแบบบันทึกของครั้งนั้น
+  private static unrecordedRows(me: number, today: string) {
+    return query(
           `WITH v AS (
              SELECT a.*,
                     ROW_NUMBER() OVER (PARTITION BY a.student_id ORDER BY a.created_at, a.appointment_id)::int AS visit_number
@@ -128,9 +190,12 @@ export class FacultyHomeController {
               )
             ORDER BY v.appointment_date ASC`,
           [me, today]
-        ),
-        // เล่มฉบับสมบูรณ์ฉบับล่าสุดที่ส่งมารอตรวจรับ (ตรงกับ allow-list ของ reviewReport)
-        query(
+        );
+  }
+
+  // เล่มฉบับสมบูรณ์ฉบับล่าสุดที่ส่งมารอตรวจรับ (ตรงกับ allow-list ของ reviewReport)
+  private static reportRows(me: number, today: string) {
+    return query(
           `SELECT fr.report_id AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
                   c.name_th AS company_name_th, ('ฉบับที่ ' || fr.version) AS detail,
                   (fr.submitted_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date::text AS since,
@@ -147,9 +212,12 @@ export class FacultyHomeController {
             WHERE fr.status = 'submitted' AND s.advisor_id = $1
             ORDER BY fr.submitted_at ASC`,
           [me, today]
-        ),
-        // สหกิจ 14 — นักศึกษายื่นขอแล้ว รออาจารย์ที่ปรึกษาลงนาม
-        query(
+        );
+  }
+
+  // สหกิจ 14 — นักศึกษายื่นขอแล้ว รออาจารย์ที่ปรึกษาลงนาม
+  private static confirmationRows(me: number, today: string) {
+    return query(
           `SELECT rc.confirmation_id AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
                   c.name_th AS company_name_th, NULL::text AS detail,
                   (rc.requested_at AT TIME ZONE 'Asia/Bangkok')::date::text AS since,
@@ -161,45 +229,23 @@ export class FacultyHomeController {
             WHERE rc.status = 'pending' AND s.advisor_id = $1
             ORDER BY rc.requested_at ASC`,
           [me, today]
-        ),
-        // ข้อมูลประกอบ: ได้ที่ฝึกแล้วแต่ยังไม่มีนัดนิเทศเลยสักครั้ง (ใครร่างก็นับ)
-        query(
+        );
+  }
+
+  // ข้อมูลประกอบ: นักศึกษาที่ฉันนิเทศ ได้ที่ฝึกแล้วแต่ยังไม่มีนัดนิเทศเลยสักครั้ง
+  private static noAppointmentRows(me: number) {
+    return query(
           `SELECT DISTINCT ON (s.student_id)
                   NULL::int AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
                   c.name_th AS company_name_th, NULL::text AS detail, NULL::text AS since, NULL::int AS days
              FROM students s
              JOIN intent_forms i ON i.student_id = s.student_id AND i.status = 'accepted'
              JOIN companies c ON c.company_id = i.company_id
-            WHERE (s.advisor_id = $1 OR s.supervisor_id = $1)
+            WHERE s.supervisor_id = $1
               AND NOT EXISTS (SELECT 1 FROM supervision_appointments a WHERE a.student_id = s.student_id)
             ORDER BY s.student_id, i.form_id DESC`,
           [me]
-        ),
-        // เอกสารหมายเลข 1 ในสาขาที่ยังรอลงนามบนกระดาษ — แถบข้อมูล ไม่ใช่กองงาน (SEC-04)
-        query(
-          `SELECT COUNT(*)::int AS n
-             FROM intent_forms i JOIN students s ON s.student_id = i.student_id
-            WHERE i.status = 'pending_advisor' AND s.major_id = $1`,
-          [majorId]
-        ),
-      ]);
-
-      res.status(200).json({
-        today,
-        tiles: {
-          outline: tile(outline.rows, 'ไม่มีโครงร่างที่รอคุณเห็นชอบ'),
-          reschedule: tile(reschedule.rows, 'ไม่มีนัดที่พี่เลี้ยงขอเลื่อน'),
-          unrecorded_visit: tile(unrecorded.rows, 'ไม่มีการนิเทศที่ค้างบันทึก'),
-          report: tile(report.rows, 'ยังไม่มีเล่มที่ส่งเข้ามารอตรวจรับ'),
-          confirmation: tile(confirmation.rows, 'ยังไม่มีนักศึกษายื่นขอ'),
-          no_appointment: tile(noAppointment.rows, 'นักศึกษาที่ได้ที่ฝึกแล้วมีนัดนิเทศทุกคน'),
-        },
-        paper_pending_major: paper.rows[0].n,
-      });
-    } catch (error) {
-      if (sendAccessError(res, error)) return;
-      sendUnexpectedError(res, error, 'Advisor home error', 'เกิดข้อผิดพลาดขณะโหลดหน้าแรกของอาจารย์');
-    }
+        );
   }
 
   /**

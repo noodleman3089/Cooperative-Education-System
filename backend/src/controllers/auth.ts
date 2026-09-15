@@ -13,6 +13,7 @@ import { sendPasswordResetEmail, sendPasswordSetNoticeEmail } from '../utils/ema
 import { AuditAction, writeAudit } from '../utils/audit';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 import { sendUnexpectedError } from '../utils/httpError';
+import { resolveViews } from '../utils/facultyViews';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -145,6 +146,7 @@ export class AuthController {
           userId: user.user_id,
           email: user.email,
           roles: user.roles,
+          views: await resolveViews(user.user_id, user.roles),
         },
       });
     } catch (error) {
@@ -169,6 +171,7 @@ export class AuthController {
         userId: req.user.userId,
         email: req.user.email,
         roles: req.user.roles,
+        views: await resolveViews(req.user.userId, req.user.roles),
       },
     });
   }
@@ -274,6 +277,7 @@ export class AuthController {
           userId: user.user_id,
           email: user.email,
           roles: user.roles,
+          views: await resolveViews(user.user_id, user.roles),
         },
       });
     } catch (error) {
@@ -607,7 +611,7 @@ export class AuthController {
 
       res.status(200).json({
         message: 'ยืนยันตัวตนสำเร็จ',
-        user: tokenPayload,
+        user: { ...tokenPayload, views: await resolveViews(user.user_id, user.roles) },
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Claim Personnel Error', 'เกิดข้อผิดพลาดในการยืนยันตัวตนบุคลากร');
