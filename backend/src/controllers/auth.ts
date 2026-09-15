@@ -14,6 +14,7 @@ import { AuditAction, writeAudit } from '../utils/audit';
 import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 import { sendUnexpectedError } from '../utils/httpError';
 import { resolveViews } from '../utils/facultyViews';
+import { replaceDeptHeadInMajor } from '../utils/deptHead';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -570,6 +571,11 @@ export class AuthController {
              last_name = EXCLUDED.last_name`,
           [req.user.userId, row.major_id, row.first_name, row.last_name]
         );
+
+        // SB-G2: รายชื่อ claim เจ้าหน้าที่เป็นคนเตรียม (role + สาขา) — หัวหน้าสาขาคนใหม่แทนคนเก่า
+        if (row.role_name === 'dept_head') {
+          await replaceDeptHeadInMajor(req.user.userId, req, client);
+        }
 
         // Inside the transaction: if the claim rolls back, so does its record.
         await writeAudit(

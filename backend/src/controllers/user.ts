@@ -9,6 +9,7 @@ import { createInviteLink } from '../utils/invite';
 import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
+import { replaceDeptHeadInMajor } from '../utils/deptHead';
 
 
 
@@ -214,6 +215,9 @@ export class UserController {
         return;
       }
 
+      // SB-G2: หัวหน้าสาขามีคนเดียวต่อสาขา — เจ้าหน้าที่ตั้งคนนี้ = ถอดคนเก่าในสาขาเดียวกัน
+      const replacedDeptHeads = roles.includes('dept_head') ? await replaceDeptHeadInMajor(id, req) : [];
+
       writeAudit({
         action: AuditAction.USER_UPDATED,
         entityType: 'user',
@@ -231,7 +235,8 @@ export class UserController {
 
       res.status(200).json({
         message: 'User updated successfully.',
-        user: updatedUser
+        user: updatedUser,
+        replaced_dept_heads: replacedDeptHeads,
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Update User Error', 'An internal server error occurred while updating the user.');
@@ -378,6 +383,10 @@ export class UserController {
                 majorId,
                 item.e_signature_file || null
               );
+              // SB-G2: ไฟล์นำเข้าเป็นของเจ้าหน้าที่ — แถวหัวหน้าสาขาแทนคนเก่าในสาขานั้น
+              if (role === 'dept_head') {
+                await replaceDeptHeadInMajor(user.user_id, req);
+              }
             }
           }
 

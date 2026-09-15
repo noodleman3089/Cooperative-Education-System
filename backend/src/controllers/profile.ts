@@ -9,6 +9,19 @@ import { UserModel } from '../models/user';
 
 import { hashPassword } from '../utils/password';
 import { sendUnexpectedError } from '../utils/httpError';
+import { findOtherDeptHead } from '../utils/deptHead';
+
+/**
+ * SB-G2: ผู้ใช้เลือกสาขาเองแล้วชนหัวหน้าสาขาที่มีอยู่ → ปฏิเสธ ไม่ถอดคนเก่าให้
+ * (การแทนที่ทำได้เฉพาะเจ้าหน้าที่ · เหตุผลอยู่ที่ utils/deptHead.ts)
+ */
+async function deptHeadConflictMessage(userId: number, roles: string[], majorId: number): Promise<string | null> {
+  if (!roles.includes('dept_head')) return null;
+  const other = await findOtherDeptHead(userId, majorId);
+  return other
+    ? `สาขานี้มีหัวหน้าสาขาอยู่แล้ว (${other.full_name}) — การเปลี่ยนหัวหน้าสาขาต้องให้เจ้าหน้าที่เป็นผู้ตั้ง`
+    : null;
+}
 import { StudentProfileSetupBody, PersonnelProfileSetupBody } from '../types';
 
 export class ProfileController {
@@ -257,6 +270,12 @@ export class ProfileController {
           return;
         }
 
+        const conflict = await deptHeadConflictMessage(userId, personnelRoles, major_id);
+        if (conflict) {
+          res.status(409).json({ message: conflict });
+          return;
+        }
+
         // Save profile to PERSONNEL table
         // Roles are already assigned by admin — no role mutation here.
         const profile = await PersonnelModel.createPersonnel(
@@ -486,6 +505,13 @@ export class ProfileController {
         if (!majorExists) {
           res.status(400).json({ message: 'Invalid major_id. Referenced major does not exist.' });
           return;
+        }
+        if (parsedMajorId !== existingProfile.major_id) {
+          const conflict = await deptHeadConflictMessage(userId, req.user.roles, parsedMajorId);
+          if (conflict) {
+            res.status(409).json({ message: conflict });
+            return;
+          }
         }
       }
 

@@ -18,6 +18,8 @@ export const AuditAction = {
   PERSONNEL_CLAIM_REJECTED: 'personnel.claim_rejected',
   USER_CREATED: 'user.created',
   USER_UPDATED: 'user.updated',
+  // หัวหน้าสาขามีคนเดียวต่อสาขา — ตั้งคนใหม่แล้วคนเก่าถูกถอดตำแหน่งอัตโนมัติ (SB-G2)
+  USER_DEPT_HEAD_REPLACED: 'user.dept_head_replaced',
   USER_DELETED: 'user.deleted',
   USER_AUTO_DEACTIVATED: 'user.auto_deactivated',
   PASSWORD_RESET: 'user.password_reset',
