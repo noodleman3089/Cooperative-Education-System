@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { sendFinalReportNotificationEmail } from '../utils/email';
-import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { assertAssignedDuty, assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
 
@@ -357,7 +357,8 @@ export class FinalReportController {
         res.status(404).json({ message: 'ไม่พบเล่มรายงานที่ระบุ' });
         return;
       }
-      await assertCanReviewStudentWork(reviewerId, req.user.roles, ownerRes.rows[0].student_id);
+      // SB-F9: ตรวจรับเล่มเป็นงานของอาจารย์ที่ปรึกษา (คู่กับ สหกิจ 14) ไม่ใช่อาจารย์นิเทศ
+      await assertAssignedDuty(reviewerId, req.user.roles, ownerRes.rows[0].student_id, 'advisor');
 
       // allow-list (แนวเดียวกับ SEC-04): ตรวจรับได้เฉพาะเล่มฉบับสมบูรณ์ที่ส่งมารอตรวจ
       // · แถว reviewer_kind='mentor' คือร่างที่ส่งพี่เลี้ยง ไม่ใช่ของอาจารย์

@@ -126,7 +126,8 @@ export class PersonnelController {
 
       const personnelId = req.user.userId;
 
-      // Query students where this personnel is either advisor or supervisor
+      // SB-F9: เฉพาะนักศึกษาที่ฉันเป็นอาจารย์นิเทศ — หน้านัดนิเทศ (สหกิจ 12) และสหกิจ 13 ใช้เส้นนี้
+      //   และทั้งสองงานเขียนได้เฉพาะ supervisor_id แล้ว · ที่ปรึกษาดูนักศึกษาของตัวเองผ่าน GET /students
       // ⛔ เฉพาะนักศึกษาที่สถานประกอบการตอบรับแล้ว และหนึ่งแถวต่อคน
       //    เดิมรวมใบที่ยังรอลงนาม/รอบริษัท (หน้าจอขึ้นปุ่ม "กำหนดวันนิเทศ" ที่กดแล้วได้ 400)
       //    และคืนแถวซ้ำเมื่อนักศึกษามีหลายใบที่ยังไม่ถูกปฏิเสธ
@@ -157,7 +158,7 @@ export class PersonnelController {
         JOIN companies c ON i.company_id = c.company_id
         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
         LEFT JOIN accommodations a ON s.student_id = a.student_id
-        WHERE s.supervisor_id = $1 OR s.advisor_id = $1
+        WHERE s.supervisor_id = $1
         ORDER BY s.student_id, i.form_id DESC
       `;
       

@@ -4,7 +4,7 @@ import { sendSupervisionAppointmentEmail } from '../utils/email';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from 'jsonwebtoken';
 import { sendUnexpectedError } from '../utils/httpError';
-import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { assertAssignedDuty, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { buildTravelRequestPdf, TRAVEL_REQUEST_MAX_ROWS } from '../utils/travelRequestPdf';
 
@@ -127,7 +127,8 @@ export class AppointmentController {
 
       // SEC-06: เดิมไม่ตรวจเลย — อาจารย์คนไหนก็ร่างนัดให้นักศึกษาคนไหนก็ได้ที่มีที่ฝึกแล้ว
       // และร่างนั้นกลายเป็นอีเมลถึงพี่เลี้ยงของบริษัทนั้นเมื่อเจ้าหน้าที่กดส่ง
-      await assertCanReviewStudentWork(advisorId, req.user.roles, studentId);
+      // SB-F9: สหกิจ 12 เป็นงานของอาจารย์นิเทศ — ที่ปรึกษาที่ไม่ได้นิเทศร่างไม่ได้ (จะแย่งเพดาน 2 ครั้ง)
+      await assertAssignedDuty(advisorId, req.user.roles, studentId, 'supervisor');
 
       // Check if student has an active intent
       const intentRes = await query(

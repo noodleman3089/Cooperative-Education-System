@@ -122,6 +122,51 @@ export async function assertCanReviewStudentWork(
 }
 
 /**
+ * Assert that an advisor holds one *specific* duty for this student (SB-F9).
+ *
+ * `assertCanReviewStudentWork` accepts either column, which is right for reading but
+ * wrong for writing: the forms split the work. สหกิจ 11 · 14 and the final-report
+ * check belong to the อาจารย์ที่ปรึกษา (`advisor_id`); สหกิจ 12 · 13 and the travel
+ * request belong to the อาจารย์นิเทศ (`supervisor_id`). With the loose check, an
+ * advisor who was not the supervisor could draft visits for the same student and
+ * use up the two-visit limit the real supervisor needed.
+ *
+ * Staff/dean and a department head within the student's major pass through, as in
+ * `assertCanReviewStudentWork` — the routes that allow them are unchanged.
+ */
+export async function assertAssignedDuty(
+  userId: number,
+  roles: string[],
+  studentId: number,
+  duty: 'advisor' | 'supervisor'
+): Promise<void> {
+  if (roles.some((r) => INSTITUTION_WIDE_ROLES.includes(r))) return;
+
+  if (roles.includes('dept_head')) {
+    await assertCanAccessStudent(userId, roles, studentId);
+    return;
+  }
+
+  if (roles.includes('advisor')) {
+    const column = duty === 'advisor' ? 'advisor_id' : 'supervisor_id';
+    const res = await query(`SELECT 1 FROM students WHERE student_id = $1 AND ${column} = $2 LIMIT 1`, [
+      studentId,
+      userId,
+    ]);
+    if ((res.rowCount ?? 0) === 0) {
+      throw new AccessDeniedError(
+        duty === 'advisor'
+          ? 'งานนี้เป็นของอาจารย์ที่ปรึกษาของนักศึกษาคนนี้เท่านั้น'
+          : 'งานนี้เป็นของอาจารย์นิเทศของนักศึกษาคนนี้เท่านั้น'
+      );
+    }
+    return;
+  }
+
+  throw new AccessDeniedError('Forbidden. You do not have access to this student\'s records.');
+}
+
+/**
  * Assert that a mentor is *this student's* assigned mentor.
  *
  * SEC-06 again, on the co-op side this time. `PATCH /students/:id/work-plan/approve`

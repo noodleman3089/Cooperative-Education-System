@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
-import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { assertAssignedDuty, assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
 import { AuditAction, writeAudit } from '../utils/audit';
 import {
@@ -114,7 +114,8 @@ export class SupervisionRecordController {
         return;
       }
 
-      await assertCanReviewStudentWork(req.user.userId, req.user.roles, studentId);
+      // SB-F9: บันทึกได้เฉพาะอาจารย์นิเทศของนักศึกษาคนนี้ · ที่ปรึกษาอ่านได้ (getByStudent)
+      await assertAssignedDuty(req.user.userId, req.user.roles, studentId, 'supervisor');
 
       const body = req.body ?? {};
       const visitNumber = Number(body.visit_number);
