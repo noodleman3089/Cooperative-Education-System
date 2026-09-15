@@ -289,7 +289,60 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           </h1>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* สลับบทบาท/ฝ่าย (Segmented Control ตามร่างดีไซน์ .design/faculty) */}
+          {(() => {
+            const availableViews = (auth?.user?.views && auth.user.views.length > 0)
+              ? auth.user.views
+              : (auth?.user?.roles ?? []);
+            if (!auth?.user || availableViews.length <= 1) return null;
+            return (
+              <div className="relative flex items-center">
+                {/* ซ่อน select ไว้ให้ E2E helper (page.getByTestId('role-switch').selectOption(...)) ใช้งานได้เสมอ */}
+                <select
+                  data-testid="role-switch"
+                  value={currentRole}
+                  onChange={(e) => onRoleChange(e.target.value)}
+                  aria-label="สลับบทบาท"
+                  className="sr-only"
+                  tabIndex={-1}
+                  aria-hidden="true"
+                >
+                  {availableViews.map((r) => (
+                    <option key={r} value={r}>
+                      {getRoleLabel(r)}
+                    </option>
+                  ))}
+                </select>
+
+                {/* ตัวสลับแบบ Segmented Pill Tabs ตามดีไซน์ .design/faculty/AdvisorHome.dc.html */}
+                <div
+                  data-testid="role-switcher-segmented"
+                  className="flex items-center gap-1 p-[3px] bg-[#F3F4F6] dark:bg-gray-800 rounded-[12px] border border-gray-200/60 dark:border-gray-700/60"
+                >
+                  {availableViews.map((r) => {
+                    const isActive = currentRole === r;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        data-testid={`role-btn-${r}`}
+                        onClick={() => onRoleChange(r)}
+                        className={`px-3 py-1.5 rounded-[9px] text-xs sm:text-[13px] transition-all cursor-pointer border-none font-sans ${
+                          isActive
+                            ? 'bg-white dark:bg-gray-700 font-bold text-[#1E3A8A] dark:text-blue-300 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.08)]'
+                            : 'bg-transparent font-medium text-[#4B5563] dark:text-gray-400 hover:text-[#111827] dark:hover:text-gray-200'
+                        }`}
+                      >
+                        {getRoleLabel(r)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Notification Bell */}
           {auth?.user && ['advisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (
             <div className="relative">
@@ -404,35 +457,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           )}
 
           {/* Dark Mode Toggle */}
-          {/* สลับบทบาท (มินิมอล) — แสดงเฉพาะเมื่อบัญชีมีมากกว่า 1 บทบาท/ฝ่าย */}
-          {(() => {
-            const availableViews = (auth?.user?.views && auth.user.views.length > 0)
-              ? auth.user.views
-              : (auth?.user?.roles ?? []);
-            if (!auth?.user || availableViews.length <= 1) return null;
-            return (
-              <div className="relative flex items-center">
-                <select
-                  data-testid="role-switch"
-                  value={currentRole}
-                  onChange={(e) => onRoleChange(e.target.value)}
-                  aria-label="สลับบทบาท"
-                  className="cursor-pointer appearance-none rounded-lg border border-gray-200 bg-gray-50/80 py-1 pl-2.5 pr-6 text-xs font-semibold text-brand-navy hover:bg-gray-100 hover:border-gray-300 focus:outline-none focus:ring-1 focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 transition-colors"
-                >
-                  {availableViews.map((r) => (
-                    <option key={r} value={r} className="bg-white text-gray-700 dark:bg-gray-900 dark:text-gray-200">
-                      {getRoleLabel(r)}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute right-1.5 flex items-center text-gray-400 dark:text-gray-500">
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-            );
-          })()}
 
           <button
             type="button"
