@@ -4,6 +4,13 @@ import { sendSupervisionAppointmentEmail } from '../utils/email';
 import jwt from 'jsonwebtoken';
 import type { JwtPayload } from 'jsonwebtoken';
 import { sendUnexpectedError } from '../utils/httpError';
+import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
+import { AuditAction, writeAudit } from '../utils/audit';
+
+/** คู่มือกำหนดนิเทศสหกิจ 2 ครั้ง · ไม่มีสถานะยกเลิกนัด จึงไม่มีนัดที่ 3 */
+const MAX_VISITS = 2;
+/** นัดครั้งถัดไปร่างได้เมื่อครั้งก่อนตกลงกันแล้วเท่านั้น */
+const CONFIRMED_APPOINTMENT_STATUSES = ['accepted', 'offline_agreed'];
 
 // No fallback secret: a guessable default would let anyone forge the mentor
 // response tokens minted below (and every other JWT in the system).
@@ -57,9 +64,18 @@ export class AppointmentController {
       }
       const { roles, userId } = req.user;
       
+      // visit_number = ครั้งที่นิเทศบนกระดาษ (สหกิจ 12 · บันทึก สหกิจ 13 · ใบขออนุมัติเดินทาง)
+      // ⛔ นับจากนัดทั้งหมดของนักศึกษาคนนั้น ก่อนกรองตามผู้เรียก — ถ้าอาจารย์คนละคน
+      //    ร่างครั้งที่ 1 กับ 2 การนับหลังกรองจะให้ทั้งคู่เป็น "ครั้งที่ 1"
       let queryStr = `
-        SELECT a.*, s.first_name, s.last_name, s.student_code, c.name_th as company_name 
+        SELECT a.*, s.first_name, s.last_name, s.student_code, c.name_th as company_name,
+               v.visit_number
         FROM supervision_appointments a
+        JOIN (
+          SELECT appointment_id,
+                 ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY created_at, appointment_id)::int AS visit_number
+            FROM supervision_appointments
+        ) v ON v.appointment_id = a.appointment_id
         JOIN students s ON a.student_id = s.student_id
         JOIN companies c ON a.company_id = c.company_id
         WHERE 1=1
@@ -99,18 +115,42 @@ export class AppointmentController {
       const { student_id, appointment_date, student_time, mentor_time, tour_requested } = req.body;
 
       if (!student_id || !appointment_date || !student_time || !mentor_time) {
-        res.status(400).json({ message: 'Missing required fields.' });
+        res.status(400).json({ message: 'กรุณาระบุวันที่ เวลาพบนักศึกษา และเวลาพบพี่เลี้ยงให้ครบ' });
         return;
       }
+      const studentId = parseInt(String(student_id), 10);
+      if (!Number.isInteger(studentId)) {
+        res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
+        return;
+      }
+
+      // SEC-06: เดิมไม่ตรวจเลย — อาจารย์คนไหนก็ร่างนัดให้นักศึกษาคนไหนก็ได้ที่มีที่ฝึกแล้ว
+      // และร่างนั้นกลายเป็นอีเมลถึงพี่เลี้ยงของบริษัทนั้นเมื่อเจ้าหน้าที่กดส่ง
+      await assertCanReviewStudentWork(advisorId, req.user.roles, studentId);
 
       // Check if student has an active intent
       const intentRes = await query(
         `SELECT company_id FROM intent_forms WHERE student_id = $1 AND status = 'accepted'`,
-        [student_id]
+        [studentId]
       );
 
       if ((intentRes.rowCount ?? 0) === 0) {
-        res.status(400).json({ message: 'Student does not have an accepted intent form.' });
+        res.status(400).json({ message: 'นักศึกษาคนนี้ยังไม่ได้รับการตอบรับจากสถานประกอบการ จึงยังนัดนิเทศไม่ได้' });
+        return;
+      }
+
+      const existing = await query(
+        `SELECT status FROM supervision_appointments WHERE student_id = $1 ORDER BY created_at, appointment_id`,
+        [studentId]
+      );
+      if ((existing.rowCount ?? 0) >= MAX_VISITS) {
+        res.status(409).json({ message: `นัดนิเทศของนักศึกษาคนนี้ครบ ${MAX_VISITS} ครั้งแล้ว` });
+        return;
+      }
+      if (existing.rows.some((r) => !CONFIRMED_APPOINTMENT_STATUSES.includes(r.status))) {
+        res.status(409).json({
+          message: 'นัดนิเทศครั้งก่อนยังไม่ได้รับการยืนยัน — รอพี่เลี้ยงตอบหรือบันทึกว่าตกลงนอกระบบก่อน',
+        });
         return;
       }
 
@@ -120,15 +160,25 @@ export class AppointmentController {
         `INSERT INTO supervision_appointments 
          (advisor_id, student_id, company_id, appointment_date, student_time, mentor_time, tour_requested, status) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft') RETURNING appointment_id`,
-        [advisorId, student_id, companyId, appointment_date, student_time, mentor_time, tour_requested || false]
+        [advisorId, studentId, companyId, appointment_date, student_time, mentor_time, tour_requested || false]
       );
+      const appointmentId = insertRes.rows[0].appointment_id;
+
+      writeAudit({
+        action: AuditAction.APPOINTMENT_DRAFT_CREATED,
+        entityType: 'supervision_appointment',
+        entityId: appointmentId,
+        subjectId: studentId,
+        detail: { visit_number: (existing.rowCount ?? 0) + 1, appointment_date },
+      }, req).catch(() => undefined);
 
       res.status(201).json({
         success: true,
-        message: 'Draft appointment created.',
-        data: { appointment_id: insertRes.rows[0].appointment_id }
+        message: 'บันทึกร่างนัดนิเทศแล้ว รอเจ้าหน้าที่ตรวจและส่งถึงสถานประกอบการ',
+        data: { appointment_id: appointmentId, visit_number: (existing.rowCount ?? 0) + 1 }
       });
     } catch (error) {
+      if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Create Draft Appointment Error', 'An internal server error occurred.');
     }
   }
