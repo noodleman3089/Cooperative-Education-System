@@ -68,6 +68,11 @@ export class CoopProgressController {
            FROM supervision_appointments sa 
            JOIN supervision_logs sl ON sa.appointment_id = sl.appointment_id 
            WHERE sa.student_id = s.student_id AND sl.status = 'submitted') as supervision_logs_count,
+          -- สหกิจ 13 — แบบฟอร์มจริงของการนิเทศ (เดิมไม่ถูกนับเลย)
+          (SELECT COUNT(*) FROM supervision_records sr WHERE sr.student_id = s.student_id) as supervision_records_count,
+          -- สหกิจ 14 — แบบแจ้งยืนยันการส่งรายงาน (นักศึกษายื่น · อาจารย์ที่ปรึกษาลงนาม)
+          rc.confirmation_id, rc.status as confirmation_status, rc.requested_at as confirmation_requested_at,
+          rc.certified_at as confirmation_certified_at,
           -- Final Report
           rep_fin.status as final_report_status,
           rep_fin.file_path as final_report_path,
@@ -85,9 +90,16 @@ export class CoopProgressController {
         LEFT JOIN companies c ON inf.company_id = c.company_id
         LEFT JOIN accommodations acc ON s.student_id = acc.student_id
         LEFT JOIN report_outlines rep_out ON s.student_id = rep_out.student_id
-        LEFT JOIN final_reports rep_fin ON s.student_id = rep_fin.student_id AND rep_fin.version = (
-            SELECT COALESCE(MAX(version), 1) FROM final_reports WHERE student_id = s.student_id
-        )
+        -- ⛔ กรอง reviewer_kind='advisor' ทั้งสองชั้น — ร่างที่ส่งพี่เลี้ยงนับเลขฉบับแยกกัน
+        --    ถ้าไม่กรอง ฉบับที่ 1 ของร่างกับของเล่มจริงชนกัน = แถวซ้ำ หรือได้ report_id ของร่าง
+        --    ซึ่งหน้าตรวจรับเล่มส่งต่อไปที่ PATCH /final-reports/:id/status
+        LEFT JOIN final_reports rep_fin ON s.student_id = rep_fin.student_id
+             AND rep_fin.reviewer_kind = 'advisor'
+             AND rep_fin.version = (
+               SELECT COALESCE(MAX(version), 1) FROM final_reports
+                WHERE student_id = s.student_id AND reviewer_kind = 'advisor'
+             )
+        LEFT JOIN report_confirmations rc ON s.student_id = rc.student_id
         LEFT JOIN final_evaluations eval_15 ON s.student_id = eval_15.student_id
              AND eval_15.evaluator_role = 'mentor' AND eval_15.form_code = 'sahatkit_15'
         LEFT JOIN final_evaluations eval_16 ON s.student_id = eval_16.student_id
@@ -144,7 +156,8 @@ export class CoopProgressController {
         }
 
         // 4. Supervision Submitted (10%)
-        if (parseInt(row.supervision_logs_count, 10) > 0) {
+        // บันทึกย่อหลังนิเทศ หรือแบบบันทึก สหกิจ 13 อย่างใดอย่างหนึ่ง = ไปนิเทศแล้ว
+        if (parseInt(row.supervision_logs_count, 10) > 0 || parseInt(row.supervision_records_count, 10) > 0) {
           progress += 10;
           details.supervisionCompleted = true;
         }
@@ -187,7 +200,16 @@ export class CoopProgressController {
           // เกรดมาจาก สหกิจ 15 อย่างเดียว การบวกกันจะสร้างตัวเลขที่ไม่มีความหมาย
           sahatkit15Score: row.sahatkit15_score !== null ? parseFloat(row.sahatkit15_score) : null,
           sahatkit16Score: row.sahatkit16_score !== null ? parseFloat(row.sahatkit16_score) : null,
-          lastNotifiedAt: row.last_notified_at || null
+          lastNotifiedAt: row.last_notified_at || null,
+          supervisionRecordCount: parseInt(row.supervision_records_count, 10),
+          reportConfirmation: row.confirmation_id
+            ? {
+                confirmationId: row.confirmation_id,
+                status: row.confirmation_status,
+                requestedAt: row.confirmation_requested_at,
+                certifiedAt: row.confirmation_certified_at,
+              }
+            : null
         };
       });
 
