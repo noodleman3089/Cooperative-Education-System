@@ -127,8 +127,11 @@ export class PersonnelController {
       const personnelId = req.user.userId;
 
       // Query students where this personnel is either advisor or supervisor
+      // ⛔ เฉพาะนักศึกษาที่สถานประกอบการตอบรับแล้ว และหนึ่งแถวต่อคน
+      //    เดิมรวมใบที่ยังรอลงนาม/รอบริษัท (หน้าจอขึ้นปุ่ม "กำหนดวันนิเทศ" ที่กดแล้วได้ 400)
+      //    และคืนแถวซ้ำเมื่อนักศึกษามีหลายใบที่ยังไม่ถูกปฏิเสธ
       const queryStr = `
-        SELECT 
+        SELECT DISTINCT ON (s.student_id)
           s.student_id, s.student_code, s.first_name, s.last_name, s.phone,
           s.advisor_id, s.supervisor_id,
           c.name_th as company_name, c.address as company_address, c.province as company_province, c.district as company_district, c.google_place_id,
@@ -150,11 +153,12 @@ export class PersonnelController {
             FROM weekly_work_plans w WHERE w.student_id = s.student_id), '[]'
           ) as weekly_plans
         FROM students s
-        JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
+        JOIN intent_forms i ON s.student_id = i.student_id AND i.status = 'accepted'
         JOIN companies c ON i.company_id = c.company_id
         LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
         LEFT JOIN accommodations a ON s.student_id = a.student_id
         WHERE s.supervisor_id = $1 OR s.advisor_id = $1
+        ORDER BY s.student_id, i.form_id DESC
       `;
       
       const result = await query(queryStr, [personnelId]);
