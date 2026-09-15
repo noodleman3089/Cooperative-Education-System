@@ -175,6 +175,7 @@ export interface StudentRow {
 /** โครงร่างรายงาน (สหกิจ 11) หนึ่งฉบับ ในคิวตรวจของพี่เลี้ยง/อาจารย์ */
 export interface ReportOutlineRow {
   outline_id: number;
+  student_id?: number;
   student_code?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -183,7 +184,47 @@ export interface ReportOutlineRow {
   latest_file_path?: string | null;
   latest_submitted_at?: string | null;
   latest_rejection_comment?: string | null;
+  latest_report_title?: string | null;
+  version_count?: number;
+  waiting_since?: string | null;
+  days_waiting?: number | null;
   status: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** ฉบับของโครงร่างรายงาน */
+export interface ReportOutlineVersion {
+  version_id: number;
+  file_path: string | null;
+  report_title: string;
+  outline_text?: string | null;
+  submitted_at: string;
+  rejection_comment?: string | null;
+  status: string;
+  reviewer_email?: string | null;
+  reviewer_first_name?: string | null;
+  reviewer_last_name?: string | null;
+  reviewer_mentor_name?: string | null;
+}
+
+/** บันทึกข้อความนักศึกษา */
+export interface StudentMemoItem {
+  memo_id: number;
+  student_id: number;
+  semester_id: number;
+  memo_type: string;
+  intent_form_id?: number | null;
+  reason: string;
+  created_at: string;
+  student_code?: string | null;
+  first_name?: string | null;
+  last_name?: string | null;
+  student_phone?: string | null;
+  major_name_th?: string | null;
+  faculty_name_th?: string | null;
+  academic_year?: number | null;
+  semester?: string | null;
 }
 
 /** แผนปฏิบัติงานหนึ่งสัปดาห์ในแผน 16 สัปดาห์ */
