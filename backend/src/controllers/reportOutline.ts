@@ -434,13 +434,22 @@ export class ReportOutlineController {
           c.name_th as company_name_th,
           v.file_path as latest_file_path,
           v.submitted_at as latest_submitted_at,
-          v.rejection_comment as latest_rejection_comment
+          v.rejection_comment as latest_rejection_comment,
+          v.report_title as latest_report_title,
+          (SELECT COUNT(*)::int FROM report_outline_versions WHERE outline_id = ro.outline_id) as version_count,
+          ro.updated_at::timestamptz as waiting_since,
+          -- "รอคุณมากี่วัน" — นับเฉพาะใบที่อยู่ในมืออาจารย์ · updated_at ขยับตอนพี่เลี้ยงเห็นชอบ
+          -- ⛔ updated_at เป็น TIMESTAMP ไม่มีโซน (ค่าเวลาตามโซนของ session ที่เขียน) —
+          --    แปลงเป็น timestamptz ด้วยโซนเดียวกันก่อน แล้วค่อยตัดวันตามเวลาไทย
+          CASE WHEN ro.status = 'pending_advisor'
+               THEN ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (ro.updated_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date)
+               ELSE NULL END as days_waiting
         FROM report_outlines ro
         JOIN students s ON ro.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
         JOIN companies c ON ro.company_id = c.company_id
         LEFT JOIN LATERAL (
-          SELECT file_path, submitted_at, rejection_comment
+          SELECT file_path, submitted_at, rejection_comment, report_title
           FROM report_outline_versions
           WHERE outline_id = ro.outline_id
           ORDER BY submitted_at DESC
