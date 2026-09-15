@@ -127,8 +127,10 @@ const SupervisionLogForm: React.FC<SupervisionLogFormProps> = ({ appointmentId, 
                 <div key={idx} className="relative w-24 h-24 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden group">
                   <img src={URL.createObjectURL(photo)} alt="preview" className="w-full h-full object-cover" />
                   <button 
+                    type="button"
                     onClick={() => removePhoto(idx)}
-                    className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                    className="absolute top-1 right-1 bg-black/70 hover:bg-red-600 text-white p-1 rounded-full transition-colors cursor-pointer"
+                    title="ลบรูปภาพ"
                   >
                     <X className="w-4 h-4" />
                   </button>
