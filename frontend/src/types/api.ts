@@ -168,8 +168,15 @@ export interface StudentRow {
   first_name?: string | null;
   last_name?: string | null;
   nickname?: string | null;
+  phone?: string | null;
   major_name_th?: string | null;
   cumulative_gpa?: number | string | null;
+  advisor_id?: number | null;
+  advisor_email?: string | null;
+  supervisor_id?: number | null;
+  supervisor_email?: string | null;
+  company_name?: string | null;
+  company_province?: string | null;
 }
 
 /** โครงร่างรายงาน (สหกิจ 11) หนึ่งฉบับ ในคิวตรวจของพี่เลี้ยง/อาจารย์ */
