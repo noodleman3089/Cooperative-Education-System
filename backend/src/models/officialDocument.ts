@@ -112,6 +112,12 @@ export class OfficialDocumentModel {
   static async listAll() {
     const res = await query(
       `SELECT d.doc_id, d.document_number, d.type, d.student_id, d.company_id, d.template_id, d.generated_file_path, d.status, d.dean_signature_date, d.docusign_envelope_id,
+              d.created_at,
+              -- "ค้างที่คณบดีมากี่วัน" — คิดที่ฐานด้วยวันของไทย หน้าจอห้ามคำนวณเอง
+              -- ⛔ created_at เป็น NULL ได้ (ใบก่อน migration 030) = ไม่ทราบ ไม่ใช่ 0 วัน
+              CASE WHEN d.status = 'pending_sign' AND d.created_at IS NOT NULL
+                   THEN ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (d.created_at AT TIME ZONE 'Asia/Bangkok')::date)
+                   ELSE NULL END AS days_pending,
               s.student_code, s.first_name, s.last_name,
               c.name_th as company_name_th
        FROM official_documents d
