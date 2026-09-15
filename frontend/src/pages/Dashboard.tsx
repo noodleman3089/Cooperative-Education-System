@@ -7,6 +7,7 @@ import PageSkeleton, { skeletonFor } from '../components/ui/Skeleton';
 import Button from '../components/ui/Button';
 import { statusText } from '../components/ui/StatusBadge';
 import api from '../services/api';
+import EmptyState from '../components/ui/EmptyState';
 import { Lock } from 'lucide-react';
 import { getErrorStatus } from '../utils/errors';
 import { formatThaiDate, formatThaiRange } from '../utils/thaiDate';
@@ -23,7 +24,10 @@ import type { CoopCalendarResponse } from '../types/api';
 const StudentDashboard = lazy(() => import('../components/StudentDashboard'));
 const SmartJobBoard = lazy(() => import('../components/SmartJobBoard'));
 const StudentProfile = lazy(() => import('../components/StudentProfile'));
-const AdvisorDashboard = lazy(() => import('../components/AdvisorDashboard'));
+const AdvisorHome = lazy(() => import('./Advisor/AdvisorHome'));
+const AdvisorStudents = lazy(() => import('./Advisor/AdvisorStudents'));
+const OutlineReview = lazy(() => import('./Advisor/OutlineReview'));
+const FacultyMemos = lazy(() => import('./Faculty/FacultyMemos'));
 const DeptHeadDashboard = lazy(() => import('../components/DeptHeadDashboard'));
 const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
@@ -104,24 +108,45 @@ const StageLockedScreen: React.FC<{
   </div>
 );
 
+const SUB_QUERIES_TO_CLEAR = [
+  'queue', 'form', 'tab', 'offer', 'company',
+  'tile', 'scope', 'student', 'outline', 'visit', 'type', 'doc', 'view', 'major'
+];
+const SUPERVISOR_EXCLUSIVE_MENUS = ['supervision', 'supervision_record'];
+const ADVISOR_EXCLUSIVE_MENUS = ['report_outlines', 'memos', 'final_evaluation'];
+
 const Dashboard: React.FC = () => {
   const auth = useContext(AuthContext);
   
   /**
-   * รองรับ ?role= ตามสเปก D ข้อ 14.5
-   * อ่าน ?role= ก่อน ถ้าไม่มีหรือไม่ใช่ role ที่ผู้ใช้ถือจริง → ใช้ roles[0] เหมือนเดิม
-   * พฤติกรรมเดิมทั้งหมดจึงไม่เปลี่ยน และ E2E ที่ไม่ส่ง ?role= ยังผ่านเหมือนเดิม
+   * รองรับ ?role= ตามสเปก D ข้อ 14.5 และ F ข้อ 1.1 / 2.3
    */
   const [searchParams, setSearchParams] = useSearchParams();
   const activeMenu = searchParams.get('menu') || 'dashboard';
   const roleParam = searchParams.get('role');
 
+  const userViews = useMemo(() => {
+    if (auth?.user?.views && auth.user.views.length > 0) {
+      return auth.user.views;
+    }
+    return auth?.user?.roles ?? ['student'];
+  }, [auth?.user?.views, auth?.user?.roles]);
+
   const currentRole = useMemo(() => {
-    if (roleParam && auth?.user?.roles?.includes(roleParam)) {
+    // 1. ?menu= ของอีกฝ่ายที่ผู้ใช้มี → เปิดฝ่ายนั้นเอง (สเปก F 1.1)
+    if (SUPERVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) {
+      return 'supervisor';
+    }
+    if (ADVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) {
+      return 'advisor';
+    }
+    // 2. ตรวจ ?role=
+    if (roleParam) {
       return roleParam;
     }
-    return auth?.user?.roles?.[0] ?? 'student';
-  }, [roleParam, auth?.user?.roles]);
+    // 3. ค่าตั้งต้น: view แรกของผู้ใช้
+    return userViews[0] ?? 'student';
+  }, [activeMenu, roleParam, userViews]);
 
   const handleRoleChange = useCallback(
     (role: string) => {
@@ -130,8 +155,8 @@ const Dashboard: React.FC = () => {
           const next = new URLSearchParams(prev);
           next.set('role', role);
           next.delete('menu'); // รีเซ็ต menu เป็นหน้าแรกเมื่อสลับบทบาท (พฤติกรรมเดิม)
-          // ล้าง sub-queries ของบทบาทเดิมเพื่อไม่ให้ค้างข้ามบทบาท
-          ['queue', 'form', 'tab', 'offer', 'company'].forEach(q => next.delete(q));
+          // ล้าง sub-queries ของบทบาทเดิมเพื่อไม่ให้ค้างข้ามบทบาท (สเปก F 1.1)
+          SUB_QUERIES_TO_CLEAR.forEach(q => next.delete(q));
           return next;
         },
         { replace: false }
@@ -145,18 +170,24 @@ const Dashboard: React.FC = () => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
+          // รักษา role ถ้าไม่ใช่ view แรกหรือมี roleParam กำหนดไว้
+          if (roleParam) {
+            next.set('role', roleParam);
+          } else if (currentRole && currentRole !== userViews[0]) {
+            next.set('role', currentRole);
+          }
           // หน้าแรกไม่ต้องมีพารามิเตอร์ ให้ `/dashboard` เปล่าๆ ยังเป็น URL ของหน้าแรก
           if (menu === 'dashboard') next.delete('menu');
           else next.set('menu', menu);
-          // ล้าง sub-queries ของเมนูเดิมเมื่อสลับเมนูหลัก
-          ['queue', 'form', 'tab', 'offer', 'company'].forEach(q => next.delete(q));
+          // ล้าง sub-queries ของเมนูเดิมเมื่อสลับเมนูหลัก (สเปก F 1.1)
+          SUB_QUERIES_TO_CLEAR.forEach(q => next.delete(q));
           return next;
         },
         // ตั้งใจให้ push เข้าประวัติ ไม่ใช่ replace — ปุ่ม Back ต้องย้อนเมนูได้
         { replace: false }
       );
     },
-    [setSearchParams]
+    [setSearchParams, roleParam, currentRole, userViews]
   );
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
@@ -362,11 +393,39 @@ const Dashboard: React.FC = () => {
         return <StudentDashboard />;
         
       case 'advisor':
+        if (!userViews.includes('advisor')) {
+          return (
+            <div data-testid="faculty-view-empty">
+              <EmptyState
+                title="ไม่มีสิทธิ์เข้าถึงฝ่ายที่ปรึกษา"
+                description="คุณยังไม่ได้รับมอบหมายเป็นอาจารย์ที่ปรึกษาของนักศึกษาคนใด"
+              />
+            </div>
+          );
+        }
         if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'students') return <AdvisorStudents />;
+        if (activeMenu === 'report_outlines') return <OutlineReview />;
+        if (activeMenu === 'memos') return <FacultyMemos />;
+        if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
+        return <AdvisorHome />;
+
+      case 'supervisor':
+        if (!userViews.includes('supervisor')) {
+          return (
+            <div data-testid="faculty-view-empty">
+              <EmptyState
+                title="ไม่มีสิทธิ์เข้าถึงฝ่ายนิเทศ"
+                description="คุณยังไม่ได้รับมอบหมายเป็นอาจารย์นิเทศของนักศึกษาคนใด"
+              />
+            </div>
+          );
+        }
+        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
-        if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
-        return <AdvisorDashboard activeMenu={activeMenu} />;
+        return <AdvisorHome />;
         
       case 'dept_head':
         if (activeMenu === 'profile') return <PersonnelProfile />;

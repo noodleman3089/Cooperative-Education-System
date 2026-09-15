@@ -2,6 +2,7 @@ export interface User {
   userId: number;
   email: string;
   roles: string[];
+  views?: string[];
 }
 
 /** ความสามารถทางภาษาหนึ่งรายการ ตามที่นักศึกษากรอกในหน้าประวัติ */

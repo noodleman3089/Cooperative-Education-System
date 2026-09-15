@@ -222,18 +222,19 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     advisor: [
-      { id: 'dashboard', label: 'แดชบอร์ดที่ปรึกษา', icon: icons.dashboard },
-      { id: 'students', label: 'รายชื่อนักศึกษาในที่ปรึกษา', icon: icons.students },
-      { id: 'report_outlines', label: 'ตรวจโครงร่างรายงาน', icon: icons.report_outline },
-      { id: 'supervision', label: 'นัดหมายและติดตามการนิเทศ', icon: icons.supervision },
-      // สหกิจ 13 — คนละหน้ากับ 'supervision' ด้านบน: ตัวนั้นคือการนัดและติดตาม
-      // ตัวนี้คือแบบฟอร์ม 37 ข้ออย่างเป็นทางการ
-      { id: 'supervision_record', label: 'แบบบันทึกการนิเทศ (สหกิจ 13)', icon: icons.evaluation },
-      // อาจารย์ไม่ได้ประเมิน — ทั้ง สหกิจ 15 และ 16 เป็นของพนักงานที่ปรึกษาตามแบบฟอร์มจริง
-      // หน้านี้คือการตรวจอนุมัติเล่มรายงาน (สหกิจ 14) + ดูผลประเมินอย่างเดียว
-      // menu id คงเดิมโดยตั้งใจ: ผูกอยู่ 5 ที่รวม NavId ของ e2e การเปลี่ยนควรเป็น commit แยก
-      { id: 'final_evaluation', label: 'ตรวจเล่มรายงานฉบับสมบูรณ์', icon: icons.evaluation },
-      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'students', label: 'นักศึกษาในสาขา', icon: icons.students, group: 'ระหว่างปฏิบัติงาน' },
+      { id: 'report_outlines', label: 'เห็นชอบโครงร่าง (สหกิจ 11)', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
+      { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
+      { id: 'final_evaluation', label: 'ตรวจรับเล่มรายงาน (สหกิจ 14)', icon: icons.evaluation, group: 'ปลายภาค' },
+      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
+    ],
+    supervisor: [
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'students', label: 'นักศึกษาที่ฉันนิเทศ', icon: icons.students, group: 'การนิเทศ' },
+      { id: 'supervision', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.supervision, group: 'การนิเทศ' },
+      { id: 'supervision_record', label: 'บันทึกการนิเทศ (สหกิจ 13)', icon: icons.evaluation, group: 'การนิเทศ' },
+      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     dept_head: [
       { id: 'dashboard', label: 'ภาพรวมสาขาวิชา', icon: icons.dashboard },

@@ -29,6 +29,7 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   supervision: 'cards',
   report_outline: 'table',
   report_outlines: 'table',
+  memos: 'table',
   final_report: 'table',
   // Both evaluation screens — the mentor's and the advisor's — open on a grid of
   // student cards. They were mapped to 'table', so the layout changed shape as
