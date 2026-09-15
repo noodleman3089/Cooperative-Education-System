@@ -1301,15 +1301,32 @@ export class StudentController {
           );
         }
 
-        // Save weekly plans if provided
+        // แผนรายสัปดาห์ — วันของแต่ละสัปดาห์เซิร์ฟเวอร์คำนวณจากวันเริ่มของใบที่ตอบรับแล้ว
+        //
+        // ⛔ ไม่อ่าน start_date/end_date จากผู้เรียก: หน้าจอที่รีเมคแล้วส่งมาเป็นค่าว่าง ของเดิม
+        //    **ลบแผนทั้งหมดก่อน** แล้วข้ามทุกแถวที่ไม่มีวัน → แผนที่พิมพ์หายเงียบ และแผนเก่าหายด้วย
+        //    ทุกครั้งที่กดบันทึก · และวันที่ต้องมาจากเซิร์ฟเวอร์อยู่แล้ว (ห้ามคำนวณวันที่หน้าจอ)
+        // ⛔ ยังไม่มีวันเริ่มจากสถานประกอบการ = ไม่แตะแผนเดิมเลย (ห้ามลบก่อนรู้ว่าจะเขียนได้)
         if (Array.isArray(weekly_plans) && weekly_plans.length > 0) {
-          await client.query('DELETE FROM weekly_work_plans WHERE student_id = $1', [studentId]);
-          for (const plan of weekly_plans) {
-            if (plan.week_number && plan.start_date && plan.end_date) {
-              await client.query(`
-                INSERT INTO weekly_work_plans (student_id, week_number, start_date, end_date, tasks, status)
-                VALUES ($1, $2, $3, $4, $5, 'planned')
-              `, [studentId, plan.week_number, plan.start_date, plan.end_date, plan.tasks || '']);
+          const startRes = await client.query(
+            `SELECT start_date FROM intent_forms
+             WHERE student_id = $1 AND status = 'accepted' AND start_date IS NOT NULL
+             ORDER BY form_id DESC LIMIT 1`,
+            [studentId]
+          );
+          if ((startRes.rowCount ?? 0) > 0) {
+            await client.query('DELETE FROM weekly_work_plans WHERE student_id = $1', [studentId]);
+            for (const plan of weekly_plans) {
+              const week = parseInt(String(plan.week_number), 10);
+              if (!Number.isInteger(week) || week < 1) continue;
+              await client.query(
+                `INSERT INTO weekly_work_plans (student_id, week_number, start_date, end_date, tasks, status)
+                 SELECT $1, $2, i.start_date + 7 * ($2 - 1), i.start_date + 7 * ($2 - 1) + 6, $3, 'planned'
+                 FROM intent_forms i
+                 WHERE i.student_id = $1 AND i.status = 'accepted' AND i.start_date IS NOT NULL
+                 ORDER BY i.form_id DESC LIMIT 1`,
+                [studentId, week, typeof plan.tasks === 'string' ? plan.tasks : '']
+              );
             }
           }
         }
