@@ -133,19 +133,18 @@ const Dashboard: React.FC = () => {
   }, [auth?.user?.views, auth?.user?.roles]);
 
   const currentRole = useMemo(() => {
-    // 1. ?menu= ของอีกฝ่ายที่ผู้ใช้มี → เปิดฝ่ายนั้นเอง (สเปก F 1.1)
-    if (SUPERVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) {
-      return 'supervisor';
+    // 1. ?role= ใช้ได้เฉพาะฝ่ายที่ผู้ใช้มีจริง (สเปก F 1.1) ไม่งั้นใช้ view แรก
+    const base =
+      roleParam && userViews.includes(roleParam) ? roleParam : (userViews[0] ?? 'student');
+    // 2. ?menu= ของอีกฝ่าย → เปิดฝ่ายนั้นเอง **เฉพาะเมื่ออยู่ฝ่ายอาจารย์**
+    //    ⛔ id พวกนี้บทบาทอื่นใช้ด้วย (`memos` นักศึกษา · `report_outlines`/`final_evaluation`
+    //    พี่เลี้ยงและบริษัท) — สลับให้ทุกคนแล้วหน้าจอของบทบาทนั้นกลายเป็นจอว่าง
+    //    · ไม่มีฝ่ายปลายทาง → case ด้านล่างแสดง faculty-view-empty
+    if (base === 'advisor' || base === 'supervisor') {
+      if (SUPERVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) return 'supervisor';
+      if (ADVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) return 'advisor';
     }
-    if (ADVISOR_EXCLUSIVE_MENUS.includes(activeMenu)) {
-      return 'advisor';
-    }
-    // 2. ตรวจ ?role=
-    if (roleParam) {
-      return roleParam;
-    }
-    // 3. ค่าตั้งต้น: view แรกของผู้ใช้
-    return userViews[0] ?? 'student';
+    return base;
   }, [activeMenu, roleParam, userViews]);
 
   const handleRoleChange = useCallback(
