@@ -24,7 +24,12 @@ class ApiClient {
     const url = `${API_BASE_URL}${path}`;
     
     const headers = new Headers(options.headers || {});
-    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    if (options.body instanceof FormData) {
+      // ⛔ ห้ามตั้ง Content-Type เองเมื่อส่ง FormData — เบราว์เซอร์ต้องใส่ `boundary=` ให้เอง
+      //    ผู้เรียก 5 จุดเคยส่ง 'multipart/form-data' เปล่า ๆ เซิร์ฟเวอร์แยก part ไม่ได้ → 500
+      //    ทุกการอัปโหลดของนักศึกษา (โครงร่าง · เล่มรายงาน · บันทึกรายสัปดาห์)
+      headers.delete('Content-Type');
+    } else if (!headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
 
