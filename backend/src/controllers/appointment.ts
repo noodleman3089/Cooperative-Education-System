@@ -6,6 +6,7 @@ import type { JwtPayload } from 'jsonwebtoken';
 import { sendUnexpectedError } from '../utils/httpError';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { buildTravelRequestPdf, TRAVEL_REQUEST_MAX_ROWS } from '../utils/travelRequestPdf';
 
 /** คู่มือกำหนดนิเทศสหกิจ 2 ครั้ง · ไม่มีสถานะยกเลิกนัด จึงไม่มีนัดที่ 3 */
 const MAX_VISITS = 2;
@@ -456,6 +457,106 @@ export class AppointmentController {
       res.status(200).json({ success: true, message: 'Reschedule accepted successfully.' });
     } catch (error) {
       sendUnexpectedError(res, error, 'Accept Reschedule Error', 'An internal server error occurred.');
+    }
+  }
+
+  /**
+   * พิมพ์บันทึกข้อความขออนุมัติเดินทางไปราชการ (คู่มือหน้า 33–34 · 50) — ปุ่มพิมพ์สำรอง
+   * Route: GET /api/appointments/travel-request/print?visit=1&ids=12,15
+   * Access: advisor · เฉพาะนัดที่ตัวเองร่าง และตกลงกันแล้ว
+   *
+   * ⛔ วาดสดทุกครั้ง ไม่เก็บไฟล์ ไม่สร้างสถานะ — การอนุมัติจริงอยู่ที่ E-document
+   */
+  static async printTravelRequest(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const visit = Number(req.query.visit);
+      if (visit !== 1 && visit !== 2) {
+        res.status(400).json({ message: 'กรุณาระบุการนิเทศครั้งที่ 1 หรือ 2' });
+        return;
+      }
+      const ids = String(req.query.ids ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((s) => Number(s));
+      if (ids.length === 0 || ids.some((n) => !Number.isInteger(n) || n <= 0) || new Set(ids).size !== ids.length) {
+        res.status(400).json({ message: 'กรุณาเลือกนัดนิเทศอย่างน้อยหนึ่งรายการ' });
+        return;
+      }
+      if (ids.length > TRAVEL_REQUEST_MAX_ROWS) {
+        res.status(400).json({ message: `บันทึกหนึ่งฉบับใส่ได้ไม่เกิน ${TRAVEL_REQUEST_MAX_ROWS} คน — แบ่งเป็นหลายฉบับ` });
+        return;
+      }
+
+      const rows = await query(
+        `WITH v AS (
+           SELECT appointment_id,
+                  ROW_NUMBER() OVER (PARTITION BY student_id ORDER BY created_at, appointment_id)::int AS visit_number
+             FROM supervision_appointments
+         )
+         SELECT a.appointment_id, a.advisor_id, a.status, a.appointment_date::text AS appointment_date, v.visit_number,
+                s.first_name, s.last_name, c.name_th AS company_name_th
+           FROM supervision_appointments a
+           JOIN v ON v.appointment_id = a.appointment_id
+           JOIN students s ON s.student_id = a.student_id
+           JOIN companies c ON c.company_id = a.company_id
+          WHERE a.appointment_id = ANY($1::int[])
+          ORDER BY a.appointment_date, s.student_code`,
+        [ids]
+      );
+      if ((rows.rowCount ?? 0) !== ids.length) {
+        res.status(404).json({ message: 'ไม่พบนัดนิเทศบางรายการที่เลือก' });
+        return;
+      }
+      const me = req.user.userId;
+      if (rows.rows.some((r) => r.advisor_id !== me)) {
+        res.status(403).json({ message: 'เลือกได้เฉพาะนัดนิเทศที่ท่านเป็นผู้ร่างเท่านั้น' });
+        return;
+      }
+      const notReady = rows.rows.filter(
+        (r) => !CONFIRMED_APPOINTMENT_STATUSES.includes(r.status) || r.visit_number !== visit
+      );
+      if (notReady.length > 0) {
+        res.status(400).json({
+          message:
+            `นัดของ ${notReady.map((r) => [r.first_name, r.last_name].filter(Boolean).join(' ')).join(' · ')} ` +
+            `ยังไม่ได้ยืนยัน หรือไม่ใช่การนิเทศครั้งที่ ${visit}`,
+        });
+        return;
+      }
+
+      const advisor = await query(
+        `SELECT p.first_name, p.last_name, m.major_name_th, f.faculty_name_th
+           FROM personnel p
+           JOIN master_major m ON m.major_id = p.major_id
+           JOIN master_faculty f ON f.faculty_id = m.faculty_id
+          WHERE p.personnel_id = $1`,
+        [me]
+      );
+      if ((advisor.rowCount ?? 0) === 0) {
+        res.status(403).json({ message: 'ไม่พบข้อมูลบุคลากรของท่าน กรุณาติดต่อเจ้าหน้าที่เพื่อตั้งค่าโปรไฟล์' });
+        return;
+      }
+      const a = advisor.rows[0];
+
+      const pdf = await buildTravelRequestPdf({
+        visit_number: visit as 1 | 2,
+        advisor_first_name: a.first_name,
+        advisor_last_name: a.last_name,
+        major_name_th: a.major_name_th,
+        faculty_name_th: a.faculty_name_th,
+        rows: rows.rows,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="travel-request-visit-${visit}.pdf"`);
+      res.status(200).send(pdf);
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Travel request PDF error', 'เกิดข้อผิดพลาดขณะสร้างบันทึกข้อความขออนุมัติเดินทาง');
     }
   }
 }

@@ -13,6 +13,14 @@ router.get(
 );
 
 // POST /api/appointments/draft (Advisor creates draft)
+// บันทึกข้อความขออนุมัติเดินทางไปราชการ (ปุ่มพิมพ์สำรอง · spec-F ข้อ 6.4)
+router.get(
+  '/travel-request/print',
+  authenticateToken,
+  authorizeRoles('advisor'),
+  AppointmentController.printTravelRequest
+);
+
 router.post(
   '/draft',
   authenticateToken,
