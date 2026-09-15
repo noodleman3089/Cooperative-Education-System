@@ -339,16 +339,40 @@ export class FinalReportController {
         return;
       }
 
+      // เหตุผลการส่งกลับถูกเก็บบนแถวให้นักศึกษาอ่าน — ส่งกลับโดยไม่บอกว่าแก้อะไรคือทางตัน
+      if (status === 'rejected' && !(typeof comment === 'string' && comment.trim())) {
+        res.status(400).json({ message: 'กรุณาระบุข้อเสนอแนะว่าต้องแก้ไขอะไร ก่อนส่งเล่มรายงานกลับ' });
+        return;
+      }
+
       const reviewerId = req.user.userId;
 
       // SEC-06: this endpoint had no ownership check whatsoever — any advisor
       // could approve or reject any student's final report by guessing an id.
-      const ownerRes = await query('SELECT student_id FROM final_reports WHERE report_id = $1', [reportId]);
+      const ownerRes = await query(
+        'SELECT student_id, status, reviewer_kind FROM final_reports WHERE report_id = $1',
+        [reportId]
+      );
       if ((ownerRes.rowCount ?? 0) === 0) {
         res.status(404).json({ message: 'ไม่พบเล่มรายงานที่ระบุ' });
         return;
       }
       await assertCanReviewStudentWork(reviewerId, req.user.roles, ownerRes.rows[0].student_id);
+
+      // allow-list (แนวเดียวกับ SEC-04): ตรวจรับได้เฉพาะเล่มฉบับสมบูรณ์ที่ส่งมารอตรวจ
+      // · แถว reviewer_kind='mentor' คือร่างที่ส่งพี่เลี้ยง ไม่ใช่ของอาจารย์
+      // · เล่มที่ตรวจไปแล้วห้ามกดทับ — สหกิจ 14 อ้างแถวที่ approved อยู่
+      const { status: currentStatus, reviewer_kind: reviewerKind } = ownerRes.rows[0];
+      if (reviewerKind !== 'advisor') {
+        res.status(409).json({ message: 'แถวนี้เป็นร่างที่ส่งให้พนักงานที่ปรึกษาตรวจ ไม่ใช่เล่มฉบับสมบูรณ์' });
+        return;
+      }
+      if (currentStatus !== 'submitted') {
+        res.status(409).json({
+          message: `เล่มรายงานฉบับนี้ตรวจไปแล้ว (สถานะปัจจุบัน: ${currentStatus === 'approved' ? 'ตรวจรับแล้ว' : 'ส่งกลับแก้ไข'})`,
+        });
+        return;
+      }
 
       // Update report status
       await query(

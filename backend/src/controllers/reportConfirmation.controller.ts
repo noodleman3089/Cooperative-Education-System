@@ -136,10 +136,16 @@ export class ReportConfirmationController {
         return;
       }
 
-      const { student_id, advisor_id } = checkRes.rows[0];
+      const { student_id, advisor_id, status } = checkRes.rows[0];
 
       if (advisor_id !== advisorId) {
         res.status(403).json({ message: 'Forbidden. คุณไม่ใช่อาจารย์ที่ปรึกษาของนักศึกษาคนนี้' });
+        return;
+      }
+
+      // ลงนามได้ครั้งเดียว — ชื่อผู้ลงนามและเวลาถูกพิมพ์ลงแบบฟอร์มที่นักศึกษาพิมพ์ออก
+      if (status !== 'pending') {
+        res.status(409).json({ message: 'ใบนี้ลงนามรับรองไปแล้ว' });
         return;
       }
 
