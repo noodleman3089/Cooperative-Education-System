@@ -29,9 +29,13 @@ const TAB_CONFIG: Record<OutlineTab, { label: string; tone: string }> = {
   },
 };
 
+const isOutlineTab = (value: string | null): value is OutlineTab =>
+  value === 'pending_advisor' || value === 'pending_mentor' || value === 'approved' || value === 'rejected';
+
 const OutlineReview: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get('tab') as OutlineTab) || 'pending_advisor';
+  const tabParam = searchParams.get('tab');
+  const activeTab: OutlineTab = isOutlineTab(tabParam) ? tabParam : 'pending_advisor';
   const outlineIdParam = searchParams.get('outline');
 
   const [reportOutlines, setReportOutlines] = useState<ReportOutlineRow[]>([]);
@@ -49,14 +53,15 @@ const OutlineReview: React.FC = () => {
     studentId: number;
     versions: ReportOutlineVersion[];
   } | null>(null);
+  const [versionsError, setVersionsError] = useState<string | null>(null);
 
   const loadOutlines = useCallback(async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
-      setError(null);
       const res = await api.get('/outlines/advisor');
       const data: ReportOutlineRow[] = Array.isArray(res) ? res : res?.data || [];
       setReportOutlines(data);
+      setError(null);
     } catch (err) {
       console.error('Failed to load advisor outlines:', err);
       if (!isBackground) {
@@ -131,11 +136,13 @@ const OutlineReview: React.FC = () => {
             studentId: sId,
             versions: res?.data?.versions || [],
           });
+          setVersionsError(null);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
           setVersionsData({ studentId: sId, versions: [] });
+          setVersionsError(getErrorMessage(err, 'ดึงประวัติการส่งโครงร่างไม่สำเร็จ'));
         }
       });
 
@@ -195,7 +202,7 @@ const OutlineReview: React.FC = () => {
 
       setSuccess(
         status === 'approved'
-          ? `เห็นชอบโครงร่างรายงานของ ${studentName} เรียบร้อยแล้ว (อนุมัติเรียบร้อย)`
+          ? `เห็นชอบโครงร่างรายงานของ ${studentName} เรียบร้อยแล้ว`
           : `ส่งกลับโครงร่างรายงานของ ${studentName} ให้แก้ไขเรียบร้อยแล้ว`
       );
 
@@ -221,7 +228,6 @@ const OutlineReview: React.FC = () => {
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
             เห็นชอบโครงร่างรายงาน (สหกิจ 11)
           </h1>
-          <span className="sr-only">อนุมัติโครงร่างรายงานการปฏิบัติงาน (สหกิจ 11)</span>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 max-w-2xl leading-relaxed">
             ลำดับตามแบบฟอร์ม: นักศึกษาปรึกษาพี่เลี้ยง →{' '}
             <strong className="font-semibold text-gray-800 dark:text-gray-200">
@@ -261,7 +267,6 @@ const OutlineReview: React.FC = () => {
       {success && (
         <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
           <span>{success}</span>
-          <span className="font-bold text-emerald-700 dark:text-emerald-400 shrink-0">อนุมัติเรียบร้อย</span>
         </div>
       )}
 
@@ -367,25 +372,6 @@ const OutlineReview: React.FC = () => {
                         </span>
                       ) : null}
                     </div>
-
-                    {/* Compatibility for phase3-workflow */}
-                    {activeTab === 'pending_advisor' && (
-                      <div className="mt-3 flex items-center justify-between">
-                        <span className="text-[11px] text-blue-700 dark:text-blue-400 font-medium">
-                          รอที่ปรึกษาอนุมัติ
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectOutline(item);
-                          }}
-                          className="text-xs font-bold text-brand-blue hover:underline bg-transparent border-none p-0 cursor-pointer"
-                        >
-                          เปิดตรวจอนุมัติ
-                        </button>
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -448,7 +434,11 @@ const OutlineReview: React.FC = () => {
                 <div className="px-4 py-2.5 bg-gray-50 dark:bg-gray-800 text-xs font-bold text-gray-700 dark:text-gray-300 border-b border-gray-200 dark:border-gray-700">
                   ประวัติการส่ง ({versions.length} ฉบับ)
                 </div>
-                {versions.length === 0 ? (
+                {versionsError ? (
+                  <div className="p-4">
+                    <AlertBanner variant="error" message={versionsError} />
+                  </div>
+                ) : versions.length === 0 ? (
                   <div className="p-4 text-xs text-gray-500 dark:text-gray-400">
                     ยังไม่มีประวัติการส่งฉบับย่อย
                   </div>
@@ -506,8 +496,9 @@ const OutlineReview: React.FC = () => {
                 )}
               </div>
 
-              {/* Feedback Textarea & Actions (Only if activeTab is pending_advisor) */}
-              {activeTab === 'pending_advisor' && (
+              {/* ปุ่มพิจารณาขึ้นตามสถานะจริงของใบที่เลือก ไม่ใช่ตามแท็บที่เปิดอยู่ —
+                  URL ค้างที่แท็บเดิมได้หลังกดเห็นชอบ/ส่งกลับ (ข้อ 2.1) */}
+              {selectedOutline.status === 'pending_advisor' && (
                 <div className="space-y-4 pt-2">
                   <div>
                     <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
@@ -547,7 +538,7 @@ const OutlineReview: React.FC = () => {
                         onClick={() => handleReviewAction('approved')}
                         className="flex-1 sm:flex-initial px-5 py-2 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shadow-sm"
                       >
-                        เห็นชอบโครงร่างรายงาน (อนุมัติโครงร่างรายงาน)
+                        เห็นชอบโครงร่างรายงาน
                       </button>
                     </div>
                   </div>
@@ -555,13 +546,13 @@ const OutlineReview: React.FC = () => {
               )}
 
               {/* Read-Only Status Notice if not pending_advisor */}
-              {activeTab !== 'pending_advisor' && (
+              {selectedOutline.status !== 'pending_advisor' && (
                 <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
                   <span>
                     โครงร่างรายงานนี้อยู่ในสถานะ{' '}
                     <strong className="text-gray-800 dark:text-gray-200">
-                      {TAB_CONFIG[activeTab].label}
+                      {TAB_CONFIG[selectedOutline.status as OutlineTab]?.label || selectedOutline.status}
                     </strong>{' '}
                     (อ่านอย่างเดียว)
                   </span>
