@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
-import { Search, Check, AlertTriangle, RefreshCw, Download, Mail } from 'lucide-react';
+import { Search, Check, AlertTriangle, RefreshCw, Download, Mail, Lock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
@@ -248,7 +248,7 @@ export const FinalProgressDashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
-            ติดตามเอกสารนักศึกษา
+            กระดานติดตามสถานะและผลการประเมิน
           </h1>
           <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
             ตอบคำถามเดียว: <strong className="font-bold text-gray-800 dark:text-gray-200">ใครยังไม่ส่งอะไร</strong> · ช่องประเมินท้ายตารางบอกว่า “มีใบประเมินแล้วหรือยัง” เท่านั้น —{' '}
@@ -318,7 +318,15 @@ export const FinalProgressDashboard: React.FC = () => {
           ครบทุกอย่าง ({completeCount})
         </button>
 
-        {majorOptions.length > 0 && (
+        {majorOptions.length === 1 ? (
+          <div
+            data-testid="major-locked-badge"
+            className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-gray-200 bg-gray-50 text-xs font-semibold text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
+          >
+            <Lock className="w-3.5 h-3.5 text-gray-600 dark:text-gray-400" />
+            <span>สาขาวิชา: {majorOptions[0]}</span>
+          </div>
+        ) : majorOptions.length > 1 ? (
           <select
             value={selectedMajor}
             onChange={(e) => setSelectedMajor(e.target.value)}
@@ -332,7 +340,7 @@ export const FinalProgressDashboard: React.FC = () => {
               </option>
             ))}
           </select>
-        )}
+        ) : null}
 
         <button
           type="button"
