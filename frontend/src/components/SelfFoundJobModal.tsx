@@ -59,7 +59,6 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
     company_phone: '',
     contact_person: '',
     contact_position: '',
-    job_position: '',
   });
 
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
@@ -202,6 +201,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
       !company_phone
     ) {
       setError('กรุณากรอกข้อมูลสถานที่ฝึกงานที่จำเป็นให้ครบถ้วน');
+      return;
+    }
+
+    // ช่องผู้ประสานงานติดดอกจันว่าบังคับ จึงต้องบังคับจริง — คณะใช้ชื่อนี้ติดต่อกลับ
+    // เวลาออกหนังสือขอความอนุเคราะห์ไปยังที่ฝึกที่นักศึกษาหามาเอง
+    if (!selfFoundForm.contact_person.trim() || !selfFoundForm.contact_position.trim()) {
+      setError('กรุณากรอกชื่อและตำแหน่งของผู้ประสานงานที่สถานประกอบการ');
       return;
     }
 
@@ -515,27 +521,16 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
 
           <div className="h-px bg-gray-100 dark:bg-gray-800" />
 
-          {/* 4. ตำแหน่งงานที่ต้องการไปฝึกงาน */}
-          <div className="space-y-3.5">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Briefcase className="w-[18px] h-[18px] text-blue-600 dark:text-blue-400 shrink-0" />
-              4. ตำแหน่งงานที่ต้องการไปฝึกงาน
-            </h3>
-
-            <div>
-              <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                ชื่อตำแหน่งงานที่ตกลงไว้ <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                placeholder="เช่น นักศึกษาฝึกงานแผนกพัฒนาระบบสารสนเทศ"
-                value={selfFoundForm.job_position}
-                onChange={(e) =>
-                  setSelfFoundForm({ ...selfFoundForm, job_position: e.target.value })
-                }
-                className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
-              />
-            </div>
+          {/* 4. ตำแหน่งงาน — ⛔ ไม่มีช่องให้นักศึกษากรอกที่นี่โดยตั้งใจ
+              `intent_forms.job_position` คือ "งานที่ได้ทำจริง" ตามตารางกลางหน้า 2 ของ สหกิจ 07
+              ซึ่ง**สถานประกอบการเป็นผู้กรอก** · ช่องเดิมติดดอกจันว่าบังคับ แต่ค่าที่พิมพ์ไม่เคยถูกส่ง
+              ไปไหนเลย = ข้อมูลหายเงียบ และป้ายสัญญาเกินกว่าที่ระบบทำได้ */}
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 flex items-start gap-2.5">
+            <Briefcase className="w-[18px] h-[18px] text-gray-500 dark:text-gray-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+              <strong className="text-gray-800 dark:text-gray-200">ตำแหน่งงานและพี่เลี้ยง</strong>{' '}
+              สถานประกอบการจะเป็นผู้กรอกในแบบ สหกิจ 07 หลังคณะออกหนังสือขอความอนุเคราะห์ให้แล้ว
+            </p>
           </div>
 
           {/* ผ่อนผัน / Late Submission Window */}
