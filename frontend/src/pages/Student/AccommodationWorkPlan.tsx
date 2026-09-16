@@ -423,6 +423,17 @@ const AccommodationWorkPlan: React.FC = () => {
         return;
       }
 
+      // ⛔ ผู้ติดต่อฉุกเฉินเป็นช่องบังคับของใบ สหกิจ 06 — อาจารย์นิเทศใช้ตอนเกิดเหตุ
+      //    หน้านี้แสดงอย่างเดียว (แหล่งจริงคือใบสมัคร สหกิจ 03) จึงต้องบอกให้ไปกรอกที่นั่น
+      //    ไม่ใช่ปล่อยให้ส่งใบที่มีช่องฉุกเฉินว่าง
+      if (!emergencyContact.name?.trim() || !emergencyContact.phone?.trim()) {
+        setError(
+          'ใบ สหกิจ 06 ต้องมีผู้ติดต่อกรณีฉุกเฉิน — กรอกชื่อและเบอร์โทรที่หน้า "ใบสมัครงานสหกิจ" (สหกิจ 03) ก่อน แล้วกลับมาส่งอีกครั้ง'
+        );
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       // ต้องมีอย่างน้อย 1 หัวข้องานที่กรอกชื่อไว้และติ๊กอย่างน้อย 1 เดือน
       const filledTopics = topics.filter((t) => t.topic.trim() && t.months.length > 0);
       if (filledTopics.length === 0) {
