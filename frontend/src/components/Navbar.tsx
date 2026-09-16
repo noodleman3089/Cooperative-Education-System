@@ -30,6 +30,8 @@ interface NotificationItem {
   type?: string;
   student_code?: string | null;
   status?: string;
+  // สำหรับฝ่ายอาจารย์ (advisor / supervisor) จาก SB-F1 / F8
+  url?: string;
 }
 
 /** ส่วนของ `/profile/me` ที่แถบบนใช้ — ฟิลด์นักศึกษาเป็น optional เพราะบุคลากรไม่มี */
@@ -58,6 +60,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
 
   // Notification and Modal states
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [facultyCount, setFacultyCount] = useState<number | null>(null);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   /**
@@ -123,9 +126,74 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const fetchNotifications = async () => {
     if (!auth?.user) return;
     try {
-      if (currentRole === 'advisor') {
-        const res = await api.get('/intents?status=pending_advisor');
-        setNotifications(res || []);
+      if (currentRole === 'advisor' || currentRole === 'supervisor') {
+        const res = await api.get(`/faculty/home/advisor?view=${currentRole}`);
+        if (res && res.tiles) {
+          const items: NotificationItem[] = [];
+          if (currentRole === 'advisor') {
+            const outlineCount = res.tiles.outline?.count ?? 0;
+            const reportCount = res.tiles.report?.count ?? 0;
+            const confirmationCount = res.tiles.confirmation?.count ?? 0;
+            setFacultyCount(outlineCount + reportCount + confirmationCount);
+
+            (res.tiles.outline?.items || []).forEach(
+              (it: { ref_id: number; full_name: string; detail?: string; student_code?: string }) => {
+                items.push({
+                  id: `outline_${it.ref_id}`,
+                  title: it.full_name,
+                  description: `โครงร่างรอเห็นชอบ: ${it.detail || 'สหกิจ 11'} (${it.student_code})`,
+                  url: `/dashboard?menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`,
+                });
+              }
+            );
+            (res.tiles.report?.items || []).forEach(
+              (it: { student_id: number; full_name: string; student_code?: string }) => {
+                items.push({
+                  id: `report_${it.student_id}`,
+                  title: it.full_name,
+                  description: `เล่มรายงานรอตรวจรับ (${it.student_code})`,
+                  url: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                });
+              }
+            );
+            (res.tiles.confirmation?.items || []).forEach(
+              (it: { student_id: number; full_name: string; student_code?: string }) => {
+                items.push({
+                  id: `conf_${it.student_id}`,
+                  title: it.full_name,
+                  description: `สหกิจ 14 รอลงนามรับรอง (${it.student_code})`,
+                  url: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                });
+              }
+            );
+          } else {
+            const rescheduleCount = res.tiles.reschedule?.count ?? 0;
+            const unrecordedCount = res.tiles.unrecorded_visit?.count ?? 0;
+            setFacultyCount(rescheduleCount + unrecordedCount);
+
+            (res.tiles.reschedule?.items || []).forEach(
+              (it: { ref_id: number; student_id: number; full_name: string; visit_number?: number }) => {
+                items.push({
+                  id: `reschedule_${it.ref_id}`,
+                  title: it.full_name,
+                  description: `พี่เลี้ยงขอเลื่อนนัดนิเทศ (ครั้งที่ ${it.visit_number || 1})`,
+                  url: `/dashboard?role=supervisor&menu=supervision&student=${it.student_id}`,
+                });
+              }
+            );
+            (res.tiles.unrecorded_visit?.items || []).forEach(
+              (it: { ref_id: number; student_id: number; full_name: string; visit_number?: number }) => {
+                items.push({
+                  id: `unrecorded_${it.ref_id}`,
+                  title: it.full_name,
+                  description: `ไปนิเทศแล้วยังไม่บันทึก (ครั้งที่ ${it.visit_number || 1})`,
+                  url: `/dashboard?role=supervisor&menu=supervision_record&student=${it.student_id}&visit=${it.visit_number || 1}`,
+                });
+              }
+            );
+          }
+          setNotifications(items);
+        }
       } else if (currentRole === 'dept_head') {
         // เดิม poll `approved_by_advisor` ซึ่งไม่มีใบไหนไปถึงอีกแล้วตั้งแต่ลายเซ็นย้าย
         // ไปอยู่บนกระดาษ = กระดิ่งของหัวหน้าสาขาขึ้น 0 ตลอดกาล
@@ -344,117 +412,156 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           })()}
 
           {/* Notification Bell */}
-          {auth?.user && ['advisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative"
-                title={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : 'รายการรออนุมัติ'}
-                aria-label={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : 'รายการรออนุมัติ'}
-                aria-expanded={showNotifDropdown}
-              >
-                <Bell className="h-5 w-5" />
-                {notifications.length > 0 && (
-                  <span className="absolute top-1 right-1 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
-                    {notifications.length}
-                  </span>
-                )}
-              </button>
+          {auth?.user && ['advisor', 'supervisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (() => {
+            const isFaculty = currentRole === 'advisor' || currentRole === 'supervisor';
+            const notifCount = isFaculty ? (facultyCount ?? 0) : notifications.length;
 
-              {showNotifDropdown && (
-                <>
-                  <div
-                    className="fixed inset-0 z-30"
-                    onClick={() => setShowNotifDropdown(false)}
-                  ></div>
-                  <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-96 overflow-y-auto">
-                    <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
-                      <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                        {currentRole === 'student' ? 'ความคืบหน้าสหกิจศึกษา' : 'รายการค้างตรวจสอบ'} ({notifications.length})
-                      </span>
-                    </div>
-                    {notifications.length > 0 ? (
-                      <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                        {notifications.map((item, index) => {
-                          if (currentRole === 'student') {
+            return (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
+                  title={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : isFaculty ? 'งานที่รอมือคุณ' : 'รายการรออนุมัติ'}
+                  aria-label={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : isFaculty ? 'งานที่รอมือคุณ' : 'รายการรออนุมัติ'}
+                  aria-expanded={showNotifDropdown}
+                >
+                  <Bell className="h-5 w-5" />
+                  {notifCount > 0 && (
+                    <span className="absolute top-1 right-1 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
+                      {notifCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-30"
+                      onClick={() => setShowNotifDropdown(false)}
+                    ></div>
+                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-96 overflow-y-auto">
+                      <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                        <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                          {currentRole === 'student'
+                            ? 'ความคืบหน้าสหกิจศึกษา'
+                            : isFaculty
+                              ? 'งานที่รอมือคุณ'
+                              : 'รายการค้างตรวจสอบ'} ({notifCount})
+                        </span>
+                      </div>
+                      {notifications.length > 0 ? (
+                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
+                          {notifications.map((item, index) => {
+                            if (currentRole === 'student') {
+                              return (
+                                <button
+                                  key={index}
+                                  onClick={() => {
+                                    setShowNotifDropdown(false);
+                                    navigate('/dashboard');
+                                  }}
+                                  className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
+                                >
+                                  <div className={`p-1.5 rounded-lg mt-0.5 ${item.isWarning
+                                    ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
+                                    : item.isSuccess
+                                      ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
+                                      : 'bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400'
+                                    }`}>
+                                    <FileText className="h-4 w-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                                      {item.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-normal mt-0.5 leading-normal">
+                                      {item.description}
+                                    </p>
+                                  </div>
+                                </button>
+                              );
+                            }
+
+                            if (isFaculty) {
+                              return (
+                                <button
+                                  key={index}
+                                  onClick={() => {
+                                    setShowNotifDropdown(false);
+                                    if (item.url) navigate(item.url);
+                                  }}
+                                  className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
+                                >
+                                  <div className="p-1.5 rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 mt-0.5">
+                                    <FileText className="h-4 w-4" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                                      {item.title}
+                                    </p>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                      {item.description}
+                                    </p>
+                                  </div>
+                                  <span className="h-2 w-2 rounded-full bg-blue-500 mt-2 shrink-0"></span>
+                                </button>
+                              );
+                            }
+
+                            const isDoc = currentRole === 'dean';
+                            const itemId = isDoc ? item.doc_id : item.form_id;
                             return (
                               <button
                                 key={index}
                                 onClick={() => {
                                   setShowNotifDropdown(false);
-                                  navigate('/dashboard');
+                                  if (itemId === undefined) return;
+                                  if (isDoc) {
+                                    setSelectedDocId(itemId);
+                                  } else {
+                                    setSelectedIntentId(itemId);
+                                  }
                                 }}
-                                className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
+                                className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                               >
-                                <div className={`p-1.5 rounded-lg mt-0.5 ${item.isWarning
-                                  ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
-                                  : item.isSuccess
-                                    ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                                    : 'bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400'
-                                  }`}>
+                                <div className="p-1.5 rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 mt-0.5">
                                   <FileText className="h-4 w-4" />
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                    {item.title}
+                                    {isDoc
+                                      ? `${item.first_name || ''} ${item.last_name || ''}`
+                                      : `${item.first_name || ''} ${item.last_name || ''}`
+                                    }
                                   </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-normal mt-0.5 leading-normal">
-                                    {item.description}
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                                    {isDoc
+                                      ? `ลงนาม: ${item.type === 'cover_letter' ? 'หนังสือขออนุเคราะห์' : 'หนังสือส่งตัว'}`
+                                      : `ฝึกงาน: ${item.company_name_th}`
+                                    }
                                   </p>
                                 </div>
+                                <span className="h-2 w-2 rounded-full bg-blue-500 mt-2 shrink-0"></span>
                               </button>
                             );
-                          }
-
-                          const isDoc = currentRole === 'dean';
-                          const itemId = isDoc ? item.doc_id : item.form_id;
-                          return (
-                            <button
-                              key={index}
-                              onClick={() => {
-                                setShowNotifDropdown(false);
-                                if (itemId === undefined) return;
-                                if (isDoc) {
-                                  setSelectedDocId(itemId);
-                                } else {
-                                  setSelectedIntentId(itemId);
-                                }
-                              }}
-                              className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                            >
-                              <div className="p-1.5 rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 mt-0.5">
-                                <FileText className="h-4 w-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                  {isDoc
-                                    ? `${item.first_name || ''} ${item.last_name || ''}`
-                                    : `${item.first_name || ''} ${item.last_name || ''}`
-                                  }
-                                </p>
-                                <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                                  {isDoc
-                                    ? `ลงนาม: ${item.type === 'cover_letter' ? 'หนังสือขออนุเคราะห์' : 'หนังสือส่งตัว'}`
-                                    : `ฝึกงาน: ${item.company_name_th}`
-                                  }
-                                </p>
-                              </div>
-                              <span className="h-2 w-2 rounded-full bg-blue-500 mt-2 shrink-0"></span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      <div className="text-center py-8 text-xs text-gray-600 dark:text-gray-400">
-                        {currentRole === 'student' ? 'ยังไม่มีความคืบหน้าคำร้องในขณะนี้' : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-xs text-gray-600 dark:text-gray-400">
+                          {currentRole === 'student'
+                            ? 'ยังไม่มีความคืบหน้าคำร้องในขณะนี้'
+                            : isFaculty
+                              ? 'ไม่มีงานรอคุณในขณะนี้'
+                              : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Dark Mode Toggle */}
 

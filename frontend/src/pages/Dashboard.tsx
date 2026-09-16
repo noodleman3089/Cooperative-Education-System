@@ -407,7 +407,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'report_outlines') return <OutlineReview />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
-        return <AdvisorHome />;
+        return <AdvisorHome view="advisor" />;
 
       case 'supervisor':
         if (!userViews.includes('supervisor')) {
@@ -424,7 +424,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
-        return <AdvisorHome />;
+        return <AdvisorHome view="supervisor" />;
         
       case 'dept_head':
         if (activeMenu === 'profile') return <PersonnelProfile />;
