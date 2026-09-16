@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -105,6 +105,9 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const queueParam = searchParams.get('queue'); // 'request' | 'acceptance' | 'dispatch' | null
   const formParam = searchParams.get('form'); // e.g. '41'
 
+  /** ใบที่เปิดแผงตรวจอยู่ตอนนี้ — กันไม่ให้โหลดคิวรอบถัดไปล้างฟอร์มที่พิมพ์ค้างไว้ */
+  const openedFormRef = useRef<number | null>(null);
+
   const [requestQueue, setRequestQueue] = useState<RequestFormRow[]>([]);
   const [acceptanceQueue, setAcceptanceQueue] = useState<AcceptanceRow[]>([]);
   const [dispatchQueue, setDispatchQueue] = useState<DispatchRow[]>([]);
@@ -168,11 +171,19 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       setDispatchQueue(dispRows);
 
       // Auto-open modal if ?form= is specified in URL
-      if (formParam) {
+      //
+      // ⛔ เฉพาะตอนโหลดจริงเท่านั้น — การเปิดแผงตรวจตั้ง `?form=` ไว้บน URL แล้ว poll
+      //    เบื้องหลัง (ทุก 10 วินาที) วิ่งเข้าบล็อกนี้ซ้ำ **แล้วล้างฟอร์มผู้ลงนามเป็นค่าว่าง**
+      //    เจ้าหน้าที่ที่พิมพ์ชื่อผู้ลงนามค้างไว้จึงเสียข้อความที่พิมพ์ทุก 10 วินาที
+      //    และปุ่ม "รับคำร้อง" กลับไป disabled เอง
+      if (formParam && !isBackground) {
         const formIdNum = Number(formParam);
         if (queueParam === 'request' || !queueParam) {
           const matched = reqRows.find((r) => r.form_id === formIdNum);
-          if (matched) {
+          // ⛔ เปิดอยู่แล้ว = ไม่แตะฟอร์ม · การกดเปิดแผงตั้ง `?form=` ซึ่งทำให้ loadQueues
+          //    วิ่งอีกรอบ (formParam เป็น dependency) แล้วล้างชื่อผู้ลงนามที่เพิ่งพิมพ์
+          if (matched && openedFormRef.current !== formIdNum) {
+            openedFormRef.current = formIdNum;
             setReviewingRequest(matched);
             api.get(`/intents/${matched.form_id}`).then(setRequestDetail).catch(() => null);
             setOfficerForm({
@@ -229,6 +240,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   };
 
   const openRequestReview = async (row: RequestFormRow) => {
+    openedFormRef.current = row.form_id;
     setReviewingRequest(row);
     setRequestDetail(null);
     setOfficerForm({
@@ -261,6 +273,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   };
 
   const closeRequestReview = () => {
+    openedFormRef.current = null;
     setReviewingRequest(null);
     setRequestDetail(null);
     setSearchParams(
