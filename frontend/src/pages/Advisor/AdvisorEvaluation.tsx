@@ -106,9 +106,10 @@ const AdvisorEvaluation: React.FC = () => {
           setStudentReports(res.data || []);
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (isMounted) {
           setStudentReports([]);
+          setError(getErrorMessage(err, 'ไม่สามารถโหลดประวัติเล่มรายงานของนักศึกษาคนนี้ได้'));
         }
       });
 
