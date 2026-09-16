@@ -168,6 +168,28 @@ export class ReportOutlineController {
           return;
         }
       } else if (status === 'rejected') {
+        /**
+         * ⛔ ตีกลับได้เฉพาะใบที่ยังอยู่ในมือคนที่กด — allow-list เดียวกับสายอนุมัติ
+         *
+         * ของเดิมสายนี้ไม่ตรวจ `current_status` เลย แปลว่า:
+         *   · อาจารย์ตีกลับใบที่ **เห็นชอบไปแล้ว** ได้ (นักศึกษาเริ่มเขียนเล่มไปแล้ว ใบย้อนกลับเงียบ ๆ)
+         *   · อาจารย์ตีกลับใบที่ยัง `pending_mentor` ได้ = ข้ามขั้นพี่เลี้ยง (สหกิจ 11 ต้องผ่าน 2 คนตามลำดับ)
+         */
+        const allowedFrom = isAdvisor && current_status === 'pending_advisor'
+          ? 'advisor'
+          : isMentor && current_status === 'pending_mentor'
+            ? 'mentor'
+            : null;
+        if (!allowedFrom) {
+          res.status(400).json({
+            message:
+              current_status === 'approved'
+                ? 'โครงร่างนี้ผ่านการเห็นชอบแล้ว ตีกลับไม่ได้ — ให้นักศึกษาส่งฉบับใหม่เข้ามาแทน'
+                : `ตีกลับโครงร่างในสถานะ ${current_status} ไม่ได้`,
+          });
+          return;
+        }
+
         // Can be either, check whichever role is making the request
         let allowed = false;
         if (isAdvisor) {
