@@ -495,7 +495,8 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
                           {intent.company_name_th}
                         </td>
                         <td className="p-4 text-gray-600 dark:text-gray-400">
-                          {intent.job_title || 'ฝึกงานทั่วไป'}
+                          {/* ไม่มีตำแหน่ง = "–" ไม่ใช่ค่าที่แต่งขึ้น (ใบที่หาที่ฝึกเองยังไม่มีตำแหน่งจนกว่าจะกรอก สหกิจ 07) */}
+                          {intent.job_title || '–'}
                         </td>
                         <td className="p-4">
                           <StatusBadge

@@ -481,7 +481,9 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
                         {applicantName(app)} · <span className="font-mono text-xs">{app.student_code}</span>
                       </div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                        {app.major_name_th} · สมัครตำแหน่ง <span className="font-semibold text-gray-700 dark:text-gray-300">{app.job_title || 'ฝึกงานทั่วไป'}</span>
+                        {/* ⛔ ไม่มีตำแหน่ง = แสดง "–" · ค่าสำรองที่แต่งเอง ("ฝึกงานทั่วไป") ทำให้ใบที่นักศึกษา
+                            หาที่ฝึกเองดูเหมือนมีตำแหน่งตกลงไว้แล้ว ทั้งที่ยังไม่มีใครกรอก สหกิจ 07 */}
+                        {app.major_name_th} · สมัครตำแหน่ง <span className="font-semibold text-gray-700 dark:text-gray-300">{app.job_title || '–'}</span>
                       </div>
                     </div>
 
@@ -633,9 +635,11 @@ const CompanyHome: React.FC<CompanyHomeProps> = ({ onNavigate }) => {
             </span>
           </div>
 
-          {applicants.length > 0 ? (
+          {/* ⛔ เฉพาะใบที่ตอบรับแล้วเท่านั้น — ใบที่ยังรอท่านตัดสินใจอยู่ในกล่องด้านบน
+              การเอามารวมที่นี่ทำให้หัวข้อ "อยู่กับท่านตอนนี้" พูดเกินกว่าที่ข้อมูลรับรอง */}
+          {acceptedStudents.length > 0 ? (
             <div className="divide-y divide-gray-100 dark:divide-gray-800 max-h-96 overflow-y-auto">
-              {applicants.map((app) => (
+              {acceptedStudents.map((app) => (
                 <div key={app.form_id} className="p-4 flex items-center justify-between gap-3 text-xs">
                   <div>
                     <div className="font-bold text-gray-800 dark:text-gray-200">
