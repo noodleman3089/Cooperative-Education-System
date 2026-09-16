@@ -536,16 +536,26 @@ export const FinalProgressDashboard: React.FC = () => {
                           )}
                         </td>
 
-                        {/* 10. ใบประเมิน 15 / 16 (กฎ: ห้ามเขียนว่าผ่าน) */}
+                        {/* 10. ใบประเมิน 15 / 16 (กฎ: ห้ามเขียนว่าผ่าน — คะแนนดิบสองใบแยกกัน ไม่รวม) */}
                         <td className="p-3 text-center font-bold">
                           {evalText === 'ครบทั้ง 2 ใบ' ? (
-                            <span className="text-emerald-600 dark:text-emerald-400">
-                              ครบทั้ง 2 ใบ
-                            </span>
+                            <div>
+                              <span className="text-emerald-600 dark:text-emerald-400 block">
+                                ครบทั้ง 2 ใบ
+                              </span>
+                              <span className="font-normal text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">
+                                สหกิจ 15: {std.sahatkit15Score}/100 · สหกิจ 16: {std.sahatkit16Score}/70
+                              </span>
+                            </div>
                           ) : evalText === 'มีแค่ 15' ? (
-                            <span className="text-amber-600 dark:text-amber-400">
-                              มีแค่ 15
-                            </span>
+                            <div>
+                              <span className="text-amber-600 dark:text-amber-400 block">
+                                มีแค่ 15
+                              </span>
+                              <span className="font-normal text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">
+                                สหกิจ 15: {std.sahatkit15Score}/100
+                              </span>
+                            </div>
                           ) : (
                             <span className="text-gray-400">–</span>
                           )}
