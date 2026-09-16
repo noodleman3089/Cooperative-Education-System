@@ -28,7 +28,9 @@ const AdvisorHome = lazy(() => import('./Advisor/AdvisorHome'));
 const AdvisorStudents = lazy(() => import('./Advisor/AdvisorStudents'));
 const OutlineReview = lazy(() => import('./Advisor/OutlineReview'));
 const FacultyMemos = lazy(() => import('./Faculty/FacultyMemos'));
-const DeptHeadDashboard = lazy(() => import('../components/DeptHeadDashboard'));
+const DeptHeadHome = lazy(() => import('./DeptHead/DeptHeadHome'));
+const AdvisorAssignment = lazy(() => import('./DeptHead/AdvisorAssignment'));
+const PetitionTracking = lazy(() => import('./DeptHead/PetitionTracking'));
 const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
 const JobOfferManager = lazy(() => import('./Staff/JobOfferManager'));
@@ -110,7 +112,8 @@ const StageLockedScreen: React.FC<{
 
 const SUB_QUERIES_TO_CLEAR = [
   'queue', 'form', 'tab', 'offer', 'company',
-  'tile', 'scope', 'student', 'outline', 'visit', 'type', 'doc', 'view', 'major'
+  'tile', 'scope', 'student', 'outline', 'visit', 'type', 'doc', 'view', 'major',
+  'filter', 'stage'
 ];
 const SUPERVISOR_EXCLUSIVE_MENUS = ['supervision', 'supervision_record'];
 const ADVISOR_EXCLUSIVE_MENUS = ['report_outlines', 'memos', 'final_evaluation'];
@@ -429,10 +432,12 @@ const Dashboard: React.FC = () => {
       case 'dept_head':
         if (activeMenu === 'profile') return <PersonnelProfile />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        if (activeMenu === 'memos') return <FacultyMemos />;
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
         //   แทนที่จะเปิดหน้าว่าง · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
-        if (activeMenu === 'students') return <DeptHeadDashboard activeMenu="assignment" />;
-        return <DeptHeadDashboard activeMenu={activeMenu} />;
+        if (activeMenu === 'students' || activeMenu === 'assignment') return <AdvisorAssignment />;
+        if (activeMenu === 'approval') return <PetitionTracking />;
+        return <DeptHeadHome />;
         
       case 'dean':
         if (activeMenu === 'signature') return <DeanDashboard activeMenu="signature" />;

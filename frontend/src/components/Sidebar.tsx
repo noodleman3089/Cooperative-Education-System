@@ -237,15 +237,14 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     dept_head: [
-      { id: 'dashboard', label: 'ภาพรวมสาขาวิชา', icon: icons.dashboard },
+      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
+      { id: 'assignment', label: 'จัดสรรอาจารย์ที่ปรึกษา & นิเทศ', icon: icons.assignment, group: 'งานของสาขาวิชา' },
       // หัวหน้าสาขาไม่ได้ "อนุมัติ" ในระบบแล้ว — ลายเซ็นอยู่บนแบบคำร้อง (เอกสารหมายเลข 1)
       // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
-      { id: 'approval', label: 'ติดตามคำร้อง', icon: icons.approval },
-      { id: 'assignment', label: 'จัดสรรอาจารย์ที่ปรึกษา', icon: icons.assignment },
-      // ⛔ เมนู 'students' (ตรวจสอบคุณสมบัตินักศึกษา) ถูกถอดออก 2026-09-14 — หน้านั้นมีแค่
-      //    สิทธิ์สะสมกับปฐมนิเทศ ซึ่งไม่อยู่ในขอบเขต · รายชื่อ+อาจารย์ดูได้ที่ 'assignment'
-      { id: 'final_progress', label: 'สรุปผลการประเมินสาขาวิชา', icon: icons.summary },
-      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
+      { id: 'approval', label: 'ติดตามคำร้อง (เอกสารหมายเลข 1)', icon: icons.approval, group: 'งานของสาขาวิชา' },
+      { id: 'final_progress', label: 'ติดตามเอกสาร & ผลประเมิน', icon: icons.summary, group: 'งานของสาขาวิชา' },
+      { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'งานของสาขาวิชา' },
+      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     dean: [
       { id: 'dashboard', label: 'แดชบอร์ดเอกสารอนุมัติ', icon: icons.dashboard },

@@ -18,3 +18,29 @@ export const intentDisplayStatus = (
   status: string,
   coverLetterStatus?: string | null
 ): string => (status === 'approved_by_dept_head' && coverLetterStatus ? coverLetterStatus : status);
+
+export type DeptHeadIntentStage = 'paper' | 'staff' | 'dean' | 'company' | 'accepted' | 'other';
+
+/**
+ * จัดกลุ่ม stage ของใบความจำนงสำหรับฝ่ายหัวหน้าสาขาวิชา (spec-G ข้อ 5 / SB-G1)
+ *
+ * ⚠️ ฟังก์ชันเดียวในระบบ ห้ามคิดนิยามใหม่:
+ * - paper: pending_advisor (กำลังเดินเรื่องกระดาษ)
+ * - staff: pending_officer_request / pending_officer_approval (เจ้าหน้าที่รับและตรวจ)
+ * - dean: approved_by_dept_head และยังไม่ออกหนังสือเสร็จ (coverLetterStatus !== 'signed')
+ * - company: approved_by_dept_head และออกหนังสือเสร็จแล้ว (coverLetterStatus === 'signed')
+ * - accepted: ตอบรับแล้ว
+ */
+export const getIntentStage = (
+  status: string,
+  coverLetterStatus?: string | null
+): DeptHeadIntentStage => {
+  if (status === 'pending_advisor') return 'paper';
+  if (status === 'pending_officer_request' || status === 'pending_officer_approval') return 'staff';
+  if (status === 'approved_by_dept_head') {
+    return coverLetterStatus === 'signed' ? 'company' : 'dean';
+  }
+  if (status === 'accepted') return 'accepted';
+  return 'other';
+};
+
