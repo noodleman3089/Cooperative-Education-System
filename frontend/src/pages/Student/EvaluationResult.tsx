@@ -122,8 +122,35 @@ const EvaluationResult: React.FC = () => {
 
       {error && <AlertBanner variant="error" message={error} />}
 
+      {/* 0. ยังไม่ถึงเวลาที่เปิดให้ดู (403 จากเซิร์ฟเวอร์ — SEC/ปฏิทิน)
+          ⛔ ตอนล็อก **ระบบไม่รู้** ว่าพี่เลี้ยงส่งแบบประเมินหรือยัง เพราะเซิร์ฟเวอร์ไม่ส่งคะแนนมาเลย
+             ของเดิมตกไปแสดงการ์ด "พี่เลี้ยงยังไม่ได้ส่งแบบประเมินเข้าระบบ" ซึ่งพูดเกินข้อมูล
+             (พี่เลี้ยงส่งครบแล้วก็ยังขึ้นข้อความนี้) และเหตุผลที่ล็อกไม่ถูกแสดงเลย */}
+      {lockedReason && (
+        <div
+          data-testid="eval-locked"
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
+        >
+          <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0">
+            <Calendar className="w-6 h-6" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white">ยังไม่เปิดให้ดูผลประเมิน</h2>
+            <p
+              data-testid="eval-locked-reason"
+              className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed"
+            >
+              {lockedReason}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              ระหว่างนี้ระบบยังไม่บอกว่าพี่เลี้ยงส่งแบบประเมินแล้วหรือยัง — คะแนนจะแสดงเมื่อถึงเวลา
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 1. Empty State ก: ยังไม่ถึงสัปดาห์สุดท้าย */}
-      {hasNone && isBeforeFinalWeek && (
+      {hasNone && !lockedReason && isBeforeFinalWeek && (
         <div
           data-testid="eval-empty-not-yet"
           className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
@@ -150,8 +177,9 @@ const EvaluationResult: React.FC = () => {
         </div>
       )}
 
-      {/* 2. Empty State ข: ถึงเวลาแล้ว แต่พี่เลี้ยงยังไม่ส่ง (หรือถูกล็อกตามปฏิทิน) */}
-      {hasNone && (!isBeforeFinalWeek || lockedReason) && (
+      {/* 2. Empty State ข: ถึงเวลาแล้ว แต่พี่เลี้ยงยังไม่ส่ง — ใช้ได้เฉพาะตอน**ไม่ได้ถูกล็อก**
+          เพราะตอนล็อกเซิร์ฟเวอร์ไม่ส่งคะแนนมา เราจึงไม่มีทางรู้ว่าพี่เลี้ยงส่งหรือยัง */}
+      {hasNone && !lockedReason && !isBeforeFinalWeek && (
         <div
           data-testid="eval-empty-waiting"
           className="bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/60 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
@@ -233,7 +261,11 @@ const EvaluationResult: React.FC = () => {
               18 หัวข้อ {data?.mentor_name ? `· ประเมินโดย คุณ${data.mentor_name}` : ''}
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              {s15?.submitted_at ? `ส่งเข้าระบบ ${formatThaiDate(s15.submitted_at)}` : 'ยังไม่ส่ง'}
+              {s15?.submitted_at
+                ? `ส่งเข้าระบบ ${formatThaiDate(s15.submitted_at)}`
+                : lockedReason
+                  ? 'ยังไม่เปิดให้ดู'
+                  : 'ยังไม่ส่ง'}
             </p>
           </div>
 
@@ -263,7 +295,11 @@ const EvaluationResult: React.FC = () => {
               14 หัวข้อ {data?.mentor_name ? `· ประเมินโดย คุณ${data.mentor_name}` : ''}
             </p>
             <p className="text-xs text-gray-400 dark:text-gray-500">
-              {s16?.submitted_at ? `ส่งเข้าระบบ ${formatThaiDate(s16.submitted_at)}` : 'ยังไม่ส่ง'}
+              {s16?.submitted_at
+                ? `ส่งเข้าระบบ ${formatThaiDate(s16.submitted_at)}`
+                : lockedReason
+                  ? 'ยังไม่เปิดให้ดู'
+                  : 'ยังไม่ส่ง'}
             </p>
           </div>
 
