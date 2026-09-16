@@ -109,8 +109,8 @@ export class WeeklyLogController {
                summary = $10,
                mentor_certified_by = NULL,
                mentor_certified_at = NULL,
-               returned_comment = CASE WHEN $6 = 'submitted' THEN NULL ELSE returned_comment END,
-               submitted_at = CASE WHEN $6 = 'submitted' THEN CURRENT_TIMESTAMP ELSE submitted_at END,
+               returned_comment = CASE WHEN $6::varchar = 'submitted' THEN NULL ELSE returned_comment END,
+               submitted_at = CASE WHEN $6::varchar = 'submitted' THEN CURRENT_TIMESTAMP ELSE submitted_at END,
                updated_at = CURRENT_TIMESTAMP
            WHERE weekly_log_id = $11`,
           [
@@ -147,7 +147,7 @@ export class WeeklyLogController {
              achievements, problems, status, start_date, end_date,
              external_file_path, summary, submitted_at
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-             CASE WHEN $8 = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END
+             CASE WHEN $8::varchar = 'submitted' THEN CURRENT_TIMESTAMP ELSE NULL END
            ) RETURNING weekly_log_id`,
           [
             studentId,
