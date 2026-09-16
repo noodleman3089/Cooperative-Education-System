@@ -364,7 +364,7 @@ const SupervisionTracking: React.FC = () => {
             </span>
           ))
         ) : (
-          <span className="text-xs text-gray-400">ยังไม่มีข้อมูลจังหวัดของสถานประกอบการ</span>
+          <span className="text-xs text-gray-400 dark:text-gray-500">ยังไม่มีข้อมูลจังหวัดของสถานประกอบการ</span>
         )}
       </div>
 
@@ -429,7 +429,7 @@ const SupervisionTracking: React.FC = () => {
                       {student.mentor_name ? (
                         <span>พี่เลี้ยง: {student.mentor_name} {student.mentor_phone ? `· ${student.mentor_phone}` : ''}</span>
                       ) : (
-                        <span className="text-gray-400">ยังไม่ระบุพี่เลี้ยง</span>
+                        <span className="text-gray-400 dark:text-gray-500">ยังไม่ระบุพี่เลี้ยง</span>
                       )}
                     </div>
                     <div>
@@ -449,7 +449,17 @@ const SupervisionTracking: React.FC = () => {
                           )}
                         </span>
                       ) : (
-                        <span className="text-gray-400">ยังไม่ได้ปักหมุดที่พัก</span>
+                        <span className="text-gray-400 dark:text-gray-500">ยังไม่ได้ปักหมุดที่พัก</span>
+                      )}
+                    </div>
+                    <div>
+                      {student.emergency_contact ? (
+                        <span data-testid="supervision-emergency-contact">
+                          ฉุกเฉิน: {student.emergency_contact}
+                          {student.emergency_phone ? ` · ${student.emergency_phone}` : ''}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 dark:text-gray-500">ยังไม่มีผู้ติดต่อฉุกเฉิน</span>
                       )}
                     </div>
                   </div>
@@ -485,7 +495,7 @@ const SupervisionTracking: React.FC = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div className="p-3 border border-gray-200 dark:border-gray-700 rounded-xl">
                               <span className="text-xs font-bold text-gray-500 block">ที่คุณเสนอ</span>
-                              <span className="text-xs text-gray-400 line-through block mt-0.5">
+                              <span className="text-xs text-gray-400 dark:text-gray-500 line-through block mt-0.5">
                                 {formatThaiDate(visit1.appointment_date)} · พบพี่เลี้ยง {visit1.mentor_time || '-'}
                               </span>
                             </div>
@@ -618,7 +628,7 @@ const SupervisionTracking: React.FC = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div className="p-3 border border-gray-200 dark:border-gray-700 rounded-xl">
                               <span className="text-xs font-bold text-gray-500 block">ที่คุณเสนอ</span>
-                              <span className="text-xs text-gray-400 line-through block mt-0.5">
+                              <span className="text-xs text-gray-400 dark:text-gray-500 line-through block mt-0.5">
                                 {formatThaiDate(visit2.appointment_date)} · พบพี่เลี้ยง {visit2.mentor_time || '-'}
                               </span>
                             </div>
@@ -841,9 +851,9 @@ const SupervisionTracking: React.FC = () => {
                     >
                       <span>แผนปฏิบัติงานรายสัปดาห์: ({student.weekly_plans.length} สัปดาห์)</span>
                       {expandedPlans[student.student_id] ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400" />
+                        <ChevronUp className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                       ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
+                        <ChevronDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
                       )}
                     </button>
 
@@ -926,7 +936,7 @@ const SupervisionTracking: React.FC = () => {
         {/* Travel Candidates Table / List */}
         <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
           {travelCandidates.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400">
+            <div className="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
               ยังไม่มีนัดครั้งที่ {travelVisit} ที่ยืนยันแล้ว
             </div>
           ) : (
@@ -939,7 +949,7 @@ const SupervisionTracking: React.FC = () => {
                   key={app.appointment_id}
                   className={`flex items-center gap-3 p-3 text-xs transition-colors ${
                     !isConfirmed
-                      ? 'bg-gray-50/60 dark:bg-gray-800/40 text-gray-400'
+                      ? 'bg-gray-50/60 dark:bg-gray-800/40 text-gray-400 dark:text-gray-500'
                       : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/60 text-gray-900 dark:text-white'
                   }`}
                 >

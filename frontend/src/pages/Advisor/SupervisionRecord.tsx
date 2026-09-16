@@ -396,7 +396,7 @@ const SupervisionRecord: React.FC = () => {
 
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {students.length === 0 ? (
-              <div className="p-6 text-center text-xs text-gray-400">
+              <div className="p-6 text-center text-xs text-gray-400 dark:text-gray-500">
                 ไม่มีนักศึกษาที่คุณเป็นผู้นิเทศ
               </div>
             ) : (
@@ -698,9 +698,9 @@ const SupervisionRecord: React.FC = () => {
                       ส่วนที่ 2 — ประเมินนักศึกษา
                     </h3>
                     {part2Open ? (
-                      <ChevronUp className="w-4 h-4 text-gray-500" />
+                      <ChevronUp className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-500" />
+                      <ChevronDown className="w-4 h-4 text-gray-500 dark:text-gray-400" />
                     )}
                   </div>
                   <span className="text-xs text-gray-500 dark:text-gray-400">
