@@ -195,10 +195,27 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           setNotifications(items);
         }
       } else if (currentRole === 'dept_head') {
-        // เดิม poll `approved_by_advisor` ซึ่งไม่มีใบไหนไปถึงอีกแล้วตั้งแต่ลายเซ็นย้าย
-        // ไปอยู่บนกระดาษ = กระดิ่งของหัวหน้าสาขาขึ้น 0 ตลอดกาล
-        const res = await api.get('/intents?status=pending_officer_request');
-        setNotifications(res || []);
+        const res = await api.get('/faculty/home/dept-head');
+        if (res && res.unassigned) {
+          const count = res.unassigned.students_affected ?? 0;
+          setFacultyCount(count);
+          const items: NotificationItem[] = (res.unassigned.items || []).map(
+            (it: { student_id: number; full_name: string; student_code?: string; missing?: string[] }) => {
+              const missingText =
+                it.missing?.map((m: string) => (m === 'advisor' ? 'ที่ปรึกษา' : 'ผู้นิเทศ')).join(' และ ') || 'อาจารย์';
+              return {
+                id: `unassigned_${it.student_id}`,
+                title: it.full_name,
+                description: `ยังไม่มีอาจารย์${missingText} (${it.student_code || ''})`,
+                url: `/dashboard?menu=assignment&filter=incomplete`,
+              };
+            }
+          );
+          setNotifications(items);
+        } else {
+          setFacultyCount(0);
+          setNotifications([]);
+        }
       } else if (currentRole === 'staff') {
         // คิวจริงของเจ้าหน้าที่คือคำร้องที่นักศึกษาอัปโหลดกลับมาแล้วรอตรวจรับ
         // ไม่ใช่ `approved_by_dept_head` ซึ่งคือใบที่ตัวเองกดรับไปแล้ว
@@ -417,7 +434,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           {/* Notification Bell */}
           {auth?.user && ['advisor', 'supervisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (() => {
             const isFaculty = currentRole === 'advisor' || currentRole === 'supervisor';
-            const notifCount = isFaculty ? (facultyCount ?? 0) : notifications.length;
+            const isDeptHead = currentRole === 'dept_head';
+            const notifCount = (isFaculty || isDeptHead) ? (facultyCount ?? 0) : notifications.length;
 
             return (
               <div className="relative">
@@ -425,8 +443,24 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                   type="button"
                   onClick={() => setShowNotifDropdown(!showNotifDropdown)}
                   className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
-                  title={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : isFaculty ? 'งานที่รอมือคุณ' : 'รายการรออนุมัติ'}
-                  aria-label={currentRole === 'student' ? 'ความคืบหน้าคำร้อง' : isFaculty ? 'งานที่รอมือคุณ' : 'รายการรออนุมัติ'}
+                  title={
+                    currentRole === 'student'
+                      ? 'ความคืบหน้าคำร้อง'
+                      : isFaculty
+                        ? 'งานที่รอมือคุณ'
+                        : isDeptHead
+                          ? 'นักศึกษาที่ยังไม่ได้จัดสรรอาจารย์'
+                          : 'รายการรออนุมัติ'
+                  }
+                  aria-label={
+                    currentRole === 'student'
+                      ? 'ความคืบหน้าคำร้อง'
+                      : isFaculty
+                        ? 'งานที่รอมือคุณ'
+                        : isDeptHead
+                          ? 'นักศึกษาที่ยังไม่ได้จัดสรรอาจารย์'
+                          : 'รายการรออนุมัติ'
+                  }
                   aria-expanded={showNotifDropdown}
                 >
                   <Bell className="h-5 w-5" />
@@ -450,7 +484,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                             ? 'ความคืบหน้าสหกิจศึกษา'
                             : isFaculty
                               ? 'งานที่รอมือคุณ'
-                              : 'รายการค้างตรวจสอบ'} ({notifCount})
+                              : isDeptHead
+                                ? 'นักศึกษาที่ยังไม่ได้จัดสรรอาจารย์'
+                                : 'รายการค้างตรวจสอบ'} ({notifCount})
                         </span>
                       </div>
                       {notifications.length > 0 ? (
@@ -486,7 +522,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                               );
                             }
 
-                            if (isFaculty) {
+                            if (isFaculty || isDeptHead) {
                               return (
                                 <button
                                   key={index}
@@ -556,7 +592,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                             ? 'ยังไม่มีความคืบหน้าคำร้องในขณะนี้'
                             : isFaculty
                               ? 'ไม่มีงานรอคุณในขณะนี้'
-                              : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
+                              : isDeptHead
+                                ? 'นักศึกษาทุกคนมีอาจารย์ครบแล้ว'
+                                : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
                         </div>
                       )}
                     </div>
