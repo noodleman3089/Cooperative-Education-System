@@ -123,6 +123,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     if (!auth?.user) return;
     try {
       if (currentRole === 'advisor' || currentRole === 'supervisor') {
+        // ยิงซ้ำกับ AdvisorHome.tsx โดยตั้งใจ — กระดิ่งอยู่ทุกหน้า ไม่ใช่แค่หน้าแรกอาจารย์
+        // จึงต้องมีข้อมูลของตัวเองเสมอ แม้ผู้ใช้ไม่ได้เปิดหน้าแรกอยู่ · การแชร์ผลจะต้องมี
+        // context/store ใหม่ ซึ่งเกินขอบเขตแก้จุดนี้ (ดู PROMPT-sonnet-R5 ข้อ ง)
         const res = await api.get(`/faculty/home/advisor?view=${currentRole}`);
         if (res && res.tiles) {
           const items: NotificationItem[] = [];

@@ -10,6 +10,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import { formatThaiDate } from '../../utils/thaiDate';
 import { AuthContext } from '../../context/AuthContext';
+import { getErrorMessage } from '../../utils/errors';
 
 export interface TileItem {
   ref_id: number | null;
@@ -85,30 +86,29 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     async (isBackground = false) => {
       try {
         if (!isBackground) setLoading(true);
-        setError(null);
 
+        // ยิงซ้ำกับ Navbar.tsx โดยตั้งใจ — กระดิ่งต้องมีข้อมูลของตัวเองทุกหน้า
+        // แชร์ผลกันได้ก็ต่อเมื่อมี context/store ใหม่ ซึ่งเกินขอบเขตแก้จุดนี้
         const homeRes: AdvisorHomePayload = await api.get(
           `/faculty/home/advisor?view=${currentView}`
         );
         setDashboardPayload(homeRes);
+        setError(null);
 
         // Fetch intents list only for the advisor tracking card
         if (currentView === 'advisor') {
           try {
             const intentsRes = await api.get('/intents');
             setIntents(intentsRes || []);
-          } catch {
-            // Background / secondary load error shouldn't crash home
+          } catch (err) {
+            if (!isBackground) {
+              setError(getErrorMessage(err, 'โหลดรายการใบความจำนงที่ติดตามไม่ได้'));
+            }
           }
         }
       } catch (err: unknown) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const apiErr = err as any;
-        const msg =
-          apiErr?.response?.data?.message ||
-          'ไม่สามารถโหลดข้อมูลหน้าแรกของอาจารย์ได้ กรุณาลองใหม่อีกครั้ง';
         if (!isBackground) {
-          setError(msg);
+          setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลหน้าแรกของอาจารย์ได้ กรุณาลองใหม่อีกครั้ง'));
         }
       } finally {
         if (!isBackground) setLoading(false);
