@@ -117,11 +117,31 @@ export const UsersAndMasterData: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // บุคลากรและสาขาสำหรับตรวจสอบหัวหน้าสาขาคนเดิม (SB-G2)
+  const [personnelList, setPersonnelList] = useState<
+    {
+      personnel_id: number;
+      major_id: number;
+      major_name_th: string;
+      first_name?: string | null;
+      last_name?: string | null;
+      email: string;
+      roles: string[];
+    }[]
+  >([]);
+  const [pendingDeptHeadReplace, setPendingDeptHeadReplace] = useState<{
+    message: string;
+  } | null>(null);
+
   const loadUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
-      const usersData = await api.get('/users');
+      const [usersData, personnelData] = await Promise.all([
+        api.get('/users'),
+        api.get('/personnel'),
+      ]);
       setUsers(usersData || []);
+      setPersonnelList(personnelData || []);
     } catch (err) {
       console.error('Failed to load users:', err);
     } finally {
@@ -239,23 +259,32 @@ export const UsersAndMasterData: React.FC = () => {
     setSuccess(null);
   };
 
-  const handleEditUserSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const executeEditUser = async () => {
     if (!selectedUser) return;
 
     setIsSubmittingUser(true);
     setError(null);
     setSuccess(null);
+    setPendingDeptHeadReplace(null);
 
     try {
-      const updateData: { roles: string[]; is_active: boolean; password?: string } = {
+      const updateData: { email: string; roles: string[]; is_active: boolean; password?: string } = {
+        email: userEmail || selectedUser.email,
         roles: userRoles,
         is_active: userIsActive,
       };
       if (userPassword.trim()) updateData.password = userPassword;
 
-      await api.put(`/users/${selectedUser.user_id}`, updateData);
-      setSuccess(`อัปเดตข้อมูลบัญชี ${selectedUser.email} เรียบร้อยแล้ว`);
+      const res = await api.put(`/users/${selectedUser.user_id}`, updateData);
+      let successMsg = `อัปเดตข้อมูลบัญชี ${selectedUser.email} เรียบร้อยแล้ว`;
+      if (res?.replaced_dept_heads && res.replaced_dept_heads.length > 0) {
+        const replacedNames = res.replaced_dept_heads
+          .map((h: { full_name: string }) => h.full_name)
+          .join(', ');
+        successMsg += ` (ถอดบทบาทหัวหน้าสาขาวิชาจาก ${replacedNames})`;
+      }
+
+      setSuccess(successMsg);
       setIsEditUserModalOpen(false);
       await loadUsers();
     } catch (err) {
@@ -263,6 +292,52 @@ export const UsersAndMasterData: React.FC = () => {
     } finally {
       setIsSubmittingUser(false);
     }
+  };
+
+  const handleEditUserSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+
+    // SB-G2: ตรวจสอบกรณีเพิ่มบทบาท dept_head ให้บัญชีที่ยังไม่เคยมีบทบาทนี้
+    const isAddingDeptHead =
+      userRoles.includes('dept_head') && !(selectedUser.roles || []).includes('dept_head');
+    if (isAddingDeptHead) {
+      const targetPersonnel = personnelList.find(
+        (p) =>
+          p.personnel_id === selectedUser.user_id ||
+          p.email?.toLowerCase() === selectedUser.email.toLowerCase()
+      );
+      if (targetPersonnel?.major_id) {
+        const existingHead = personnelList.find(
+          (p) =>
+            p.major_id === targetPersonnel.major_id &&
+            p.personnel_id !== selectedUser.user_id &&
+            (p.roles || []).includes('dept_head')
+        );
+        const majorName = targetPersonnel.major_name_th || 'นี้';
+        if (existingHead) {
+          const headName =
+            [existingHead.first_name, existingHead.last_name].filter(Boolean).join(' ').trim() ||
+            existingHead.email;
+          setPendingDeptHeadReplace({
+            message: `สาขา ${majorName} มีหัวหน้าสาขาอยู่แล้ว คือ ${headName} — บันทึกแล้ว ${headName} จะไม่ใช่หัวหน้าสาขาอีกต่อไป (บัญชีและหน้าที่อาจารย์ยังอยู่)`,
+          });
+          return;
+        } else {
+          setPendingDeptHeadReplace({
+            message: 'ถ้าสาขานี้มีหัวหน้าสาขาอยู่ คนเดิมจะถูกถอดตำแหน่ง',
+          });
+          return;
+        }
+      } else {
+        setPendingDeptHeadReplace({
+          message: 'ถ้าสาขานี้มีหัวหน้าสาขาอยู่ คนเดิมจะถูกถอดตำแหน่ง',
+        });
+        return;
+      }
+    }
+
+    await executeEditUser();
   };
 
   const handlePreseedSubmit = async (e: React.FormEvent) => {
@@ -1602,6 +1677,18 @@ export const UsersAndMasterData: React.FC = () => {
         busy={deletePreseedBusy}
         onConfirm={handleDeletePreseed}
         onCancel={() => setPendingDeletePreseed(null)}
+      />
+
+      {/* กล่องยืนยันการตั้งหัวหน้าสาขาคนใหม่ (SB-G2) */}
+      <ConfirmDialog
+        open={pendingDeptHeadReplace !== null}
+        title="ยืนยันการเปลี่ยนหัวหน้าสาขาวิชา"
+        message={pendingDeptHeadReplace?.message || ''}
+        confirmLabel="ยืนยันและบันทึก"
+        confirmTestId="user-dept-head-replace-confirm"
+        busy={isSubmittingUser}
+        onConfirm={executeEditUser}
+        onCancel={() => setPendingDeptHeadReplace(null)}
       />
     </div>
   );
