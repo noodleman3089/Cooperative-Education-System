@@ -90,8 +90,8 @@ export const ImportScreening: React.FC = () => {
   const loadData = useCallback(async () => {
     try {
       const [studentsRes, masterRes] = await Promise.all([
-        api.get('/students').catch(() => []),
-        api.get('/master-data').catch(() => ({ majors: [] })),
+        api.get('/students'),
+        api.get('/master-data'),
       ]);
       const list = Array.isArray(studentsRes) ? studentsRes : [];
       setRegisteredStudents(list);
@@ -103,6 +103,7 @@ export const ImportScreening: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
+      setError(getErrorMessage(err, 'ไม่สามารถเรียกรายชื่อนักศึกษาและข้อมูลสาขาได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setLoadingData(false);
     }

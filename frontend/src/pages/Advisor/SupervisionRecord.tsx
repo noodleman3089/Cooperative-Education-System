@@ -148,8 +148,8 @@ const SupervisionRecord: React.FC = () => {
       const [formMeta, list, appRes, homeRes] = await Promise.all([
         api.get('/supervision-records/form'),
         api.get('/personnel/supervised-students'),
-        api.get('/appointments').catch(() => []),
-        api.get('/faculty/home/advisor?view=supervisor').catch(() => null),
+        api.get('/appointments'),
+        api.get('/faculty/home/advisor?view=supervisor'),
       ]);
       setMeta(formMeta);
       setError(null);

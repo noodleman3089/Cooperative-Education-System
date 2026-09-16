@@ -76,7 +76,7 @@ const DeptHeadDashboard: React.FC<DeptHeadDashboardProps> = ({ activeMenu = 'das
         // ตลอดกาล · แก้ครั้งนั้นเป็นการดึงสองสถานะที่ยังเดินกระดาษอยู่ — ซึ่งยังไม่พอ
         // เพราะพอเจ้าหน้าที่กดรับ ใบก็หายจากหน้า "ติดตาม" ทันที (เจอตอนเดินจริง
         // 2026-08-27) · ตอนนี้ดึงทั้งสาขาแล้วคัดเฉพาะใบที่ยังมีชีวิตอยู่
-        const all = (await api.get('/intents').catch(() => [])) as IntentForm[] | null;
+        const all = (await api.get('/intents')) as IntentForm[] | null;
         setPendingIntents((all || []).filter((i) => !DEAD_INTENT_STATUSES.includes(i.status)));
       } else {
         const [studentsRes, personnelRes] = await Promise.all([

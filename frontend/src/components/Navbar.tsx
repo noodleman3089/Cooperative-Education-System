@@ -328,6 +328,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         if (cancelled) return;
         setProfile((res?.profile ?? null) as MyProfile | null);
       })
+      // ตั้งใจเงียบ: 404 = ยังไม่มีโปรไฟล์ หรือ role นี้ไม่มี endpoint นี้ (พี่เลี้ยง/บริษัท)
+      // แถบบนตกกลับไปแสดงอีเมล ซึ่งเป็นพฤติกรรมที่ถูกแล้ว ไม่ใช่การซ่อนความพังของข้อมูลที่หน้าจอต้องใช้
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         /* ยังไม่มีโปรไฟล์ หรือ role นี้ไม่มี endpoint — ใช้อีเมลแทน */
       });

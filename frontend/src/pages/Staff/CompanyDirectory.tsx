@@ -111,6 +111,9 @@ const CompanyDirectory: React.FC = () => {
       .then(res => {
         if (Array.isArray(res)) setIntents(res as IntentRef[]);
       })
+      // ตั้งใจเงียบ: ตัวเลขสรุปใบความจำนงเป็นข้อมูลประกอบของทำเนียบสถานประกอบการ
+      // ไม่ใช่เนื้อหาหลักของหน้า · หน้าหลักยังใช้งานได้ตามปกติ
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         // fail-safe: intents summary is non-blocking
       });

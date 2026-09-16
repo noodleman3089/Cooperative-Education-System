@@ -35,6 +35,9 @@ export function useLateWindow(activityKey: string): LateWindow {
           lateEndDate: found?.late_end_date ?? null,
         });
       })
+      // ตั้งใจเงียบ: ปฏิทินเป็น fail-open ทั้งระบบ (ดูคอมเมนต์หัวไฟล์ + CLAUDE.md)
+      // อ่านปฏิทินไม่ได้ต้องไม่ไปปิดปุ่มยื่นของนักศึกษา
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         /* เงียบโดยตั้งใจ — ดูเหตุผลในคอมเมนต์หัวไฟล์ */
       });

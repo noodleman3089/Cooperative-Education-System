@@ -44,7 +44,7 @@ const StudentMemoScreen: React.FC = () => {
         const [typeRes, mine, myIntents] = await Promise.all([
           api.get('/memos/types'),
           api.get('/memos/me'),
-          api.get('/intents/me').catch(() => []),
+          api.get('/intents/me'),
         ]);
         if (cancelled) return;
         setTypes((typeRes as { types: MemoType[] }).types);

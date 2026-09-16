@@ -151,7 +151,7 @@ const SmartJobBoard: React.FC = () => {
       const [jobsData, companiesData, masterData, meResult] = await Promise.all([
         api.get('/jobs'),
         api.get('/companies'),
-        api.get('/master-data').catch(() => ({ provinces: [], googleMapsApiKey: '' })),
+        api.get('/master-data'),
         api.get('/students/dashboard').then(
           (d) => ({ ok: true as const, d }),
           (e) => ({ ok: false as const, e })

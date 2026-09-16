@@ -157,9 +157,9 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       if (!isBackground) setLoading(true);
       setError(null);
       const [requestData, acceptanceData, dispatchData] = await Promise.all([
-        api.get('/intents?status=pending_officer_request').catch(() => []),
-        api.get('/intents?status=pending_officer_approval').catch(() => []),
-        api.get('/intents?status=accepted').catch(() => []),
+        api.get('/intents?status=pending_officer_request'),
+        api.get('/intents?status=pending_officer_approval'),
+        api.get('/intents?status=accepted'),
       ]);
 
       const reqRows = (requestData || []) as RequestFormRow[];
@@ -185,7 +185,12 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
           if (matched && openedFormRef.current !== formIdNum) {
             openedFormRef.current = formIdNum;
             setReviewingRequest(matched);
-            api.get(`/intents/${matched.form_id}`).then(setRequestDetail).catch(() => null);
+            api
+              .get(`/intents/${matched.form_id}`)
+              .then(setRequestDetail)
+              .catch((err) =>
+                setError(getErrorMessage(err, 'ไม่สามารถเปิดรายละเอียดคำร้องได้'))
+              );
             setOfficerForm({
               advisor_signer_name: '',
               advisor_signed_date: '',
