@@ -247,9 +247,10 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     dean: [
-      { id: 'dashboard', label: 'แดชบอร์ดเอกสารอนุมัติ', icon: icons.dashboard },
-      { id: 'signature', label: 'ตั้งค่าลายมือชื่อดิจิทัล', icon: icons.signature },
-      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile }
+      { id: 'dashboard', label: 'หนังสือรอลงนาม', icon: icons.dashboard },
+      { id: 'signature', label: 'ลายมือชื่อสำหรับหนังสือราชการ', icon: icons.signature },
+      { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline },
+      { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     staff: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },

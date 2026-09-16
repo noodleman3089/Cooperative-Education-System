@@ -4,7 +4,6 @@ import { AuthContext } from '../context/AuthContext';
 import api, { API_BASE_URL } from '../services/api';
 import { Bell, FileText, LogOut } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
-import DeanSignModal from './DeanSignModal';
 
 /**
  * กระดิ่งแจ้งเตือนใช้ร่วมกันทุกบทบาท แต่แหล่งข้อมูลต่างกัน:
@@ -75,9 +74,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || null;
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
-  const [selectedDocId, setSelectedDocId] = useState<number | null>(null);
-
-  const docDetail = selectedDocId !== null ? notifications.find((n) => n.doc_id === selectedDocId) : null;
 
   const toggleDarkMode = () => {
     const nextDark = !darkMode;
@@ -555,10 +551,10 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                                 key={index}
                                 onClick={() => {
                                   setShowNotifDropdown(false);
-                                  if (itemId === undefined) return;
                                   if (isDoc) {
-                                    setSelectedDocId(itemId);
+                                    navigate('/dashboard');
                                   } else {
+                                    if (itemId === undefined) return;
                                     setSelectedIntentId(itemId);
                                   }
                                 }}
@@ -705,15 +701,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         onClose={() => setSelectedIntentId(null)}
       />
 
-      <DeanSignModal
-        docId={selectedDocId}
-        docDetail={docDetail ?? null}
-        onClose={() => setSelectedDocId(null)}
-        onSuccess={() => {
-          window.dispatchEvent(new CustomEvent('intent-updated'));
-          setSelectedDocId(null);
-        }}
-      />
+
     </>
   );
 };

@@ -23,9 +23,14 @@ const TONE_BY_TYPE: Record<string, string> = {
   late_submission: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/50',
 };
 
-const FacultyMemos: React.FC = () => {
+interface FacultyMemosProps {
+  showMajorFilter?: boolean;
+}
+
+const FacultyMemos: React.FC<FacultyMemosProps> = ({ showMajorFilter = false }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedType = searchParams.get('type') || 'all';
+  const selectedMajor = searchParams.get('major') || 'all';
 
   const [memos, setMemos] = useState<StudentMemoItem[]>([]);
   const [memoTypes, setMemoTypes] = useState<MemoTypeInfo[]>([]);
@@ -90,10 +95,21 @@ const FacultyMemos: React.FC = () => {
     });
   };
 
+  const availableMajors = useMemo(() => {
+    const majors = new Set<string>();
+    memos.forEach((m) => {
+      if (m.major_name_th) majors.add(m.major_name_th);
+    });
+    return Array.from(majors).sort();
+  }, [memos]);
+
   // Filtered memos
   const filteredMemos = useMemo(() => {
     return memos.filter((item) => {
       if (selectedType !== 'all' && item.memo_type !== selectedType) {
+        return false;
+      }
+      if (showMajorFilter && selectedMajor !== 'all' && item.major_name_th !== selectedMajor) {
         return false;
       }
       if (searchTerm.trim()) {
@@ -101,13 +117,14 @@ const FacultyMemos: React.FC = () => {
         const fullName = `${item.first_name || ''} ${item.last_name || ''}`.toLowerCase();
         const code = (item.student_code || '').toLowerCase();
         const reason = (item.reason || '').toLowerCase();
-        if (!fullName.includes(query) && !code.includes(query) && !reason.includes(query)) {
+        const major = (item.major_name_th || '').toLowerCase();
+        if (!fullName.includes(query) && !code.includes(query) && !reason.includes(query) && !major.includes(query)) {
           return false;
         }
       }
       return true;
     });
-  }, [memos, selectedType, searchTerm]);
+  }, [memos, selectedType, selectedMajor, showMajorFilter, searchTerm]);
 
   // Counts by memo_type
   const countsByType = useMemo(() => {
@@ -154,7 +171,7 @@ const FacultyMemos: React.FC = () => {
         {/* Filters and Search Bar */}
         <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center gap-3 flex-wrap bg-gray-50/50 dark:bg-gray-800/30">
           <div className="relative w-full sm:w-72">
-            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
               value={searchTerm}
@@ -198,6 +215,37 @@ const FacultyMemos: React.FC = () => {
               );
             })}
           </div>
+
+          {showMajorFilter && availableMajors.length > 0 && (
+            <div className="flex items-center gap-1.5 ml-auto sm:ml-0">
+              <span className="text-xs text-gray-600 dark:text-gray-400 font-medium">สาขาวิชา:</span>
+              <select
+                data-testid="memo-major-filter"
+                aria-label="ตัวกรองสาขาวิชา"
+                value={selectedMajor}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev);
+                    if (val === 'all') {
+                      next.delete('major');
+                    } else {
+                      next.set('major', val);
+                    }
+                    return next;
+                  });
+                }}
+                className="px-2.5 py-1 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-brand-blue cursor-pointer"
+              >
+                <option value="all">ทุกสาขาวิชา</option>
+                {availableMajors.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Table Content */}

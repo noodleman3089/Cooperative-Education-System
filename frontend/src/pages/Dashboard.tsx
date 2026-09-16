@@ -31,7 +31,8 @@ const FacultyMemos = lazy(() => import('./Faculty/FacultyMemos'));
 const DeptHeadHome = lazy(() => import('./DeptHead/DeptHeadHome'));
 const AdvisorAssignment = lazy(() => import('./DeptHead/AdvisorAssignment'));
 const PetitionTracking = lazy(() => import('./DeptHead/PetitionTracking'));
-const DeanDashboard = lazy(() => import('../components/DeanDashboard'));
+const DeanSignQueue = lazy(() => import('./Dean/DeanSignQueue'));
+const DeanSignature = lazy(() => import('./Dean/DeanSignature'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
 const JobOfferManager = lazy(() => import('./Staff/JobOfferManager'));
 const UsersAndMasterData = lazy(() => import('./Staff/UsersAndMasterData'));
@@ -440,9 +441,10 @@ const Dashboard: React.FC = () => {
         return <DeptHeadHome />;
         
       case 'dean':
-        if (activeMenu === 'signature') return <DeanDashboard activeMenu="signature" />;
+        if (activeMenu === 'signature') return <DeanSignature onNavigate={setActiveMenu} />;
+        if (activeMenu === 'memos') return <FacultyMemos showMajorFilter />;
         if (activeMenu === 'profile') return <PersonnelProfile />;
-        return <DeanDashboard activeMenu="dashboard" />;
+        return <DeanSignQueue onNavigate={setActiveMenu} />;
         
       case 'staff':
         if (activeMenu === 'appointments') return <AppointmentAudit />;
