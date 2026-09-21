@@ -75,7 +75,7 @@ const authLimiter = rateLimit({
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV !== 'production' ? 10000 : 100, // Limit each IP to 100 general requests (10000 in dev)
+  max: process.env.NODE_ENV !== 'production' ? 10000 : 3000, // 3000/IP — เดิม 100: แดชบอร์ด poll ทุก 10 วิ แท็บเดียว ≈ 90 และมหาวิทยาลัยออกเน็ต IP เดียว (NAT) · เจ้าของตัดสิน 2026-09-21
   message: { message: 'Too many requests. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
