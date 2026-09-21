@@ -66,6 +66,11 @@ const authLimiter = rateLimit({
   message: { message: 'Too many auth requests. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  // นับเฉพาะคำขอที่ล้มเหลว (4xx/5xx) — สิ่งที่ต้องกันคือการเดารหัสผ่าน ไม่ใช่การใช้งานปกติ
+  // ⛔ เดิมนับทุกคำขอใต้ /api/auth รวม `GET /auth/me` ที่ยิงทุกครั้งที่โหลดหน้า
+  //    โหมด production (10 ครั้ง) = ผู้ใช้จริงรีโหลด 10 หน้าใน 15 นาทีแล้วถูกดีดออก
+  //    และชุด E2E ยาว 15 นาทีชนเพดาน dev (1000) ท้ายชุดทุกรอบ (พบ 2026-09-21)
+  skipSuccessfulRequests: true,
 });
 
 const generalLimiter = rateLimit({
