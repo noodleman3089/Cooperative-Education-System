@@ -10,6 +10,7 @@ import CoopJourneyBar from './CoopJourneyBar';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import ConfirmDialog from './ui/ConfirmDialog';
+import ConfirmSummary from './ui/ConfirmSummary';
 import StatusBadge from './ui/StatusBadge';
 import { intentDisplayStatus } from '../utils/intentStatus';
 import Button from './ui/Button';
@@ -61,6 +62,8 @@ const StudentDashboard: React.FC = () => {
   const [signerPosition, setSignerPosition] = useState('');
   const [signedDate, setSignedDate] = useState('');
   const [proofError, setProofError] = useState<string | null>(null);
+  // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ + ระบบส่งลิงก์เชิญถึงอีเมลพี่เลี้ยง — ตรวจก่อนส่ง
+  const [confirmingProof, setConfirmingProof] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
   const [signerAdvisor, setSignerAdvisor] = useState('');
@@ -191,6 +194,12 @@ const StudentDashboard: React.FC = () => {
       setProofError('กรุณากรอกชื่อ ตำแหน่ง และวันที่ของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับ');
       return;
     }
+    setProofError(null);
+    setConfirmingProof(true);
+  };
+
+  const submitProof = async () => {
+    if (!activeIntent || !evidenceFile) return;
 
     const formData = new FormData();
     formData.append('name', mentorName);
@@ -209,6 +218,7 @@ const StudentDashboard: React.FC = () => {
 
     try {
       await api.post(`/acceptances/student/${activeIntent.form_id}/upload-proof`, formData);
+      setConfirmingProof(false);
       // Reset states
       setMentorName('');
       setMentorEmail('');
@@ -223,6 +233,7 @@ const StudentDashboard: React.FC = () => {
       await loadDashboardData();
     } catch (err) {
       // ⛔ ไม่ใช้ setError — `error` ของหน้านี้แทนที่ทั้งหน้า ข้อมูลที่กรอกไว้จะหายไปกับมัน
+      setConfirmingProof(false);
       setProofError(getErrorMessage(err, 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSubmittingProof(false);
@@ -1194,6 +1205,42 @@ const StudentDashboard: React.FC = () => {
       </div>
 
       {/* Announcement Detail Modal */}
+        <ConfirmDialog
+          open={confirmingProof && !!activeIntent}
+          title="ส่งแบบตอบรับให้เจ้าหน้าที่"
+          confirmLabel="ยืนยันส่ง"
+          cancelLabel="กลับไปแก้"
+          confirmTestId="proof-confirm"
+          cancelTestId="proof-confirm-cancel"
+          busy={submittingProof}
+          onCancel={() => setConfirmingProof(false)}
+          onConfirm={submitProof}
+          message={
+            <ConfirmSummary
+              lead={`${activeIntent?.company_name_th ?? ''} · เริ่มงาน ${startDate ? formatThaiDate(startDate) : '—'}`}
+              groups={[
+                {
+                  title: 'พนักงานที่ปรึกษา (พี่เลี้ยง) · ระบบจะส่งลิงก์เชิญไปที่อีเมลนี้',
+                  rows: [
+                    { label: 'ชื่อ', value: mentorName.trim() },
+                    { label: 'อีเมล', value: mentorEmail.trim() },
+                    { label: 'โทรศัพท์', value: mentorPhone.trim() },
+                  ],
+                },
+                {
+                  title: 'ผู้ลงนามบนแบบตอบรับ · พิมพ์ลงหนังสือส่งตัว',
+                  rows: [
+                    { label: 'ชื่อ', value: signerName.trim() },
+                    { label: 'ตำแหน่ง', value: signerPosition.trim() },
+                    { label: 'วันที่', value: signedDate ? formatThaiDate(signedDate) : '' },
+                    { label: 'ไฟล์', value: evidenceFile?.name ?? '' },
+                  ],
+                },
+              ]}
+              lockNote="ส่งแล้วแก้เองไม่ได้ จนกว่าเจ้าหน้าที่จะตีกลับ"
+            />
+          }
+        />
       {selectedAnnouncement && announcementModal}
 
       {/* Co-op Calendar Modal */}

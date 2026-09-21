@@ -8,6 +8,8 @@ import Button from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
 import { JOB_TYPE_OPTIONS, WORK_REGION_OPTIONS } from '../../config/studentInterests';
 import { getErrorMessage } from '../../utils/errors';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 
 interface Major {
   major_id: number;
@@ -57,6 +59,8 @@ const OnboardingStudent: React.FC = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ค่าทะเบียน (รหัส · สาขา · ปีที่เข้า) แก้เองไม่ได้หลังบันทึก (SEC-05) — ให้ตรวจอีกครั้งก่อนส่ง
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const auth = useContext(AuthContext);
   const navigate = useNavigate();
@@ -158,12 +162,14 @@ const OnboardingStudent: React.FC = () => {
   const toggleJobType = (type: string) =>
     setJobTypes(prev => (prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]));
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError(null);
-
     if (!validateStepTwo()) return;
+    setConfirmOpen(true);
+  };
 
+  const submitProfile = async () => {
     setIsSubmitting(true);
     try {
       await api.post('/profile/setup', {
@@ -192,6 +198,7 @@ const OnboardingStudent: React.FC = () => {
     } catch (err) {
       // ข้อผิดพลาดของขั้นที่ 1 (รหัสซ้ำ · สาขาไม่มีจริง · รหัสผูกกับอีเมลอื่น) เด้งกลับ
       // มาตอนกดส่งจากขั้นที่ 2 — พากลับไปขั้นที่ 1 ไม่งั้นผู้ใช้เห็นข้อความที่แก้ไม่ได้
+      setConfirmOpen(false);
       setStep(1);
       window.scrollTo({ top: 0 });
       setGlobalError(getErrorMessage(err, 'การบันทึกข้อมูลล้มเหลว กรุณาติดต่อผู้ดูแลระบบ'));
@@ -522,6 +529,33 @@ const OnboardingStudent: React.FC = () => {
           </div>
         </form>
       </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ยืนยันข้อมูลทะเบียน"
+        confirmLabel="ยืนยันและบันทึก"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="onboarding-confirm"
+        cancelTestId="onboarding-confirm-cancel"
+        busy={isSubmitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={submitProfile}
+        message={
+          <ConfirmSummary
+            lead="ตรวจอีกครั้งก่อนบันทึก ค่าเหล่านี้ถูกพิมพ์ลงหนังสือที่คณบดีลงนาม"
+            rows={[
+              { label: 'รหัสนักศึกษา', value: studentCode.trim() },
+              {
+                label: 'สาขาวิชา',
+                value: majors.find(m => m.major_id === selectedMajorId)?.major_name_th ?? '—',
+              },
+              { label: 'ปีที่เข้าศึกษา', value: enrollmentYear },
+              { label: 'ชื่อ-นามสกุล', value: `${firstName.trim()} ${lastName.trim()}`.trim() },
+            ]}
+            lockNote="รหัส สาขา และปีที่เข้า แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่"
+          />
+        }
+      />
     </div>
   );
 };
