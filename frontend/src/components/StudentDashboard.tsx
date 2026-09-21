@@ -56,6 +56,11 @@ const StudentDashboard: React.FC = () => {
   const [mentorPosition, setMentorPosition] = useState('');
   const [mentorDept, setMentorDept] = useState('');
   const [startDate, setStartDate] = useState('');
+  // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตามกระดาษ (ถูกพิมพ์ลงหนังสือส่งตัว · เจ้าหน้าที่ไม่ต้องคีย์ซ้ำ)
+  const [signerName, setSignerName] = useState('');
+  const [signerPosition, setSignerPosition] = useState('');
+  const [signedDate, setSignedDate] = useState('');
+  const [proofError, setProofError] = useState<string | null>(null);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
   const [signerAdvisor, setSignerAdvisor] = useState('');
@@ -179,7 +184,11 @@ const StudentDashboard: React.FC = () => {
     if (!activeIntent || !evidenceFile) return;
 
     if (!mentorName || !mentorEmail || !mentorPhone || !startDate) {
-      setError('กรุณากรอกข้อมูลพี่เลี้ยงและระบุวันเริ่มงานให้ครบถ้วน');
+      setProofError('กรุณากรอกข้อมูลพี่เลี้ยงและระบุวันเริ่มงานให้ครบถ้วน');
+      return;
+    }
+    if (!signerName.trim() || !signerPosition.trim() || !signedDate) {
+      setProofError('กรุณากรอกชื่อ ตำแหน่ง และวันที่ของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับ');
       return;
     }
 
@@ -190,10 +199,13 @@ const StudentDashboard: React.FC = () => {
     formData.append('position', mentorPosition);
     formData.append('department', mentorDept);
     formData.append('start_date', startDate);
+    formData.append('signer_name', signerName.trim());
+    formData.append('signer_position', signerPosition.trim());
+    formData.append('signed_date', signedDate);
     formData.append('evidence', evidenceFile);
 
     setSubmittingProof(true);
-    setError(null);
+    setProofError(null);
 
     try {
       await api.post(`/acceptances/student/${activeIntent.form_id}/upload-proof`, formData);
@@ -204,10 +216,14 @@ const StudentDashboard: React.FC = () => {
       setMentorPosition('');
       setMentorDept('');
       setStartDate('');
+      setSignerName('');
+      setSignerPosition('');
+      setSignedDate('');
       setEvidenceFile(null);
       await loadDashboardData();
     } catch (err) {
-      setError(getErrorMessage(err, 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง'));
+      // ⛔ ไม่ใช้ setError — `error` ของหน้านี้แทนที่ทั้งหน้า ข้อมูลที่กรอกไว้จะหายไปกับมัน
+      setProofError(getErrorMessage(err, 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSubmittingProof(false);
     }
@@ -975,6 +991,7 @@ const StudentDashboard: React.FC = () => {
                         <Input
                           type="date"
                           required
+                          data-testid="proof-start-date"
                           disabled={submittingProof || reportingFail}
                           value={startDate}
                           onChange={(e) => setStartDate(e.target.value)} size="sm"
@@ -1006,6 +1023,45 @@ const StudentDashboard: React.FC = () => {
                       </div>
                     </div>
 
+                    <div className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
+                      <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+                        ผู้ลงนามบนแบบตอบรับ (กรอกตามที่ปรากฏบนกระดาษ) — ชื่อนี้จะถูกพิมพ์ลงหนังสือส่งตัว
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ชื่อผู้อนุมัติ *</label>
+                          <Input
+                            data-testid="proof-signer-name"
+                            disabled={submittingProof || reportingFail}
+                            value={signerName}
+                            onChange={(e) => setSignerName(e.target.value)}
+                            placeholder="เช่น นางสาวสมหญิง ใจดี" size="sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ตำแหน่ง *</label>
+                          <Input
+                            data-testid="proof-signer-position"
+                            disabled={submittingProof || reportingFail}
+                            value={signerPosition}
+                            onChange={(e) => setSignerPosition(e.target.value)}
+                            placeholder="เช่น ผู้จัดการฝ่ายบุคคล" size="sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันที่บนแบบตอบรับ *</label>
+                          <Input
+                            type="date"
+                            data-testid="proof-signed-date"
+                            disabled={submittingProof || reportingFail}
+                            value={signedDate}
+                            onChange={(e) => setSignedDate(e.target.value)}
+                            size="sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     <div className="space-y-1">
                       <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1 font-bold">ไฟล์หลักฐานใบตอบรับจากบริษัท (PDF/PNG/JPG) *</label>
                       <input
@@ -1018,6 +1074,7 @@ const StudentDashboard: React.FC = () => {
                       />
                     </div>
 
+                    <AlertBanner variant="error" message={proofError} />
                     <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
                       <button
                         type="submit"

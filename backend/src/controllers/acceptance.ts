@@ -157,16 +157,25 @@ export class AcceptanceController {
       // ยังไม่ลงนาม = ยังไม่มีอะไรให้บริษัทตอบ · `acceptance_due_date` ถูกปั๊มตอนลงนาม
       // จึงใช้เป็นด่านลำดับได้ในตัว ไม่ต้อง join หา official_documents ซ้ำ
       const gate = await query(
-        `SELECT acceptance_due_date::text AS due,
-                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today
-           FROM intent_forms WHERE form_id = $1`,
+        `SELECT i.acceptance_due_date::text AS due,
+                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
+                (SELECT d.dean_signature_date::date::text
+                   FROM official_documents d
+                  WHERE d.student_id = i.student_id AND d.company_id = i.company_id
+                    AND d.type = 'cover_letter' AND d.status = 'signed'
+                  ORDER BY d.doc_id DESC LIMIT 1) AS letter_signed_on
+           FROM intent_forms i WHERE i.form_id = $1`,
         [intentId]
       );
       if ((gate.rowCount ?? 0) === 0) {
         res.status(404).json({ message: 'ไม่พบใบแจ้งความจำนงที่ต้องการ' });
         return;
       }
-      const { due, today } = gate.rows[0] as { due: string | null; today: string };
+      const { due, today, letter_signed_on } = gate.rows[0] as {
+        due: string | null;
+        today: string;
+        letter_signed_on: string | null;
+      };
       if (!due) {
         res.status(409).json({
           message:
@@ -179,6 +188,35 @@ export class AcceptanceController {
       // เพราะบางบริษัทเซ็นช้า · เทียบสตริง YYYY-MM-DD ล้วน ห้าม new Date()
       const submittedLate = today > due;
 
+      // ผู้ลงนามบนแบบตอบรับ — ถูกพิมพ์ลงหนังสือส่งตัว จึงบังคับ · นักศึกษาถือกระดาษอยู่แล้วเลยกรอกเอง
+      // (เจ้าของตัดสิน 2026-09-21: เดิมเจ้าหน้าที่คีย์จากกระดาษตอนตรวจ = ภาระซ้ำ)
+      const raw = req.body as Record<string, unknown>;
+      const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+      const signerName = text(raw.signer_name);
+      const signerPosition = text(raw.signer_position);
+      const signedDate = text(raw.signed_date);
+      if (!signerName || !signerPosition || !signedDate) {
+        res.status(400).json({
+          message: 'กรุณากรอกชื่อ ตำแหน่ง และวันที่ของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับของสถานประกอบการ',
+        });
+        return;
+      }
+      // เทียบสตริง YYYY-MM-DD ล้วน — ห้าม new Date() (เลื่อนวันตาม timezone)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(signedDate)) {
+        res.status(400).json({ message: 'รูปแบบวันที่บนแบบตอบรับไม่ถูกต้อง' });
+        return;
+      }
+      if (signedDate > today) {
+        res.status(400).json({ message: 'วันที่บนแบบตอบรับเป็นวันในอนาคต กรุณาตรวจสอบกับกระดาษอีกครั้ง' });
+        return;
+      }
+      if (letter_signed_on && signedDate < letter_signed_on) {
+        res.status(400).json({
+          message: `วันที่บนแบบตอบรับ (${signedDate}) มาก่อนวันที่คณบดีลงนามหนังสือขอความอนุเคราะห์ (${letter_signed_on}) ซึ่งเป็นไปไม่ได้ เพราะสถานประกอบการตอบรับหลังได้รับหนังสือฉบับนั้น`,
+        });
+        return;
+      }
+
 
       const updatedIntent = await IntentFormModel.acceptByStudentWithTransaction(
         intentId,
@@ -186,7 +224,8 @@ export class AcceptanceController {
         { name, email, phone, position, department },
         start_date,
         evidencePath,
-        submittedLate
+        submittedLate,
+        { name: signerName, position: signerPosition, signedDate }
       );
 
       // Send email notification to student: waiting for officer review
@@ -294,43 +333,18 @@ export class AcceptanceController {
       }
 
       if (action === 'accepted') {
-        // ⛔ ก่อนหน้านี้ระบบรับไฟล์แบบตอบรับได้ แต่ไม่รู้ว่าในกระดาษเขียนว่าอะไร
-        //    สามช่องนี้คือสิ่งที่เจ้าหน้าที่อ่านจากใบจริงแล้วคีย์เข้ามา (กลไกเดียวกับ
-        //    ที่คีย์ชื่อผู้ลงนามจากเอกสารหมายเลข 1) — ไม่มีสามช่องนี้ก็ยังเป็นไฟล์ทึบเหมือนเดิม
-        const body = req.body as Record<string, unknown>;
-        const signerName = typeof body.signer_name === 'string' ? body.signer_name.trim() : '';
-        const signerPosition =
-          typeof body.signer_position === 'string' ? body.signer_position.trim() : '';
-        const signedDate = typeof body.signed_date === 'string' ? body.signed_date.trim() : '';
-
-        if (!signerName || !signerPosition || !signedDate) {
-          throw new Error(
-            'กรุณากรอกชื่อผู้อนุมัติ ตำแหน่ง และวันที่ ตามที่ปรากฏบนแบบตอบรับที่นักศึกษาส่งมา'
-          );
-        }
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(signedDate)) {
-          throw new Error('รูปแบบวันที่บนแบบตอบรับไม่ถูกต้อง');
-        }
-        // เทียบสตริง YYYY-MM-DD ล้วน — ห้าม new Date() (เลื่อนวันตาม timezone)
-        if (signedDate > intent.today) {
-          throw new Error('วันที่บนแบบตอบรับเป็นวันในอนาคต กรุณาตรวจสอบกับกระดาษอีกครั้ง');
-        }
-        if (intent.letter_signed_on && signedDate < intent.letter_signed_on) {
-          throw new Error(
-            `วันที่บนแบบตอบรับ (${signedDate}) มาก่อนวันที่คณบดีลงนามหนังสือขอความอนุเคราะห์ (${intent.letter_signed_on}) ซึ่งเป็นไปไม่ได้ เพราะสถานประกอบการตอบรับหลังได้รับหนังสือฉบับนั้น`
-          );
-        }
+        // ผู้ลงนามบนแบบตอบรับ นักศึกษากรอกตอนอัปโหลดแล้ว (ตรวจวันที่ไว้ตรงนั้น) — เจ้าหน้าที่แค่ดูเทียบกับกระดาษ
+        // ⛔ ไม่รับชื่อ/ตำแหน่ง/วันที่จากเจ้าหน้าที่แล้ว (เจ้าของตัดสิน 2026-09-21) · ส่งมาก็เมิน
+        const signerRes = await client.query(
+          `SELECT acceptance_signer_name, acceptance_signed_date::text AS acceptance_signed_date
+             FROM intent_forms WHERE form_id = $1`,
+          [intentId]
+        );
+        const signerName = signerRes.rows[0]?.acceptance_signer_name ?? null;
+        const signedDate = signerRes.rows[0]?.acceptance_signed_date ?? null;
 
         // 2. Update intent status to accepted
-        await client.query(
-          `UPDATE intent_forms
-              SET status = 'accepted',
-                  acceptance_signer_name = $2,
-                  acceptance_signer_position = $3,
-                  acceptance_signed_date = $4
-            WHERE form_id = $1`,
-          [intentId, signerName, signerPosition, signedDate]
-        );
+        await client.query(`UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`, [intentId]);
 
         // 3. Activate mentor account if it's currently inactive
         if (intent.mentor_id) {

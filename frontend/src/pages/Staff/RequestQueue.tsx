@@ -66,6 +66,10 @@ export interface AcceptanceRow {
   acceptance_due_date?: string | null;
   acceptance_submitted_late?: boolean;
   start_date?: string | null;
+  /** ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตอนอัปโหลด (มากับ `GET /intents`) */
+  acceptance_signer_name?: string | null;
+  acceptance_signer_position?: string | null;
+  acceptance_signed_date?: string | null;
 }
 
 export interface DispatchRow {
@@ -134,11 +138,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
   // Modal Review States - Acceptance
   const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceRow | null>(null);
-  const [acceptanceForm, setAcceptanceForm] = useState({
-    signer_name: '',
-    signer_position: '',
-    signed_date: '',
-  });
   const [acceptanceBusy, setAcceptanceBusy] = useState(false);
   const [rejectingAcceptance, setRejectingAcceptance] = useState(false);
   const [acceptanceRejectReason, setAcceptanceRejectReason] = useState('');
@@ -195,7 +194,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
           const matched = accRows.find((r) => r.form_id === formIdNum);
           if (matched) {
             setReviewingAcceptance(matched);
-            setAcceptanceForm({ signer_name: '', signer_position: '', signed_date: '' });
           }
         }
         if (queueParam === 'dispatch') {
@@ -329,7 +327,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
   const openAcceptanceReview = (row: AcceptanceRow) => {
     setReviewingAcceptance(row);
-    setAcceptanceForm({ signer_name: '', signer_position: '', signed_date: '' });
     setRejectingAcceptance(false);
     setAcceptanceRejectReason('');
     setError(null);
@@ -364,7 +361,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     try {
       await api.put(`/acceptances/${reviewingAcceptance.form_id}/officer-approve`, {
         action,
-        ...(action === 'accepted' ? acceptanceForm : { reason: acceptanceRejectReason.trim() }),
+        ...(action === 'accepted' ? {} : { reason: acceptanceRejectReason.trim() }),
       });
       setSuccess(
         action === 'accepted'
@@ -1200,53 +1197,15 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                   />
                 </div>
               ) : (
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
-                    กรอกตามที่ปรากฏบนกระดาษ — สามช่องนี้คือสิ่งที่ทำให้ระบบรู้ว่าใครเป็นผู้อนุมัติ ไม่ใช่แค่เก็บไฟล์ไว้เฉยๆ
-                  </p>
-                  <div>
-                    <label
-                      htmlFor="acceptance-signer-name"
-                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                    >
-                      ชื่อผู้อนุมัตินักศึกษา
-                    </label>
-                    <Input
-                      id="acceptance-signer-name"
-                      data-testid="acceptance-signer-name"
-                      value={acceptanceForm.signer_name}
-                      onChange={(e) => setAcceptanceForm((f) => ({ ...f, signer_name: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="acceptance-signer-position"
-                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                    >
-                      ตำแหน่ง
-                    </label>
-                    <Input
-                      id="acceptance-signer-position"
-                      data-testid="acceptance-signer-position"
-                      value={acceptanceForm.signer_position}
-                      onChange={(e) => setAcceptanceForm((f) => ({ ...f, signer_position: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label
-                      htmlFor="acceptance-signed-date"
-                      className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                    >
-                      วันที่บนแบบตอบรับ
-                    </label>
-                    <Input
-                      id="acceptance-signed-date"
-                      type="date"
-                      data-testid="acceptance-signed-date"
-                      value={acceptanceForm.signed_date}
-                      onChange={(e) => setAcceptanceForm((f) => ({ ...f, signed_date: e.target.value }))}
-                    />
-                  </div>
+                // ⛔ เจ้าหน้าที่ไม่ต้องคีย์ผู้ลงนามอีก (เจ้าของตัดสิน 2026-09-21) — นักศึกษากรอกตอนอัปโหลด แสดงให้เทียบกับกระดาษ
+                <div
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
+                  data-testid="acceptance-signer"
+                >
+                  <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่นักศึกษากรอก — ตรวจให้ตรงกับกระดาษก่อนรับ (ชื่อนี้ถูกพิมพ์ลงหนังสือส่งตัว)</p>
+                  <p>ชื่อผู้อนุมัตินักศึกษา: <strong>{reviewingAcceptance.acceptance_signer_name || '—'}</strong></p>
+                  <p>ตำแหน่ง: <strong>{reviewingAcceptance.acceptance_signer_position || '—'}</strong></p>
+                  <p>วันที่บนแบบตอบรับ: <strong>{reviewingAcceptance.acceptance_signed_date ? formatThaiDate(reviewingAcceptance.acceptance_signed_date.slice(0, 10)) : '—'}</strong></p>
                 </div>
               )}
             </div>
@@ -1276,11 +1235,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                 <Button
                   size="sm"
                   loading={acceptanceBusy}
-                  disabled={
-                    !acceptanceForm.signer_name.trim() ||
-                    !acceptanceForm.signer_position.trim() ||
-                    !acceptanceForm.signed_date
-                  }
                   data-testid="acceptance-approve-submit"
                   onClick={() => submitAcceptanceDecision('accepted')}
                 >
