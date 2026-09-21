@@ -18,6 +18,9 @@ router.use(authorizeRoles('company'));
 // GET /api/form07 — ข้อมูลบริษัท + พนักงานที่ปรึกษา + นักศึกษาที่ตอบรับไว้
 router.get('/', Form07Controller.getForm);
 
+// GET /api/form07/print — PDF หน้า 1–2 ของบริษัทตัวเอง (ปุ่ม "พิมพ์ใบ 07" ใน Form07Company)
+router.get('/print', Form07Controller.printForm);
+
 // PUT /api/form07 — บันทึกทั้งใบในทรานแซกชันเดียว (บริษัท · พี่เลี้ยง · งานที่มอบหมาย)
 router.put('/', Form07Controller.updateForm);
 

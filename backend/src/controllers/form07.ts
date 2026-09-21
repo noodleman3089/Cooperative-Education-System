@@ -4,6 +4,7 @@ import { writeAudit } from '../utils/audit';
 import { sendMentorInviteEmail } from '../utils/email';
 import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
 import { createInviteLink } from '../utils/invite';
+import { buildForm07Pdf, type Form07PdfData } from '../utils/form07Pdf';
 
 /**
  * แบบแจ้งรายละเอียดงาน ตำแหน่งงาน พนักงานที่ปรึกษา (สหกิจ 07 หน้า 1–2)
@@ -34,6 +35,36 @@ export class Form07Controller {
       res.status(200).json({ company, mentors, students, ...deadline });
     } catch (error) {
       sendUnexpectedError(res, error, 'Get form07 error', 'ไม่สามารถโหลดแบบแจ้งรายละเอียดงานได้');
+    }
+  }
+
+  /**
+   * Route: GET /api/form07/print
+   * Access: company — พิมพ์ได้เฉพาะบริษัทของตัวเอง (บริษัทมาจาก token ไม่รับ `:id`)
+   *
+   * หน้า 1–2 ของกระดาษ จากข้อมูลที่บันทึกไว้ล่าสุด · หน้า 3 (แผนปฏิบัติงาน) ไม่อยู่ที่นี่
+   */
+  static async printForm(req: Request, res: Response): Promise<void> {
+    try {
+      const companyId = await requireOwnCompany(req, res);
+      if (companyId === null) return;
+
+      const [company, mentors, students] = await Promise.all([
+        fetchCompany(companyId),
+        fetchMentors(companyId),
+        fetchStudents(companyId),
+      ]);
+
+      const pdf = await buildForm07Pdf({
+        company,
+        mentors,
+        students,
+      } as unknown as Form07PdfData);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="coop07-company-${companyId}.pdf"`);
+      res.status(200).send(pdf);
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Print form07 error', 'ไม่สามารถสร้างแบบแจ้งรายละเอียดงาน (สหกิจ 07) ได้');
     }
   }
 
