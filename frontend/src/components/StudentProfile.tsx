@@ -393,7 +393,7 @@ const StudentProfile: React.FC = () => {
               <input
                 type="text"
                 readOnly
-                value={enrollmentYear !== '' ? String(enrollmentYear) : '2568'}
+                value={enrollmentYear !== '' ? String(enrollmentYear) : '—'}
                 className="text-xs font-bold text-gray-900 dark:text-white mt-1 bg-transparent border-0 p-0 focus:outline-none cursor-default"
               />
             </div>

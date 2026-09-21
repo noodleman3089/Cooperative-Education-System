@@ -35,6 +35,16 @@ const StudentDashboard: React.FC = () => {
     student: StudentProfile & { advisor?: { email: string; name?: string }; supervisor?: { email: string; name?: string } };
     activeIntent: IntentForm | null;
     documents: OfficialDocument[];
+    /** ความคืบหน้าเฟส 2–4 นับจากแถวจริง — `GET /students/dashboard` */
+    progress?: {
+      accommodation_submitted: boolean;
+      work_plan_certified: boolean;
+      outline_submitted: boolean;
+      outline_approved: boolean;
+      supervision_visits: number;
+      final_report_approved: boolean;
+      mentor_evaluations: number;
+    };
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -404,7 +414,6 @@ const StudentDashboard: React.FC = () => {
   }
 
   const activeIntent = data.activeIntent;
-  const student = data.student;
   const documents = data.documents || [];
 
   // ป้าย "สถานะการพิจารณา" ต้องอ่านจากหนังสือเมื่อออกหนังสือแล้ว — ตรรกะอยู่ที่
@@ -452,26 +461,31 @@ const StudentDashboard: React.FC = () => {
   })();
   const step1_5Done = intentStatus === 'accepted';
 
-  const step2_1Done = step1_5Done && !!(student?.current_address || intentStatus === 'accepted');
-  const step2_2Done = step1_5Done && intentStatus === 'accepted';
+  // ⛔ เฟส 2–4 อ่านจาก `progress` ที่ backend นับจากแถวจริงของแต่ละขั้น — ห้ามเดาจากสถานะใบความจำนง
+  //    เดิม 2.x ติ๊กเสร็จทันทีที่บริษัทตอบรับ (ยังไม่ได้กรอกอะไรเลย) และ 3.x/4.x เป็น `&& false` ตลอดกาล
+  //    · แต่ละขั้นเสร็จตามข้อมูลของตัวเอง ไม่ต่อโซ่กัน — ของจริงไม่เรียงเสมอ (นิเทศได้ก่อนโครงร่างผ่าน)
+  const progress = data.progress;
+  const SUPERVISION_VISITS = 2; // คู่มือกำหนดนิเทศ 2 ครั้ง (`supervision_records.visit_number` 1 | 2)
+  const supervisionVisits = progress?.supervision_visits ?? 0;
 
-  const step3_1Done = step2_2Done && false;
-  const step3_2Done = step3_1Done && false;
-  const step3_3Done = step3_2Done && false;
+  const step2_1Done = step1_5Done && !!progress?.accommodation_submitted;
+  const step2_2Done = step1_5Done && !!progress?.work_plan_certified;
 
-  const step4_1Done = step3_3Done && false;
-  const step4_2Done = step4_1Done && false;
-  // ⛔ เดิมอ่าน `is_eligible` ซึ่งไม่เกี่ยวกับเกรดเลย และหลัง SEC-02 เปลี่ยน (ทุกคนมีสิทธิ์)
-  //    มันทำให้ขั้น "ยืนยันเกรด S/U" ขึ้นว่าเสร็จให้นักศึกษาทุกคนตั้งแต่วันแรก
-  //    ระบบยังไม่มีข้อมูลเกรดสุดท้าย จึงยึดแบบเดียวกับขั้น 3.x/4.x ข้างบนไปก่อน (รอรีเมคฝ่ายนักศึกษา)
-  const step4_3Done = step4_2Done && false;
+  const step3_1Done = step1_5Done && !!progress?.outline_submitted;
+  const step3_2Done = step1_5Done && !!progress?.outline_approved;
+  const step3_3Done = step1_5Done && supervisionVisits >= SUPERVISION_VISITS;
+
+  const step4_1Done = step1_5Done && !!progress?.final_report_approved;
+  const step4_2Done = step1_5Done && (progress?.mentor_evaluations ?? 0) >= 2;
+  // ระบบไม่เก็บเกรด (เจ้าของตัดสิน 2026-09-21) — ขั้นสุดท้ายบอกแค่ว่าผลประเมินครบแล้ว
+  const step4_3Done = step4_2Done;
 
   let activePhaseId = 1;
   // เฟส 2 คือ "สัปดาห์แรกของการทำงาน" — เข้าได้ต่อเมื่อ **สถานประกอบการตอบรับแล้ว**
   // ไม่ใช่แค่ออกหนังสือเสร็จ (ของเดิมใช้ step1_3Done ที่ติ๊กตั้งแต่มีแถวหนังสือ)
   if (step1_5Done) activePhaseId = 2;
   if (step2_1Done && step2_2Done) activePhaseId = 3;
-  if (step3_3Done) activePhaseId = 4;
+  if (step3_3Done || step4_1Done) activePhaseId = 4;
 
   const phases: PhaseGroup[] = [
     {
@@ -563,8 +577,9 @@ const StudentDashboard: React.FC = () => {
         },
         {
           id: '3.3',
-          title: '3.3 การนิเทศงาน (สหกิจ 13)',
-          description: 'อาจารย์นิเทศเข้าตรวจเยี่ยมพื้นที่/ออนไลน์ และบันทึกการประเมิน',
+          // ⛔ ไม่ใช่ "สหกิจ 13" — ใบนั้นอาจารย์นิเทศประเมิน *สถานประกอบการ* ไม่ใช่ใบของนักศึกษา
+          title: '3.3 การนิเทศงาน (ครั้งที่ 1 และ 2)',
+          description: `อาจารย์นิเทศเข้าตรวจเยี่ยมพื้นที่/ออนไลน์ · นิเทศแล้ว ${supervisionVisits} จาก ${SUPERVISION_VISITS} ครั้ง`,
           status: step3_3Done ? 'completed' : step3_2Done ? 'active' : 'pending'
         }
       ]
@@ -572,7 +587,7 @@ const StudentDashboard: React.FC = () => {
     {
       phaseId: 4,
       title: '4. สิ้นสุด & ประเมินผล',
-      subtitle: 'ส่งรายงานเล่มสมบูรณ์ & ตัดเกรด',
+      subtitle: 'ส่งรายงานเล่มสมบูรณ์ & ผลประเมิน',
       status: step4_3Done ? 'completed' : activePhaseId === 4 ? 'active' : 'pending',
       subSteps: [
         {
@@ -589,8 +604,8 @@ const StudentDashboard: React.FC = () => {
         },
         {
           id: '4.3',
-          title: '4.3 ประเมินผลสำเร็จ & ยืนยันเกรด (S/U)',
-          description: 'อาจารย์ตัดเกรดผ่านโครงการสหกิจศึกษาสำเร็จเรียบร้อย',
+          title: '4.3 ผลประเมินครบแล้ว',
+          description: 'ได้รับผลประเมินจากพนักงานที่ปรึกษาครบทั้งสหกิจ 15 และ 16',
           status: step4_3Done ? 'completed' : step4_2Done ? 'active' : 'pending'
         }
       ]

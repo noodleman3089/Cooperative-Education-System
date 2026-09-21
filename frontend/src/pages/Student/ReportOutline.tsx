@@ -210,7 +210,7 @@ const ReportOutline: React.FC = () => {
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div className="space-y-1.5">
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
-            โครงร่างรายงาน (Co-op 11)
+            โครงร่างรายงาน (สหกิจ 11)
           </h1>
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
             เลือกหัวข้อรายงานร่วมกับพี่เลี้ยงก่อน แล้วให้อาจารย์ที่ปรึกษาเห็นชอบ จึงเริ่มเขียนรายงานฉบับจริงได้

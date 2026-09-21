@@ -99,7 +99,10 @@ const SupervisionLogForm: React.FC<SupervisionLogFormProps> = ({ appointmentId, 
           <AlertBanner variant="error" message={error} />
 
           <div>
-            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">คะแนนประเมินเบื้องต้น (1-100)</label>
+            <label className="block text-sm font-bold text-gray-700 dark:text-gray-300 mb-1">คะแนนประเมินเบื้องต้น (1-100)</label>
+            {/* Q2 เจ้าของตัดสิน 2026-09-21: คงช่องไว้ (ขอบเขต "บันทึกคะแนน…การปฏิบัติงาน") แต่บอกตรง ๆ ว่า
+                ไม่มีที่ไหนอ่าน `preliminary_score` ไปคิดเกรด — เกรดมาจากสหกิจ 15 ที่พี่เลี้ยงกรอกเท่านั้น */}
+            <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">ใช้ประกอบการพิจารณาเท่านั้น ไม่นำไปตัดเกรด</p>
             <input 
               type="number" 
               min="0" max="100"

@@ -149,7 +149,33 @@ export class StudentController {
         [userId]
       );
 
+      // 4. ความคืบหน้าเฟส 2–4 — ตัว stepper บนหน้าแรกอ่านจากตรงนี้ **ที่เดียว**
+      // ⛔ เดิมหน้าจอเดาเอง: 2.x ติ๊กเสร็จทันทีที่บริษัทตอบรับ และ 3.x/4.x เป็น `&& false` ตลอดกาล
+      //    ทุกค่าข้างล่างต้องมาจากแถวจริงของขั้นนั้น
+      const progressQuery = await query(
+        `SELECT
+           EXISTS (SELECT 1 FROM accommodations WHERE student_id = $1) AS accommodation_submitted,
+           -- สหกิจ 07 หน้า 3 ลงนามสองฝ่าย: นักศึกษา (กดส่ง) + พนักงานที่ปรึกษา
+           EXISTS (SELECT 1 FROM work_plan_approvals
+                    WHERE student_id = $1 AND approver_role = 'mentor' AND status = 'approved') AS work_plan_certified,
+           -- ส่งผ่านพี่เลี้ยงไปถึงอาจารย์แล้ว = ขั้นนักศึกษาจบ · ใบที่ยังรอพี่เลี้ยงยังไม่นับ
+           EXISTS (SELECT 1 FROM report_outlines
+                    WHERE student_id = $1 AND status IN ('pending_advisor', 'approved')) AS outline_submitted,
+           EXISTS (SELECT 1 FROM report_outlines
+                    WHERE student_id = $1 AND status = 'approved') AS outline_approved,
+           (SELECT COUNT(DISTINCT visit_number)::int FROM supervision_records
+             WHERE student_id = $1) AS supervision_visits,
+           -- ⛔ ต้อง reviewer_kind = 'advisor' — แถว 'mentor' คือร่างที่ส่งพี่เลี้ยงดูก่อน ไม่ใช่เล่มสมบูรณ์
+           EXISTS (SELECT 1 FROM final_reports
+                    WHERE student_id = $1 AND reviewer_kind = 'advisor' AND status = 'approved') AS final_report_approved,
+           -- สหกิจ 15 และ 16 — พี่เลี้ยงกรอกทั้งสองใบ
+           (SELECT COUNT(DISTINCT form_code)::int FROM final_evaluations
+             WHERE student_id = $1 AND evaluator_role = 'mentor') AS mentor_evaluations`,
+        [userId]
+      );
+
       res.status(200).json({
+        progress: progressQuery.rows[0],
         student: {
           student_id: student.student_id,
           student_code: student.student_code,
