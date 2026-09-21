@@ -362,6 +362,8 @@ export interface StudentMemo {
 }
 
 export interface IntentForm {
+  /** ชื่อผู้ลงนามแบบคำร้องที่ระบบรู้เอง (เฉพาะ `GET /students/dashboard`) · null = นักศึกษาต้องกรอก */
+  request_signers?: { advisor_name: string | null; dept_head_name: string | null };
   form_id: number;
   student_id: number;
   company_id: number;

@@ -384,10 +384,36 @@ export class IntentFormModel {
    * — `OFFICER_RECEIVE_FROM` จึงรวม `pending_officer_request` ไว้ด้วย
    * คืน path เดิมออกมาให้ผู้เรียกลบไฟล์ทิ้ง ไม่งั้นโฟลเดอร์จะบวมตามจำนวนครั้งที่อัปซ้ำ
    */
+  /**
+   * ชื่อผู้ลงนามบนแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — เจ้าของตัดสิน 2026-09-21
+   * ให้ระบบดึงเอง ไม่ใช่ให้เจ้าหน้าที่นั่งคีย์จากกระดาษ
+   *   - ที่ปรึกษา = `students.advisor_id` (หัวหน้าสาขาเป็นคนตั้ง)
+   *   - หัวหน้าสาขา = บุคลากร role `dept_head` ของสาขาเดียวกับนักศึกษา (มีคนเดียวต่อสาขา · SB-G2)
+   * ค่าใดเป็น null = ระบบยังไม่รู้ → นักศึกษากรอกเองตอนอัปโหลดกระดาษที่ลงนามแล้ว
+   */
+  static async resolveRequestSigners(
+    studentId: number,
+    db: Pick<PoolClient, 'query'> = pool
+  ): Promise<{ advisor_name: string | null; dept_head_name: string | null }> {
+    const res = await db.query(
+      `SELECT
+         (SELECT NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '')
+            FROM personnel p WHERE p.personnel_id = s.advisor_id) AS advisor_name,
+         (SELECT NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '')
+            FROM user_roles r JOIN personnel p ON p.personnel_id = r.user_id
+           WHERE r.role_name = 'dept_head' AND p.major_id = s.major_id
+           ORDER BY r.user_id LIMIT 1) AS dept_head_name
+         FROM students s WHERE s.student_id = $1`,
+      [studentId]
+    );
+    return res.rows[0] ?? { advisor_name: null, dept_head_name: null };
+  }
+
   static async attachRequestForm(
     formId: number,
     studentId: number,
-    filePath: string
+    filePath: string,
+    typedSigners: { advisorName?: string; deptHeadName?: string } = {}
   ): Promise<{ previousPath: string | null }> {
     const client = await pool.connect();
     try {
@@ -405,11 +431,24 @@ export class IntentFormModel {
       }
       assertAllowedTransition('upload_request_form', row.status, OFFICER_RECEIVE_FROM);
 
+      // ชื่อที่ระบบรู้ชนะเสมอ — นักศึกษากรอกได้เฉพาะช่องที่ระบบยังไม่รู้
+      const known = await IntentFormModel.resolveRequestSigners(studentId, client);
+      const advisorName = known.advisor_name ?? (typedSigners.advisorName?.trim() || null);
+      const deptHeadName = known.dept_head_name ?? (typedSigners.deptHeadName?.trim() || null);
+      const missing = [
+        !advisorName && 'ชื่ออาจารย์ที่ปรึกษาที่ลงนาม',
+        !deptHeadName && 'ชื่อหัวหน้าสาขาวิชาที่ลงนาม',
+      ].filter(Boolean);
+      if (missing.length > 0) {
+        throw new Error(`ระบบยังไม่รู้ชื่อผู้ลงนาม กรุณากรอก: ${missing.join(' · ')}`);
+      }
+
       await client.query(
         `UPDATE intent_forms
-            SET request_form_path = $1, status = 'pending_officer_request', reject_reason = NULL
+            SET request_form_path = $1, status = 'pending_officer_request', reject_reason = NULL,
+                advisor_signer_name = $3, dept_head_signer_name = $4
           WHERE form_id = $2`,
-        [filePath, formId]
+        [filePath, formId, advisorName, deptHeadName]
       );
 
       await client.query('COMMIT');
@@ -427,7 +466,8 @@ export class IntentFormModel {
    *
    * ทำสามอย่างในทรานแซกชันเดียว เพราะทั้งสามเป็นผลของการตรวจกระดาษใบเดียวกัน
    * และถ้าแยกกันแล้วพลาดกลางทาง จะได้ใบความจำนงที่ผ่านแล้วแต่บริษัทยังไม่รับรอง
-   *   1. บันทึกชื่อ/วันที่ผู้ลงนามสองคนที่อ่านจากกระดาษ + เลขที่หนังสือออก
+   *   1. บันทึกเลขที่หนังสือออก — ชื่อผู้ลงนามสองคนมาจากระบบ/นักศึกษาตอนอัปโหลดแล้ว
+   *      (⛔ เจ้าหน้าที่ไม่ต้องคีย์ชื่อ/วันที่จากกระดาษอีก · เจ้าของตัดสิน 2026-09-21)
    *   2. เลื่อนสถานะไป approved_by_dept_head
    *   3. รับรองสถานประกอบการ (SEC-04) — ชื่อกับที่อยู่บนกระดาษคือสิ่งที่จะถูก
    *      พิมพ์ลงหนังสือราชการ การตรวจของเจ้าหน้าที่ตรงนี้คือด่านเดียวที่มีมนุษย์อ่าน
@@ -435,13 +475,7 @@ export class IntentFormModel {
   static async officerApproveRequest(
     formId: number,
     officerUserId: number,
-    input: {
-      advisorSignerName: string;
-      advisorSignedDate: string;
-      deptHeadSignerName: string;
-      deptHeadSignedDate: string;
-      documentNo: string;
-    }
+    input: { documentNo: string }
   ): Promise<{ studentId: number; companyId: number }> {
     const client = await pool.connect();
     try {
@@ -460,24 +494,18 @@ export class IntentFormModel {
         throw new Error('ยังไม่มีไฟล์แบบคำร้องที่ลงนามแล้วในระบบ');
       }
 
+      // ใบที่อัปโหลดก่อนเปลี่ยนวิธี (ยังไม่มีชื่อบนแถว) เติมจากระบบให้ ไม่มีก็ปล่อย null
+      const known = await IntentFormModel.resolveRequestSigners(row.student_id, client);
       await client.query(
         `UPDATE intent_forms
             SET status = 'approved_by_dept_head',
-                advisor_signer_name = $1, advisor_signed_date = $2,
-                dept_head_signer_name = $3, dept_head_signed_date = $4,
-                officer_document_no = $5,
-                officer_approved_at = NOW(), officer_approved_by = $6,
+                advisor_signer_name = COALESCE(advisor_signer_name, $1),
+                dept_head_signer_name = COALESCE(dept_head_signer_name, $2),
+                officer_document_no = $3,
+                officer_approved_at = NOW(), officer_approved_by = $4,
                 reject_reason = NULL
-          WHERE form_id = $7`,
-        [
-          input.advisorSignerName,
-          input.advisorSignedDate,
-          input.deptHeadSignerName,
-          input.deptHeadSignedDate,
-          input.documentNo,
-          officerUserId,
-          formId,
-        ]
+          WHERE form_id = $5`,
+        [known.advisor_name, known.dept_head_name, input.documentNo, officerUserId, formId]
       );
 
       await client.query('UPDATE companies SET is_verified = TRUE WHERE company_id = $1', [

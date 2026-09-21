@@ -58,6 +58,9 @@ const StudentDashboard: React.FC = () => {
   const [startDate, setStartDate] = useState('');
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
+  const [signerAdvisor, setSignerAdvisor] = useState('');
+  const [signerDeptHead, setSignerDeptHead] = useState('');
+  const [requestFormError, setRequestFormError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
   const [confirmingFailure, setConfirmingFailure] = useState(false);
@@ -139,16 +142,31 @@ const StudentDashboard: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // ชื่อผู้ลงนาม — ระบบรู้แล้วไม่ต้องส่ง · ระบบไม่รู้ = นักศึกษาต้องกรอกก่อน (เจ้าหน้าที่ไม่ต้องคีย์อีก)
+    const known = data?.activeIntent?.request_signers;
+    const missing = [
+      !known?.advisor_name && !signerAdvisor.trim() && 'ชื่ออาจารย์ที่ปรึกษาที่ลงนาม',
+      !known?.dept_head_name && !signerDeptHead.trim() && 'ชื่อหัวหน้าสาขาวิชาที่ลงนาม',
+    ].filter(Boolean);
+    if (missing.length > 0) {
+      setRequestFormError(`กรุณากรอก ${missing.join(' และ ')} ก่อนเลือกไฟล์`);
+      e.target.value = '';
+      return;
+    }
+
     const formData = new FormData();
     formData.append('request_form', file);
+    if (!known?.advisor_name) formData.append('advisor_signer_name', signerAdvisor.trim());
+    if (!known?.dept_head_name) formData.append('dept_head_signer_name', signerDeptHead.trim());
 
     setUploadingRequestForm(true);
-    setError(null);
+    setRequestFormError(null);
     try {
       await api.post(`/intents/${formId}/request-form`, formData);
       await loadDashboardData();
     } catch (err) {
-      setError(getErrorMessage(err, 'อัปโหลดแบบคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+      // ⛔ ไม่ใช้ setError — `error` ของหน้านี้แทนที่ทั้งหน้า ช่องที่กรอกไว้จะหายไปกับมัน
+      setRequestFormError(getErrorMessage(err, 'อัปโหลดแบบคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setUploadingRequestForm(false);
       // ให้เลือกไฟล์เดิมซ้ำได้ ถ้ารอบแรกพลาด
@@ -799,6 +817,48 @@ const StudentDashboard: React.FC = () => {
                         </a>
                       </div>
                     ) : (
+                      <>
+                      {/* ผู้ลงนามสองช่องบนกระดาษ — ระบบดึงชื่อที่รู้ให้ ที่ยังไม่รู้ให้นักศึกษากรอก */}
+                      <AlertBanner variant="error" message={requestFormError} />
+                      <div className="mb-3 space-y-2" data-testid="request-signers">
+                        {(!activeIntent.request_signers?.advisor_name || !activeIntent.request_signers?.dept_head_name) && (
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            ระบบยังไม่มีชื่อผู้ลงนามบางคน — พิมพ์ชื่อตามที่ลงนามบนกระดาษ
+                          </p>
+                        )}
+                        {activeIntent.request_signers?.advisor_name ? (
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            อาจารย์ที่ปรึกษา: <span className="font-bold text-gray-800 dark:text-gray-200">{activeIntent.request_signers.advisor_name}</span>
+                          </p>
+                        ) : (
+                          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                            ชื่ออาจารย์ที่ปรึกษาที่ลงนาม
+                            <Input
+                              data-testid="signer-advisor"
+                              value={signerAdvisor}
+                              onChange={(e) => setSignerAdvisor(e.target.value)}
+                              placeholder="เช่น ผศ.ดร.สมชาย ใจดี"
+                              className="mt-1 font-normal"
+                            />
+                          </label>
+                        )}
+                        {activeIntent.request_signers?.dept_head_name ? (
+                          <p className="text-xs text-gray-600 dark:text-gray-400">
+                            หัวหน้าสาขาวิชา: <span className="font-bold text-gray-800 dark:text-gray-200">{activeIntent.request_signers.dept_head_name}</span>
+                          </p>
+                        ) : (
+                          <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                            ชื่อหัวหน้าสาขาวิชาที่ลงนาม
+                            <Input
+                              data-testid="signer-dept-head"
+                              value={signerDeptHead}
+                              onChange={(e) => setSignerDeptHead(e.target.value)}
+                              placeholder="เช่น ดร.สมหญิง รักเรียน"
+                              className="mt-1 font-normal"
+                            />
+                          </label>
+                        )}
+                      </div>
                       <label className={`block ${uploadingRequestForm ? '' : 'cursor-pointer'}`}>
                         {/* ⛔ ปุ่มของ input type=file เป็นข้อความของเบราว์เซอร์
                             ("Choose File / No file chosen") จัดธีมได้แต่ **แปลไม่ได้** —
@@ -829,6 +889,7 @@ const StudentDashboard: React.FC = () => {
                           เลือกไฟล์แบบคำร้องที่ลงนามแล้ว
                         </span>
                       </label>
+                      </>
                     )}
                     {uploadingRequestForm && (
                       <span className="mt-1 block text-xs text-gray-600 dark:text-gray-400">

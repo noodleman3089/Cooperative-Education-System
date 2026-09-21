@@ -10,7 +10,7 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { COMPANY_VISIBLE_STATUSES } from '../models/intent';
+import { COMPANY_VISIBLE_STATUSES, IntentFormModel } from '../models/intent';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
@@ -126,6 +126,8 @@ export class StudentController {
             submitted_late: row.submitted_late,
             acceptance_due_date: row.acceptance_due_date,
             acceptance_submitted_late: row.acceptance_submitted_late,
+            // ชื่อผู้ลงนามแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — null = นักศึกษาต้องกรอกตอนอัปโหลด
+            request_signers: await IntentFormModel.resolveRequestSigners(userId),
             mentor: row.mentor_id ? {
               mentor_id: row.mentor_id,
               name: row.mentor_name,

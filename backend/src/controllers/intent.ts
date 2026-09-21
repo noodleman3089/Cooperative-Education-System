@@ -558,11 +558,19 @@ export class IntentFormController {
       }
 
       const filePath = `request_forms/${req.file.filename}`;
-      const { previousPath } = await IntentFormModel.attachRequestForm(
-        formId,
-        req.user.userId,
-        filePath
-      );
+      // ชื่อผู้ลงนามที่นักศึกษาพิมพ์ — ใช้เฉพาะช่องที่ระบบยังไม่รู้ (โมเดลตัดสิน)
+      const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
+      let previousPath: string | null;
+      try {
+        ({ previousPath } = await IntentFormModel.attachRequestForm(formId, req.user.userId, filePath, {
+          advisorName: text(req.body?.advisor_signer_name),
+          deptHeadName: text(req.body?.dept_head_signer_name),
+        }));
+      } catch (error) {
+        // multer เขียนไฟล์ลงดิสก์ไปแล้ว — ถูกปฏิเสธก็ต้องลบทิ้ง ไม่ให้ค้างเป็นไฟล์กำพร้า
+        fs.promises.unlink(path.join(process.cwd(), 'uploads', filePath)).catch(() => undefined);
+        throw error;
+      }
 
       // อัปทับของเดิม = ไฟล์เก่าไม่มีใครอ้างถึงแล้ว ลบทิ้งไม่ให้โฟลเดอร์บวม
       // (ทำหลัง COMMIT เสมอ ถ้าลบก่อนแล้วทรานแซกชันล้ม จะเสียไฟล์ที่ยังใช้อยู่)
@@ -593,12 +601,13 @@ export class IntentFormController {
   }
 
   /**
-   * เจ้าหน้าที่รับคำร้อง — กรอกชื่อผู้ลงนามจากกระดาษ + ออกเลขที่หนังสือ
+   * เจ้าหน้าที่รับคำร้อง — ตรวจกระดาษ แล้วกรอก **เลขที่หนังสือออก** ช่องเดียว
    * Route: PATCH /api/intents/:id/officer-approve
    * Access: staff
    *
-   * ⛔ **บังคับครบทุกช่อง** — ค่าพวกนี้จะถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ที่คณบดี
-   * ลงนาม ปล่อยว่างช่องใดช่องหนึ่งแปลว่าหนังสือราชการออกไปโดยมีที่ว่าง
+   * ⛔ ชื่อผู้ลงนาม (ที่ปรึกษา · หัวหน้าสาขา) **ไม่รับจากเจ้าหน้าที่แล้ว** — ระบบดึงเอง
+   *    หรือนักศึกษากรอกตอนอัปโหลด (เจ้าของตัดสิน 2026-09-21: เดิมบังคับเจ้าหน้าที่คีย์
+   *    ชื่อ+วันที่ 4 ช่องจากกระดาษทุกใบ ทั้งที่ไม่ได้ถูกพิมพ์ลงหนังสือเลย) · ส่งมาก็เมิน
    */
   static async officerApproveRequest(req: Request, res: Response): Promise<void> {
     try {
@@ -613,46 +622,16 @@ export class IntentFormController {
         return;
       }
 
-      const {
-        advisor_signer_name,
-        advisor_signed_date,
-        dept_head_signer_name,
-        dept_head_signed_date,
-        document_no,
-      } = req.body ?? {};
-
-      const missing = [
-        ['ชื่ออาจารย์ที่ปรึกษาผู้ลงนาม', advisor_signer_name],
-        ['วันที่อาจารย์ที่ปรึกษาลงนาม', advisor_signed_date],
-        ['ชื่อหัวหน้าสาขาวิชาผู้ลงนาม', dept_head_signer_name],
-        ['วันที่หัวหน้าสาขาวิชาลงนาม', dept_head_signed_date],
-        ['เลขที่หนังสือออก', document_no],
-      ]
-        .filter(([, value]) => typeof value !== 'string' || !value.trim())
-        .map(([label]) => label);
-
-      if (missing.length > 0) {
-        res.status(400).json({ message: `กรุณากรอกให้ครบ: ${missing.join(' · ')}` });
-        return;
-      }
-
-      // วันที่รับเป็นสตริง YYYY-MM-DD ล้วน — ห้าม new Date() แล้วส่งต่อ เพราะจะเลื่อนวัน
-      const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
-      if (!isDate(advisor_signed_date) || !isDate(dept_head_signed_date)) {
-        res.status(400).json({ message: 'รูปแบบวันที่ลงนามต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
+      const { document_no } = req.body ?? {};
+      if (typeof document_no !== 'string' || !document_no.trim()) {
+        res.status(400).json({ message: 'กรุณากรอกเลขที่หนังสือออก' });
         return;
       }
 
       const { studentId, companyId } = await IntentFormModel.officerApproveRequest(
         formId,
         req.user.userId,
-        {
-          advisorSignerName: advisor_signer_name.trim(),
-          advisorSignedDate: advisor_signed_date.trim(),
-          deptHeadSignerName: dept_head_signer_name.trim(),
-          deptHeadSignedDate: dept_head_signed_date.trim(),
-          documentNo: document_no.trim(),
-        }
+        { documentNo: document_no.trim() }
       );
 
       // ออกหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) แล้วส่งเข้าคิวคณบดี

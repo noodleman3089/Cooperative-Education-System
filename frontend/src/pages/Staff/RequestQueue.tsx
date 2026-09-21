@@ -21,6 +21,9 @@ export interface RequestFormRow {
   company_name_th?: string;
   company_id: number;
   request_form_path?: string | null;
+  /** ชื่อผู้ลงนามแบบคำร้อง — ระบบดึงเอง/นักศึกษากรอกตอนอัปโหลด (มากับ `GET /intents`) */
+  advisor_signer_name?: string | null;
+  dept_head_signer_name?: string | null;
   submitted_late?: boolean;
   late_reason?: string | null;
   created_at?: string | null;
@@ -123,13 +126,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   // Modal Review States - Request (E1)
   const [reviewingRequest, setReviewingRequest] = useState<RequestFormRow | null>(null);
   const [requestDetail, setRequestDetail] = useState<RequestDetailData | null>(null);
-  const [officerForm, setOfficerForm] = useState({
-    advisor_signer_name: '',
-    advisor_signed_date: '',
-    dept_head_signer_name: '',
-    dept_head_signed_date: '',
-    document_no: '',
-  });
+  const [officerForm, setOfficerForm] = useState({ document_no: '' });
   const [officerBusy, setOfficerBusy] = useState(false);
   const [confirmingApprove, setConfirmingApprove] = useState(false);
   const [rejectingRequest, setRejectingRequest] = useState(false);
@@ -191,13 +188,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
               .catch((err) =>
                 setError(getErrorMessage(err, 'ไม่สามารถเปิดรายละเอียดคำร้องได้'))
               );
-            setOfficerForm({
-              advisor_signer_name: '',
-              advisor_signed_date: '',
-              dept_head_signer_name: '',
-              dept_head_signed_date: '',
-              document_no: '',
-            });
+            setOfficerForm({ document_no: '' });
           }
         }
         if (queueParam === 'acceptance') {
@@ -248,13 +239,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     openedFormRef.current = row.form_id;
     setReviewingRequest(row);
     setRequestDetail(null);
-    setOfficerForm({
-      advisor_signer_name: '',
-      advisor_signed_date: '',
-      dept_head_signer_name: '',
-      dept_head_signed_date: '',
-      document_no: '',
-    });
+    setOfficerForm({ document_no: '' });
     setRejectReason('');
     setRejectingRequest(false);
     setError(null);
@@ -449,12 +434,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     }
   };
 
-  const officerFormIncomplete =
-    !officerForm.advisor_signer_name.trim() ||
-    !officerForm.advisor_signed_date ||
-    !officerForm.dept_head_signer_name.trim() ||
-    !officerForm.dept_head_signed_date ||
-    !officerForm.document_no.trim();
+  const officerFormIncomplete = !officerForm.document_no.trim();
 
   // Filter lists based on search & late toggles
   const filteredRequests = useMemo(() => {
@@ -1085,55 +1065,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                           ส่วนของเจ้าหน้าที่ฝ่ายวิชาการและวิจัย
                         </h4>
                         <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                          คีย์ตามที่เขียนอยู่บนกระดาษ — ทั้งสี่ช่องนี้คือช่อง “ความเห็นของอาจารย์ที่ปรึกษา” และ “ความเห็นของอาจารย์หัวหน้าสาขาวิชา” ท้ายเอกสารหมายเลข 1
+                          ตรวจลายเซ็นบนกระดาษ แล้วกรอกเลขที่หนังสือออกช่องเดียว — ชื่อผู้ลงนามระบบดึงให้แล้ว (หรือนักศึกษากรอกตอนอัปโหลด)
                         </p>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                            ชื่ออาจารย์ที่ปรึกษาผู้ลงนาม <span className="text-red-500">*</span>
-                          </label>
-                          <Input
-                            value={officerForm.advisor_signer_name}
-                            data-testid="officer-advisor-name"
-                            placeholder="เช่น ผศ.ดร.กิตติพงษ์ ใจกล้า"
-                            onChange={(e) => setOfficerForm((f) => ({ ...f, advisor_signer_name: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                            วันที่ลงนาม <span className="text-red-500">*</span>
-                          </label>
-                          <Input
-                            type="date"
-                            value={officerForm.advisor_signed_date}
-                            data-testid="officer-advisor-date"
-                            onChange={(e) => setOfficerForm((f) => ({ ...f, advisor_signed_date: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                            ชื่อหัวหน้าสาขาวิชาผู้ลงนาม <span className="text-red-500">*</span>
-                          </label>
-                          <Input
-                            value={officerForm.dept_head_signer_name}
-                            data-testid="officer-dept-head-name"
-                            placeholder="เช่น ดร.นภาพร สุขสมบูรณ์"
-                            onChange={(e) => setOfficerForm((f) => ({ ...f, dept_head_signer_name: e.target.value }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                            วันที่ลงนาม <span className="text-red-500">*</span>
-                          </label>
-                          <Input
-                            type="date"
-                            value={officerForm.dept_head_signed_date}
-                            data-testid="officer-dept-head-date"
-                            onChange={(e) => setOfficerForm((f) => ({ ...f, dept_head_signed_date: e.target.value }))}
-                          />
-                        </div>
+                      {/* ⛔ เจ้าหน้าที่ไม่ต้องคีย์ชื่อ/วันที่จากกระดาษอีก (เจ้าของตัดสิน 2026-09-21) — แสดงให้เทียบกับกระดาษเท่านั้น */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1" data-testid="officer-signers">
+                        <p>อาจารย์ที่ปรึกษาผู้ลงนาม: <strong>{reviewingRequest.advisor_signer_name || '—'}</strong></p>
+                        <p>หัวหน้าสาขาวิชาผู้ลงนาม: <strong>{reviewingRequest.dept_head_signer_name || '—'}</strong></p>
                       </div>
 
                       <div>
