@@ -447,19 +447,8 @@ const JobOffer02: React.FC = () => {
           <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-900 rounded-full text-xs font-bold">
             ส่งกลับก่อนวันที่ {dueDate}
           </span>
-          <Button
-            data-testid="offer-print"
-            variant="secondary"
-            size="sm"
-            onClick={() => window.open(`/api/job-offers/${offerId}/print`, '_blank')}
-          >
-            <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 6 2 18 2 18 9" />
-              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-              <rect width="12" height="8" x="6" y="14" />
-            </svg>
-            พิมพ์แบบฟอร์ม (PDF)
-          </Button>
+          {/* ⛔ ไม่มีปุ่มพิมพ์ สหกิจ 02 โดยตั้งใจ (เจ้าของตัดสิน 2026-09-21: ลดงานเอกสาร) — ใบนี้จบในระบบ
+              เดิมมีปุ่มชี้ไป `/api/job-offers/:id/print` ซึ่งไม่เคยมี route กดแล้ว 404 */}
         </div>
       </div>
 
