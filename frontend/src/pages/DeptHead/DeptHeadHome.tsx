@@ -6,6 +6,7 @@ import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
+import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 
 interface UnassignedItem {
   student_id: number;
@@ -64,21 +65,15 @@ const DeptHeadHome: React.FC = () => {
   const loadData = async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
-      setError(null);
-      setIs403(false);
       const res = await api.get('/faculty/home/dept-head');
       setData(res);
+      // ล้างแถบหลังโหลดสำเร็จเท่านั้น — ล้างก่อนยิงทำให้แถบ 403 กะพริบทุกรอบ poll
+      setError(null);
+      setIs403(false);
     } catch (err: unknown) {
       console.error('Failed to load dept head home data:', err);
-      const errorObj = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
-      const status = errorObj.response?.status;
-      const message = errorObj.response?.data?.message || errorObj.message || 'เกิดข้อผิดพลาดขณะโหลดข้อมูลหน้าแรกของหัวหน้าสาขาวิชา';
-      if (status === 403) {
-        setIs403(true);
-        setError(message);
-      } else {
-        setError(message);
-      }
+      if (getErrorStatus(err) === 403) setIs403(true);
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดขณะโหลดข้อมูลหน้าแรกของหัวหน้าสาขาวิชา'));
     } finally {
       if (!isBackground) setLoading(false);
     }

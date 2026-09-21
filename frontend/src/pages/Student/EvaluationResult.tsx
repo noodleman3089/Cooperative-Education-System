@@ -381,7 +381,7 @@ const EvaluationResult: React.FC = () => {
           </div>
 
           {/* Dash note */}
-          <div className="p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-750/50 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2.5">
+          <div className="p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/50 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2.5">
             <AlertTriangle className="w-4 h-4 text-gray-500 shrink-0" />
             <span>
               ขีด “–” แปลว่าพี่เลี้ยงติ๊กว่าไม่มีโอกาสได้ประเมินหัวข้อนั้น{' '}

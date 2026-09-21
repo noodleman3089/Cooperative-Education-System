@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus, getIntentStage, type DeptHeadIntentStage } from '../../utils/intentStatus';
 import { formatThaiDate } from '../../utils/thaiDate';
+import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 
 const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected'];
 
@@ -41,22 +42,20 @@ const PetitionTracking: React.FC = () => {
   const loadData = async (isBackground = false) => {
     try {
       if (!isBackground) setLoading(true);
-      setError(null);
-      setIs403Error(false);
 
       // GET /intents ดึงรายการทั้งสาขาของผู้ใช้
       // ⛔ ปฏิบัติตามกฎ fail-closed 5.1 ไม่ดักจับเป็น array ว่างเปล่า
       const res = (await api.get('/intents')) as IntentForm[] | null;
       setIntents(res || []);
+      // ล้างแถบเฉพาะเมื่อโหลดสำเร็จ — ล้างก่อนยิงทำให้แถบ error หายเองทุกรอบ poll
+      setError(null);
+      setIs403Error(false);
     } catch (err: unknown) {
       console.error('Failed to load petition tracking data:', err);
-      const errObj = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
-      if (errObj?.response?.status === 403) {
+      if (getErrorStatus(err) === 403) {
         setIs403Error(true);
-      } else {
-        if (!isBackground) {
-          setError(errObj?.response?.data?.message || 'ไม่สามารถเรียกข้อมูลคำร้องใบความจำนงในสาขาวิชาได้');
-        }
+      } else if (!isBackground) {
+        setError(getErrorMessage(err, 'ไม่สามารถเรียกข้อมูลคำร้องใบความจำนงในสาขาวิชาได้'));
       }
     } finally {
       if (!isBackground) setLoading(false);

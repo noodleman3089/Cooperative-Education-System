@@ -87,7 +87,11 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
         setHasName(nameOk);
         setDeanFullName(nameOk ? `${prof.first_name} ${prof.last_name}` : '');
       } else {
+        // โหลดโปรไฟล์ไม่ได้ ≠ ขาดลายมือชื่อ — บอกความจริง และไม่ปล่อยให้แถบ "ขาดลายมือชื่อ" ขึ้นแทน
         console.error('Failed to load profile:', profileRes.reason);
+        // poll พลาดครั้งเดียวไม่ล้างสถานะที่โหลดได้ก่อนหน้า
+        if (!isBackground) setProfileLoaded(false);
+        if (!isBackground) setError(getErrorMessage(profileRes.reason, 'โหลดโปรไฟล์ไม่ได้ จึงตรวจความพร้อมลงนามไม่ได้ กรุณาลองใหม่อีกครั้ง'));
       }
     } catch (err) {
       console.error('Failed to load Dean queue data:', err);
@@ -397,7 +401,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               <div className="flex items-center gap-3 self-end sm:self-auto flex-wrap">
                 {!isReadyToSign && (
                   <span className="text-xs text-red-700 dark:text-red-400 font-medium">
-                    ลงนามไม่ได้: {!hasSignature ? 'ขาดลายมือชื่อ' : 'ขาดชื่อในโปรไฟล์'}
+                    ลงนามไม่ได้: {!profileLoaded ? 'โหลดโปรไฟล์ไม่ได้' : !hasSignature ? 'ขาดลายมือชื่อ' : 'ขาดชื่อในโปรไฟล์'}
                   </span>
                 )}
                 <Button

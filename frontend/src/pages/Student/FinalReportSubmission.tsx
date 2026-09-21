@@ -353,7 +353,7 @@ const FinalReportSubmission: React.FC = () => {
         {/* Step 1 content & actions */}
         <div className="ml-12 space-y-4">
           {latestMentorDraft && (
-            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-750 flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <FileText className="w-5 h-5 text-gray-500 shrink-0" />
                 <div>
@@ -484,7 +484,7 @@ const FinalReportSubmission: React.FC = () => {
               {/* Upload Dropzone */}
               <div
                 onClick={() => step2InputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 bg-gray-50/60 dark:bg-gray-750/30 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
+                className="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 bg-gray-50/60 dark:bg-gray-800/30 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
               >
                 <Upload className="w-8 h-8 text-gray-400 dark:text-gray-500" />
                 <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -635,7 +635,7 @@ const FinalReportSubmission: React.FC = () => {
         </div>
 
         <div className="ml-12 space-y-4">
-          <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-750/40 text-xs md:text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+          <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 text-xs md:text-sm leading-relaxed text-gray-600 dark:text-gray-400">
             ใบนี้เป็นหลักฐานว่าส่งรายงานครบแล้ว ระบบเติมข้อมูลให้เองทั้งใบ (ชื่อ · รหัส · สถานประกอบการ · ชื่อรายงาน · วันที่ส่ง) นักศึกษาไม่ต้องกรอกอะไร — กดขอให้อาจารย์รับรอง แล้วพิมพ์ไปส่งงานสหกิจศึกษาประจำคณะ
           </div>
 
