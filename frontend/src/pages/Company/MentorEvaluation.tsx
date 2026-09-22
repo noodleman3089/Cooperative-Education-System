@@ -386,11 +386,11 @@ const MentorEvaluation: React.FC = () => {
                       )}
                       {std.final_report_status ? (
                         <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-950/20 dark:text-green-400">
-                          ส่งเล่มรายงานสมบูรณ์แล้ว
+                          ส่งร่างรายงานให้ตรวจแล้ว
                         </span>
                       ) : (
                         <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                          ยังไม่ส่งเล่มรายงาน
+                          ยังไม่ส่งร่างรายงาน
                         </span>
                       )}
                     </div>
@@ -636,7 +636,7 @@ const MentorEvaluation: React.FC = () => {
                     className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-bold text-brand-blue hover:bg-blue-50 dark:border-gray-700 dark:text-blue-400 dark:hover:bg-gray-700"
                   >
                     <FileText className="h-4 w-4" />
-                    เปิดอ่านเล่มรายงานฉบับสมบูรณ์
+                    เปิดอ่านร่างรายงานที่ส่งให้ท่านตรวจ
                   </a>
                 )}
 
