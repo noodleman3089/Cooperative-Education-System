@@ -169,8 +169,13 @@ export class FinalEvaluationController {
          JOIN master_major m ON s.major_id = m.major_id
          JOIN companies c ON i.company_id = c.company_id
          LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
-         LEFT JOIN final_reports fr ON s.student_id = fr.student_id AND fr.version = (
-             SELECT COALESCE(MAX(version), 1) FROM final_reports WHERE student_id = s.student_id
+         -- เฉพาะร่างที่ส่งพี่เลี้ยง (reviewer_kind = 'mentor') — version นับแยกตาม reviewer_kind
+         -- ถ้าไม่กรอง ร่าง v1 กับเล่มที่ส่งอาจารย์ v1 จะ join ได้สองแถว = นักศึกษาซ้ำในรายชื่อ
+         -- และพี่เลี้ยงได้ path เล่มที่ส่งอาจารย์ ซึ่ง getMentorDrafts ตั้งใจไม่ให้เห็น
+         LEFT JOIN final_reports fr ON s.student_id = fr.student_id
+              AND fr.reviewer_kind = 'mentor' AND fr.version = (
+             SELECT MAX(version) FROM final_reports
+              WHERE student_id = s.student_id AND reviewer_kind = 'mentor'
          )
          LEFT JOIN final_evaluations eval15 ON s.student_id = eval15.student_id
               AND eval15.evaluator_role = 'mentor' AND eval15.form_code = 'sahatkit_15'
