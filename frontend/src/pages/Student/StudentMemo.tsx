@@ -6,6 +6,8 @@ import Button from '../../components/ui/Button';
 import { Select, Textarea } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { formatThaiDate } from '../../utils/thaiDate';
 import type { IntentForm, MemoType, StudentMemo } from '../../types/api';
 
@@ -77,8 +79,16 @@ const StudentMemoScreen: React.FC = () => {
   const selected = types.find((t) => t.key === effectiveType) ?? null;
   const remaining = REASON_MIN_LENGTH - reason.trim().length;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // เอกสารทางการถึงคณบดี ไม่มีทางแก้หรือถอนในระบบ — ตรวจก่อนบันทึก (เจ้าของตัดสิน 2026-09-21)
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setConfirmOpen(true);
+  };
+
+  const submitMemo = async () => {
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -95,6 +105,7 @@ const StudentMemoScreen: React.FC = () => {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อความได้'));
     } finally {
       setSubmitting(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -248,6 +259,30 @@ const StudentMemoScreen: React.FC = () => {
           </ul>
         )}
       </section>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ยืนยันบันทึกข้อความถึงคณบดี"
+        confirmLabel="บันทึกและเตรียมพิมพ์"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="memo-confirm"
+        cancelTestId="memo-confirm-cancel"
+        busy={submitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={submitMemo}
+        message={
+          <ConfirmSummary
+            lead="บันทึกแล้วระบบออกเป็นบันทึกข้อความให้พิมพ์ยื่น และอาจารย์ที่เกี่ยวข้องเห็นในระบบ"
+            rows={[
+              { label: 'เรื่อง', value: selected?.label ?? '' },
+              { label: 'เหตุผล', value: <span className="whitespace-pre-line font-normal">{reason.trim()}</span> },
+              ...(latestIntent
+                ? [{ label: 'อ้างถึงใบความจำนง', value: `เลขที่ ${latestIntent.form_id}${latestIntent.company_name_th ? ` · ${latestIntent.company_name_th}` : ''}` }]
+                : []),
+            ]}
+            lockNote="เป็นเอกสารทางการ บันทึกแล้วแก้หรือถอนในระบบไม่ได้"
+          />
+        }
+      />
     </div>
   );
 };

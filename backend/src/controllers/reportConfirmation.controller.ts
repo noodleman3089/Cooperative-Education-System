@@ -36,6 +36,14 @@ export class ReportConfirmationController {
 
       const reportId = reportRes.rows[0].report_id;
 
+      // ⛔ อาจารย์รับรองแล้ว = ขอซ้ำไม่ได้ — เดิม ON CONFLICT ด้านล่างล้าง certified_by/certified_at ทิ้ง
+      //    นักศึกษากดขอซ้ำครั้งเดียวก็ลบการรับรองที่ออกไปแล้ว (พบ 2026-09-22)
+      const existing = await query(`SELECT status FROM report_confirmations WHERE student_id = $1`, [studentId]);
+      if (existing.rows[0]?.status === 'certified') {
+        res.status(409).json({ message: 'อาจารย์ที่ปรึกษารับรองการส่งรายงาน (สหกิจ 14) ให้แล้ว ไม่ต้องยื่นขอซ้ำ' });
+        return;
+      }
+
       const confirmRes = await query(
         `INSERT INTO report_confirmations (student_id, report_id, status, requested_at)
          VALUES ($1, $2, 'pending', NOW())

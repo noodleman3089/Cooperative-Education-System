@@ -13,6 +13,8 @@ import {
 import AlertBanner from '../../components/ui/AlertBanner';
 import { CalendarGate, useCalendarGate } from '../../components/ui/CalendarGate';
 import { getErrorMessage } from '../../utils/errors';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 
 interface ReportItem {
   report_id: number;
@@ -75,6 +77,10 @@ const FinalReportSubmission: React.FC = () => {
   const [uploadingStep1, setUploadingStep1] = useState<boolean>(false);
   const [uploadingStep2, setUploadingStep2] = useState<boolean>(false);
   const [requestingConfirm, setRequestingConfirm] = useState<boolean>(false);
+  // ⛔ เลือกไฟล์แล้วยังไม่ส่ง — ต้องผ่านกล่องยืนยันก่อน (เดิมเลือกไฟล์ = ส่งทันที · ส่งแล้วถอนไม่ได้
+  //    ทุกครั้งนับเป็นฉบับใหม่ที่ผู้ตรวจเห็นในประวัติ) · เจ้าของตัดสิน 2026-09-21
+  const [pendingUpload, setPendingUpload] = useState<{ kind: 'mentor' | 'advisor'; file: File } | null>(null);
+  const [confirmingRequest, setConfirmingRequest] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [examDate, setExamDate] = useState<string | null>(null);
@@ -128,47 +134,30 @@ const FinalReportSubmission: React.FC = () => {
     };
   }, [auth?.user, refreshTrigger]);
 
-  // Handle Step 1 upload (draft to mentor)
-  const handleUploadStep1 = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  /** ตรวจไฟล์แบบเดียวกันทั้งสองขั้น — ผ่านแล้วเปิดกล่องยืนยัน ยังไม่ส่ง */
+  const checkPdf = (file: File): boolean => {
     if (file.type !== 'application/pdf') {
       setError('กรุณาอัปโหลดไฟล์ PDF เท่านั้น');
-      return;
+      return false;
     }
-
     if (file.size > 20 * 1024 * 1024) {
       setError('ขนาดไฟล์ต้องไม่เกิน 20MB');
-      return;
+      return false;
     }
-
-    try {
-      setUploadingStep1(true);
-      setError(null);
-      setSuccess(null);
-
-      const formData = new FormData();
-      formData.append('report', file);
-      formData.append('reviewer_kind', 'mentor');
-
-      const res = await api.post('/final-reports', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      const msg = (res as { message?: string })?.message || 'ส่งร่างรายงานให้พี่เลี้ยงตรวจเรียบร้อยแล้ว';
-      setSuccess(msg);
-      setRefreshTrigger((prev) => prev + 1);
-      if (step1InputRef.current) step1InputRef.current.value = '';
-    } catch (err) {
-      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการส่งร่างรายงาน'));
-    } finally {
-      setUploadingStep1(false);
-    }
+    return true;
   };
 
-  // Handle Step 2 upload (final report to advisor)
-  const handleUploadStep2 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Step 1 (draft to mentor) — เลือกไฟล์แล้วเปิดกล่องยืนยัน
+  const handleUploadStep1 = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!checkPdf(file)) return;
+    setError(null);
+    setPendingUpload({ kind: 'mentor', file });
+  };
+
+  // Handle Step 2 (final report to advisor) — เลือกไฟล์แล้วเปิดกล่องยืนยัน
+  const handleUploadStep2 = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -182,42 +171,51 @@ const FinalReportSubmission: React.FC = () => {
       return;
     }
 
-    if (file.type !== 'application/pdf') {
-      setError('กรุณาอัปโหลดไฟล์ PDF เท่านั้น');
-      return;
-    }
+    if (!checkPdf(file)) return;
+    setError(null);
+    setPendingUpload({ kind: 'advisor', file });
+  };
 
-    if (file.size > 20 * 1024 * 1024) {
-      setError('ขนาดไฟล์ต้องไม่เกิน 20MB');
-      return;
-    }
+  /** ยกเลิกในกล่องยืนยัน — ล้างไฟล์ที่เลือกไว้ ให้เลือกไฟล์เดิมซ้ำได้ */
+  const cancelUpload = () => {
+    setPendingUpload(null);
+    if (step1InputRef.current) step1InputRef.current.value = '';
+    if (step2InputRef.current) step2InputRef.current.value = '';
+  };
 
+  const submitUpload = async () => {
+    if (!pendingUpload) return;
+    const { kind, file } = pendingUpload;
+    const setBusy = kind === 'mentor' ? setUploadingStep1 : setUploadingStep2;
     try {
-      setUploadingStep2(true);
+      setBusy(true);
       setError(null);
       setSuccess(null);
 
       const formData = new FormData();
       formData.append('report', file);
-      formData.append('reviewer_kind', 'advisor');
+      formData.append('reviewer_kind', kind);
 
       const res = await api.post('/final-reports', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      const msg = (res as { message?: string })?.message || 'ส่งเล่มรายงานฉบับสมบูรณ์เรียบร้อยแล้ว';
-      setSuccess(msg);
+      const fallback = kind === 'mentor' ? 'ส่งร่างรายงานให้พี่เลี้ยงตรวจเรียบร้อยแล้ว' : 'ส่งเล่มรายงานฉบับสมบูรณ์เรียบร้อยแล้ว';
+      setSuccess((res as { message?: string })?.message || fallback);
       setRefreshTrigger((prev) => prev + 1);
-      if (step2InputRef.current) step2InputRef.current.value = '';
     } catch (err) {
-      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการส่งรายงานฉบับสมบูรณ์'));
+      setError(
+        getErrorMessage(err, kind === 'mentor' ? 'เกิดข้อผิดพลาดในการส่งร่างรายงาน' : 'เกิดข้อผิดพลาดในการส่งรายงานฉบับสมบูรณ์')
+      );
     } finally {
-      setUploadingStep2(false);
+      setBusy(false);
+      cancelUpload();
     }
   };
 
   // Handle Step 3 request confirmation (สหกิจ 14)
   const handleRequestConfirmation = async () => {
+    setConfirmingRequest(false);
     try {
       setRequestingConfirm(true);
       setError(null);
@@ -643,7 +641,7 @@ const FinalReportSubmission: React.FC = () => {
             <button
               type="button"
               data-testid="finalreport-confirm-request"
-              onClick={handleRequestConfirmation}
+              onClick={() => setConfirmingRequest(true)}
               disabled={!isAdvisorApproved || isConfirmed || isConfirmPending || requestingConfirm}
               className={`px-4 py-2.5 rounded-xl text-sm font-semibold flex items-center gap-2 transition ${
                 !isAdvisorApproved || isConfirmed || isConfirmPending
@@ -676,6 +674,61 @@ const FinalReportSubmission: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={!!pendingUpload}
+        title={pendingUpload?.kind === 'mentor' ? 'ส่งร่างรายงานให้พี่เลี้ยง' : 'ส่งเล่มรายงานให้อาจารย์ที่ปรึกษา'}
+        confirmLabel={pendingUpload?.kind === 'mentor' ? 'ส่งร่างให้พี่เลี้ยง' : 'ส่งเล่มให้อาจารย์'}
+        cancelLabel="กลับไปเลือกไฟล์"
+        confirmTestId="finalreport-upload-confirm"
+        cancelTestId="finalreport-upload-cancel"
+        busy={uploadingStep1 || uploadingStep2}
+        onCancel={cancelUpload}
+        onConfirm={submitUpload}
+        message={
+          pendingUpload && (
+            <ConfirmSummary
+              lead={
+                pendingUpload.kind === 'mentor'
+                  ? `ส่งถึง ${data?.intent?.mentor_name ? `คุณ${data.intent.mentor_name}` : 'พี่เลี้ยง'} เพื่อตรวจร่าง`
+                  : 'ส่งถึงอาจารย์ที่ปรึกษาเพื่อตรวจเล่มสมบูรณ์'
+              }
+              rows={[
+                { label: 'ไฟล์', value: pendingUpload.file.name },
+                { label: 'ขนาด', value: `${(pendingUpload.file.size / (1024 * 1024)).toFixed(1)} MB` },
+                {
+                  label: 'ส่งเป็นฉบับที่',
+                  value: String(
+                    ((pendingUpload.kind === 'mentor' ? data?.mentor_drafts : data?.advisor_reports)?.length ?? 0) + 1
+                  ),
+                },
+              ]}
+              lockNote="ส่งแล้วถอนไม่ได้ — ถ้าไฟล์ผิดต้องส่งฉบับใหม่ และฉบับนี้ยังอยู่ในประวัติที่ผู้ตรวจเห็น"
+            />
+          )
+        }
+      />
+
+      <ConfirmDialog
+        open={confirmingRequest}
+        title="ขอใบรับรองการส่งรายงาน (สหกิจ 14)"
+        confirmLabel="ยื่นขอรับรอง"
+        cancelLabel="ยกเลิก"
+        confirmTestId="finalreport-request-confirm"
+        cancelTestId="finalreport-request-cancel"
+        busy={requestingConfirm}
+        onCancel={() => setConfirmingRequest(false)}
+        onConfirm={handleRequestConfirmation}
+        message={
+          <ConfirmSummary
+            lead="อาจารย์ที่ปรึกษาจะรับรองว่าเล่มฉบับนี้คือฉบับที่ส่งจริง"
+            rows={[
+              { label: 'เล่มฉบับที่', value: latestAdvisorReport ? String(latestAdvisorReport.version) : '—' },
+              { label: 'ไฟล์', value: latestAdvisorReport?.file_path?.split('/').pop() ?? '—' },
+            ]}
+            lockNote="ยื่นได้ครั้งเดียว — ตรวจว่าเป็นเล่มฉบับสุดท้ายที่อาจารย์อนุมัติแล้ว"
+          />
+        }
+      />
     </div>
   );
 };

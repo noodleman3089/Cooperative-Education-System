@@ -16,6 +16,8 @@ import {
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import { getErrorMessage } from '../../utils/errors';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import type { WeeklyPlan } from '../../types/api';
 import { loadThaiAddressData, type ProvinceItem } from '../../data/thaiAddress';
 import type { AddressComponent } from '../../types/googleMaps';
@@ -155,6 +157,8 @@ const AccommodationWorkPlan: React.FC = () => {
   const [topics, setTopics] = useState<WorkPlanTopicRow[]>([]);
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlan[]>([]);
   const [approvals, setApprovals] = useState<ApprovalItem[]>([]);
+  // ส่งให้พี่เลี้ยง = ถึงมือพี่เลี้ยงทันที และถ้ารับรองไปแล้ว การส่งใหม่ล้างการรับรอง — ตรวจก่อนส่ง (บันทึกร่างไม่ต้อง)
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
 
   const [restoredDraft, setRestoredDraft] = useState(false);
   const DRAFT_KEY = `accommodation_plan_draft_${auth?.user?.userId ?? 'anon'}`;
@@ -404,7 +408,7 @@ const AccommodationWorkPlan: React.FC = () => {
     );
   };
 
-  const handleSubmit = async (submitToMentor: boolean) => {
+  const handleSubmit = async (submitToMentor: boolean, confirmed = false) => {
     // Validation for submission
     if (submitToMentor) {
       const missing = [
@@ -439,6 +443,12 @@ const AccommodationWorkPlan: React.FC = () => {
       if (filledTopics.length === 0) {
         setError('กรุณากรอกหัวข้องานอย่างน้อย 1 รายการ พร้อมติ๊กเดือนที่ทำ ก่อนส่งให้พี่เลี้ยง');
         window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      if (!confirmed) {
+        setError(null);
+        setConfirmSubmitOpen(true);
         return;
       }
     }
@@ -479,6 +489,7 @@ const AccommodationWorkPlan: React.FC = () => {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } finally {
       setIsSubmitting(false);
+      setConfirmSubmitOpen(false);
     }
   };
 
@@ -1208,6 +1219,44 @@ const AccommodationWorkPlan: React.FC = () => {
           </div>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmSubmitOpen}
+        title="ส่งแผนปฏิบัติงานให้พี่เลี้ยงรับรอง"
+        confirmLabel="ส่งให้พี่เลี้ยง"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="workplan-confirm"
+        cancelTestId="workplan-confirm-cancel"
+        busy={isSubmitting}
+        onCancel={() => setConfirmSubmitOpen(false)}
+        onConfirm={() => handleSubmit(true, true)}
+        message={(() => {
+          const filled = topics.filter((t) => t.topic.trim() && t.months.length > 0);
+          const months = filled.flatMap((t) => t.months);
+          return (
+            <ConfirmSummary
+              lead={`ส่งถึง ${jobInfo?.mentor_name || 'พนักงานที่ปรึกษา (พี่เลี้ยง)'} เพื่อลงนามรับรอง (สหกิจ 07 หน้า 3)`}
+              rows={[
+                {
+                  label: 'ที่พัก',
+                  value: [accommodation.house_no, accommodation.subdistrict, accommodation.district, accommodation.province]
+                    .map((v) => (v ?? '').trim())
+                    .filter(Boolean)
+                    .join(' '),
+                },
+                {
+                  label: 'หัวข้องาน',
+                  value: `${filled.length} หัวข้อ${months.length ? ` · เดือนที่ ${Math.min(...months)}–${Math.max(...months)}` : ''}`,
+                },
+              ]}
+              lockNote={
+                mentorApproval?.status === 'approved'
+                  ? 'พี่เลี้ยงรับรองแผนนี้ไปแล้ว — ส่งใหม่จะล้างการรับรองเดิม และต้องรอพี่เลี้ยงรับรองอีกครั้ง'
+                  : 'ส่งแล้วยังแก้และส่งใหม่ได้ แต่ถ้าพี่เลี้ยงรับรองไปแล้ว การส่งใหม่จะล้างการรับรอง'
+              }
+            />
+          );
+        })()}
+      />
     </div>
   );
 };

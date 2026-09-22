@@ -11,6 +11,8 @@ import {
 import api from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal from './ui/Modal';
+import ConfirmDialog from './ui/ConfirmDialog';
+import ConfirmSummary from './ui/ConfirmSummary';
 import { getErrorMessage } from '../utils/errors';
 import useLateWindow from '../hooks/useLateWindow';
 import { formatThaiDate } from '../utils/thaiDate';
@@ -65,6 +67,8 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
   const [placeCheckMessage, setPlaceCheckMessage] = useState<string | null>(null);
   const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // ยื่นแล้วนักศึกษาถูกผูกกับบริษัทนี้ และชื่อ/ที่อยู่ถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ — ตรวจก่อนยื่น
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handlePlaceSelected = async (place: PlaceResult) => {
@@ -211,6 +215,19 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
       return;
     }
 
+    setConfirmOpen(true);
+  };
+
+  const submitSelfFound = async () => {
+    const {
+      company_name_th,
+      company_address,
+      company_province,
+      company_district,
+      company_postal_code,
+      company_phone,
+    } = selfFoundForm;
+
     setIsSubmitting(true);
 
     try {
@@ -272,6 +289,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
       setError(getErrorMessage(err, 'การส่งข้อมูลสถานที่ฝึกงานล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -590,6 +608,44 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
           </div>
         </div>
       </form>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ยืนยันยื่นความจำนง"
+        confirmLabel="ยืนยันยื่นความจำนง"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="self-found-confirm"
+        cancelTestId="self-found-confirm-cancel"
+        busy={isSubmitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={submitSelfFound}
+        message={
+          <ConfirmSummary
+            lead="ยื่นแล้วระบบเริ่มเดินเรื่องขอหนังสือกับสถานประกอบการนี้ให้"
+            rows={[
+              { label: 'สถานประกอบการ', value: selfFoundForm.company_name_th.trim() },
+              {
+                label: 'ที่อยู่',
+                value: [
+                  selfFoundForm.company_address,
+                  selfFoundForm.company_district,
+                  selfFoundForm.company_province,
+                  selfFoundForm.company_postal_code,
+                ]
+                  .map((v) => (v ?? '').trim())
+                  .filter(Boolean)
+                  .join(' '),
+              },
+              {
+                label: 'ผู้ประสานงาน',
+                value: `${selfFoundForm.contact_person.trim()} · ${selfFoundForm.contact_position.trim()}`,
+              },
+              ...(lateWindow.isLate ? [{ label: 'เหตุผลที่ยื่นช้า', value: lateReason.trim() }] : []),
+            ]}
+            lockNote="ชื่อและที่อยู่นี้จะถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ · เปลี่ยนสถานประกอบการได้จนกว่าเจ้าหน้าที่จะออกเลขหนังสือ"
+          />
+        }
+      />
     </Modal>
   );
 };

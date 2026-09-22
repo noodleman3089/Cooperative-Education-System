@@ -16,6 +16,8 @@ import {
 import AlertBanner from '../../components/ui/AlertBanner';
 import CalendarGate, { useCalendarGate } from '../../components/ui/CalendarGate';
 import { getErrorMessage } from '../../utils/errors';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 
 interface OutlineVersion {
   version_id: number;
@@ -80,6 +82,11 @@ const ReportOutline: React.FC = () => {
   // Calendar Gate
   const { status: calendarStatus } = useCalendarGate('report_outline');
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // ⛔ backend ไม่มีสถานะ "ร่าง" — ทุก POST /outlines คือส่งถึงพี่เลี้ยงทันที (เดิมปุ่มบันทึกร่างส่งจริง พบ 2026-09-22)
+  //    ร่างจึงเก็บในเครื่องนี้ (แบบเดียวกับแผนปฏิบัติงาน) · ไฟล์แนบเก็บไม่ได้ ต้องแนบใหม่ตอนส่ง
+  const DRAFT_KEY = `outline_draft_${auth?.user?.userId ?? 'anon'}`;
 
   useEffect(() => {
     let active = true;
@@ -98,6 +105,17 @@ const ReportOutline: React.FC = () => {
           setReportTitle(latest.report_title || '');
           setOutlineText(latest.outline_text || '');
           setExistingFilePath(latest.file_path || null);
+        }
+        // ร่างในเครื่องใหม่กว่าฉบับที่ส่งไปเสมอ (ถูกลบทิ้งตอนส่งจริง)
+        try {
+          const raw = localStorage.getItem(`outline_draft_${auth.user.userId}`);
+          if (raw) {
+            const draft = JSON.parse(raw) as { title?: string; text?: string };
+            if (draft.title !== undefined) setReportTitle(draft.title);
+            if (draft.text !== undefined) setOutlineText(draft.text);
+          }
+        } catch {
+          /* localStorage ใช้ไม่ได้ (โหมดส่วนตัว) — ไม่มีร่างก็แสดงฉบับจากเซิร์ฟเวอร์ */
         }
       } catch (err) {
         if (!active) return;
@@ -137,7 +155,22 @@ const ReportOutline: React.FC = () => {
     };
   })();
 
+  const saveDraft = () => {
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({ title: reportTitle, text: outlineText }));
+      setError(null);
+      setSuccess('บันทึกร่างไว้ในเครื่องนี้แล้ว — พี่เลี้ยงยังไม่เห็นจนกว่าจะกดส่ง (ไฟล์แนบต้องแนบใหม่ตอนส่ง)');
+    } catch {
+      setError('บันทึกร่างในเครื่องนี้ไม่ได้ (เบราว์เซอร์ปิดการเก็บข้อมูล)');
+    }
+  };
+
+  /** ตรวจแล้วเปิดกล่องยืนยัน — การส่งจริงอยู่ที่ submitOutline */
   const handleSubmit = async (isDraft: boolean) => {
+    if (isDraft) {
+      saveDraft();
+      return;
+    }
     setError(null);
     setSuccess(null);
 
@@ -156,6 +189,11 @@ const ReportOutline: React.FC = () => {
       return;
     }
 
+    setError(null);
+    setConfirmOpen(true);
+  };
+
+  const submitOutline = async () => {
     try {
       setSubmitting(true);
       const formData = new FormData();
@@ -172,12 +210,18 @@ const ReportOutline: React.FC = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      setSuccess(isDraft ? 'บันทึกร่างโครงร่างรายงานเรียบร้อยแล้ว' : 'ส่งโครงร่างรายงานให้พี่เลี้ยงตรวจสอบเรียบร้อยแล้ว');
+      setSuccess('ส่งโครงร่างรายงานให้พี่เลี้ยงตรวจสอบเรียบร้อยแล้ว');
+      try {
+        localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* ไม่มีร่างให้ลบ */
+      }
       setRefreshTrigger((prev) => prev + 1);
     } catch (err) {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล'));
     } finally {
       setSubmitting(false);
+      setConfirmOpen(false);
     }
   };
 
@@ -468,7 +512,7 @@ const ReportOutline: React.FC = () => {
           <span className="text-xs text-gray-500 dark:text-gray-400">
             {data?.versions && data.versions.length > 0
               ? 'การกดส่งใหม่จะนับเป็นเวอร์ชันถัดไป และเริ่มรอบการตรวจใหม่จากพี่เลี้ยง'
-              : 'บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งตรวจ'}
+              : 'บันทึกร่างเก็บไว้ในเครื่องนี้ พี่เลี้ยงยังไม่เห็นจนกว่าจะกดส่งตรวจ'}
           </span>
           <div className="flex items-center gap-3 shrink-0">
             <button
@@ -484,10 +528,11 @@ const ReportOutline: React.FC = () => {
             <button
               type="button"
               data-testid="outline-submit"
-              disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+              disabled={submitting || isMentorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+              title={isMentorApproved ? 'พี่เลี้ยงเห็นชอบแล้ว ส่งทับไม่ได้จนกว่าอาจารย์จะส่งกลับให้แก้' : undefined}
               onClick={() => handleSubmit(false)}
               className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
+                submitting || isMentorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'
                   ? 'bg-blue-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
               }`}
@@ -573,6 +618,33 @@ const ReportOutline: React.FC = () => {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="ส่งโครงร่างให้พี่เลี้ยงตรวจ"
+        confirmLabel="ส่งให้พี่เลี้ยงตรวจ"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="outline-confirm"
+        cancelTestId="outline-confirm-cancel"
+        busy={submitting}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={submitOutline}
+        message={
+          <ConfirmSummary
+            lead={`ส่งถึง ${mentorFullName} · เป็นเวอร์ชันที่ ${(data?.versions?.length ?? 0) + 1}`}
+            rows={[
+              { label: 'หัวข้อรายงาน', value: reportTitle.trim() },
+              {
+                label: 'โครงร่าง',
+                value: outlineText.trim()
+                  ? outlineText.trim().split('\n').slice(0, 2).join(' / ') + (outlineText.trim().split('\n').length > 2 ? ' …' : '')
+                  : '',
+              },
+              { label: 'ไฟล์แนบ', value: file ? file.name : existingFilePath ? existingFilePath.split('/').pop() : 'ไม่มี' },
+            ]}
+            lockNote="ส่งฉบับใหม่ทับได้จนกว่าพี่เลี้ยงจะเห็นชอบ · เห็นชอบแล้วแก้ไม่ได้ จนกว่าอาจารย์จะส่งกลับให้แก้"
+          />
+        }
+      />
     </div>
   );
 };

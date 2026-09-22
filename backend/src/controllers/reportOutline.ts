@@ -43,13 +43,22 @@ export class ReportOutlineController {
 
       // Check if an outline already exists for this student
       const existingRes = await query(
-        `SELECT outline_id FROM report_outlines WHERE student_id = $1`,
+        `SELECT outline_id, status FROM report_outlines WHERE student_id = $1`,
         [studentId]
       );
 
       let outlineId;
 
       if ((existingRes.rowCount ?? 0) > 0) {
+        // ⛔ พี่เลี้ยงเห็นชอบแล้ว (ถึงมืออาจารย์ / อนุมัติแล้ว) = ส่งทับไม่ได้ จนกว่าจะถูกตีกลับ
+        //    เดิมส่งได้ทุกสถานะ แล้วดันใบที่อาจารย์อนุมัติแล้วกลับไปรอพี่เลี้ยง = ล้างการอนุมัติเงียบ ๆ (พบ 2026-09-22)
+        if (['pending_advisor', 'approved'].includes(existingRes.rows[0].status)) {
+          res.status(409).json({
+            message:
+              'โครงร่างนี้พี่เลี้ยงเห็นชอบแล้ว ส่งฉบับใหม่ทับไม่ได้ จนกว่าอาจารย์ที่ปรึกษาจะส่งกลับให้แก้ไข',
+          });
+          return;
+        }
         outlineId = existingRes.rows[0].outline_id;
         // Update status back to pending_mentor
         await query(
