@@ -1,4 +1,4 @@
-import { query } from '../config/database';
+import pool, { query } from '../config/database';
 import { Student } from '../types';
 
 export class StudentModel {
@@ -207,21 +207,73 @@ export class StudentModel {
 
   /**
    * Assign advisor and supervisor for a student.
+   * โอนนัดนิเทศที่ยังไม่ได้ไปให้อาจารย์นิเทศคนใหม่ในทรานแซกชันเดียวกัน (ดู `transferOpenAppointments`)
    */
   static async assignAdvisorAndSupervisor(
     studentId: number,
     advisorId: number | null,
     supervisorId: number | null
   ): Promise<Student | null> {
-    const res = await query(
-      `UPDATE students 
-       SET advisor_id = $2, supervisor_id = $3
-       WHERE student_id = $1 
-       RETURNING student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, advisor_id, supervisor_id`,
-      [studentId, advisorId, supervisorId]
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const res = await client.query(
+        `UPDATE students 
+         SET advisor_id = $2, supervisor_id = $3
+         WHERE student_id = $1 
+         RETURNING student_id, student_code, major_id, province_id, cumulative_gpa, resume_file, advisor_id, supervisor_id`,
+        [studentId, advisorId, supervisorId]
+      );
+      if ((res.rowCount ?? 0) === 0) {
+        await client.query('ROLLBACK');
+        return null;
+      }
+      if (supervisorId !== null) {
+        await StudentModel.transferOpenAppointments(client, studentId, supervisorId);
+      }
+      await client.query('COMMIT');
+      return res.rows[0] as Student;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * เปลี่ยนอาจารย์นิเทศแล้ว นัดที่ **ยังไม่ได้ไปนิเทศ** ย้ายไปอยู่กับคนใหม่
+   *
+   * `supervision_appointments.advisor_id` คือผู้ร่างนัด และทุกด่าน (ตอบวันเลื่อน · ข้ามการยืนยัน ·
+   * พิมพ์บันทึกขออนุมัติเดินทาง) ตรวจกับคอลัมน์นี้ — เดิมเปลี่ยนตัวแล้วนัดค้างอยู่กับคนเก่า
+   * คนใหม่แตะนัดไม่ได้ ส่วนคนเก่ายังพิมพ์ขอเดินทางไปนิเทศนักศึกษาที่ไม่ใช่ของตัวเองได้
+   *
+   * ⛔ นัดที่ไปนิเทศแล้วไม่ย้าย — เป็นหลักฐานว่าใครไป: มีบันทึกย่อหลังนิเทศที่ส่งแล้ว
+   *    หรือมี สหกิจ 13 ของครั้งนั้น (ครั้งที่ = ลำดับนัดของนักศึกษา สูตรเดียวกับ printTravelRequest)
+   */
+  static async transferOpenAppointments(
+    db: { query: typeof query },
+    studentId: number,
+    supervisorId: number
+  ): Promise<void> {
+    await db.query(
+      `WITH v AS (
+         SELECT appointment_id,
+                ROW_NUMBER() OVER (ORDER BY created_at, appointment_id)::int AS visit_number
+           FROM supervision_appointments
+          WHERE student_id = $1
+       )
+       UPDATE supervision_appointments a
+          SET advisor_id = $2, updated_at = CURRENT_TIMESTAMP
+         FROM v
+        WHERE v.appointment_id = a.appointment_id
+          AND a.advisor_id IS DISTINCT FROM $2
+          AND NOT EXISTS (SELECT 1 FROM supervision_logs l
+                           WHERE l.appointment_id = a.appointment_id AND l.status = 'submitted')
+          AND NOT EXISTS (SELECT 1 FROM supervision_records r
+                           WHERE r.student_id = $1 AND r.visit_number = v.visit_number)`,
+      [studentId, supervisorId]
     );
-    if ((res.rowCount ?? 0) === 0) return null;
-    return res.rows[0] as Student;
   }
 
   /**

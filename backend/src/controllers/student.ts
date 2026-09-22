@@ -1062,6 +1062,7 @@ export class StudentController {
             'UPDATE students SET advisor_id = $2, supervisor_id = $3 WHERE student_id = $1',
             [studentId, advisor_id, supervisor_id]
           );
+          await StudentModel.transferOpenAppointments(client, studentId, supervisor_id);
         }
         await client.query('COMMIT');
       } catch (txError) {
