@@ -450,14 +450,26 @@ export class IntentFormController {
   /**
    * Get pipeline summary counts for all statuses.
    * Route: GET /api/intents/pipeline-summary
+   *
+   * ⛔ SEC-06: advisor/dept_head เห็นเฉพาะสาขาตัวเอง (`resolveMajorScope` · ไม่มีโปรไฟล์ = 403)
+   *    staff/dean เห็นทั้งคณะ · เดิมไม่กรองเลย advisor ได้ตัวเลขทั้งคณะ
    */
-  static async getPipelineSummary(_req: Request, res: Response): Promise<void> {
+  static async getPipelineSummary(req: Request, res: Response): Promise<void> {
     try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+      const { majorId } = await resolveMajorScope(req.user.userId, req.user.roles);
+      // $1 = majorId หรือ NULL (ทั้งคณะ) — ใช้ร่วมกันทั้งสาม query
+      const scope = `AND ($1::int IS NULL OR i.student_id IN (SELECT student_id FROM students WHERE major_id = $1))`;
+
       const summaryResult = await query(`
-        SELECT status, COUNT(*)::int as count
-        FROM intent_forms
-        GROUP BY status
-      `);
+        SELECT i.status, COUNT(*)::int as count
+        FROM intent_forms i
+        WHERE TRUE ${scope}
+        GROUP BY i.status
+      `, [majorId]);
 
       // ⛔ คีย์ในนี้คือ allow-list จริง — สถานะที่ไม่ได้อยู่ตรงนี้จะถูกทิ้งเงียบๆ ที่
       //    ลูปข้างล่าง (`hasOwnProperty`) ไม่ใช่แค่ค่าเริ่มต้นสวยงาม
@@ -504,7 +516,8 @@ export class IntentFormController {
         ) doc ON TRUE
         WHERE i.status = 'approved_by_dept_head'
           AND doc.status = 'signed'
-      `);
+          ${scope}
+      `, [majorId]);
       const deanSignedCount = Number(deanSignedResult.rows[0]?.count || 0);
       counts.dean_signed = deanSignedCount;
       counts.pending_sign = Math.max(0, counts.approved_by_dept_head - deanSignedCount);
@@ -526,11 +539,13 @@ export class IntentFormController {
                AND d.company_id = i.company_id
                AND d.type = 'send_letter'
           )
-      `);
+          ${scope}
+      `, [majorId]);
       counts.dispatch_eligible = Number(dispatchEligibleResult.rows[0]?.count || 0);
 
       res.status(200).json(counts);
     } catch (error) {
+      if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Get Pipeline Summary Error', 'An error occurred while fetching pipeline summary.');
     }
   }
