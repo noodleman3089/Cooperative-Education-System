@@ -166,7 +166,8 @@ const AppRoutes: React.FC = () => {
       <Route 
         path="/staff/final-progress" 
         element={
-          <ProtectedRoute requiredRoles={['staff', 'dean']}>
+          // ไม่มี dean — GET /coop-progress/dashboard ไม่ให้คณบดี (ได้ 403 หน้าว่าง) · เจ้าของตัดสิน 2026-09-22
+          <ProtectedRoute requiredRoles={['staff']}>
             <FinalProgressDashboard />
           </ProtectedRoute>
         } 
