@@ -501,8 +501,6 @@ const AccommodationWorkPlan: React.FC = () => {
   const filledTopicsCount = topics.filter((t) => t.topic.trim() && t.months.length > 0).length;
 
   const mentorApproval = approvals.find((a) => a.approver_role === 'mentor');
-  const advisorApproval = approvals.find((a) => a.approver_role === 'advisor');
-  const supervisorApproval = approvals.find((a) => a.approver_role === 'supervisor');
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 page-enter pb-16">
@@ -1091,10 +1089,11 @@ const AccommodationWorkPlan: React.FC = () => {
           </>
         )}
 
-        {/* 3-Person Approval Chain */}
+        {/* ผู้ลงนามสหกิจ 07 หน้า 3 — กระดาษมีแค่นักศึกษา + พี่เลี้ยง แล้วส่งคืนงานสหกิจ
+            (เดิมมีแถวอาจารย์ที่ปรึกษา/อาจารย์นิเทศ "รอตรวจ" ที่ไม่มีใครกดได้ — ถอดแล้ว 2026-09-22) */}
         <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 space-y-3">
           <span className="text-xs font-bold text-gray-900 dark:text-white block">
-            แผนงานต้องผ่านการรับรอง 3 คน
+            แผนงานต้องได้รับการรับรองจากพี่เลี้ยง แล้วระบบส่งถึงงานสหกิจศึกษา
           </span>
           <div className="space-y-2 text-xs">
             {/* 1. พี่เลี้ยง */}
@@ -1121,60 +1120,6 @@ const AccommodationWorkPlan: React.FC = () => {
                 ) : mentorApproval?.status === 'rejected' ? (
                   <span className="text-red-700 dark:text-red-400 font-semibold">
                     ไม่อนุมัติ: {mentorApproval.comment || 'กรุณาแก้ไขแผนงาน'}
-                  </span>
-                ) : (
-                  <span className="text-amber-800 dark:text-amber-400 font-medium">รอตรวจ</span>
-                )}
-              </span>
-            </div>
-
-            {/* 2. อาจารย์ที่ปรึกษา */}
-            <div className="flex items-center gap-3">
-              <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] ${
-                  advisorApproval?.status === 'approved'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-                }`}
-              >
-                {advisorApproval?.status === 'approved' ? (
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                ) : (
-                  '2'
-                )}
-              </span>
-              <span className="text-gray-700 dark:text-gray-300">
-                <strong className="text-gray-900 dark:text-white">อาจารย์ที่ปรึกษา</strong> —{' '}
-                {advisorApproval?.status === 'approved' ? (
-                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                    รับรองแล้ว {advisorApproval.approved_at ? new Date(advisorApproval.approved_at).toLocaleDateString('th-TH') : ''}
-                  </span>
-                ) : (
-                  <span className="text-amber-800 dark:text-amber-400 font-medium">รอตรวจ</span>
-                )}
-              </span>
-            </div>
-
-            {/* 3. อาจารย์นิเทศ */}
-            <div className="flex items-center gap-3">
-              <span
-                className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-bold text-[11px] ${
-                  supervisorApproval?.status === 'approved'
-                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                    : 'bg-amber-100 text-amber-800 border border-amber-300'
-                }`}
-              >
-                {supervisorApproval?.status === 'approved' ? (
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                ) : (
-                  '3'
-                )}
-              </span>
-              <span className="text-gray-700 dark:text-gray-300">
-                <strong className="text-gray-900 dark:text-white">อาจารย์นิเทศ</strong> —{' '}
-                {supervisorApproval?.status === 'approved' ? (
-                  <span className="text-emerald-700 dark:text-emerald-400 font-semibold">
-                    รับรองแล้ว {supervisorApproval.approved_at ? new Date(supervisorApproval.approved_at).toLocaleDateString('th-TH') : ''}
                   </span>
                 ) : (
                   <span className="text-amber-800 dark:text-amber-400 font-medium">รอตรวจ</span>

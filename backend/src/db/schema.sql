@@ -1019,11 +1019,13 @@ CREATE TABLE IF NOT EXISTS work_plan_topics (
     CONSTRAINT work_plan_topics_student_seq_key UNIQUE (student_id, seq)
 );
 
--- 23. Work Plan Approvals (สายการรับรองแผนงาน 3 ฝ่าย)
+-- 23. Work Plan Approvals — การลงนามรับรองสหกิจ 07 หน้า 3 ของพี่เลี้ยง
+-- กระดาษลงนามแค่นักศึกษา + พนักงานที่ปรึกษา แล้วส่งคืนงานสหกิจ · อาจารย์ไม่มีช่องลงนาม (migration 034)
 CREATE TABLE IF NOT EXISTS work_plan_approvals (
     approval_id SERIAL PRIMARY KEY,
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
-    approver_role VARCHAR(20) NOT NULL, -- 'mentor', 'advisor', 'supervisor'
+    approver_role VARCHAR(20) NOT NULL
+        CONSTRAINT work_plan_approvals_approver_role_check CHECK (approver_role = 'mentor'),
     approver_id INT REFERENCES users(user_id) ON DELETE SET NULL,
     status VARCHAR(20) NOT NULL DEFAULT 'pending', -- 'pending', 'approved', 'rejected'
     approved_at TIMESTAMPTZ,

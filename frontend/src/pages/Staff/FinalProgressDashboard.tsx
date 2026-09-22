@@ -27,6 +27,7 @@ interface StudentProgress {
   progressDetails: {
     intentApproved: boolean;
     accommodationSubmitted: boolean;
+    workPlanCertified: boolean;
     outlineApproved: boolean;
     supervisionCompleted: boolean;
     finalReportSubmitted: boolean;
@@ -136,6 +137,7 @@ export const FinalProgressDashboard: React.FC = () => {
     const p = s.progressDetails;
     return (
       p.accommodationSubmitted &&
+      p.workPlanCertified &&
       p.intentApproved &&
       p.outlineApproved &&
       p.supervisionCompleted &&
@@ -215,7 +217,7 @@ export const FinalProgressDashboard: React.FC = () => {
         std.majorName,
         std.companyName || '-',
         p.accommodationSubmitted ? 'ส่งแล้ว' : '-',
-        p.intentApproved ? 'ส่งแล้ว' : '-',
+        p.workPlanCertified ? 'พี่เลี้ยงรับรองแล้ว' : '-',
         p.outlineApproved ? 'อนุมัติแล้ว' : '-',
         p.supervisionCompleted ? 'นิเทศแล้ว' : '-',
         p.finalReportSubmitted ? 'ส่งแล้ว' : '-',
@@ -470,9 +472,9 @@ export const FinalProgressDashboard: React.FC = () => {
                           )}
                         </td>
 
-                        {/* 4. สหกิจ 07 แผนงาน */}
+                        {/* 4. สหกิจ 07 แผนงาน — ติ๊กเมื่อพี่เลี้ยงรับรองหน้า 3 แล้ว (เดิมผูกผิดกับ intentApproved) */}
                         <td className="p-3 text-center">
-                          {p.intentApproved ? (
+                          {p.workPlanCertified ? (
                             <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
                               <Check className="w-3 h-3 stroke-[3]" />
                             </span>

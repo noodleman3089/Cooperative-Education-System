@@ -1522,8 +1522,12 @@ export class StudentController {
   }
 
   /**
-   * Approve work plan (mentor / advisor / supervisor)
+   * Approve work plan — พี่เลี้ยงเท่านั้น
    * Route: PATCH /api/students/:id/work-plan/approve
+   *
+   * ⛔ สหกิจ 07 หน้า 3 ลงนามสองฝ่ายคือนักศึกษา (กดส่ง) + พนักงานที่ปรึกษา แล้วส่งคืนงานสหกิจศึกษา
+   *    อาจารย์ไม่มีช่องลงนาม — เดิมสร้างแถว advisor/supervisor `pending` ไว้โดยไม่มีปุ่มให้กด
+   *    หน้านักศึกษาจึงขึ้น "รอตรวจ" ค้างถาวร (ถอดแล้ว 2026-09-22 · migration 034)
    */
   static async approveWorkPlan(req: Request, res: Response): Promise<void> {
     try {
@@ -1536,58 +1540,20 @@ export class StudentController {
         res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
         return;
       }
-      const roles = req.user.roles;
 
       // ⛔ SEC-06: ต้องตรวจว่านักศึกษาคนนี้เป็นของผู้เรียกจริง **ก่อน** เขียนอะไรลงฐาน
       //    ของเดิมรับ `:id` มาแล้วเขียนเลย แปลว่าพี่เลี้ยงคนไหนก็ได้ใส่รหัสนักศึกษา
       //    ของบริษัทอื่นแล้วลงนามรับรองแผนงานให้เขาได้ · หน้าจอไม่เคยมีปุ่มนั้น
       //    ซึ่งเป็นเหตุผลที่ไม่มีใครสังเกต แต่ URL มี
-      const approverRole = roles.includes('mentor')
-        ? 'mentor'
-        : roles.includes('advisor') || roles.includes('staff')
-          ? 'advisor'
-          : null;
-
-      if (!approverRole) {
-        res.status(403).json({ message: 'คุณไม่มีสิทธิ์ในการรับรองแผนงาน' });
-        return;
-      }
-      if (approverRole === 'mentor') {
-        await assertMentorOwnsStudent(req.user.userId, studentId);
-      } else {
-        await assertCanReviewStudentWork(req.user.userId, roles, studentId);
-      }
+      await assertMentorOwnsStudent(req.user.userId, studentId);
 
       await query(
         `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status, approved_at)
-         VALUES ($1, $2, $3, 'approved', NOW())
+         VALUES ($1, 'mentor', $2, 'approved', NOW())
          ON CONFLICT (student_id, approver_role)
-         DO UPDATE SET status = 'approved', approver_id = $3, approved_at = NOW(), comment = NULL`,
-        [studentId, approverRole, req.user.userId]
+         DO UPDATE SET status = 'approved', approver_id = $2, approved_at = NOW(), comment = NULL`,
+        [studentId, req.user.userId]
       );
-
-      // If mentor approves, initialize advisor and supervisor approvals as pending
-      if (approverRole === 'mentor') {
-        const st = await query(`SELECT advisor_id, supervisor_id FROM students WHERE student_id = $1`, [studentId]);
-        const advId = st.rows[0]?.advisor_id;
-        const supId = st.rows[0]?.supervisor_id;
-        if (advId) {
-          await query(
-            `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status)
-             VALUES ($1, 'advisor', $2, 'pending')
-             ON CONFLICT (student_id, approver_role) DO NOTHING`,
-            [studentId, advId]
-          );
-        }
-        if (supId) {
-          await query(
-            `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status)
-             VALUES ($1, 'supervisor', $2, 'pending')
-             ON CONFLICT (student_id, approver_role) DO NOTHING`,
-            [studentId, supId]
-          );
-        }
-      }
 
       res.status(200).json({ success: true, message: 'รับรองแผนปฏิบัติงานเรียบร้อยแล้ว' });
     } catch (error) {
@@ -1613,32 +1579,17 @@ export class StudentController {
         return;
       }
       const { comment } = req.body;
-      const roles = req.user.roles;
 
       // ⛔ SEC-06 เหมือนกับ approveWorkPlan ด้านบน — การตีกลับก็เป็นการเขียนสถานะ
       //    ลงแผนงานของคนอื่นได้เท่ากัน และยังทำให้แผนที่เขาลงนามไว้แล้วกลับเป็นร่าง
-      const approverRole = roles.includes('mentor')
-        ? 'mentor'
-        : roles.includes('advisor') || roles.includes('staff')
-          ? 'advisor'
-          : null;
-
-      if (!approverRole) {
-        res.status(403).json({ message: 'Forbidden.' });
-        return;
-      }
-      if (approverRole === 'mentor') {
-        await assertMentorOwnsStudent(req.user.userId, studentId);
-      } else {
-        await assertCanReviewStudentWork(req.user.userId, roles, studentId);
-      }
+      await assertMentorOwnsStudent(req.user.userId, studentId);
 
       await query(
         `INSERT INTO work_plan_approvals (student_id, approver_role, approver_id, status, comment)
-         VALUES ($1, $2, $3, 'rejected', $4)
+         VALUES ($1, 'mentor', $2, 'rejected', $3)
          ON CONFLICT (student_id, approver_role)
-         DO UPDATE SET status = 'rejected', approver_id = $3, comment = $4`,
-        [studentId, approverRole, req.user.userId, comment || null]
+         DO UPDATE SET status = 'rejected', approver_id = $2, comment = $3`,
+        [studentId, req.user.userId, comment || null]
       );
 
       res.status(200).json({ success: true, message: 'ส่งกลับแผนปฏิบัติงานให้แก้ไขเรียบร้อยแล้ว' });

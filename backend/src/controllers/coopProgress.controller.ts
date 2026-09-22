@@ -59,8 +59,11 @@ export class CoopProgressController {
           c.name_th as company_name,
           -- Accommodations
           acc.student_id as acc_student_id,
-          -- Work plans count
-          (SELECT COUNT(*) FROM weekly_work_plans wwp WHERE wwp.student_id = s.student_id) as work_plans_count,
+          -- สหกิจ 07 หน้า 3 — พี่เลี้ยงลงนามรับรองแล้ว (กระดาษส่งคืนงานสหกิจ = คนที่ดูหน้านี้)
+          -- เดิมนับ weekly_work_plans ซึ่งไม่ใช่ใบนี้ · สูตรเดียวกับ work_plan_certified หน้าแรกนักศึกษา
+          EXISTS (SELECT 1 FROM work_plan_approvals wpa
+                   WHERE wpa.student_id = s.student_id AND wpa.approver_role = 'mentor'
+                     AND wpa.status = 'approved') as work_plan_certified,
           -- Outline (สหกิจ 11)
           rep_out.status as outline_status,
           -- Supervision logs
@@ -130,6 +133,7 @@ export class CoopProgressController {
         const details = {
           intentApproved: false,
           accommodationSubmitted: false,
+          workPlanCertified: false,
           outlineApproved: false,
           supervisionCompleted: false,
           finalReportSubmitted: false,
@@ -143,10 +147,14 @@ export class CoopProgressController {
           details.intentApproved = true;
         }
 
-        // 2. Accommodation & Work Plan (20%)
-        if (row.acc_student_id && row.work_plans_count > 0) {
-          progress += 20;
+        // 2. สหกิจ 06 ที่พัก (10%) + สหกิจ 07 แผนงานที่พี่เลี้ยงรับรองแล้ว (10%)
+        if (row.acc_student_id) {
+          progress += 10;
           details.accommodationSubmitted = true;
+        }
+        if (row.work_plan_certified) {
+          progress += 10;
+          details.workPlanCertified = true;
         }
 
         // 3. Report Outline Approved (20%)

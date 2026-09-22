@@ -118,17 +118,17 @@ router.get(
   StudentController.getWorkPlanForReview
 );
 
-// Route: PATCH /api/students/:id/work-plan/approve (Mentor, Advisor, Staff)
+// Route: PATCH /api/students/:id/work-plan/approve (Mentor เท่านั้น — สหกิจ 07 หน้า 3 ลงนามแค่นักศึกษา + พี่เลี้ยง)
 router.patch(
   '/:id/work-plan/approve',
-  authorizeRoles('mentor', 'advisor', 'staff', 'dean'),
+  authorizeRoles('mentor'),
   StudentController.approveWorkPlan
 );
 
-// Route: PATCH /api/students/:id/work-plan/reject (Mentor, Advisor, Staff)
+// Route: PATCH /api/students/:id/work-plan/reject (Mentor เท่านั้น)
 router.patch(
   '/:id/work-plan/reject',
-  authorizeRoles('mentor', 'advisor', 'staff', 'dean'),
+  authorizeRoles('mentor'),
   StudentController.rejectWorkPlan
 );
 
