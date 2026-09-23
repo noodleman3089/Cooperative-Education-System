@@ -221,6 +221,14 @@ export class ReportOutlineController {
           res.status(403).json({ message: 'Forbidden. You are not authorized to reject this report outline.' });
           return;
         }
+
+        // ตีกลับต้องบอกเหตุผล — นักศึกษาต้องรู้ว่าแก้อะไร · เดิมบังคับแค่บนหน้าจอ
+        // ยิง API ตรงแล้ว rejection_comment เป็น NULL ได้ · ตรวจหลังด่านสิทธิ์
+        // เพื่อให้คนไม่มีสิทธิ์ได้ 403 เหมือนเดิม ไม่ใช่ 400
+        if (typeof comment !== 'string' || !comment.trim()) {
+          res.status(400).json({ message: 'กรุณาระบุข้อเสนอแนะในการส่งกลับแก้ไขโครงร่างรายงาน' });
+          return;
+        }
       }
 
       // State Machine Enforcement
