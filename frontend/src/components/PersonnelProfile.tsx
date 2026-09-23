@@ -1,494 +1,405 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { Lock, PenLine, ArrowRight } from 'lucide-react';
 import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
+import Button from './ui/Button';
+import { Input } from './ui/Input';
+import { AuthContext } from '../context/AuthContext';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
-import { Input, Select } from './ui/Input';
 
-interface Major {
-  major_id: number;
-  major_code: string;
-  major_name_th: string;
+interface PersonnelProfileData {
+  first_name?: string | null;
+  last_name?: string | null;
+  birth_date?: string | null;
+  e_signature_file?: string | null;
+  email?: string;
+  major_name_th?: string | null;
+  faculty_name_th?: string | null;
 }
 
-const PersonnelProfile: React.FC = () => {
-  const [profile, setProfile] = useState<{ status?: string; e_signature_file?: string | null } | null>(null);
+/** นับจาก `students.advisor_id` / `supervisor_id` — มีเฉพาะบัญชีที่ถือ role `advisor` */
+interface Caseload {
+  advisees: number;
+  supervisees: number;
+}
+
+interface PersonnelProfileProps {
+  /** ไปเมนูอื่นในฝ่ายเดิม — คณบดีใช้ไปหน้าลายมือชื่อ */
+  onNavigate?: (menu: string) => void;
+  /** สลับไปหน้าแรกของอีกฝ่าย — แถวในการ์ด "หน้าที่ของคุณในระบบ" */
+  onSwitchView?: (view: string) => void;
+}
+
+/**
+ * ป้ายและหน้าที่ของแต่ละ "ฝ่าย" (view ไม่ใช่ role — ฝ่ายนิเทศคำนวณจากการจัดสรร · `utils/facultyViews.ts`)
+ * ข้อความหน้าที่ลอกจากเมนูจริงใน `Sidebar.tsx` — แก้เมนูเมื่อไหร่ให้แก้ที่นี่ด้วย
+ */
+const VIEW_INFO: Record<string, { label: string; duties: string }> = {
+  advisor: {
+    label: 'อาจารย์ที่ปรึกษา',
+    duties: 'เห็นชอบโครงร่าง (สหกิจ 11) · บันทึกข้อความนักศึกษา · ตรวจรับเล่มรายงาน (สหกิจ 14)',
+  },
+  supervisor: {
+    label: 'อาจารย์นิเทศ',
+    duties: 'นัดหมายนิเทศ (สหกิจ 12) · บันทึกการนิเทศ (สหกิจ 13)',
+  },
+  dept_head: {
+    label: 'หัวหน้าสาขาวิชา',
+    duties: 'จัดสรรอาจารย์ที่ปรึกษาและนิเทศ · ติดตามคำร้อง (เอกสารหมายเลข 1) · ติดตามเอกสารและผลประเมิน',
+  },
+  dean: {
+    label: 'คณบดี',
+    duties: 'ลงนามหนังสือราชการ · ตั้งค่าลายมือชื่อ · บันทึกข้อความนักศึกษา',
+  },
+  staff: {
+    label: 'เจ้าหน้าที่สหกิจศึกษา',
+    duties: 'แบบเสนองาน (สหกิจ 02) · นัดหมายนิเทศ · รายชื่อนักศึกษา บัญชีผู้ใช้ และปฏิทินสหกิจ',
+  },
+};
+
+/**
+ * โปรไฟล์ของบุคลากรในมหาวิทยาลัย (ที่ปรึกษา · นิเทศ · หัวหน้าสาขา · คณบดี · เจ้าหน้าที่)
+ * แบบ B ที่เจ้าของเลือก 2026-09-23: หัวโปรไฟล์ + สองคอลัมน์
+ *
+ * - **สังกัด — แก้เองไม่ได้** สาขาคือสิ่งที่ `resolveMajorScope` ใช้ตัดสินว่าเห็นนักศึกษาคนไหน
+ *   เดิมมี dropdown ให้เลือกเอง = ขยายสิทธิ์ตัวเองได้ · เจ้าหน้าที่แก้ที่ `PUT /users/:id` ทางเดียว
+ * - **ชื่อ · วันเกิด — แก้เองได้** ทุกฝ่ายรวมเจ้าหน้าที่ เพราะชื่อคือสิ่งที่บอกว่าใครทำอะไร
+ * - กระดานวาดลายเซ็นคณบดีอยู่ที่เมนู `signature` ที่เดียว (มี ConfirmDialog) — หน้านี้แค่พาไป
+ */
+const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitchView }) => {
+  const auth = useContext(AuthContext);
+  const [profile, setProfile] = useState<PersonnelProfileData | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
-  const [majors, setMajors] = useState<Major[]>([]);
-  
-  const [selectedMajorId, setSelectedMajorId] = useState<number | ''>('');
+  const [caseload, setCaseload] = useState<Caseload | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [birthDate, setBirthDate] = useState('');
+
   const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** ยังไม่เคยกรอกประวัติ — สถานะปกติของบุคลากรที่เพิ่งได้รับสิทธิ์ ไม่ใช่ความผิดพลาด */
   const [notice, setNotice] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [birthDate, setBirthDate] = useState('');
+  /** มีชื่อไฟล์ในฐานแต่เปิดภาพไม่ได้ — โชว์ไอคอนแทนรูปแตก */
+  const [sigImageBroken, setSigImageBroken] = useState(false);
+  const alertRef = useRef<HTMLDivElement>(null);
 
-  // E-Signature Pad states
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [lastX, setLastX] = useState(0);
-  const [lastY, setLastY] = useState(0);
-  const [brushColor, setBrushColor] = useState('#1e3a8a'); // Navy Blue
-  const [brushSize, setBrushSize] = useState(3);
-  const [savedSigPath, setSavedSigPath] = useState<string | null>(null);
-  
-  // Upload mode
-  const [uploadMode, setUploadMode] = useState<'draw' | 'file'>('draw');
-  const [signatureFile, setSignatureFile] = useState<File | null>(null);
-
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // แยก settle ทีละรายการ — 404 ของ /profile/me คือบุคลากรที่ยังไม่เคยกรอกประวัติ
-      // ซึ่งเดิมโยนรายชื่อสาขาวิชาทิ้งไปด้วย ทำให้ dropdown ที่ต้องใช้กรอกว่างเปล่า
-      const [profileResult, masterResult] = await Promise.allSettled([
-        api.get('/profile/me'),
-        api.get('/master-data')
-      ]);
-
-      if (masterResult.status === 'fulfilled') {
-        setMajors(masterResult.value.majors || []);
-      } else {
-        console.error('Failed to load master data:', masterResult.reason);
-      }
-
-      if (profileResult.status === 'rejected') {
-        console.error('Failed to load personnel profile:', profileResult.reason);
-        const notOnboarded = getErrorStatus(profileResult.reason) === 404;
-        setNotice(notOnboarded ? 'ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกข้อมูลแล้วกดบันทึก' : null);
-        setError(notOnboarded ? null : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
-        return;
-      }
-
-      setNotice(null);
-      const profileData = profileResult.value;
-      setRoles(profileData.roles || []);
-
-      const prof = profileData.profile;
-      if (prof) {
-        setProfile(prof);
-        setSelectedMajorId(prof.major_id || '');
-        setSavedSigPath(prof.e_signature_file || null);
-        setFirstName(prof.first_name || '');
-        setLastName(prof.last_name || '');
-        setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
-      }
-    } catch (err) {
-      console.error('Failed to load personnel profile:', err);
-      setError('ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
-    } finally {
-      setLoading(false);
-    }
+  const applyProfile = (prof: PersonnelProfileData) => {
+    setProfile(prof);
+    setFirstName(prof.first_name || '');
+    setLastName(prof.last_name || '');
+    setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
   };
 
   useEffect(() => {
-    loadProfile();
+    api
+      .get('/profile/me')
+      .then((res) => {
+        const prof: PersonnelProfileData | undefined = res.profile;
+        setRoles(res.roles || []);
+        setCaseload(res.caseload ?? null);
+        if (prof) {
+          setProfile(prof);
+          setFirstName(prof.first_name || '');
+          setLastName(prof.last_name || '');
+          setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load personnel profile:', err);
+        const notOnboarded = getErrorStatus(err) === 404;
+        setNotice(notOnboarded ? 'ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณาติดต่อเจ้าหน้าที่สหกิจศึกษา' : null);
+        setError(notOnboarded ? null : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
-  // Signature Pad drawing logic
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    setIsDrawing(true);
-    const rect = canvas.getBoundingClientRect();
-    let x: number;
-    let y: number;
-
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-    
-    setLastX(x);
-    setLastY(y);
-  };
-
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-
-    const rect = canvas.getBoundingClientRect();
-    let x: number;
-    let y: number;
-
-    if ('touches' in e) {
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-      e.preventDefault(); // Prevent scrolling on mobile
-    } else {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    }
-
-    ctx.strokeStyle = brushColor;
-    ctx.lineWidth = brushSize;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    
-    ctx.beginPath();
-    ctx.moveTo(lastX, lastY);
-    ctx.lineTo(x, y);
-    ctx.stroke();
-
-    setLastX(x);
-    setLastY(y);
-  };
-
-  const stopDrawing = () => {
-    setIsDrawing(false);
-  };
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    const ctx = canvas?.getContext('2d');
-    if (!canvas || !ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-  };
-
-  const dataURLtoBlob = (dataUrl: string): Blob => {
-    const arr = dataUrl.split(',');
-    const mime = arr[0].match(/:(.*?);/)![1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  };
-
-  const handleUpdate = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
 
-    if (selectedMajorId === '') {
-      setError('กรุณาเลือกสาขาวิชาที่สังกัด');
+    if (!firstName.trim() || !lastName.trim()) {
+      setError('กรุณากรอกชื่อและนามสกุล');
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
     setIsSubmitting(true);
-
     try {
       const formData = new FormData();
-      formData.append('major_id', String(selectedMajorId));
+      formData.append('first_name', firstName.trim());
+      formData.append('last_name', lastName.trim());
       formData.append('birth_date', birthDate);
 
-      if (!roles.includes('staff')) {
-        formData.append('first_name', firstName);
-        formData.append('last_name', lastName);
-      }
-
-      if (roles.includes('dean')) {
-        if (uploadMode === 'draw') {
-          const canvas = canvasRef.current;
-          if (canvas) {
-            // Check if canvas is not blank
-            const blank = document.createElement('canvas');
-            blank.width = canvas.width;
-            blank.height = canvas.height;
-            if (canvas.toDataURL() !== blank.toDataURL()) {
-              const dataUrl = canvas.toDataURL('image/png');
-              const blob = dataURLtoBlob(dataUrl);
-              formData.append('signature', blob, 'signature.png');
-            }
-          }
-        } else if (uploadMode === 'file' && signatureFile) {
-          formData.append('signature', signatureFile);
-        }
-      }
-
       const res = await api.put('/profile/personnel', formData);
-      setSuccess('บันทึกการแก้ไขข้อมูลโปรไฟล์สำเร็จเรียบร้อย');
-      
-      if (res.profile) {
-        setProfile(res.profile);
-        setSavedSigPath(res.profile.e_signature_file || null);
-      }
-      
-      // Clear states
-      clearCanvas();
-      setSignatureFile(null);
-      
+      if (res.profile) applyProfile(res.profile);
+      setSuccess('บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว');
     } catch (err) {
       console.error('Failed to update personnel profile:', err);
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setIsSubmitting(false);
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case 'advisor': return 'อาจารย์ที่ปรึกษา (Advisor)';
-      case 'dept_head': return 'หัวหน้าสาขาวิชา / หัวหน้าภาค (Department Head)';
-      case 'dean': return 'คณบดี (Dean)';
-      case 'staff': return 'เจ้าหน้าที่ประสานงานสหกิจ (Coop Staff)';
-      default: return role;
-    }
-  };
-
   if (loading) {
-    return (
-      <PageSkeleton variant='form' />
-    );
+    return <PageSkeleton variant="form" />;
   }
 
+  const isDean = roles.includes('dean');
+  // ฝ่ายที่ผู้ใช้เห็นในตัวสลับ — ไม่มี views (บัญชีเก่า) ใช้ role แทน
+  const views = (auth?.user?.views?.length ? auth.user.views : roles).filter((v) => VIEW_INFO[v]);
+  const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
+  const initials = (profile?.first_name?.[0] || '') + (profile?.last_name?.[0] || '');
+  const signatureUrl = profile?.e_signature_file
+    ? `${API_BASE_URL}/files/signatures/${profile.e_signature_file.split('/').pop()}`
+    : null;
+
+  const cardClass = 'bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs';
+  const labelClass = 'block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1';
+  const lockBadge = (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+      <Lock className="w-3 h-3 text-gray-600 dark:text-gray-400" aria-hidden="true" />
+      แก้เองไม่ได้
+    </span>
+  );
+
   return (
-    <div className="max-w-2xl bg-white p-8 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800 page-enter">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white">การตั้งค่าโปรไฟล์บุคลากร</h2>
-        <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-          จัดการข้อมูลสาขาวิชาที่สังกัด และตั้งค่าลายมือชื่อดิจิทัลสำหรับประทับตราอนุมัติเอกสาร
-        </p>
+    <div className="max-w-5xl mx-auto space-y-6 page-enter pb-16">
+      <div ref={alertRef} className="space-y-3 empty:hidden">
+        <AlertBanner variant="info" message={notice} />
+        <AlertBanner variant="error" message={error} />
+        <AlertBanner variant="success" message={success} />
       </div>
 
-      <AlertBanner variant="info" message={notice} className="mb-4" />
-      <AlertBanner variant="error" message={error} className="mb-4" />
-
-      <AlertBanner variant="success" message={success} className="mb-4" />
-
-      <form onSubmit={handleUpdate} className="space-y-5">
-        {/* บทบาทในระบบ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              บทบาทปฏิบัติหน้าที่ในระบบ
-            </label>
-            <div className="w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-600 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 font-medium">
-              {roles.map(r => getRoleLabel(r)).join(', ')}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-              สถานะการลงทะเบียนโปรไฟล์
-            </label>
-            <div className={`w-full px-4 py-2.5 text-sm rounded-lg border border-gray-200 font-medium ${
-              profile?.status === 'approved' 
-                ? 'bg-green-50 border-green-200 text-green-700 dark:bg-green-950/20 dark:border-green-900 dark:text-green-400'
-                : 'bg-yellow-50 border-yellow-200 text-yellow-700 dark:bg-yellow-950/20 dark:border-yellow-900 dark:text-yellow-400'
-            }`}>
-              {profile?.status === 'approved' ? 'อนุมัติเรียบร้อยแล้ว' : 'รอการอนุมัติบัญชี'}
-            </div>
-          </div>
+      {!profile && (
+        <div className={cardClass}>
+          <h1 className="text-2xl font-black text-gray-900 dark:text-white">ข้อมูลส่วนตัวบุคลากร</h1>
         </div>
+      )}
 
-        {/* ชื่อจริง และนามสกุล (ยกเว้นบทบาทเจ้าหน้าที่) */}
-        {!roles.includes('staff') && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                ชื่อจริง
-              </label>
-              <Input
-                type="text"
-                required
-                disabled={isSubmitting}
-                value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                นามสกุล
-              </label>
-              <Input
-                type="text"
-                required
-                disabled={isSubmitting}
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* เลือกสาขาวิชา */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-            สาขาวิชาที่สังกัด / ดูแล
-          </label>
-          <Select
-            required
-            disabled={isSubmitting}
-            value={selectedMajorId}
-            onChange={(e) => setSelectedMajorId(Number(e.target.value))}
+      {profile && (
+        <>
+          {/* หัวโปรไฟล์ */}
+          <div
+            data-testid="personnel-profile-hero"
+            className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-xs overflow-hidden"
           >
-            <option value="">-- เลือกสาขาวิชา --</option>
-            {majors.map((m) => (
-              <option key={m.major_id} value={m.major_id}>
-                [{m.major_code}] {m.major_name_th}
-              </option>
-            ))}
-          </Select>
-        </div>
-
-        {/* วันเดือนปีเกิด (Birth Date) */}
-        <div>
-          <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-            วันเดือนปีเกิด (Birth Date) *
-          </label>
-          <Input
-            type="date"
-            required
-            disabled={isSubmitting}
-            value={birthDate}
-            onChange={(e) => setBirthDate(e.target.value)}
-            className="cursor-pointer"
-          />
-        </div>
-
-        {/* ตั้งค่าลายเซ็นดิจิทัล (แสดงเฉพาะคณบดี) */}
-        {roles.includes('dean') && (
-          <div className="border-t border-gray-100 dark:border-gray-800 pt-5 space-y-4">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-                ลายมือชื่ออิเล็กทรอนิกส์ (Digital Signature)
-              </h3>
-              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-                ลายเซ็นนี้จะใช้สำหรับนำไปวางประทับตราบนเอกสารใบคำร้องต่างๆ ของนักศึกษาโดยอัตโนมัติ
-              </p>
-            </div>
-
-            {/* แสดงลายเซ็นปัจจุบัน */}
-            {savedSigPath && (
-              <div className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-800/80 inline-block">
-                <span className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ลายเซ็นปัจจุบันในระบบ:</span>
-                <img
-                  src={`${API_BASE_URL}/files/signatures/${savedSigPath.split('/').pop()}`}
-                  alt="Digital Signature"
-                  className="h-16 object-contain bg-white dark:bg-gray-900 rounded p-1"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
+            {/* โหมดมืดเป็นเทากลาง ไม่ใช่กรมท่า — ทั้งแอปไม่มีพื้นสีเต็มแผ่นในโหมดมืด แถบน้ำเงินเข้มจึงดูหลุดชุด */}
+            <div className="h-20 bg-brand-navy dark:bg-gray-800" aria-hidden="true" />
+            <div className="px-6 sm:px-8 pb-6 -mt-12 flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6">
+              <div
+                aria-hidden="true"
+                className="w-28 h-28 shrink-0 rounded-full bg-blue-50 dark:bg-gray-900 border-4 border-white dark:border-gray-900 ring-1 ring-transparent dark:ring-gray-700 flex items-center justify-center text-4xl font-black text-brand-blue dark:text-blue-400"
+              >
+                {initials || '—'}
               </div>
-            )}
+              {/* sm:pt-14 > ระยะที่รูปยื่นขึ้นไปบนแถบ (48px) — ชื่อต้องอยู่บนพื้นการ์ดเสมอ ห่างจากแถบ 8px
+                  เดิมชิดขอบพอดี ตัวดำไปติดพื้นกรมท่า อ่านยาก (เจ้าของทัก 2026-09-23) */}
+              <div className="flex-1 min-w-0 space-y-1.5 sm:pt-14 sm:pb-1">
+                <h1 className="text-2xl font-black text-gray-900 dark:text-white">
+                  {displayName || 'ยังไม่ได้ตั้งชื่อ'}
+                </h1>
+                <p className="text-xs text-gray-600 dark:text-gray-400 break-words">
+                  {[profile.email, profile.major_name_th, profile.faculty_name_th]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {views.map((v) => (
+                    <span
+                      key={v}
+                      className="px-3 py-1 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-200 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-800"
+                    >
+                      {VIEW_INFO[v].label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
 
-            {/* สลับแท็บ วิธีการส่งลายเซ็น */}
-            <div className="flex gap-2 p-1 bg-gray-100 dark:bg-gray-800 rounded-lg max-w-xs text-xs">
-              <button
-                type="button"
-                onClick={() => setUploadMode('draw')}
-                className={`flex-1 py-1.5 rounded-md text-center font-medium transition-all ${
-                  uploadMode === 'draw'
-                    ? 'bg-white text-gray-900 shadow dark:bg-gray-700 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
-                วาดลายมือชื่อสด
-              </button>
-              <button
-                type="button"
-                onClick={() => setUploadMode('file')}
-                className={`flex-1 py-1.5 rounded-md text-center font-medium transition-all ${
-                  uploadMode === 'file'
-                    ? 'bg-white text-gray-900 shadow dark:bg-gray-700 dark:text-white'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-                }`}
-              >
-                อัปโหลดไฟล์ภาพลายเซ็น
-              </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            {/* คอลัมน์ซ้าย */}
+            <div className="lg:col-span-2 space-y-6">
+              <form data-testid="personnel-profile-form" onSubmit={handleSubmit} className={`${cardClass} space-y-5`}>
+                <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลที่คุณแก้เองได้</h2>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    ชื่อนี้โผล่ในรายการที่คุณอนุมัติ ตีกลับ หรือให้คะแนน — นักศึกษาและพี่เลี้ยงใช้ดูว่าใครเป็นคนทำ
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="personnel-first-name" className={labelClass}>ชื่อ *</label>
+                    <Input
+                      id="personnel-first-name"
+                      data-testid="personnel-first-name"
+                      value={firstName}
+                      disabled={isSubmitting}
+                      onChange={(e) => setFirstName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="personnel-last-name" className={labelClass}>นามสกุล *</label>
+                    <Input
+                      id="personnel-last-name"
+                      data-testid="personnel-last-name"
+                      value={lastName}
+                      disabled={isSubmitting}
+                      onChange={(e) => setLastName(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="personnel-birth-date" className={labelClass}>วันเกิด</label>
+                    <Input
+                      id="personnel-birth-date"
+                      data-testid="personnel-birth-date"
+                      type="date"
+                      value={birthDate}
+                      disabled={isSubmitting}
+                      onChange={(e) => setBirthDate(e.target.value)}
+                      className="cursor-pointer"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-3 border-t border-gray-100 dark:border-gray-800">
+                  <Button type="submit" data-testid="personnel-profile-save" loading={isSubmitting} loadingLabel="กำลังบันทึกข้อมูล...">
+                    บันทึกข้อมูลส่วนตัว
+                  </Button>
+                </div>
+              </form>
+
+              {views.length > 0 && (
+                <section data-testid="personnel-duties" className={cardClass}>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white mb-2">หน้าที่ของคุณในระบบ</h2>
+                  <ul>
+                    {views.map((v) => (
+                      <li key={v} className="border-t border-gray-100 dark:border-gray-800">
+                        <button
+                          type="button"
+                          data-testid={`personnel-duty-${v}`}
+                          onClick={() => onSwitchView?.(v)}
+                          className="w-full flex items-center justify-between gap-4 py-3.5 text-left group cursor-pointer"
+                        >
+                          <span className="min-w-0">
+                            <span className="block text-sm font-bold text-gray-900 dark:text-white">{VIEW_INFO[v].label}</span>
+                            <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+                              {VIEW_INFO[v].duties}
+                            </span>
+                          </span>
+                          <span className="shrink-0 inline-flex items-center gap-1 text-xs font-bold text-brand-blue dark:text-blue-400 group-hover:underline">
+                            เปิด <ArrowRight className="w-3.5 h-3.5" aria-hidden="true" />
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              )}
             </div>
 
-            {uploadMode === 'draw' ? (
-              <div className="space-y-3">
-                {/* ตัวควบคุมปากกา */}
-                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5">
-                      <span>สีปากกา:</span>
-                      <input 
-                        type="color" 
-                        value={brushColor} 
-                        onChange={(e) => setBrushColor(e.target.value)}
-                        className="w-5 h-5 rounded cursor-pointer border-none bg-transparent"
-                      />
+            {/* คอลัมน์ขวา */}
+            <div className="space-y-6">
+              <section data-testid="personnel-profile-registry" className={`${cardClass} space-y-3.5`}>
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">สังกัด</h2>
+                  {lockBadge}
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">คณะ</div>
+                  <div className="text-xs font-bold text-gray-900 dark:text-white mt-0.5">{profile.faculty_name_th || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-600 dark:text-gray-400">สาขาวิชา</div>
+                  <div data-testid="personnel-profile-major" className="text-xs font-bold text-gray-900 dark:text-white mt-0.5">
+                    {profile.major_name_th || '—'}
+                  </div>
+                </div>
+                <p className="pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                  สาขากำหนดว่าคุณเห็นนักศึกษาและคำร้องของใคร —{' '}
+                  <strong className="text-gray-800 dark:text-gray-200">ไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษา</strong>
+                </p>
+              </section>
+
+              {caseload && (
+                <section data-testid="personnel-caseload" className={`${cardClass} space-y-3`}>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">นักศึกษาในความดูแล</h2>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-800">
+                      <div className="text-xs text-gray-600 dark:text-gray-400">เป็นที่ปรึกษา</div>
+                      <div data-testid="personnel-caseload-advisees" className="text-3xl font-black text-gray-900 dark:text-white">
+                        {caseload.advisees}
+                      </div>
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 leading-snug">คน · ดูแลจนส่งเล่ม</div>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <span>ขนาด:</span>
-                      <Select
-                        value={brushSize}
-                        onChange={(e) => setBrushSize(Number(e.target.value))} size="sm"
-                      >
-                        <option value="2">บาง (2px)</option>
-                        <option value="3">ปกติ (3px)</option>
-                        <option value="5">หนา (5px)</option>
-                      </Select>
+                    {/* สีชุดเดียวกับกล่อง "เกรดที่คุณแจ้ง" ในหน้านักศึกษา */}
+                    <div className="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/60">
+                      <div className="text-xs font-semibold text-blue-900 dark:text-blue-300">เป็นอาจารย์นิเทศ</div>
+                      <div data-testid="personnel-caseload-supervisees" className="text-3xl font-black text-brand-blue dark:text-blue-400">
+                        {caseload.supervisees}
+                      </div>
+                      <div className="text-[11px] text-blue-900 dark:text-blue-300 leading-snug">คน · ไปนิเทศที่บริษัท</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={clearCanvas}
-                    className="text-red-500 hover:text-red-600 transition-colors font-medium"
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    หัวหน้าสาขาเป็นคนมอบหมายทั้งสองอย่าง — คนเดียวกันอาจอยู่ทั้งสองช่องได้ · ดูรายชื่อได้ที่เมนูของแต่ละฝ่าย
+                  </p>
+                </section>
+              )}
+
+              {/* ลายมือชื่อ — คณบดีเท่านั้น · ตัวกระดานวาดอยู่ที่เมนู signature ที่เดียว */}
+              {isDean && (
+                <section data-testid="personnel-signature-card" className={`${cardClass} space-y-3`}>
+                  <h2 className="text-base font-bold text-gray-900 dark:text-white">ลายมือชื่อสำหรับหนังสือราชการ</h2>
+                  <div className="h-16 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 flex items-center justify-center overflow-hidden">
+                    {signatureUrl && !sigImageBroken ? (
+                      <img
+                        src={signatureUrl}
+                        alt="ลายมือชื่อปัจจุบัน"
+                        className="max-h-14 object-contain"
+                        onError={() => setSigImageBroken(true)}
+                      />
+                    ) : (
+                      <PenLine className="w-5 h-5 text-gray-500 dark:text-gray-400" aria-hidden="true" />
+                    )}
+                  </div>
+                  <p
+                    className={`text-xs font-bold ${
+                      signatureUrl ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-400'
+                    }`}
                   >
-                    ล้างกระดานวาด
-                  </button>
-                </div>
-
-                {/* กระดาน Canvas วาดภาพ */}
-                <div className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden bg-white dark:bg-gray-950">
-                  <canvas
-                    ref={canvasRef}
-                    width={560}
-                    height={180}
-                    onMouseDown={startDrawing}
-                    onMouseMove={draw}
-                    onMouseUp={stopDrawing}
-                    onMouseLeave={stopDrawing}
-                    onTouchStart={startDrawing}
-                    onTouchMove={draw}
-                    onTouchEnd={stopDrawing}
-                    className="w-full cursor-crosshair block bg-transparent"
-                    style={{ touchAction: 'none' }}
-                  />
-                </div>
-              </div>
-            ) : (
-              <div>
-                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                  ไฟล์ภาพลายเซ็น (PNG/JPG แนะนำพื้นหลังโปร่งใส)
-                </label>
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg, image/jpg"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      setSignatureFile(e.target.files[0]);
-                    }
-                  }}
-                  className="w-full text-xs text-gray-600 dark:text-gray-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-600 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
-                />
-              </div>
-            )}
+                    {!signatureUrl
+                      ? 'ยังไม่ได้ตั้งค่า — ลงนามหนังสือไม่ได้'
+                      : sigImageBroken
+                        ? 'ตั้งค่าแล้ว (เปิดภาพไม่ได้)'
+                        : 'ตั้งค่าแล้ว'}
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    พิมพ์ลงหนังสือพร้อมชื่อ-นามสกุลของคุณ — ขาดอย่างใดอย่างหนึ่งจะลงนามไม่ได้
+                  </p>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full"
+                    data-testid="personnel-go-signature"
+                    onClick={() => onNavigate?.('signature')}
+                  >
+                    {signatureUrl ? 'เปลี่ยนลายมือชื่อ' : 'ตั้งค่าลายมือชื่อ'}
+                    <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                  </Button>
+                </section>
+              )}
+            </div>
           </div>
-        )}
-
-        {/* ปุ่มบันทึกข้อมูล */}
-        <div className="pt-2 border-t border-gray-100 dark:border-gray-800 flex justify-end">
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="px-6 py-2 rounded-xl bg-brand-blue text-white text-sm font-semibold hover:bg-blue-600 disabled:bg-gray-300 dark:disabled:bg-gray-800 transition-all flex items-center gap-2"
-          >
-            {isSubmitting ? 'กำลังบันทึกข้อมูล...' : 'บันทึกข้อมูลตั้งค่า'}
-          </button>
-        </div>
-      </form>
+        </>
+      )}
     </div>
   );
 };

@@ -6,6 +6,7 @@ import { PersonnelModel } from '../models/personnel';
 import { MentorModel } from '../models/mentor';
 import { MasterModel } from '../models/master';
 import { UserModel } from '../models/user';
+import { query } from '../config/database';
 
 import { hashPassword } from '../utils/password';
 import { sendUnexpectedError } from '../utils/httpError';
@@ -350,7 +351,19 @@ export class ProfileController {
           res.status(404).json({ message: 'Personnel profile not set up yet.' });
           return;
         }
-        res.status(200).json({ roles, profile });
+        // การ์ด "นักศึกษาในความดูแล" บนหน้าโปรไฟล์ — นับจากคอลัมน์เดียวกับที่ `resolveViews`
+        // ใช้ตัดสินว่ามีฝ่ายที่ปรึกษา/นิเทศ ตัวเลขกับเมนูที่เห็นจึงตรงกันเสมอ
+        let caseload: { advisees: number; supervisees: number } | null = null;
+        if (roles.includes('advisor')) {
+          const c = await query(
+            `SELECT COUNT(*) FILTER (WHERE advisor_id = $1)::int    AS advisees,
+                    COUNT(*) FILTER (WHERE supervisor_id = $1)::int AS supervisees
+               FROM students`,
+            [userId]
+          );
+          caseload = c.rows[0];
+        }
+        res.status(200).json({ roles, profile, caseload });
       } else if (roles.includes('mentor')) {
         // A mentor's details live in `mentors`, never in `personnel`. Falling
         // through to the 400 below is what left the mentor profile screen with
@@ -499,18 +512,11 @@ export class ProfileController {
       }
 
       const { userId } = req.user;
-      const { major_id, first_name, last_name, birth_date } = req.body;
-
-      // Omitting major_id keeps whatever is on record. It used to be mandatory,
-      // which forced callers that only wanted to update something else — the
-      // e-signature pad, for one — to invent a value to send.
-      const parsedMajorId =
-        major_id === undefined || major_id === null || major_id === '' ? null : parseInt(major_id, 10);
-
-      if (parsedMajorId !== null && isNaN(parsedMajorId)) {
-        res.status(400).json({ message: 'major_id must be a valid integer.' });
-        return;
-      }
+      // major_id is ignored on purpose (same reasoning as SEC-05 for students):
+      // `resolveMajorScope` reads it to decide whose students an advisor or
+      // department head can see, so letting people pick it here let them widen
+      // their own access. Staff change it at PUT /users/:id.
+      const { first_name, last_name, birth_date } = req.body;
 
       const cleanBirthDate = birth_date !== undefined && birth_date !== null && birth_date !== '' ? birth_date : null;
 
@@ -518,22 +524,6 @@ export class ProfileController {
       if (!existingProfile) {
         res.status(404).json({ message: 'Personnel profile not found. Please set up profile first.' });
         return;
-      }
-
-      // Validate major (only when one was actually supplied)
-      if (parsedMajorId !== null) {
-        const majorExists = await MasterModel.verifyMajorExists(parsedMajorId);
-        if (!majorExists) {
-          res.status(400).json({ message: 'Invalid major_id. Referenced major does not exist.' });
-          return;
-        }
-        if (parsedMajorId !== existingProfile.major_id) {
-          const conflict = await deptHeadConflictMessage(userId, req.user.roles, parsedMajorId);
-          if (conflict) {
-            res.status(409).json({ message: conflict });
-            return;
-          }
-        }
       }
 
       let signatureFile = null;
@@ -549,9 +539,9 @@ export class ProfileController {
         }
       }
 
-      const updated = await PersonnelModel.updatePersonnel(
+      await PersonnelModel.updatePersonnel(
         userId,
-        parsedMajorId,
+        null,
         signatureFile,
         first_name !== undefined ? first_name : null,
         last_name !== undefined ? last_name : null,
@@ -560,7 +550,7 @@ export class ProfileController {
 
       res.status(200).json({
         message: 'Personnel profile updated successfully.',
-        profile: updated,
+        profile: await PersonnelModel.findByPersonnelId(userId),
       });
     } catch (error) {
       sendUnexpectedError(

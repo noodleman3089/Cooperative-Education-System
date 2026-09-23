@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { UserModel } from '../models/user';
 import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
+import { MasterModel } from '../models/master';
 import { query } from '../config/database';
 import { hashPassword } from '../utils/password';
 import { sendCompanyInviteEmail, sendMentorInviteEmail } from '../utils/email';
@@ -192,11 +193,28 @@ export class UserController {
         return;
       }
 
-      const { email, roles, is_active } = req.body;
+      const { email, roles, is_active, major_id } = req.body;
 
       if (!email || !roles || !Array.isArray(roles) || is_active === undefined) {
         res.status(400).json({ message: 'Email, roles array, and is_active are required.' });
         return;
+      }
+
+      // major_id is optional and only means something for accounts with a
+      // personnel row. This is the one place a major can change after setup —
+      // the person can't do it from their own profile any more.
+      const parsedMajorId =
+        major_id === undefined || major_id === null || major_id === '' ? null : Number(major_id);
+      const beforePersonnel = parsedMajorId !== null ? await PersonnelModel.findByPersonnelId(id) : null;
+      if (parsedMajorId !== null) {
+        if (!Number.isInteger(parsedMajorId) || !(await MasterModel.verifyMajorExists(parsedMajorId))) {
+          res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
+          return;
+        }
+        if (!beforePersonnel) {
+          res.status(400).json({ message: 'บัญชีนี้ยังไม่มีโปรไฟล์บุคลากร จึงยังตั้งสาขาไม่ได้' });
+          return;
+        }
       }
 
       const existingUser = await UserModel.findByEmail(email);
@@ -215,7 +233,13 @@ export class UserController {
         return;
       }
 
+      const majorChanged = beforePersonnel !== null && parsedMajorId !== beforePersonnel.major_id;
+      if (majorChanged) {
+        await PersonnelModel.updatePersonnel(id, parsedMajorId, null);
+      }
+
       // SB-G2: หัวหน้าสาขามีคนเดียวต่อสาขา — เจ้าหน้าที่ตั้งคนนี้ = ถอดคนเก่าในสาขาเดียวกัน
+      // (ต้องอยู่หลังการย้ายสาขา — มันอ่านสาขาจากแถว personnel)
       const replacedDeptHeads = roles.includes('dept_head') ? await replaceDeptHeadInMajor(id, req) : [];
 
       writeAudit({
@@ -230,6 +254,10 @@ export class UserController {
           roles_after: roles,
           is_active_before: before?.is_active ?? null,
           is_active_after: is_active,
+          ...(majorChanged && {
+            major_id_before: beforePersonnel.major_id,
+            major_id_after: parsedMajorId,
+          }),
         },
       }, req).catch(() => undefined);
 

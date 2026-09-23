@@ -3,10 +3,16 @@ import { Personnel } from '../types';
 
 export class PersonnelModel {
   static async findByPersonnelId(personnelId: number): Promise<Personnel | null> {
+    // email / major / faculty names are for the profile screen, which shows them
+    // read-only — the major decides whose students this person can see.
     const res = await query(
-      `SELECT personnel_id, major_id, e_signature_file, status, first_name, last_name, birth_date 
-       FROM personnel 
-       WHERE personnel_id = $1`,
+      `SELECT p.personnel_id, p.major_id, p.e_signature_file, p.status, p.first_name, p.last_name, p.birth_date,
+              u.email, m.major_name_th, f.faculty_name_th
+       FROM personnel p
+       JOIN users u ON u.user_id = p.personnel_id
+       LEFT JOIN master_major m ON m.major_id = p.major_id
+       LEFT JOIN master_faculty f ON f.faculty_id = m.faculty_id
+       WHERE p.personnel_id = $1`,
       [personnelId]
     );
     if ((res.rowCount ?? 0) === 0) return null;

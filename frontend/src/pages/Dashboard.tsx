@@ -406,7 +406,7 @@ const Dashboard: React.FC = () => {
             </div>
           );
         }
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'report_outlines') return <OutlineReview />;
         if (activeMenu === 'memos') return <FacultyMemos />;
@@ -424,14 +424,14 @@ const Dashboard: React.FC = () => {
             </div>
           );
         }
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
         return <AdvisorHome view="supervisor" />;
         
       case 'dept_head':
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
@@ -443,7 +443,7 @@ const Dashboard: React.FC = () => {
       case 'dean':
         if (activeMenu === 'signature') return <DeanSignature onNavigate={setActiveMenu} />;
         if (activeMenu === 'memos') return <FacultyMemos showMajorFilter />;
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <DeanSignQueue onNavigate={setActiveMenu} />;
         
       case 'staff':
@@ -455,7 +455,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'companies') return <CompanyDirectory />;
         if (activeMenu === 'calendar') return <CoopCalendarManager />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
-        if (activeMenu === 'profile') return <PersonnelProfile />;
+        if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <StaffHome />;
         
       case 'company':

@@ -7,6 +7,7 @@ import Modal, { ModalBody } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
+import { Select } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import type {
   UserRow,
@@ -111,6 +112,8 @@ export const UsersAndMasterData: React.FC = () => {
   const [userPassword, setUserPassword] = useState('');
   const [userRoles, setUserRoles] = useState<string[]>([]);
   const [userIsActive, setUserIsActive] = useState(true);
+  /** สาขาของบุคลากร — แก้ได้ที่นี่ที่เดียว (บุคลากรแก้เองในโปรไฟล์ไม่ได้ เพราะมันกำหนดสิทธิ์) */
+  const [userMajorId, setUserMajorId] = useState<number | ''>('');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
   const [resendingInvite, setResendingInvite] = useState<number | null>(null);
 
@@ -136,12 +139,14 @@ export const UsersAndMasterData: React.FC = () => {
   const loadUsers = useCallback(async () => {
     try {
       setLoadingUsers(true);
-      const [usersData, personnelData] = await Promise.all([
+      const [usersData, personnelData, masterData] = await Promise.all([
         api.get('/users'),
         api.get('/personnel'),
+        api.get('/master-data'),
       ]);
       setUsers(usersData || []);
       setPersonnelList(personnelData || []);
+      setMajors(masterData.majors || []);
     } catch (err) {
       console.error('Failed to load users:', err);
     } finally {
@@ -254,6 +259,7 @@ export const UsersAndMasterData: React.FC = () => {
     setUserPassword('');
     setUserRoles(user.roles || []);
     setUserIsActive(user.is_active);
+    setUserMajorId(personnelList.find((p) => p.personnel_id === user.user_id)?.major_id ?? '');
     setIsEditUserModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -268,12 +274,13 @@ export const UsersAndMasterData: React.FC = () => {
     setPendingDeptHeadReplace(null);
 
     try {
-      const updateData: { email: string; roles: string[]; is_active: boolean; password?: string } = {
+      const updateData: { email: string; roles: string[]; is_active: boolean; password?: string; major_id?: number } = {
         email: userEmail || selectedUser.email,
         roles: userRoles,
         is_active: userIsActive,
       };
       if (userPassword.trim()) updateData.password = userPassword;
+      if (userMajorId !== '') updateData.major_id = userMajorId;
 
       const res = await api.put(`/users/${selectedUser.user_id}`, updateData);
       let successMsg = `อัปเดตข้อมูลบัญชี ${selectedUser.email} เรียบร้อยแล้ว`;
@@ -299,22 +306,26 @@ export const UsersAndMasterData: React.FC = () => {
     if (!selectedUser) return;
 
     // SB-G2: ตรวจสอบกรณีเพิ่มบทบาท dept_head ให้บัญชีที่ยังไม่เคยมีบทบาทนี้
+    //   หรือย้ายหัวหน้าสาขาไปสาขาอื่น — ทั้งสองแบบถอดหัวหน้าคนเดิมของสาขาปลายทาง
+    const targetPersonnel = personnelList.find(
+      (p) =>
+        p.personnel_id === selectedUser.user_id ||
+        p.email?.toLowerCase() === selectedUser.email.toLowerCase()
+    );
+    const targetMajorId = userMajorId !== '' ? userMajorId : targetPersonnel?.major_id;
     const isAddingDeptHead =
       userRoles.includes('dept_head') && !(selectedUser.roles || []).includes('dept_head');
-    if (isAddingDeptHead) {
-      const targetPersonnel = personnelList.find(
-        (p) =>
-          p.personnel_id === selectedUser.user_id ||
-          p.email?.toLowerCase() === selectedUser.email.toLowerCase()
-      );
-      if (targetPersonnel?.major_id) {
+    const isMovingDeptHead =
+      userRoles.includes('dept_head') && !!targetPersonnel && targetMajorId !== targetPersonnel.major_id;
+    if (isAddingDeptHead || isMovingDeptHead) {
+      if (targetMajorId) {
         const existingHead = personnelList.find(
           (p) =>
-            p.major_id === targetPersonnel.major_id &&
+            p.major_id === targetMajorId &&
             p.personnel_id !== selectedUser.user_id &&
             (p.roles || []).includes('dept_head')
         );
-        const majorName = targetPersonnel.major_name_th || 'นี้';
+        const majorName = majors.find((m) => m.major_id === targetMajorId)?.major_name_th || 'นี้';
         if (existingHead) {
           const headName =
             [existingHead.first_name, existingHead.last_name].filter(Boolean).join(' ').trim() ||
@@ -738,6 +749,7 @@ export const UsersAndMasterData: React.FC = () => {
 
                             <button
                               type="button"
+                              data-testid={`user-edit-${u.user_id}`}
                               onClick={() => handleEditUserClick(u)}
                               className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                             >
@@ -1632,6 +1644,29 @@ export const UsersAndMasterData: React.FC = () => {
                   ))}
                 </div>
               </div>
+              {selectedUser && personnelList.some((p) => p.personnel_id === selectedUser.user_id) && (
+                <div>
+                  <label htmlFor="modal-edit-major" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    สาขาวิชาที่สังกัด
+                  </label>
+                  <Select
+                    id="modal-edit-major"
+                    data-testid="user-edit-major"
+                    size="sm"
+                    value={userMajorId}
+                    onChange={(e) => setUserMajorId(Number(e.target.value))}
+                  >
+                    {majors.map((m) => (
+                      <option key={m.major_id} value={m.major_id}>
+                        {m.major_name_th} {m.major_code ? `(${m.major_code})` : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    สาขากำหนดว่าบุคลากรคนนี้เห็นนักศึกษาและคำร้องของใคร — แก้ได้ที่นี่ที่เดียว
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700 dark:text-gray-300 cursor-pointer">
                   <input

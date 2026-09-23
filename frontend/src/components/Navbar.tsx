@@ -355,10 +355,15 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     };
   }, [auth?.user]);
 
+  // จอมือถือวางชื่อระบบ + ตัวสลับฝ่าย + กระดิ่ง + ธีม + อวาตาร์ไม่พอ (ฝั่งขวากว้าง ~270px จาก 375)
+  // บัญชีที่มีตัวสลับจึงซ่อนชื่อระบบบนจอเล็ก — ชื่อยังอยู่หัว sidebar ที่เปิดจากปุ่มเมนู
+  const hasViewSwitcher =
+    !!auth?.user && ((auth.user.views?.length ? auth.user.views : auth.user.roles ?? []).length > 1);
+
   return (
     <>
-      <nav className="h-16 border-b border-gray-200 bg-white px-6 flex items-center justify-between dark:bg-gray-900 dark:border-gray-800 transition-colors relative z-30">
-        <div className="flex items-center gap-4">
+      <nav className="h-16 border-b border-gray-200 bg-white px-4 sm:px-6 gap-2 flex items-center justify-between dark:bg-gray-900 dark:border-gray-800 transition-colors relative z-30">
+        <div className="flex items-center gap-2 sm:gap-4 min-w-0">
           {onToggleSidebar && (
             <button
               type="button"
@@ -371,12 +376,16 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               </svg>
             </button>
           )}
-          <h1 className="text-base sm:text-lg font-bold text-brand-navy dark:text-white truncate">
+          <h1
+            className={`text-base sm:text-lg font-bold text-brand-navy dark:text-white truncate ${
+              hasViewSwitcher ? 'hidden sm:block' : ''
+            }`}
+          >
             ระบบสหกิจศึกษา RMUTTO
           </h1>
         </div>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* สลับบทบาท/ฝ่าย (Segmented Control ตามร่างดีไซน์ .design/faculty) */}
           {(() => {
             const availableViews = (auth?.user?.views && auth.user.views.length > 0)
@@ -402,10 +411,27 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                   ))}
                 </select>
 
+                {/* มือถือ: dropdown แทน pill — จอ 375px วาง pill สองปุ่มข้างชื่อระบบ+กระดิ่ง+อวาตาร์ไม่พอ
+                    ป้าย "อาจารย์ที่ปรึกษา" ถูกบีบเป็นสามบรรทัด (เจ้าของทัก 2026-09-23)
+                    · คนละตัวกับ select ของ E2E ข้างบน ซึ่งซ่อนจากผู้ใช้และ screen reader */}
+                <select
+                  data-testid="role-switch-mobile"
+                  value={currentRole}
+                  onChange={(e) => onRoleChange(e.target.value)}
+                  aria-label="สลับฝ่าย"
+                  className="sm:hidden max-w-[9.5rem] pl-2.5 pr-7 py-1.5 rounded-[10px] text-xs font-bold bg-[#F3F4F6] text-[#1E3A8A] border border-gray-200 dark:bg-gray-800 dark:text-blue-300 dark:border-gray-700 cursor-pointer"
+                >
+                  {availableViews.map((r) => (
+                    <option key={r} value={r}>
+                      {getRoleLabel(r)}
+                    </option>
+                  ))}
+                </select>
+
                 {/* ตัวสลับแบบ Segmented Pill Tabs ตามดีไซน์ .design/faculty/AdvisorHome.dc.html */}
                 <div
                   data-testid="role-switcher-segmented"
-                  className="flex items-center gap-1 p-[3px] bg-[#F3F4F6] dark:bg-gray-800 rounded-[12px] border border-gray-200/60 dark:border-gray-700/60"
+                  className="hidden sm:flex items-center gap-1 p-[3px] bg-[#F3F4F6] dark:bg-gray-800 rounded-[12px] border border-gray-200/60 dark:border-gray-700/60"
                 >
                   {availableViews.map((r) => {
                     const isActive = currentRole === r;
@@ -415,7 +441,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                         type="button"
                         data-testid={`role-btn-${r}`}
                         onClick={() => onRoleChange(r)}
-                        className={`px-3 py-1.5 rounded-[9px] text-xs sm:text-[13px] transition-all cursor-pointer border-none font-sans ${
+                        className={`px-3 py-1.5 rounded-[9px] text-xs sm:text-[13px] whitespace-nowrap transition-all cursor-pointer border-none font-sans ${
                           isActive
                             ? 'bg-white dark:bg-gray-700 font-bold text-[#1E3A8A] dark:text-blue-300 shadow-[0_1px_2px_0_rgb(0_0_0_/_0.08)]'
                             : 'bg-transparent font-medium text-[#4B5563] dark:text-gray-400 hover:text-[#111827] dark:hover:text-gray-200'

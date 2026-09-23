@@ -65,6 +65,9 @@ export interface Personnel {
   first_name: string | null;
   last_name: string | null;
   birth_date: Date | string | null;
+  email?: string;
+  major_name_th?: string | null;
+  faculty_name_th?: string | null;
 }
 
 // API Payloads
