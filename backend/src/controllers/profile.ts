@@ -46,6 +46,9 @@ export class ProfileController {
       }
 
       // password is optional now. Only validate and hash if provided
+      // ⛔ ตรวจและ hash ตรงนี้ แต่ **เขียนลงฐานหลังด่านตรวจทุกด่านของแต่ละสาขาผ่านแล้ว**
+      //    เดิมเขียนทันที — คำขอที่ตกด่านทีหลัง (รหัสนักศึกษาซ้ำ ฯลฯ) ได้ 400 แต่รหัสผ่านเปลี่ยนไปแล้ว
+      let hashedPassword: string | null = null;
       if (password !== undefined && password !== null && password !== '') {
         // กฎชุดเดียวกับหน้า OnboardingStudent — เดิมเซิร์ฟเวอร์ตรวจแค่ 6 ตัว
         // ยิง API ตรงจึงตั้งรหัสที่หน้าจอไม่ยอมรับได้
@@ -57,8 +60,7 @@ export class ProfileController {
           res.status(400).json({ message: 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลขอย่างน้อยอย่างละ 1 ตัว' });
           return;
         }
-        const hashedPassword = await hashPassword(password);
-        await UserModel.updatePassword(userId, hashedPassword);
+        hashedPassword = await hashPassword(password);
       }
 
       if (type === 'student') {
@@ -160,6 +162,35 @@ export class ProfileController {
           return trimmed ? trimmed.slice(0, max) : null;
         };
 
+        /**
+         * เกรดที่นักศึกษาแจ้งเอง — ลง `students.claimed_gpa` **ไม่ใช่ `cumulative_gpa`**
+         *
+         * อาจารย์ที่ปรึกษาโปรเจคขอให้นักศึกษากรอกเกรดได้ตั้งแต่ต้น (2026-09-07) ซึ่งจำเป็นจริง
+         * เพราะที่เดิมสำหรับค่านี้คือ `coop_applications.claimed_gpa` ของ สหกิจ 01 ที่ถูกข้ามไปแล้ว
+         * — ไม่เหลือที่ให้แจ้งเกรดเลย
+         *
+         * ⛔ แต่ยังลง `cumulative_gpa` ตรงๆ ไม่ได้ (SEC-05): เลขทะเบียนถูกพิมพ์ลง
+         * **หนังสือราชการที่คณบดีเซ็น** ตัวเลขที่ยังไม่มีมนุษย์ยืนยันจึงกลายเป็นเอกสารเท็จได้
+         * การคัดลอกเข้าทะเบียนต้องผ่านการยืนยันของเจ้าหน้าที่เหมือนที่หัวหน้าสาขาเคยทำใน สหกิจ 01
+         *
+         * ⛔ ตรวจ **ก่อน** สร้างแถว — เดิมตรวจหลัง `createStudent` เกรดผิดช่วงจึงได้ 400
+         *    แต่แถว students ค้างอยู่โดยไม่มี role และส่งซ้ำไม่ได้อีก ("ตั้งค่าเรียบร้อยแล้ว")
+         */
+        let claimedGpa: number | null = null;
+        if (body.claimed_gpa !== undefined && body.claimed_gpa !== null && body.claimed_gpa !== '') {
+          const parsed = Number(body.claimed_gpa);
+          if (!Number.isFinite(parsed) || parsed < 0 || parsed > 4) {
+            res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
+            return;
+          }
+          claimedGpa = Math.round(parsed * 100) / 100;
+        }
+
+        // ด่านตรวจของสาขานักศึกษาผ่านครบแล้ว — จากนี้ไปคือการเขียน
+        if (hashedPassword) {
+          await UserModel.updatePassword(userId, hashedPassword);
+        }
+
         // Save profile to STUDENT table
         const profile = await StudentModel.createStudent(
           userId,
@@ -191,27 +222,6 @@ export class ProfileController {
          * ปลอดภัยที่จะเขียนทับ เพราะแถวเพิ่งถูกสร้าง ทุกคอลัมน์ยังเป็น NULL อยู่
          * (`updateOptionalProfile` ไม่มี COALESCE — บนแถวที่มีข้อมูลแล้วมันล้างของเดิม)
          */
-        /**
-         * เกรดที่นักศึกษาแจ้งเอง — ลง `students.claimed_gpa` **ไม่ใช่ `cumulative_gpa`**
-         *
-         * อาจารย์ที่ปรึกษาโปรเจคขอให้นักศึกษากรอกเกรดได้ตั้งแต่ต้น (2026-09-07) ซึ่งจำเป็นจริง
-         * เพราะที่เดิมสำหรับค่านี้คือ `coop_applications.claimed_gpa` ของ สหกิจ 01 ที่ถูกข้ามไปแล้ว
-         * — ไม่เหลือที่ให้แจ้งเกรดเลย
-         *
-         * ⛔ แต่ยังลง `cumulative_gpa` ตรงๆ ไม่ได้ (SEC-05): เลขทะเบียนถูกพิมพ์ลง
-         * **หนังสือราชการที่คณบดีเซ็น** ตัวเลขที่ยังไม่มีมนุษย์ยืนยันจึงกลายเป็นเอกสารเท็จได้
-         * การคัดลอกเข้าทะเบียนต้องผ่านการยืนยันของเจ้าหน้าที่เหมือนที่หัวหน้าสาขาเคยทำใน สหกิจ 01
-         */
-        let claimedGpa: number | null = null;
-        if (body.claimed_gpa !== undefined && body.claimed_gpa !== null && body.claimed_gpa !== '') {
-          const parsed = Number(body.claimed_gpa);
-          if (!Number.isFinite(parsed) || parsed < 0 || parsed > 4) {
-            res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
-            return;
-          }
-          claimedGpa = Math.round(parsed * 100) / 100;
-        }
-
         if (claimedGpa !== null) {
           await StudentModel.updateClaimedGpa(userId, claimedGpa);
         }
@@ -280,6 +290,11 @@ export class ProfileController {
         if (conflict) {
           res.status(409).json({ message: conflict });
           return;
+        }
+
+        // ด่านตรวจของสาขาบุคลากรผ่านครบแล้ว — จากนี้ไปคือการเขียน
+        if (hashedPassword) {
+          await UserModel.updatePassword(userId, hashedPassword);
         }
 
         // Save profile to PERSONNEL table
