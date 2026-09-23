@@ -47,8 +47,14 @@ export class ProfileController {
 
       // password is optional now. Only validate and hash if provided
       if (password !== undefined && password !== null && password !== '') {
-        if (typeof password !== 'string' || password.length < 6) {
-          res.status(400).json({ message: 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร' });
+        // กฎชุดเดียวกับหน้า OnboardingStudent — เดิมเซิร์ฟเวอร์ตรวจแค่ 6 ตัว
+        // ยิง API ตรงจึงตั้งรหัสที่หน้าจอไม่ยอมรับได้
+        if (typeof password !== 'string' || password.length < 8) {
+          res.status(400).json({ message: 'รหัสผ่านต้องมีความยาวอย่างน้อย 8 ตัวอักษร' });
+          return;
+        }
+        if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/[0-9]/.test(password)) {
+          res.status(400).json({ message: 'รหัสผ่านต้องมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก และตัวเลขอย่างน้อยอย่างละ 1 ตัว' });
           return;
         }
         const hashedPassword = await hashPassword(password);
