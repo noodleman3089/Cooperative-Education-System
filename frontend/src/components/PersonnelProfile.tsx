@@ -132,7 +132,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
       const formData = new FormData();
       formData.append('first_name', firstName.trim());
       formData.append('last_name', lastName.trim());
-      formData.append('birth_date', birthDate);
+      if (!profile?.birth_date) formData.append('birth_date', birthDate);
 
       const res = await api.put('/profile/personnel', formData);
       if (res.profile) applyProfile(res.profile);
@@ -151,6 +151,12 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
   }
 
   const isDean = roles.includes('dean');
+  /** เซิร์ฟเวอร์เมินวันเกิดที่ส่งมาเมื่อมีค่าอยู่แล้ว — หน้าจอต้องบอกตรงกัน ไม่ใช่ให้กรอกแล้วเงียบ */
+  const birthDateLocked = !!profile?.birth_date;
+  // คณบดี/เจ้าหน้าที่เห็นทุกสาขา (`INSTITUTION_WIDE_ROLES`) — สาขาในแถว personnel ของสองฝ่ายนี้ไม่มีผล
+  // (คณบดีได้สาขาแรกของตารางตอนสร้างอัตโนมัติ) โชว์ไปจะทำให้เข้าใจผิดว่าถูกจำกัดสาขา
+  const majorScoped = roles.some((r) => r === 'advisor' || r === 'dept_head');
+  const majorLabel = majorScoped ? profile?.major_name_th || '—' : 'ทุกสาขา (สิทธิ์ระดับคณะ)';
   // ฝ่ายที่ผู้ใช้เห็นในตัวสลับ — ไม่มี views (บัญชีเก่า) ใช้ role แทน
   const views = (auth?.user?.views?.length ? auth.user.views : roles).filter((v) => VIEW_INFO[v]);
   const displayName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
@@ -205,7 +211,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
                   {displayName || 'ยังไม่ได้ตั้งชื่อ'}
                 </h1>
                 <p className="text-xs text-gray-600 dark:text-gray-400 break-words">
-                  {[profile.email, profile.major_name_th, profile.faculty_name_th]
+                  {[profile.email, majorScoped && profile.major_name_th, profile.faculty_name_th]
                     .filter(Boolean)
                     .join(' · ')}
                 </p>
@@ -257,15 +263,21 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
                   </div>
                   <div>
                     <label htmlFor="personnel-birth-date" className={labelClass}>วันเกิด</label>
+                    {/* ตั้งเองได้ครั้งเดียว — ระบบใช้ปิดบัญชีอัตโนมัติตอนอายุ 60 · หลังจากนั้นเจ้าหน้าที่แก้ */}
                     <Input
                       id="personnel-birth-date"
                       data-testid="personnel-birth-date"
                       type="date"
                       value={birthDate}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || birthDateLocked}
                       onChange={(e) => setBirthDate(e.target.value)}
-                      className="cursor-pointer"
+                      className={birthDateLocked ? '' : 'cursor-pointer'}
                     />
+                    <p data-testid="personnel-birth-date-hint" className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-snug">
+                      {birthDateLocked
+                        ? 'ตั้งแล้ว — ถ้าไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษาแก้ให้'
+                        : 'ตั้งได้ครั้งเดียว ตรวจให้ถูกก่อนบันทึก'}
+                    </p>
                   </div>
                 </div>
 
@@ -319,13 +331,15 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
                 <div>
                   <div className="text-xs text-gray-600 dark:text-gray-400">สาขาวิชา</div>
                   <div data-testid="personnel-profile-major" className="text-xs font-bold text-gray-900 dark:text-white mt-0.5">
-                    {profile.major_name_th || '—'}
+                    {majorLabel}
                   </div>
                 </div>
-                <p className="pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-                  สาขากำหนดว่าคุณเห็นนักศึกษาและคำร้องของใคร —{' '}
-                  <strong className="text-gray-800 dark:text-gray-200">ไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษา</strong>
-                </p>
+                {majorScoped && (
+                  <p className="pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+                    สาขากำหนดว่าคุณเห็นนักศึกษาและคำร้องของใคร —{' '}
+                    <strong className="text-gray-800 dark:text-gray-200">ไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษา</strong>
+                  </p>
+                )}
               </section>
 
               {caseload && (

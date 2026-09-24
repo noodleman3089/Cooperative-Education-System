@@ -110,14 +110,6 @@ export interface OptionalStudentProfileBody {
   interested_job_types?: unknown;
 }
 
-export interface PersonnelProfileSetupBody {
-  major_id: number;
-  e_signature_file?: string;
-  role?: string; // Optional specified base role
-  first_name?: string | null;
-  last_name?: string | null;
-  birth_date?: Date | string | null;
-}
 
 // Sprint 2 Entities
 

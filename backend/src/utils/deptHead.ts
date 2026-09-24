@@ -1,19 +1,20 @@
 import type { Request } from 'express';
 import type { PoolClient } from 'pg';
-import pool, { query } from '../config/database';
+import pool from '../config/database';
 import { AuditAction, writeAudit } from './audit';
 
 /**
  * หัวหน้าสาขาวิชามีคนเดียวต่อสาขา (SB-G2 · เจ้าของตัดสิน 2026-09-15)
  *
  * บังคับที่ระดับฐานข้อมูลไม่ได้ เพราะ role อยู่ที่ `user_roles` แต่สาขาอยู่ที่ `personnel`
- * จึงบังคับทุกทางที่ "จับคู่ role `dept_head` กับสาขา" แทน แบ่งเป็นสองแบบ:
+ * จึงบังคับทุกทางที่ "จับคู่ role `dept_head` กับสาขา" แทน — ซึ่งตอนนี้เหลือแต่ทางที่
+ * **เจ้าหน้าที่เป็นคนตั้ง** (`PUT /users/:id` รวมการย้าย/สร้างสาขา · นำเข้าผู้ใช้ · claim จากรายชื่อที่เจ้าหน้าที่เตรียม)
+ * → `replaceDeptHeadInMajor` ถอด role ของคนเก่าอัตโนมัติ · บัญชีและหน้าที่อาจารย์ของคนเก่ายังอยู่
  *
- * - **เจ้าหน้าที่เป็นคนตั้ง** (`PUT /users/:id` รวมการย้ายสาขา · นำเข้าผู้ใช้ · claim จากรายชื่อที่เจ้าหน้าที่เตรียม)
- *   → `replaceDeptHeadInMajor` ถอด role ของคนเก่าอัตโนมัติ · บัญชีและหน้าที่อาจารย์ของคนเก่ายังอยู่
- * - **ผู้ใช้ทำเอง** (ตั้งค่าโปรไฟล์บุคลากรครั้งแรกแล้วเลือกสาขา) → `findOtherDeptHead` แล้วปฏิเสธ
- *   · หลังจากนั้นผู้ใช้แก้สาขาเองไม่ได้แล้ว (`PUT /profile/personnel` เมิน `major_id` · 2026-09-23)
- *   ⛔ ห้ามถอดอัตโนมัติในทางนี้ — ไม่งั้นหัวหน้าสาขาเปลี่ยนสาขาในโปรไฟล์ตัวเองแล้วปลดคนอื่นได้
+ * ทาง "ผู้ใช้เลือกสาขาเอง" ถูกปิดหมดแล้ว — `PUT /profile/personnel` เมิน `major_id` (2026-09-23)
+ * และ `POST /profile/setup` แบบ personnel ตอบ 403 (2026-09-24) · `findOtherDeptHead` ที่ใช้ปฏิเสธ
+ * ในทางนั้นจึงถูกลบ ⛔ ถ้าวันหนึ่งเปิดทางให้ผู้ใช้เลือกสาขาเองอีก **ห้ามถอดอัตโนมัติ** ในทางนั้น
+ * — ไม่งั้นหัวหน้าสาขาย้ายสาขาตัวเองแล้วปลดคนอื่นได้
  */
 
 type Db = Pick<PoolClient, 'query'>;
@@ -24,20 +25,6 @@ export interface DeptHeadRef {
 }
 
 const NAME = `COALESCE(NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), ''), u.email)`;
-
-/** หัวหน้าสาขาคนอื่นในสาขานี้ (ไม่นับตัวเอง) — ไม่มีคืน null */
-export async function findOtherDeptHead(userId: number, majorId: number): Promise<DeptHeadRef | null> {
-  const res = await query(
-    `SELECT u.user_id, ${NAME} AS full_name
-       FROM user_roles r
-       JOIN personnel p ON p.personnel_id = r.user_id
-       JOIN users u ON u.user_id = r.user_id
-      WHERE r.role_name = 'dept_head' AND p.major_id = $1 AND r.user_id <> $2
-      ORDER BY u.user_id LIMIT 1`,
-    [majorId, userId]
-  );
-  return res.rows[0] ?? null;
-}
 
 /**
  * ถ้า `userId` ถือ `dept_head` และมีสาขาแล้ว ถอด `dept_head` ของคนอื่นในสาขาเดียวกันทิ้ง

@@ -32,9 +32,12 @@ export class PersonnelController {
       // list are choosing a person — the department head assigns an advisor to a
       // student — and without them the only label available was the email
       // address, so the UI read "advisor1@test.com" where a name belongs.
+      // birth_date เฉพาะเจ้าหน้าที่ — โมดัลแก้บัญชีใช้ (วันเกิดบุคลากรตั้งเองได้ครั้งเดียว หลังจากนั้น
+      // เจ้าหน้าที่แก้) · หัวหน้าสาขาเรียกเส้นนี้เพื่อเลือกอาจารย์ ไม่มีเหตุต้องเห็นวันเกิดเพื่อนร่วมงาน
+      const birthDateCol = roles.includes('staff') ? 'p.birth_date::text AS birth_date,' : '';
       let queryStr = `
         SELECT p.personnel_id, p.major_id, m.major_name_th, p.e_signature_file, p.status,
-               p.first_name, p.last_name,
+               p.first_name, p.last_name, ${birthDateCol}
                u.email,
                COALESCE(json_agg(r.role_name) FILTER (WHERE r.role_name IS NOT NULL), '[]') as roles
         FROM personnel p

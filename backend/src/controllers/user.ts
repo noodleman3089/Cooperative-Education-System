@@ -12,6 +12,9 @@ import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
 
+/** บทบาทที่มีแถวใน `personnel` — ตรงกับ PERSONNEL_CLAIMABLE_ROLES ใน auth.ts */
+const PERSONNEL_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
+
 
 
 export class UserController {
@@ -193,26 +196,42 @@ export class UserController {
         return;
       }
 
-      const { email, roles, is_active, major_id } = req.body;
+      const { email, roles, is_active, major_id, birth_date } = req.body;
 
       if (!email || !roles || !Array.isArray(roles) || is_active === undefined) {
         res.status(400).json({ message: 'Email, roles array, and is_active are required.' });
         return;
       }
 
-      // major_id is optional and only means something for accounts with a
-      // personnel row. This is the one place a major can change after setup —
-      // the person can't do it from their own profile any more.
+      // major_id / birth_date are optional and only mean something for personnel.
+      // This is the one place either can change after setup — the person can't
+      // change their major at all, and their birth date only once (profile.ts),
+      // because the major is their access scope and the birth date drives the
+      // age-60 auto-deactivation.
       const parsedMajorId =
         major_id === undefined || major_id === null || major_id === '' ? null : Number(major_id);
-      const beforePersonnel = parsedMajorId !== null ? await PersonnelModel.findByPersonnelId(id) : null;
-      if (parsedMajorId !== null) {
-        if (!Number.isInteger(parsedMajorId) || !(await MasterModel.verifyMajorExists(parsedMajorId))) {
-          res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
+      const parsedBirthDate =
+        birth_date === undefined || birth_date === null || birth_date === '' ? null : String(birth_date);
+      if (parsedMajorId !== null && (!Number.isInteger(parsedMajorId) || !(await MasterModel.verifyMajorExists(parsedMajorId)))) {
+        res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
+        return;
+      }
+      if (parsedBirthDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(parsedBirthDate)) {
+        res.status(400).json({ message: 'รูปแบบวันเกิดไม่ถูกต้อง' });
+        return;
+      }
+
+      const beforePersonnel =
+        parsedMajorId !== null || parsedBirthDate !== null ? await PersonnelModel.findByPersonnelId(id) : null;
+      // บัญชีบุคลากรที่ยังไม่มีแถว personnel (เจ้าหน้าที่สร้างบัญชีเองโดยไม่ผ่านรายชื่อรหัสบุคลากร)
+      // ใช้งานฝ่ายอาจารย์ไม่ได้เลย (resolveMajorScope → 403) — เลือกสาขาที่นี่ = สร้างแถวให้
+      if (!beforePersonnel && (parsedMajorId !== null || parsedBirthDate !== null)) {
+        if (!roles.some((r: string) => PERSONNEL_ROLES.includes(r))) {
+          res.status(400).json({ message: 'บัญชีนี้ไม่มีบทบาทบุคลากร จึงตั้งสาขาหรือวันเกิดไม่ได้' });
           return;
         }
-        if (!beforePersonnel) {
-          res.status(400).json({ message: 'บัญชีนี้ยังไม่มีโปรไฟล์บุคลากร จึงยังตั้งสาขาไม่ได้' });
+        if (parsedMajorId === null) {
+          res.status(400).json({ message: 'บัญชีนี้ยังไม่มีโปรไฟล์บุคลากร กรุณาเลือกสาขาวิชาก่อน' });
           return;
         }
       }
@@ -233,13 +252,28 @@ export class UserController {
         return;
       }
 
-      const majorChanged = beforePersonnel !== null && parsedMajorId !== beforePersonnel.major_id;
+      const personnelCreated = !beforePersonnel && parsedMajorId !== null;
+      if (personnelCreated) {
+        await PersonnelModel.createPersonnel(id, parsedMajorId, null, null, null, parsedBirthDate);
+      }
+
+      const majorChanged = beforePersonnel !== null && parsedMajorId !== null && parsedMajorId !== beforePersonnel.major_id;
       if (majorChanged) {
         await PersonnelModel.updatePersonnel(id, parsedMajorId, null);
       }
 
+      // เทียบเป็นสตริง YYYY-MM-DD — `Date` จาก pg เพี้ยนตามโซนเวลา (กฎ backend-db)
+      const birthDateBefore: string | null =
+        beforePersonnel && parsedBirthDate !== null
+          ? ((await query('SELECT birth_date::text AS b FROM personnel WHERE personnel_id = $1', [id])).rows[0]?.b ?? null)
+          : null;
+      const birthDateChanged = beforePersonnel !== null && parsedBirthDate !== null && parsedBirthDate !== birthDateBefore;
+      if (birthDateChanged) {
+        await PersonnelModel.updatePersonnel(id, null, null, null, null, parsedBirthDate);
+      }
+
       // SB-G2: หัวหน้าสาขามีคนเดียวต่อสาขา — เจ้าหน้าที่ตั้งคนนี้ = ถอดคนเก่าในสาขาเดียวกัน
-      // (ต้องอยู่หลังการย้ายสาขา — มันอ่านสาขาจากแถว personnel)
+      // (ต้องอยู่หลังการย้าย/สร้างสาขา — มันอ่านสาขาจากแถว personnel)
       const replacedDeptHeads = roles.includes('dept_head') ? await replaceDeptHeadInMajor(id, req) : [];
 
       writeAudit({
@@ -254,10 +288,12 @@ export class UserController {
           roles_after: roles,
           is_active_before: before?.is_active ?? null,
           is_active_after: is_active,
+          ...(personnelCreated && { personnel_created: true, major_id_after: parsedMajorId, birth_date_after: parsedBirthDate }),
           ...(majorChanged && {
             major_id_before: beforePersonnel.major_id,
             major_id_after: parsedMajorId,
           }),
+          ...(birthDateChanged && { birth_date_before: birthDateBefore, birth_date_after: parsedBirthDate }),
         },
       }, req).catch(() => undefined);
 

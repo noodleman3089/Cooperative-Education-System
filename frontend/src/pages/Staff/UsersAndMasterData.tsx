@@ -7,7 +7,7 @@ import Modal, { ModalBody } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
-import { Select } from '../../components/ui/Input';
+import { Input, Select } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import type {
   UserRow,
@@ -114,6 +114,8 @@ export const UsersAndMasterData: React.FC = () => {
   const [userIsActive, setUserIsActive] = useState(true);
   /** สาขาของบุคลากร — แก้ได้ที่นี่ที่เดียว (บุคลากรแก้เองในโปรไฟล์ไม่ได้ เพราะมันกำหนดสิทธิ์) */
   const [userMajorId, setUserMajorId] = useState<number | ''>('');
+  /** วันเกิดบุคลากร — ตัวเองตั้งได้ครั้งเดียว หลังจากนั้นแก้ที่นี่ (ใช้ปิดบัญชีอัตโนมัติตอนอายุ 60) */
+  const [userBirthDate, setUserBirthDate] = useState('');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
   const [resendingInvite, setResendingInvite] = useState<number | null>(null);
 
@@ -130,6 +132,7 @@ export const UsersAndMasterData: React.FC = () => {
       last_name?: string | null;
       email: string;
       roles: string[];
+      birth_date?: string | null;
     }[]
   >([]);
   const [pendingDeptHeadReplace, setPendingDeptHeadReplace] = useState<{
@@ -259,7 +262,9 @@ export const UsersAndMasterData: React.FC = () => {
     setUserPassword('');
     setUserRoles(user.roles || []);
     setUserIsActive(user.is_active);
-    setUserMajorId(personnelList.find((p) => p.personnel_id === user.user_id)?.major_id ?? '');
+    const personnelRow = personnelList.find((p) => p.personnel_id === user.user_id);
+    setUserMajorId(personnelRow?.major_id ?? '');
+    setUserBirthDate(personnelRow?.birth_date ?? '');
     setIsEditUserModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -274,13 +279,21 @@ export const UsersAndMasterData: React.FC = () => {
     setPendingDeptHeadReplace(null);
 
     try {
-      const updateData: { email: string; roles: string[]; is_active: boolean; password?: string; major_id?: number } = {
+      const updateData: {
+        email: string;
+        roles: string[];
+        is_active: boolean;
+        password?: string;
+        major_id?: number;
+        birth_date?: string;
+      } = {
         email: userEmail || selectedUser.email,
         roles: userRoles,
         is_active: userIsActive,
       };
       if (userPassword.trim()) updateData.password = userPassword;
       if (userMajorId !== '') updateData.major_id = userMajorId;
+      if (userBirthDate) updateData.birth_date = userBirthDate;
 
       const res = await api.put(`/users/${selectedUser.user_id}`, updateData);
       let successMsg = `อัปเดตข้อมูลบัญชี ${selectedUser.email} เรียบร้อยแล้ว`;
@@ -300,6 +313,11 @@ export const UsersAndMasterData: React.FC = () => {
       setIsSubmittingUser(false);
     }
   };
+
+  // บัญชีที่มีแถว personnel แล้ว · หรือถือบทบาทที่ต้องมีสาขา (ที่ปรึกษา/หัวหน้าสาขา) แต่ยังไม่มีแถว
+  // — แบบหลังเกิดเมื่อเจ้าหน้าที่สร้างบัญชีเองโดยไม่ผ่านรายชื่อรหัสบุคลากร และใช้งานฝ่ายอาจารย์ไม่ได้จนกว่าจะมีสาขา
+  const hasPersonnelRow = !!selectedUser && personnelList.some((p) => p.personnel_id === selectedUser.user_id);
+  const needsMajor = userRoles.some((r) => r === 'advisor' || r === 'dept_head');
 
   const handleEditUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1644,7 +1662,7 @@ export const UsersAndMasterData: React.FC = () => {
                   ))}
                 </div>
               </div>
-              {selectedUser && personnelList.some((p) => p.personnel_id === selectedUser.user_id) && (
+              {selectedUser && (hasPersonnelRow || needsMajor) && (
                 <div>
                   <label htmlFor="modal-edit-major" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     สาขาวิชาที่สังกัด
@@ -1654,8 +1672,9 @@ export const UsersAndMasterData: React.FC = () => {
                     data-testid="user-edit-major"
                     size="sm"
                     value={userMajorId}
-                    onChange={(e) => setUserMajorId(Number(e.target.value))}
+                    onChange={(e) => setUserMajorId(e.target.value === '' ? '' : Number(e.target.value))}
                   >
+                    {!hasPersonnelRow && <option value="">— ยังไม่มีสาขา —</option>}
                     {majors.map((m) => (
                       <option key={m.major_id} value={m.major_id}>
                         {m.major_name_th} {m.major_code ? `(${m.major_code})` : ''}
@@ -1663,7 +1682,27 @@ export const UsersAndMasterData: React.FC = () => {
                     ))}
                   </Select>
                   <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-                    สาขากำหนดว่าบุคลากรคนนี้เห็นนักศึกษาและคำร้องของใคร — แก้ได้ที่นี่ที่เดียว
+                    {hasPersonnelRow
+                      ? 'สาขากำหนดว่าบุคลากรคนนี้เห็นนักศึกษาและคำร้องของใคร — แก้ได้ที่นี่ที่เดียว'
+                      : 'บัญชีนี้ยังไม่มีสาขา จึงใช้งานฝ่ายอาจารย์ไม่ได้ — เลือกสาขาแล้วบันทึกเพื่อเปิดใช้งาน'}
+                  </p>
+                </div>
+              )}
+              {selectedUser && (hasPersonnelRow || userMajorId !== '') && (
+                <div>
+                  <label htmlFor="modal-edit-birth-date" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    วันเกิด
+                  </label>
+                  <Input
+                    id="modal-edit-birth-date"
+                    data-testid="user-edit-birth-date"
+                    type="date"
+                    size="sm"
+                    value={userBirthDate}
+                    onChange={(e) => setUserBirthDate(e.target.value)}
+                  />
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    ระบบปิดบัญชีบุคลากรอัตโนมัติเมื่ออายุครบ 60 ปี — บุคลากรตั้งเองได้ครั้งเดียว หลังจากนั้นแก้ที่นี่
                   </p>
                 </div>
               )}

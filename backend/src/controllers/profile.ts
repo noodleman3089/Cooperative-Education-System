@@ -10,20 +10,7 @@ import { query } from '../config/database';
 
 import { hashPassword } from '../utils/password';
 import { sendUnexpectedError } from '../utils/httpError';
-import { findOtherDeptHead } from '../utils/deptHead';
-
-/**
- * SB-G2: ผู้ใช้เลือกสาขาเองแล้วชนหัวหน้าสาขาที่มีอยู่ → ปฏิเสธ ไม่ถอดคนเก่าให้
- * (การแทนที่ทำได้เฉพาะเจ้าหน้าที่ · เหตุผลอยู่ที่ utils/deptHead.ts)
- */
-async function deptHeadConflictMessage(userId: number, roles: string[], majorId: number): Promise<string | null> {
-  if (!roles.includes('dept_head')) return null;
-  const other = await findOtherDeptHead(userId, majorId);
-  return other
-    ? `สาขานี้มีหัวหน้าสาขาอยู่แล้ว (${other.full_name}) — การเปลี่ยนหัวหน้าสาขาต้องให้เจ้าหน้าที่เป็นผู้ตั้ง`
-    : null;
-}
-import { StudentProfileSetupBody, PersonnelProfileSetupBody } from '../types';
+import { StudentProfileSetupBody } from '../types';
 
 export class ProfileController {
   /**
@@ -43,6 +30,17 @@ export class ProfileController {
 
       if (!type || !['student', 'personnel'].includes(type)) {
         res.status(400).json({ message: "ประเภทโปรไฟล์ไม่ถูกต้อง ต้องเป็น 'student' หรือ 'personnel'" });
+        return;
+      }
+
+      // บุคลากรไม่ตั้งโปรไฟล์เองทางนี้แล้ว (2026-09-24) — ทางนี้ให้เลือกสาขาเองได้ ซึ่งคือ scope
+      // ของ `resolveMajorScope` (แบบเดียวกับ SEC-05) และไม่มีหน้าจอไหนเรียกอยู่แล้ว
+      // แถว personnel เกิดได้จากสิ่งที่เจ้าหน้าที่เตรียมเท่านั้น: claim รหัสบุคลากร · นำเข้าผู้ใช้
+      // · `PUT /users/:id` ช่อง `major_id`
+      if (type === 'personnel') {
+        res.status(403).json({
+          message: 'บุคลากรตั้งค่าสาขาเองไม่ได้ — กรุณายืนยันตัวตนด้วยรหัสบุคลากร หรือติดต่อเจ้าหน้าที่สหกิจศึกษา',
+        });
         return;
       }
 
@@ -247,73 +245,6 @@ export class ProfileController {
         });
         return;
 
-      } else {
-        const body = req.body as PersonnelProfileSetupBody;
-        const { major_id, e_signature_file, first_name, last_name } = body;
-
-        if (major_id === undefined) {
-          res.status(400).json({ message: 'กรุณาระบุข้อมูลสาขาวิชา' });
-          return;
-        }
-
-        // ── Option A: Admin pre-creates accounts ──
-        // Verify this user already has a personnel role assigned by admin.
-        // Self-registration is NOT allowed; admin must create the account
-        // with the correct role(s) before the user logs in.
-        const PERSONNEL_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
-        const currentUser = await UserModel.findById(userId);
-        const personnelRoles = (currentUser?.roles || []).filter((r: string) =>
-          PERSONNEL_ROLES.includes(r)
-        );
-
-        if (personnelRoles.length === 0) {
-          res.status(403).json({
-            message: 'บัญชีของคุณยังไม่ได้ผ่านการลงทะเบียนล่วงหน้าโดยผู้ดูแลระบบ กรุณาติดต่อเจ้าหน้าที่เพื่อสร้างบัญชีพร้อมระบุบทบาทที่ถูกต้อง'
-          });
-          return;
-        }
-
-        // Check if personnel profile already exists
-        const existingProfile = await PersonnelModel.findByPersonnelId(userId);
-        if (existingProfile) {
-          res.status(400).json({ message: 'บัญชีนี้ได้รับการตั้งค่าโปรไฟล์บุคลากรเรียบร้อยแล้ว' });
-          return;
-        }
-
-        // Validate major existence
-        const majorExists = await MasterModel.verifyMajorExists(major_id);
-        if (!majorExists) {
-          res.status(400).json({ message: 'รหัสสาขาวิชาไม่ถูกต้อง ไม่พบข้อมูลสาขาวิชานี้ในระบบ' });
-          return;
-        }
-
-        const conflict = await deptHeadConflictMessage(userId, personnelRoles, major_id);
-        if (conflict) {
-          res.status(409).json({ message: conflict });
-          return;
-        }
-
-        // ด่านตรวจของสาขาบุคลากรผ่านครบแล้ว — จากนี้ไปคือการเขียน
-        if (hashedPassword) {
-          await UserModel.updatePassword(userId, hashedPassword);
-        }
-
-        // Save profile to PERSONNEL table
-        // Roles are already assigned by admin — no role mutation here.
-        const profile = await PersonnelModel.createPersonnel(
-          userId,
-          major_id,
-          e_signature_file || null,
-          first_name || null,
-          last_name || null
-        );
-
-        res.status(201).json({
-          message: 'เปิดใช้งานโปรไฟล์บุคลากรเรียบร้อยแล้ว',
-          profile,
-          assignedRoles: personnelRoles
-        });
-        return;
       }
     } catch (error) {
       sendUnexpectedError(
@@ -518,13 +449,20 @@ export class ProfileController {
       // their own access. Staff change it at PUT /users/:id.
       const { first_name, last_name, birth_date } = req.body;
 
-      const cleanBirthDate = birth_date !== undefined && birth_date !== null && birth_date !== '' ? birth_date : null;
-
       const existingProfile = await PersonnelModel.findByPersonnelId(userId);
       if (!existingProfile) {
         res.status(404).json({ message: 'Personnel profile not found. Please set up profile first.' });
         return;
       }
+
+      // วันเกิดตั้งเองได้ครั้งเดียว (ตอนยังว่าง) — หลังจากนั้นเมิน เพราะ `DeactivationScheduler`
+      // ใช้ปิดบัญชีบุคลากรตอนอายุ 60 แก้เองได้ = เลื่อนตัวเองพ้นเกณฑ์ (แบบเดียวกับ `enrollment_year`
+      // ของนักศึกษาใน SEC-05) · เจ้าหน้าที่แก้ที่ `PUT /users/:id` ช่อง `birth_date`
+      const cleanBirthDate =
+        existingProfile.birth_date === null &&
+        birth_date !== undefined && birth_date !== null && birth_date !== ''
+          ? birth_date
+          : null;
 
       let signatureFile = null;
       if (req.file) {
