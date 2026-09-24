@@ -228,11 +228,12 @@ export const UsersAndMasterData: React.FC = () => {
   const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userEmail || !userPassword || userRoles.length === 0) {
-      setError('กรุณากรอกข้อมูลให้ครบถ้วน');
+      setDialogError('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
 
     setIsSubmittingUser(true);
+    setDialogError(null);
     setError(null);
     setSuccess(null);
 
@@ -250,7 +251,8 @@ export const UsersAndMasterData: React.FC = () => {
       setUserRoles([]);
       await loadUsers();
     } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถสร้างบัญชีผู้ใช้ได้'));
+      // ในกล่อง ไม่ใช่แถบหลังกล่องที่ผู้ใช้มองไม่เห็น
+      setDialogError(getErrorMessage(err, 'ไม่สามารถสร้างบัญชีผู้ใช้ได้'));
     } finally {
       setIsSubmittingUser(false);
     }
@@ -673,8 +675,10 @@ export const UsersAndMasterData: React.FC = () => {
                 setUserEmail('');
                 setUserPassword('');
                 setUserRoles(['student']);
+                setDialogError(null);
                 setIsAddUserModalOpen(true);
               }}
+              data-testid="user-add-open"
               className="btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" /> เพิ่มบัญชี
@@ -1554,12 +1558,14 @@ export const UsersAndMasterData: React.FC = () => {
         >
           <ModalBody>
             <form onSubmit={handleAddUserSubmit} className="space-y-4">
+              <AlertBanner variant="error" message={dialogError} />
               <div>
                 <label htmlFor="modal-add-email" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   อีเมล *
                 </label>
                 <input
                   id="modal-add-email"
+                  data-testid="user-add-email"
                   type="email"
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
@@ -1574,6 +1580,7 @@ export const UsersAndMasterData: React.FC = () => {
                 </label>
                 <input
                   id="modal-add-password"
+                  data-testid="user-add-password"
                   type="password"
                   value={userPassword}
                   onChange={(e) => setUserPassword(e.target.value)}
@@ -1590,6 +1597,7 @@ export const UsersAndMasterData: React.FC = () => {
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
                         type="checkbox"
+                        data-testid={`user-add-role-${k}`}
                         checked={userRoles.includes(k)}
                         onChange={(e) => {
                           if (e.target.checked) setUserRoles([...userRoles, k]);
@@ -1611,6 +1619,7 @@ export const UsersAndMasterData: React.FC = () => {
                 </button>
                 <button
                   type="submit"
+                  data-testid="user-add-submit"
                   disabled={isSubmittingUser}
                   className="px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
                 >

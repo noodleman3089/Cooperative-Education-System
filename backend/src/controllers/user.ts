@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { UserModel } from '../models/user';
+import { UserModel, VALID_ROLES } from '../models/user';
 import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
 import { MasterModel } from '../models/master';
@@ -63,17 +63,29 @@ export class UserController {
    */
   static async createUser(req: Request, res: Response): Promise<void> {
     try {
-      const { email, password, role } = req.body;
+      const { email, password, role, roles } = req.body;
 
-      if (!email || !role) {
+      // The staff form sends `roles` (several checkboxes, same shape as PUT /:id);
+      // a single `role` string is still accepted for API callers.
+      const rawRoles: unknown[] = Array.isArray(roles) ? roles : role ? [role] : [];
+      const roleList = [...new Set(rawRoles.map((r) => (typeof r === 'string' ? r.trim().toLowerCase() : '')))];
+
+      if (!email || roleList.length === 0) {
         res.status(400).json({ message: 'Email and role are required.' });
+        return;
+      }
+      // Checked before the INSERT — addRole throwing afterwards would leave an
+      // account with no role behind.
+      const invalidRole = roleList.find((r) => !VALID_ROLES.includes(r));
+      if (invalidRole !== undefined) {
+        res.status(400).json({ message: `Invalid role: '${invalidRole}'.` });
         return;
       }
 
       // A company account is opened with no password at all: the representative
       // sets their own through the invitation link, so nothing usable is ever
       // mailed. Every other role still needs a password supplied here.
-      const isCompany = role.trim().toLowerCase() === 'company';
+      const isCompany = roleList.length === 1 && roleList[0] === 'company';
 
       if (!password && !isCompany) {
         res.status(400).json({ message: 'Password is required for non-company accounts.' });
@@ -87,14 +99,18 @@ export class UserController {
       }
 
       const passwordHash = password ? await hashPassword(password) : null;
-      const user = await UserModel.createUser(email, passwordHash, role);
+      const user = await UserModel.createUser(email, passwordHash, roleList[0]);
+      for (const extraRole of roleList.slice(1)) {
+        await UserModel.addRole(user.user_id, extraRole);
+      }
+      user.roles = roleList;
 
       writeAudit({
         action: AuditAction.USER_CREATED,
         entityType: 'user',
         entityId: user.user_id,
         subjectId: user.user_id,
-        detail: { email, role },
+        detail: { email, roles: roleList },
       }, req).catch(() => undefined);
 
       // Invite the company representative to set their own password.
