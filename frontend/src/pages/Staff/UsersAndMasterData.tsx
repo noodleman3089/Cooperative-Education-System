@@ -231,6 +231,10 @@ export const UsersAndMasterData: React.FC = () => {
       setDialogError('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
+    if (needsMajor && userMajorId === '') {
+      setDialogError('กรุณาเลือกสาขาวิชาของอาจารย์ที่ปรึกษา/หัวหน้าสาขาวิชา');
+      return;
+    }
 
     setIsSubmittingUser(true);
     setDialogError(null);
@@ -238,13 +242,21 @@ export const UsersAndMasterData: React.FC = () => {
     setSuccess(null);
 
     try {
-      await api.post('/users', {
+      const res = await api.post('/users', {
         email: userEmail,
         password: userPassword,
         roles: userRoles,
+        ...(needsMajor && { major_id: userMajorId }),
       });
 
-      setSuccess(`สร้างบัญชีผู้ใช้ ${userEmail} สำเร็จเรียบร้อยแล้ว`);
+      let successMsg = `สร้างบัญชีผู้ใช้ ${userEmail} สำเร็จเรียบร้อยแล้ว`;
+      if (res?.replaced_dept_heads && res.replaced_dept_heads.length > 0) {
+        const replacedNames = res.replaced_dept_heads
+          .map((h: { full_name: string }) => h.full_name)
+          .join(', ');
+        successMsg += ` (ถอดบทบาทหัวหน้าสาขาวิชาจาก ${replacedNames})`;
+      }
+      setSuccess(successMsg);
       setIsAddUserModalOpen(false);
       setUserEmail('');
       setUserPassword('');
@@ -320,6 +332,14 @@ export const UsersAndMasterData: React.FC = () => {
   // — แบบหลังเกิดเมื่อเจ้าหน้าที่สร้างบัญชีเองโดยไม่ผ่านรายชื่อรหัสบุคลากร และใช้งานฝ่ายอาจารย์ไม่ได้จนกว่าจะมีสาขา
   const hasPersonnelRow = !!selectedUser && personnelList.some((p) => p.personnel_id === selectedUser.user_id);
   const needsMajor = userRoles.some((r) => r === 'advisor' || r === 'dept_head');
+  // ฟอร์มเพิ่มบัญชี: หัวหน้าสาขาคนเดิมของสาขาที่เลือก ที่จะถูกถอดเมื่อสร้างบัญชี (SB-G2)
+  const existingAddHead =
+    isAddUserModalOpen && userRoles.includes('dept_head') && userMajorId !== ''
+      ? personnelList.find((p) => p.major_id === userMajorId && (p.roles || []).includes('dept_head'))
+      : undefined;
+  const addDeptHeadToReplace = existingAddHead
+    ? [existingAddHead.first_name, existingAddHead.last_name].filter(Boolean).join(' ').trim() || existingAddHead.email
+    : null;
 
   const handleEditUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -675,6 +695,7 @@ export const UsersAndMasterData: React.FC = () => {
                 setUserEmail('');
                 setUserPassword('');
                 setUserRoles(['student']);
+                setUserMajorId('');
                 setDialogError(null);
                 setIsAddUserModalOpen(true);
               }}
@@ -1609,6 +1630,35 @@ export const UsersAndMasterData: React.FC = () => {
                   ))}
                 </div>
               </div>
+              {needsMajor && (
+                <div>
+                  <label htmlFor="modal-add-major" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    สาขาวิชาที่สังกัด *
+                  </label>
+                  <Select
+                    id="modal-add-major"
+                    data-testid="user-add-major"
+                    size="sm"
+                    value={userMajorId}
+                    onChange={(e) => setUserMajorId(e.target.value === '' ? '' : Number(e.target.value))}
+                  >
+                    <option value="">— เลือกสาขา —</option>
+                    {majors.map((m) => (
+                      <option key={m.major_id} value={m.major_id}>
+                        {m.major_name_th} {m.major_code ? `(${m.major_code})` : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                    สาขากำหนดว่าบุคลากรคนนี้เห็นนักศึกษาและคำร้องของใคร
+                  </p>
+                  {addDeptHeadToReplace && (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 mt-1 leading-relaxed">
+                      สาขานี้มีหัวหน้าสาขาอยู่แล้ว คือ {addDeptHeadToReplace} — สร้างบัญชีแล้ว {addDeptHeadToReplace} จะไม่ใช่หัวหน้าสาขาอีกต่อไป (บัญชีและหน้าที่อาจารย์ยังอยู่)
+                    </p>
+                  )}
+                </div>
+              )}
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"

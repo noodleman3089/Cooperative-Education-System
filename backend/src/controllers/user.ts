@@ -63,7 +63,7 @@ export class UserController {
    */
   static async createUser(req: Request, res: Response): Promise<void> {
     try {
-      const { email, password, role, roles } = req.body;
+      const { email, password, role, roles, major_id } = req.body;
 
       // The staff form sends `roles` (several checkboxes, same shape as PUT /:id);
       // a single `role` string is still accepted for API callers.
@@ -79,6 +79,23 @@ export class UserController {
       const invalidRole = roleList.find((r) => !VALID_ROLES.includes(r));
       if (invalidRole !== undefined) {
         res.status(400).json({ message: `Invalid role: '${invalidRole}'.` });
+        return;
+      }
+
+      // ที่ปรึกษา/หัวหน้าสาขาที่ไม่มีแถว personnel ใช้ฝ่ายอาจารย์ไม่ได้เลย (resolveMajorScope → 403)
+      // จึงต้องเลือกสาขาตั้งแต่ตอนสร้าง — ตรวจทั้งหมดก่อน INSERT
+      const parsedMajorId =
+        major_id === undefined || major_id === null || major_id === '' ? null : Number(major_id);
+      if (parsedMajorId !== null && (!Number.isInteger(parsedMajorId) || !(await MasterModel.verifyMajorExists(parsedMajorId)))) {
+        res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
+        return;
+      }
+      if (parsedMajorId !== null && !roleList.some((r) => PERSONNEL_ROLES.includes(r))) {
+        res.status(400).json({ message: 'บัญชีนี้ไม่มีบทบาทบุคลากร จึงตั้งสาขาไม่ได้' });
+        return;
+      }
+      if (parsedMajorId === null && roleList.some((r) => r === 'advisor' || r === 'dept_head')) {
+        res.status(400).json({ message: 'บัญชีอาจารย์ที่ปรึกษาหรือหัวหน้าสาขาวิชาต้องเลือกสาขาวิชา' });
         return;
       }
 
@@ -105,12 +122,18 @@ export class UserController {
       }
       user.roles = roleList;
 
+      if (parsedMajorId !== null) {
+        await PersonnelModel.createPersonnel(user.user_id, parsedMajorId);
+      }
+      // SB-G2: หัวหน้าสาขามีคนเดียวต่อสาขา — เหมือน PUT /:id
+      const replacedDeptHeads = roleList.includes('dept_head') ? await replaceDeptHeadInMajor(user.user_id, req) : [];
+
       writeAudit({
         action: AuditAction.USER_CREATED,
         entityType: 'user',
         entityId: user.user_id,
         subjectId: user.user_id,
-        detail: { email, roles: roleList },
+        detail: { email, roles: roleList, ...(parsedMajorId !== null && { major_id: parsedMajorId }) },
       }, req).catch(() => undefined);
 
       // Invite the company representative to set their own password.
@@ -129,6 +152,7 @@ export class UserController {
       res.status(201).json({
         message: 'User created successfully.',
         user: safeUser,
+        replaced_dept_heads: replacedDeptHeads,
         // Surfaced outside production so the flow stays testable without SMTP.
         inviteLink: process.env.NODE_ENV !== 'production' ? inviteLink : undefined
       });
