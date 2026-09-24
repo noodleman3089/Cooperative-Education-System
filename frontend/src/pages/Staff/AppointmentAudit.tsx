@@ -30,12 +30,14 @@ interface AppointmentRow {
   appointment_date: string;
   student_time?: string;
   mentor_time?: string;
-  mentor_email?: string;
+  mentor_email?: string | null;
   tour_requested?: boolean;
-  status: string; // 'draft' | 'sent' | 'reschedule_requested' | 'confirmed' | 'bypassed'
-  rescheduled_date?: string | null;
-  rescheduled_time?: string | null;
-  rescheduled_reason?: string | null;
+  visit_number?: number;
+  // ชื่อสถานะต้องตรงกับ supervision_appointments.status ใน backend — เดิมหน้านี้ใช้ชื่อที่
+  // backend ไม่มี (sent / reschedule_requested / confirmed / bypassed) กองนับจึงเป็นศูนย์ตลอด
+  status: string; // 'draft' | 'pending_company' | 'rescheduled' | 'accepted' | 'offline_agreed'
+  proposed_reschedule_date?: string | null;
+  proposed_mentor_time?: string | null;
   created_at?: string;
 }
 
@@ -137,9 +139,9 @@ export const AppointmentAudit: React.FC = () => {
 
   // Stats
   const draftCount = appointments.filter((a) => a.status === 'draft').length;
-  const sentCount = appointments.filter((a) => a.status === 'sent').length;
-  const rescheduleCount = appointments.filter((a) => a.status === 'reschedule_requested').length;
-  const confirmedCount = appointments.filter((a) => a.status === 'confirmed' || a.status === 'bypassed').length;
+  const sentCount = appointments.filter((a) => a.status === 'pending_company').length;
+  const rescheduleCount = appointments.filter((a) => a.status === 'rescheduled').length;
+  const confirmedCount = appointments.filter((a) => a.status === 'accepted' || a.status === 'offline_agreed').length;
 
   return (
     <div className="max-w-[1360px] mx-auto space-y-4 pb-12">
@@ -268,11 +270,13 @@ export const AppointmentAudit: React.FC = () => {
                 ) : (
                   appointments.map((a) => {
                     const isDraft = a.status === 'draft';
-                    const isReschedule = a.status === 'reschedule_requested';
-                    const isSent = a.status === 'sent';
-                    const isConfirmed = a.status === 'confirmed';
-                    const isBypassed = a.status === 'bypassed';
+                    const isReschedule = a.status === 'rescheduled';
+                    const isSent = a.status === 'pending_company';
+                    const isConfirmed = a.status === 'accepted';
+                    const isBypassed = a.status === 'offline_agreed';
                     const hasNoEmail = !a.mentor_email;
+                    // "ส่งไม่ได้" มีความหมายเฉพาะนัดที่ยังต้องส่งอีเมล — นัดที่ตกลงแล้วไม่ต้องขึ้นปุ่มโทรศัพท์
+                    const cannotEmail = hasNoEmail && (isDraft || isSent);
 
                     return (
                       <tr
@@ -297,7 +301,7 @@ export const AppointmentAudit: React.FC = () => {
                           <span className="font-medium text-gray-800 dark:text-gray-200">
                             {a.advisor_name || 'อาจารย์ที่ปรึกษา'}
                           </span>
-                          <span className="text-[11px] text-gray-400 block mt-0.5">ครั้งที่ 1</span>
+                          <span className="text-[11px] text-gray-400 block mt-0.5">ครั้งที่ {a.visit_number ?? 1}</span>
                         </td>
 
                         {/* วันเวลาที่เสนอ */}
@@ -308,7 +312,7 @@ export const AppointmentAudit: React.FC = () => {
                                 {formatThaiDate(a.appointment_date)} · {a.mentor_time || a.student_time || '10:00'} น.
                               </s>
                               <span className="block text-[#B45309] dark:text-amber-400 font-semibold mt-0.5">
-                                บริษัทขอเลื่อนเป็น {a.rescheduled_date ? formatThaiDate(a.rescheduled_date) : 'วันใหม่'} · {a.rescheduled_time || '09:00'} น.
+                                บริษัทขอเลื่อนเป็น {a.proposed_reschedule_date ? formatThaiDate(a.proposed_reschedule_date) : 'วันใหม่'} · {a.proposed_mentor_time || '-'} น.
                               </span>
                             </div>
                           ) : (
@@ -333,7 +337,7 @@ export const AppointmentAudit: React.FC = () => {
 
                         {/* สถานะ */}
                         <td className="p-3.5">
-                          {hasNoEmail ? (
+                          {cannotEmail ? (
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-800">
                               ส่งไม่ได้
                             </span>
@@ -366,7 +370,7 @@ export const AppointmentAudit: React.FC = () => {
 
                         {/* จัดการ */}
                         <td className="p-3.5 text-right">
-                          {hasNoEmail ? (
+                          {cannotEmail ? (
                             <div className="flex flex-col items-end gap-1">
                               <button
                                 type="button"
@@ -492,7 +496,7 @@ export const AppointmentAudit: React.FC = () => {
         title="ยืนยันการรับวันนัดหมายใหม่"
         message={
           acceptingRescheduleDraft
-            ? `ยอมรับวันนัดหมายใหม่ที่บริษัทขอเลื่อน (${acceptingRescheduleDraft.rescheduled_date ? formatThaiDate(acceptingRescheduleDraft.rescheduled_date) : 'วันใหม่'}) สำหรับนักศึกษา ${acceptingRescheduleDraft.first_name} ใช่หรือไม่?`
+            ? `ยอมรับวันนัดหมายใหม่ที่บริษัทขอเลื่อน (${acceptingRescheduleDraft.proposed_reschedule_date ? formatThaiDate(acceptingRescheduleDraft.proposed_reschedule_date) : 'วันใหม่'}) สำหรับนักศึกษา ${acceptingRescheduleDraft.first_name} ใช่หรือไม่?`
             : ''
         }
         confirmLabel="ยอมรับวันใหม่"

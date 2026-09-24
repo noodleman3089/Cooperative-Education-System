@@ -48,19 +48,19 @@ router.put(
   AppointmentController.respond
 );
 
-// PUT /api/appointments/:id/bypass (Advisor bypass: "ตกลงนอกรอบแล้ว")
+// PUT /api/appointments/:id/bypass (อาจารย์: "ตกลงนอกรอบแล้ว" · เจ้าหน้าที่: "บันทึกว่านัดทางโทรศัพท์แล้ว")
 router.put(
   '/:id/bypass',
   authenticateToken,
-  authorizeRoles('advisor'),
+  authorizeRoles('advisor', 'staff'),
   AppointmentController.bypass
 );
 
-// PUT /api/appointments/:id/accept-reschedule (Advisor accepts reschedule)
+// PUT /api/appointments/:id/accept-reschedule (อาจารย์หรือเจ้าหน้าที่รับวันที่บริษัทขอเลื่อน)
 router.put(
   '/:id/accept-reschedule',
   authenticateToken,
-  authorizeRoles('advisor'),
+  authorizeRoles('advisor', 'staff'),
   AppointmentController.acceptReschedule
 );
 

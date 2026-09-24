@@ -70,7 +70,9 @@ export class AppointmentController {
       //    ร่างครั้งที่ 1 กับ 2 การนับหลังกรองจะให้ทั้งคู่เป็น "ครั้งที่ 1"
       let queryStr = `
         SELECT a.*, s.first_name, s.last_name, s.student_code, c.name_th as company_name,
-               v.visit_number
+               v.visit_number,
+               NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS advisor_name,
+               m.mentor_email
         FROM supervision_appointments a
         JOIN (
           SELECT appointment_id,
@@ -79,6 +81,18 @@ export class AppointmentController {
         ) v ON v.appointment_id = a.appointment_id
         JOIN students s ON a.student_id = s.student_id
         JOIN companies c ON a.company_id = c.company_id
+        LEFT JOIN personnel p ON p.personnel_id = a.advisor_id
+        -- ปลายทางอีเมลตัวเดียวกับที่ auditSend ส่งจริง (พี่เลี้ยงบนใบที่ตอบรับแล้ว)
+        -- ⛔ หน้าจอเจ้าหน้าที่ใช้ค่านี้ตัดสินว่า "ส่งได้/ส่งไม่ได้" — เดิมไม่ได้ส่งมา
+        --    ทุกแถวเลยขึ้นว่าไม่มีอีเมลและกดส่งไม่ได้เลย
+        LEFT JOIN LATERAL (
+          SELECT u.email AS mentor_email
+            FROM intent_forms i
+            JOIN users u ON u.user_id = i.mentor_id
+           WHERE i.student_id = a.student_id AND i.company_id = a.company_id AND i.status = 'accepted'
+           ORDER BY i.form_id DESC
+           LIMIT 1
+        ) m ON TRUE
         WHERE 1=1
       `;
       const params: unknown[] = [];
@@ -86,10 +100,9 @@ export class AppointmentController {
       if (roles.includes('advisor')) {
         params.push(userId);
         queryStr += ` AND a.advisor_id = $1`;
-      } else if (roles.includes('staff')) {
-        // Staff sees all drafts, or all appointments
-        queryStr += ` AND a.status = 'draft'`; // Usually staff audits drafts
       }
+      // เจ้าหน้าที่เห็นทุกสถานะ — หน้าจอมีกอง "ส่งแล้ว / ขอเลื่อน / ยืนยันแล้ว" และปุ่มรับวันใหม่
+      // (เดิมกรองเหลือแค่ร่าง กองอื่นจึงเป็นศูนย์ตลอด)
       
       queryStr += ' ORDER BY a.appointment_date ASC, a.created_at DESC';
       
@@ -216,8 +229,9 @@ export class AppointmentController {
 
       const app = appRes.rows[0];
 
-      if (app.status !== 'draft') {
-        res.status(400).json({ message: 'Only draft appointments can be sent.' });
+      // ส่งซ้ำได้ขณะยังรอบริษัทตอบ (ปุ่ม "ส่งซ้ำ" — พี่เลี้ยงหาอีเมลไม่เจอ) · ตอบแล้วส่งซ้ำไม่ได้
+      if (app.status !== 'draft' && app.status !== 'pending_company') {
+        res.status(400).json({ message: 'ส่งได้เฉพาะนัดที่ยังเป็นร่าง หรือยังรอสถานประกอบการตอบ' });
         return;
       }
 
@@ -392,13 +406,22 @@ export class AppointmentController {
         return;
       }
 
-      // Optional: Check if advisor owns the appointment
-      const advisorId = req.user.userId;
-
-      await query(
-        `UPDATE supervision_appointments SET status = 'offline_agreed', updated_at = CURRENT_TIMESTAMP WHERE appointment_id = $1 AND advisor_id = $2`,
-        [appointmentId, advisorId]
+      // อาจารย์บันทึกได้เฉพาะนัดของตัวเอง · เจ้าหน้าที่บันทึกได้ทุกนัด (ปุ่ม "บันทึกว่านัดทางโทรศัพท์แล้ว"
+      // สำหรับบริษัทที่ไม่มีอีเมล — เดิม route เปิดให้อาจารย์อย่างเดียว ปุ่มนั้นจึงได้ 403 ทุกครั้ง)
+      const isStaff = req.user.roles.includes('staff');
+      const result = await query(
+        `UPDATE supervision_appointments SET status = 'offline_agreed', updated_at = CURRENT_TIMESTAMP
+          WHERE appointment_id = $1 AND ($2::boolean OR advisor_id = $3)
+            AND status IN ('draft', 'pending_company', 'rescheduled')
+          RETURNING appointment_id`,
+        [appointmentId, isStaff, req.user.userId]
       );
+
+      // เดิมตอบ 200 แม้ไม่มีแถวไหนถูกแก้ (นัดของคนอื่น / ตกลงไปแล้ว) — ผู้ใช้เห็นว่าสำเร็จทั้งที่ไม่มีอะไรเกิดขึ้น
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบนัดหมายที่บันทึกได้ (ไม่ใช่นัดของท่าน หรือตกลงกันไปแล้ว)' });
+        return;
+      }
 
       res.status(200).json({ success: true, message: 'Appointment marked as offline agreed.' });
     } catch (error) {
@@ -424,11 +447,12 @@ export class AppointmentController {
         return;
       }
 
-      const advisorId = req.user.userId;
-
+      // เจ้าหน้าที่รับวันใหม่แทนได้ (ปุ่ม "รับวันใหม่" บนหน้านัดหมายของเจ้าหน้าที่)
+      const isStaff = req.user.roles.includes('staff');
       const appRes = await query(
-        `SELECT status, proposed_reschedule_date, proposed_mentor_time FROM supervision_appointments WHERE appointment_id = $1 AND advisor_id = $2`,
-        [appointmentId, advisorId]
+        `SELECT status, proposed_reschedule_date, proposed_mentor_time FROM supervision_appointments
+          WHERE appointment_id = $1 AND ($2::boolean OR advisor_id = $3)`,
+        [appointmentId, isStaff, req.user.userId]
       );
 
       if ((appRes.rowCount ?? 0) === 0) {
