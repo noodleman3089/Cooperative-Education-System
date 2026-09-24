@@ -272,7 +272,6 @@ export const UsersAndMasterData: React.FC = () => {
   const handleEditUserClick = (user: UserRow) => {
     setSelectedUser(user);
     setUserEmail(user.email);
-    setUserPassword('');
     setUserRoles(user.roles || []);
     setUserIsActive(user.is_active);
     const personnelRow = personnelList.find((p) => p.personnel_id === user.user_id);
@@ -298,7 +297,6 @@ export const UsersAndMasterData: React.FC = () => {
         email: string;
         roles: string[];
         is_active: boolean;
-        password?: string;
         major_id?: number;
         birth_date?: string;
       } = {
@@ -306,7 +304,6 @@ export const UsersAndMasterData: React.FC = () => {
         roles: userRoles,
         is_active: userIsActive,
       };
-      if (userPassword.trim()) updateData.password = userPassword;
       if (userMajorId !== '') updateData.major_id = userMajorId;
       if (userBirthDate) updateData.birth_date = userBirthDate;
 
@@ -1692,18 +1689,6 @@ export const UsersAndMasterData: React.FC = () => {
           <ModalBody>
             <form onSubmit={handleEditUserSubmit} className="space-y-4">
               <AlertBanner variant="error" message={dialogError} />
-              <div>
-                <label htmlFor="modal-edit-password" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  รหัสผ่านใหม่ (เว้นว่างไว้หากไม่ต้องการเปลี่ยน)
-                </label>
-                <input
-                  id="modal-edit-password"
-                  type="password"
-                  value={userPassword}
-                  onChange={(e) => setUserPassword(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                />
-              </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   บทบาทในระบบ

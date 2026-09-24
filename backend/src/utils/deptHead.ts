@@ -73,9 +73,19 @@ async function replaceWith(db: Db, userId: number, req: Request): Promise<DeptHe
   const replaced: DeptHeadRef[] = others.rows;
   if (replaced.length === 0) return [];
 
-  await db.query(`DELETE FROM user_roles WHERE role_name = 'dept_head' AND user_id = ANY($1::int[])`, [
-    replaced.map((r) => r.user_id),
-  ]);
+  const replacedIds = replaced.map((r) => r.user_id);
+  await db.query(`DELETE FROM user_roles WHERE role_name = 'dept_head' AND user_id = ANY($1::int[])`, [replacedIds]);
+
+  // คนเก่าที่ถือ dept_head อย่างเดียวจะไม่เหลือบทบาท → ล็อกอินแล้วถูกพาไปหน้ากรอกข้อมูลนักศึกษา
+  // (auth.ts: ไม่มี role = student onboarding) · ให้คงเป็นอาจารย์ที่ปรึกษาในสาขาเดิม
+  const keptAsAdvisor = await db.query(
+    `INSERT INTO user_roles (user_id, role_name)
+     SELECT id, 'advisor' FROM unnest($1::int[]) AS id
+      WHERE NOT EXISTS (SELECT 1 FROM user_roles r WHERE r.user_id = id)
+     RETURNING user_id`,
+    [replacedIds]
+  );
+  const advisorAdded = new Set<number>(keptAsAdvisor.rows.map((r) => r.user_id));
 
   for (const old of replaced) {
     await writeAudit(
@@ -84,7 +94,12 @@ async function replaceWith(db: Db, userId: number, req: Request): Promise<DeptHe
         entityType: 'user',
         entityId: old.user_id,
         subjectId: old.user_id,
-        detail: { major_id: majorId, replaced_user_id: old.user_id, new_dept_head_user_id: userId },
+        detail: {
+          major_id: majorId,
+          replaced_user_id: old.user_id,
+          new_dept_head_user_id: userId,
+          ...(advisorAdded.has(old.user_id) && { advisor_role_added: true }),
+        },
       },
       req,
       db
