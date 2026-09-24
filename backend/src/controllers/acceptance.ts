@@ -1,4 +1,6 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { IntentFormModel } from '../models/intent';
 import { CompanyAcceptPayload, StudentAcceptPayload } from '../types';
 import { notifyStudentStatusChange, sendMentorInviteEmail } from '../utils/email';
@@ -301,9 +303,15 @@ export class AcceptanceController {
         return;
       }
 
-      const { action, reason } = req.body; // action: 'accepted' or 'rejected'
+      const { action } = req.body; // action: 'accepted' or 'rejected'
       if (!action || !['accepted', 'rejected'].includes(action)) {
         res.status(400).json({ message: 'Required field: action must be either "accepted" or "rejected".' });
+        return;
+      }
+      // ตีกลับต้องมีเหตุผล — เดิมบังคับแค่บนหน้าจอ ส่งตรงมาที่ API ว่างๆ ก็ผ่าน
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (action === 'rejected' && !reason) {
+        res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ตีกลับ เพื่อให้นักศึกษาแก้ไขได้ถูกจุด' });
         return;
       }
 
@@ -422,47 +430,40 @@ export class AcceptanceController {
 
         res.status(200).json({ success: true, message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว' });
       } else {
-        // Action is 'rejected'
-        // 2. Update intent status to rejected (unlocking student)
-        await client.query(
-          `UPDATE intent_forms SET status = 'rejected' WHERE form_id = $1`,
+        // Action is 'rejected' — ตีกลับ "แบบตอบรับ" ไม่ใช่ปฏิเสธที่ฝึก
+        // ใบกลับไปรอแบบตอบรับ (ขั้นก่อนอัปโหลด) ไฟล์เดิมถูกล้าง นักศึกษาส่งใหม่ในใบเดิมได้
+        // แบบเดียวกับตีกลับแบบคำร้อง (เอกสารหมายเลข 1)
+        // ⛔ เดิมปิดใบเป็น 'rejected' และคืนโควตา — นักศึกษาส่งใหม่ไม่ได้ทั้งที่อีเมลบอกให้อัปโหลดใหม่
+        //    ถ้าบริษัทไม่รับจริง นักศึกษากด "สัมภาษณ์ไม่ผ่าน" เอง (ทางนั้นปิดใบและคืนโควตาให้)
+        // เหตุผลเก็บบนแถวเพราะคนที่ต้องอ่านคือนักศึกษา และ audit_log ไม่มี read API (SEC-07)
+        const previous = await client.query(
+          `SELECT acceptance_evidence_path FROM intent_forms WHERE form_id = $1`,
           [intentId]
         );
+        const previousPath: string | null = previous.rows[0]?.acceptance_evidence_path ?? null;
 
-        // 3. Decrement job quota applied count if applicable
-        const jobRes = await client.query(
-          `SELECT job_id FROM intent_forms WHERE form_id = $1`,
-          [intentId]
+        await client.query(
+          `UPDATE intent_forms
+              SET status = 'approved_by_dept_head', reject_reason = $2,
+                  acceptance_evidence_path = NULL, acceptance_signer_name = NULL,
+                  acceptance_signer_position = NULL, acceptance_signed_date = NULL
+            WHERE form_id = $1`,
+          [intentId, reason]
         );
-        if ((jobRes.rowCount ?? 0) > 0 && jobRes.rows[0].job_id !== null) {
-          const jobId = jobRes.rows[0].job_id;
-          const jpRes = await client.query(
-            `SELECT quota, applied_count, status FROM job_posts WHERE job_id = $1 FOR UPDATE`,
-            [jobId]
-          );
-          if ((jpRes.rowCount ?? 0) > 0) {
-            const jp = jpRes.rows[0];
-            const newAppliedCount = Math.max(0, jp.applied_count - 1);
-            // Only reopen when the post is genuinely under quota again — the old
-            // unconditional reopen resurrected posts the company had closed itself.
-            const newStatus =
-              jp.status === 'closed' && newAppliedCount < jp.quota ? 'published' : jp.status;
-            await client.query(
-              `UPDATE job_posts SET applied_count = $1, status = $2 WHERE job_id = $3`,
-              [newAppliedCount, newStatus, jobId]
-            );
-          }
-        }
 
         await writeAudit({
           action: AuditAction.ACCEPTANCE_OFFICER_DECISION,
           entityType: 'intent_form',
           entityId: intentId,
           subjectId: intent.student_id,
-          detail: { decision: 'rejected', reason: reason ?? null },
+          detail: { decision: 'rejected', reason },
         }, req, client);
 
         await client.query('COMMIT');
+
+        if (previousPath) {
+          fs.promises.unlink(path.join(process.cwd(), 'uploads', previousPath)).catch(() => undefined);
+        }
 
         // Notify student of rejection
         notifyStudentStatusChange(intentId, 'evidence_rejected', reason).catch(console.error);

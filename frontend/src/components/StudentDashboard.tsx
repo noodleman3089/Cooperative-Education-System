@@ -955,6 +955,21 @@ const StudentDashboard: React.FC = () => {
                     </p>
                   </div>
 
+                  {/* เจ้าหน้าที่ตีกลับแบบตอบรับ (เอกสารหมายเลข 2) — ใบกลับมาขั้นนี้ ไฟล์เดิมถูกล้าง
+                      ส่งใหม่ได้ในใบเดิม · reject_reason ถูกล้างตอนเจ้าหน้าที่รับคำร้อง จึงไม่ปนกับเหตุผลเก่า */}
+                  {activeIntent.reject_reason && (
+                    <AlertBanner
+                      variant="warning"
+                      message={
+                        <>
+                          <strong>เจ้าหน้าที่ตีกลับแบบตอบรับ</strong> — {activeIntent.reject_reason}
+                          <br />
+                          แก้ไขตามที่แจ้งแล้วส่งแบบตอบรับใหม่ได้เลย
+                        </>
+                      }
+                    />
+                  )}
+
                   <form onSubmit={handleProofSubmit} className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300">รายละเอียดพี่เลี้ยงผู้ดูแลสหกิจศึกษา</h4>
 

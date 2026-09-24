@@ -922,7 +922,8 @@ export class IntentFormModel {
         `UPDATE intent_forms 
          SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
              acceptance_evidence_path = $3, acceptance_submitted_late = $5,
-             acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8
+             acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8,
+             reject_reason = NULL -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
          WHERE form_id = $4
          RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date,
                    acceptance_evidence_path, acceptance_submitted_late`,
