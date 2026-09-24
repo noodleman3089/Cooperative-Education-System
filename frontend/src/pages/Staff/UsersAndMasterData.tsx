@@ -42,7 +42,6 @@ const ROLE_LABELS: Record<string, string> = {
   staff: 'เจ้าหน้าที่',
   company: 'สถานประกอบการ',
   mentor: 'พี่เลี้ยง',
-  admin: 'ผู้ดูแลระบบ',
 };
 
 export const UsersAndMasterData: React.FC = () => {
@@ -279,6 +278,7 @@ export const UsersAndMasterData: React.FC = () => {
     const personnelRow = personnelList.find((p) => p.personnel_id === user.user_id);
     setUserMajorId(personnelRow?.major_id ?? '');
     setUserBirthDate(personnelRow?.birth_date ?? '');
+    setDialogError(null);
     setIsEditUserModalOpen(true);
     setError(null);
     setSuccess(null);
@@ -288,6 +288,7 @@ export const UsersAndMasterData: React.FC = () => {
     if (!selectedUser) return;
 
     setIsSubmittingUser(true);
+    setDialogError(null);
     setError(null);
     setSuccess(null);
     setPendingDeptHeadReplace(null);
@@ -322,7 +323,8 @@ export const UsersAndMasterData: React.FC = () => {
       setIsEditUserModalOpen(false);
       await loadUsers();
     } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถแก้ไขข้อมูลผู้ใช้ได้'));
+      // ในกล่อง ไม่ใช่แถบหลังกล่องที่ผู้ใช้มองไม่เห็น
+      setDialogError(getErrorMessage(err, 'ไม่สามารถแก้ไขข้อมูลผู้ใช้ได้'));
     } finally {
       setIsSubmittingUser(false);
     }
@@ -1689,6 +1691,7 @@ export const UsersAndMasterData: React.FC = () => {
         >
           <ModalBody>
             <form onSubmit={handleEditUserSubmit} className="space-y-4">
+              <AlertBanner variant="error" message={dialogError} />
               <div>
                 <label htmlFor="modal-edit-password" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   รหัสผ่านใหม่ (เว้นว่างไว้หากไม่ต้องการเปลี่ยน)
@@ -1710,6 +1713,7 @@ export const UsersAndMasterData: React.FC = () => {
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
                         type="checkbox"
+                        data-testid={`user-edit-role-${k}`}
                         checked={userRoles.includes(k)}
                         onChange={(e) => {
                           if (e.target.checked) setUserRoles([...userRoles, k]);
