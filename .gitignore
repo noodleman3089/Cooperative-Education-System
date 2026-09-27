@@ -16,13 +16,9 @@ build/
 .DS_Store
 Thumbs.db
 
-# Test suite and working notes — kept on this machine, out of the repository.
-# The repository holds the product: backend/ and frontend/. Do not add any of
-# these back (decided 2026-08-10).
-e2e/
-playwright.config.ts
-/package.json
-/package-lock.json
+# Working notes — kept on this machine, out of the repository.
+# ชุดเทสต์ E2E (e2e/ · playwright.config.ts · package.json ที่ root) กลับเข้า repo แล้ว
+# เจ้าของตัดสิน 2026-09-27 · ผลลัพธ์ที่รันแล้วยังกันไว้ด้านล่าง (e2e/test-results/ · playwright-report/)
 CLAUDE.md
 .claude/
 

@@ -1,0 +1,20 @@
+{
+  "name": "cooperative-education-system",
+  "version": "1.0.0",
+  "description": "Root workspace orchestrator for Cooperative Education System",
+  "scripts": {
+    "dev:backend": "npm.cmd --prefix backend run dev",
+    "dev:frontend": "npm.cmd --prefix frontend run dev",
+    "db:setup": "npm.cmd --prefix backend run db:setup",
+    "db:migrate": "npm.cmd --prefix backend run db:migrate",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/pg": "^8.11.6",
+    "dotenv": "^16.4.5",
+    "pdf-parse": "^2.4.5",
+    "pg": "^8.12.0"
+  }
+}
