@@ -178,7 +178,7 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
 
     // Fill the Placement Reporting form
     await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('สุรเดช ใจดี'); // Mentor Name
-    await page.locator('input[type="email"]').fill('suradech@seagate.com'); // Mentor Email
+    await page.locator('input[placeholder="mentor@company.com"]').fill('suradech@seagate.com'); // Mentor Email
     await page.locator('input[type="tel"]').fill('0812223333'); // Mentor Phone
     await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
@@ -210,7 +210,7 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
         [studentId]
       )).rowCount
     ).toBe(0);
-    await expect(page.locator('input[type="email"]')).toHaveValue('suradech@seagate.com');
+    await expect(page.locator('input[placeholder="mentor@company.com"]')).toHaveValue('suradech@seagate.com');
 
     await page.locator('button:has-text("ส่งรายงานตัวเข้าปฏิบัติงาน")').click();
     await page.getByTestId('proof-confirm').click();

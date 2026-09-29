@@ -36,6 +36,13 @@ test.describe('Production env guard', () => {
     expect(result.errors.join(' ')).toContain('ENABLE_TEST_ROUTES');
   });
 
+  test('MAIL_DRY_RUN ที่ติดไปกับ production ต้องหยุดการสตาร์ท (ไม่งั้นระบบตอบว่าส่งเมลแล้วทั้งที่ไม่ได้ส่ง)', () => {
+    const result = checkEnvironment({ ...productionBase, MAIL_DRY_RUN: 'true' });
+    expect(result.errors.join(' ')).toContain('MAIL_DRY_RUN');
+    // ค่าอื่นที่ไม่ใช่ 'true' ไม่ขวาง
+    expect(checkEnvironment({ ...productionBase, MAIL_DRY_RUN: 'false' }).errors).toEqual([]);
+  });
+
   test('JWT_SECRET ที่หายไปหรือสั้นเกินไปต้องหยุดการสตาร์ท', () => {
     expect(checkEnvironment({ ...productionBase, JWT_SECRET: undefined }).errors).toHaveLength(1);
     expect(checkEnvironment({ ...productionBase, JWT_SECRET: 'sekret' }).errors).toHaveLength(1);
