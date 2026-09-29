@@ -3,12 +3,12 @@ import { apiLoginAs, loginAs } from '../helpers/auth';
 import { API_URL } from '../helpers/env';
 import { goToMenu } from '../helpers/nav';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, dbValue, withDb } from '../helpers/db';
+import { dbExec, dbValue, mentor1Id, withDb } from '../helpers/db';
 
 /**
  * ข้อ 1 ของ PROMPT-sonnet-R1-close-company.md
  *
- * `pages/Company/MentorCertify.tsx` เคยแสดงแผนปฏิบัติงานปลอมทั้งหน้าให้พี่เลี้ยงกดรับรอง —
+ * `pages/Mentor/MentorCertify.tsx` เคยแสดงแผนปฏิบัติงานปลอมทั้งหน้าให้พี่เลี้ยงกดรับรอง —
  * ไม่ใช่เพราะ backend พัง แต่เพราะหน้าจออ่าน `res?.data` / `res.data.data` ทั้งที่
  * `services/api.ts` คืน body ของ fetch ตรง ๆ (ไม่มี `.data` ห่ออีกชั้นแบบ axios)
  * เมื่อ `GET /students/:id/work-plan` ได้ 200 จริงแต่ `res.data` เป็น `undefined`
@@ -28,24 +28,13 @@ async function attachMentorTo(
     const student = await db.query('SELECT user_id FROM users WHERE email = $1', [studentEmail]);
     const studentId = student.rows[0].user_id as number;
 
-    const company = await db.query('SELECT company_id, created_by FROM companies LIMIT 1');
+    const company = await db.query('SELECT company_id FROM companies LIMIT 1');
     const companyId = company.rows[0].company_id as number;
-    const mentorId = company.rows[0].created_by as number;
+    const mentorId = await mentor1Id();
 
     const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
-    await db.query(
-      `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-       VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-       ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name`,
-      [mentorId, companyId]
-    );
-    // ⛔ บัญชีนี้ถือทั้ง company และ mentor เพราะ seed มีบัญชีภายนอกใบเดียว
-    await db.query(
-      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-      [mentorId]
-    );
     // ⛔ ต้องมีทั้ง start_date และ end_date — placementMonths() ใช้ทั้งคู่คำนวณคอลัมน์เดือน
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date, end_date)
@@ -83,9 +72,8 @@ async function makeOtherStudent(): Promise<string> {
   return email;
 }
 
-/** สลับไปบทบาทพี่เลี้ยงแล้วเปิดหน้ารับรองงาน (บัญชี company1 ถือสอง role — ค่าเริ่มต้นคือ company) */
+/** เปิดหน้ารับรองงานของพี่เลี้ยง (mentor1 ล็อกอินแล้ว) */
 async function openMentorCertify(page: import('@playwright/test').Page): Promise<void> {
-  await page.getByTestId('role-switch').selectOption('mentor');
   await goToMenu(page, 'certify');
 }
 
@@ -125,7 +113,7 @@ test.describe('พี่เลี้ยงรับรองแผนปฏิ�
       [studentId, mentorId]
     );
 
-    await loginAs(page, 'company1');
+    await loginAs(page, 'mentor1');
     await openMentorCertify(page);
     await page.getByTestId('certify-tab-plan').click();
 
@@ -193,7 +181,7 @@ test.describe('พี่เลี้ยงรับรองแผนปฏิ�
     await attachMentorTo(otherEmail, 90);
     // ⛔ จงใจไม่ใส่แถวใน work_plan_topics เลย — นี่คือสถานะ "ยังไม่ได้ส่ง"
 
-    await loginAs(page, 'company1');
+    await loginAs(page, 'mentor1');
     await openMentorCertify(page);
     await page.getByTestId('certify-tab-plan').click();
 

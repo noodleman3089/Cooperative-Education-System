@@ -18,6 +18,8 @@ export const ACCOUNTS = {
   head1: { email: 'head1@test.com', path: '/login/personnel', field: 'text' },
   // External partners have no university Google account and no card on /login.
   company1: { email: 'company1@test.com', path: '/login/company', field: 'email' },
+  // พี่เลี้ยง (role mentor อย่างเดียว) — คนละบัญชีกับ company1
+  mentor1: { email: 'mentor1@test.com', path: '/login/company', field: 'email' },
 } as const;
 
 export type AccountKey = keyof typeof ACCOUNTS;

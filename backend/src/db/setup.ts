@@ -100,6 +100,9 @@ export async function setupDatabase(quiet = false) {
       { email: 'dean1@test.com', password: 'password123', role: 'dean' },
       { email: 'staff1@test.com', password: 'password123', role: 'staff' },
       { email: 'company1@test.com', password: 'password123', role: 'company' },
+      // พี่เลี้ยง = บัญชีของตัวเอง ไม่ใช่บัญชีเดียวกับบริษัท · แถว `mentors` ของมัน
+      // ต้องผูกกับบริษัท ซึ่งมีแค่ในชุด seed ของ E2E (`e2e/helpers/test-seeder.ts`)
+      { email: 'mentor1@test.com', password: 'password123', role: 'mentor' },
       { email: 'head1@test.com', password: 'password123', role: 'dept_head' }
     ];
 

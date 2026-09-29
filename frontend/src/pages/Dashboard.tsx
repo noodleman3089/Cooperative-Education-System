@@ -48,19 +48,19 @@ const SupervisionRecord = lazy(() => import('./Advisor/SupervisionRecord'));
 const AppointmentAudit = lazy(() => import('./Staff/AppointmentAudit'));
 const FinalReportSubmission = lazy(() => import('./Student/FinalReportSubmission'));
 const EvaluationResult = lazy(() => import('./Student/EvaluationResult'));
-const MentorEvaluation = lazy(() => import('./Company/MentorEvaluation'));
-const MentorProfile = lazy(() => import('./Company/MentorProfile'));
+const MentorEvaluation = lazy(() => import('./Mentor/MentorEvaluation'));
+const MentorProfile = lazy(() => import('./Mentor/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
 const Form07Company = lazy(() => import('./Company/Form07Company'));
-const MentorHome = lazy(() => import('./Company/MentorHome'));
-const MentorCertify = lazy(() => import('./Company/MentorCertify'));
+const MentorHome = lazy(() => import('./Mentor/MentorHome'));
+const MentorCertify = lazy(() => import('./Mentor/MentorCertify'));
 const CompanyHome = lazy(() => import('./Company/CompanyHome'));
 const JobOffer02 = lazy(() => import('./Company/JobOffer02'));
-const ReportOutlineQueue = lazy(() => import('./Company/ReportOutlineQueue'));
+const ReportOutlineQueue = lazy(() => import('./Mentor/ReportOutlineQueue'));
 const CompanyProfile = lazy(() => import('./Company/CompanyProfile'));
 
 /**

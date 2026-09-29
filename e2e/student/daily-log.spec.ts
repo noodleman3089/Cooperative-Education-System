@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, dbValue, withDb } from '../helpers/db';
+import { dbExec, dbValue, mentor1Id, withDb } from '../helpers/db';
 
 /**
  * ข้อ 4 ของ PROMPT-sonnet-R1-close-company.md — แท็บบันทึกรายวัน (สหกิจ 08)
@@ -20,23 +20,13 @@ async function attachMentorTo(
     const student = await db.query('SELECT user_id FROM users WHERE email = $1', [studentEmail]);
     const studentId = student.rows[0].user_id as number;
 
-    const company = await db.query('SELECT company_id, created_by FROM companies LIMIT 1');
+    const company = await db.query('SELECT company_id FROM companies LIMIT 1');
     const companyId = company.rows[0].company_id as number;
-    const mentorId = company.rows[0].created_by as number;
+    const mentorId = await mentor1Id();
 
     const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
-    await db.query(
-      `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-       VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-       ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name`,
-      [mentorId, companyId]
-    );
-    await db.query(
-      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-      [mentorId]
-    );
     // ⛔ start_date ต้องไม่ใหม่เกินไป ไม่งั้นวันของ "สัปดาห์ที่ 1" ตกไปอยู่ในอนาคต
     //    ทั้งหมด ซึ่งหน้าจอปิดช่องกรอกไว้โดยตั้งใจ (ยังไม่ถึงวัน)
     await db.query(

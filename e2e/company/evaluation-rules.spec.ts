@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { withDb, dbValue } from '../helpers/db';
+import { withDb, dbValue, mentor1Id } from '../helpers/db';
 import { apiLoginAs } from '../helpers/auth';
 
 /**
@@ -65,13 +65,13 @@ const validSahatkit16 = () => ({
   other_comments: 'รูปเล่มเรียบร้อย',
 });
 
-/** ผูกพี่เลี้ยง (บัญชี company1) เข้ากับนักศึกษาผ่านใบความจำนงที่ตอบรับแล้ว */
+/** ผูกพี่เลี้ยง (บัญชี mentor1) เข้ากับนักศึกษาผ่านใบความจำนงที่ตอบรับแล้ว */
 const linkMentorToStudent = async (): Promise<number> =>
   withDb(async (db) => {
     const studentId = (
       await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")
     ).rows[0].user_id;
-    const company = (await db.query('SELECT company_id, created_by FROM companies LIMIT 1')).rows[0];
+    const company = (await db.query('SELECT company_id FROM companies LIMIT 1')).rows[0];
     const jobId = (
       await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [
         company.company_id,
@@ -81,20 +81,7 @@ const linkMentorToStudent = async (): Promise<number> =>
       await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')
     ).rows[0].semester_id;
 
-    const mentorId = (
-      await db.query(
-        `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-         VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'ฝ่ายพัฒนาซอฟต์แวร์', '0819998888')
-         ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name
-         RETURNING mentor_id`,
-        [company.created_by, company.company_id]
-      )
-    ).rows[0].mentor_id;
-
-    await db.query(
-      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-      [mentorId]
-    );
+    const mentorId = await mentor1Id();
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
        VALUES ($1, $2, $3, $4, 'accepted', $5, NOW())`,
@@ -117,7 +104,7 @@ test.describe('กติกาแบบประเมิน สหกิจ 15 
   }) => {
     await seedTestData();
     const studentId = await linkMentorToStudent();
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
 
     const res15 = await submit(request, studentId, 'sahatkit_15', validSahatkit15());
     expect(res15.status(), await res15.text()).toBe(200);
@@ -156,7 +143,7 @@ test.describe('กติกาแบบประเมิน สหกิจ 15 
   test('E2: คะแนนเกินเพดานรายข้อถูกปฏิเสธ (เดิมทุกข้อยิงได้ถึง 100)', async ({ request }) => {
     await seedTestData();
     const studentId = await linkMentorToStudent();
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
 
     // ข้อ 2.1 เพดาน 5 ตามแบบฟอร์มจริง
     const over = await submit(request, studentId, 'sahatkit_15', {
@@ -177,7 +164,7 @@ test.describe('กติกาแบบประเมิน สหกิจ 15 
   test('E3: คีย์แปลกปลอม ข้อไม่ครบ และคำถามที่บังคับตอบ ถูกปฏิเสธทั้งหมด', async ({ request }) => {
     await seedTestData();
     const studentId = await linkMentorToStudent();
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
 
     const alien = await submit(request, studentId, 'sahatkit_15', {
       ...validSahatkit15(),
@@ -208,7 +195,7 @@ test.describe('กติกาแบบประเมิน สหกิจ 15 
     expect((await submit(request, studentId, 'sahatkit_15', validSahatkit15())).status()).toBe(403);
 
     // นักศึกษาที่พี่เลี้ยงไม่ได้ดูแล (student1 ไม่มีใบความจำนงที่ผูกกับพี่เลี้ยงคนนี้)
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     const otherStudentId = await dbValue<number>(
       "SELECT user_id FROM users WHERE email = 'student1@test.com'"
     );

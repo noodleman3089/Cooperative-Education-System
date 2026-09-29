@@ -29,18 +29,9 @@ async function seedPlacedWithMentor(): Promise<void> {
     advisorId = (await db.query("SELECT user_id FROM users WHERE email = 'advisor1@test.com'")).rows[0].user_id;
     const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0]
       .semester_id;
-    const company = (await db.query('SELECT company_id, created_by FROM companies LIMIT 1')).rows[0];
-
-    // บัญชีบริษัทใน seed ทำหน้าที่พี่เลี้ยงด้วย — แบบเดียวกับ during-internship
-    await db.query(
-      `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-       VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-       ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name`,
-      [company.created_by, company.company_id]
-    );
-    await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`, [
-      company.created_by,
-    ]);
+    const company = (await db.query('SELECT company_id FROM companies LIMIT 1')).rows[0];
+    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+    const mentorId = (await db.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
     await db.query('UPDATE students SET advisor_id = $1, supervisor_id = $1 WHERE student_id = $2', [
       advisorId,
       studentId,
@@ -48,7 +39,7 @@ async function seedPlacedWithMentor(): Promise<void> {
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date)
        VALUES ($1, $2, $3, 'accepted', $4, '2026-11-02')`,
-      [studentId, company.company_id, semesterId, company.created_by]
+      [studentId, company.company_id, semesterId, mentorId]
     );
   });
 }

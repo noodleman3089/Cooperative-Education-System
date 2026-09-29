@@ -51,6 +51,8 @@ export async function seedTestData() {
     // 5. Delete existing companies and job posts to avoid constraint conflicts or duplicates
     await client.query('DELETE FROM intent_forms');
     await client.query('DELETE FROM job_posts');
+    // mentors.company_id เป็น FK RESTRICT — ต้องลบพี่เลี้ยงก่อนบริษัท
+    await client.query('DELETE FROM mentors');
     await client.query('DELETE FROM companies');
 
     // 6. Insert Test Company (Seagate Technology)
@@ -74,6 +76,14 @@ export async function seedTestData() {
       ]
     );
     const companyId = companyInsertRes.rows[0].company_id;
+
+    // 6b. mentor1 = พี่เลี้ยงของบริษัทนี้ (บัญชี role mentor ล้วน แยกจาก company1)
+    await client.query(
+      `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
+       SELECT user_id, $1, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888'
+         FROM users WHERE email = 'mentor1@test.com'`,
+      [companyId]
+    );
 
     // 7. Insert Test Job Post (Full-Stack Developer)
     //

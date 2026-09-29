@@ -19,10 +19,10 @@ const Dashboard = lazy(() => import('../pages/Dashboard'));
 const OnboardingStudent = lazy(() => import('../pages/Student/OnboardingStudent'));
 const OnboardingPersonnel = lazy(() => import('../pages/Staff/OnboardingPersonnel'));
 const SetPassword = lazy(() => import('../pages/SetPassword'));
-const AppointmentResponse = lazy(() => import('../pages/Company/AppointmentResponse'));
-const JobOffer02Token = lazy(() => import('../pages/Company/JobOffer02Token'));
+const AppointmentResponse = lazy(() => import('../pages/Mentor/AppointmentResponse'));
+const JobOffer02Token = lazy(() => import('../pages/CompanyLink/JobOffer02Token'));
 const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
-const MentorEvaluation = lazy(() => import('../pages/Company/MentorEvaluation'));
+const MentorEvaluation = lazy(() => import('../pages/Mentor/MentorEvaluation'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('../pages/Staff/FinalProgressDashboard'));
 

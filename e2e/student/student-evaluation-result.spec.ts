@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { withDb, dbExec, dbValue } from '../helpers/db';
+import { withDb, dbExec, dbValue, mentor1Id } from '../helpers/db';
 import { loginAs, apiLoginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 
@@ -95,7 +95,7 @@ async function seedSubmittedEvaluations(
   const studentId = await withDb(async (db) => {
     const sid = (await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'"))
       .rows[0].user_id;
-    const company = (await db.query('SELECT company_id, created_by FROM companies LIMIT 1')).rows[0];
+    const company = (await db.query('SELECT company_id FROM companies LIMIT 1')).rows[0];
     const jobId = (
       await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [
         company.company_id,
@@ -104,18 +104,7 @@ async function seedSubmittedEvaluations(
     const semesterId = (
       await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')
     ).rows[0].semester_id;
-    const mentorId = (
-      await db.query(
-        `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-         VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'ฝ่ายพัฒนาซอฟต์แวร์', '0819998888')
-         ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name RETURNING mentor_id`,
-        [company.created_by, company.company_id]
-      )
-    ).rows[0].mentor_id;
-    await db.query(
-      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-      [mentorId]
-    );
+    const mentorId = await mentor1Id();
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
        VALUES ($1, $2, $3, $4, 'accepted', $5, NOW())`,
@@ -124,7 +113,7 @@ async function seedSubmittedEvaluations(
     return sid as number;
   });
 
-  await apiLoginAs(request, 'company1');
+  await apiLoginAs(request, 'mentor1');
   for (const [formCode, scoresDetail] of [
     ['sahatkit_15', scores15()],
     ['sahatkit_16', scores16()],

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { dbExec, dbValue, withDb } from '../helpers/db';
+import { dbExec, dbValue, mentor1Id, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 
@@ -80,21 +80,10 @@ test.describe('เดือนของแผนปฏิบัติงาน (
     withDb(async (db) => {
       const student = await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
       const studentId = student.rows[0].user_id as number;
-      const company = await db.query('SELECT company_id, created_by FROM companies LIMIT 1');
+      const company = await db.query('SELECT company_id FROM companies LIMIT 1');
       const companyId = company.rows[0].company_id as number;
-      const mentorId = company.rows[0].created_by as number;
+      const mentorId = await mentor1Id();
       const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
-
-      await db.query(
-        `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-         VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-         ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name`,
-        [mentorId, companyId]
-      );
-      await db.query(
-        `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-        [mentorId]
-      );
 
       await db.query('DELETE FROM intent_forms WHERE student_id = $1', [studentId]);
       await db.query(
@@ -142,8 +131,7 @@ test.describe('เดือนของแผนปฏิบัติงาน (
     await expect(page.getByTestId('plan-cell-1-2')).toHaveAttribute('aria-pressed', 'true');
 
     // พี่เลี้ยงเปิดหน้ารับรอง (ข้อ 1) ต้องเห็นติ๊กตรงช่องเดียวกัน — คนละหน้าจอ คนละ query
-    await loginAs(page, 'company1');
-    await page.getByTestId('role-switch').selectOption('mentor');
+    await loginAs(page, 'mentor1');
     await goToMenu(page, 'certify');
     await page.getByTestId('certify-tab-plan').click();
 

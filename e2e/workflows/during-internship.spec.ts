@@ -15,9 +15,8 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       const studentRes = await client.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
       const studentId = studentRes.rows[0].user_id;
 
-      const companyRes = await client.query("SELECT company_id, created_by FROM companies LIMIT 1");
+      const companyRes = await client.query("SELECT company_id FROM companies LIMIT 1");
       const companyId = companyRes.rows[0].company_id;
-      const createdByUserId = companyRes.rows[0].created_by || 6;
 
       const jobRes = await client.query("SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1", [companyId]);
       const jobId = jobRes.rows[0].job_id;
@@ -25,28 +24,8 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
 
-      const mentorRes = await client.query(`
-        INSERT INTO mentors (mentor_id, company_id, name, position, department, phone) 
-        VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-        ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name
-        RETURNING mentor_id`, 
-        [createdByUserId, companyId]
-      );
-      let mentorId;
-      if (mentorRes.rowCount && mentorRes.rowCount > 0) {
-        mentorId = mentorRes.rows[0].mentor_id;
-      } else {
-         const m = await client.query("SELECT mentor_id FROM mentors LIMIT 1");
-         mentorId = m.rows[0].mentor_id;
-      }
-
-      // ⛔ บัญชีนี้ถือทั้ง company และ mentor (seed มีบัญชีภายนอกใบเดียว) — ไม่มีบทบาท
-      // mentor ใน user_roles แปลว่า Navbar เห็น view เดียว ตัวสลับ role-switch ไม่ขึ้นเลย
-      // ตามแบบเดียวกับ attachMentorTo ใน company-mentor-permissions.spec.ts
-      await client.query(
-        `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-        [createdByUserId]
-      );
+      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+      const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       await client.query(
         `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
@@ -176,11 +155,8 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       client.release();
     }
 
-    // 2. Company/Mentor logs in
-    await loginAs(page, 'company1');
-    // บัญชีนี้ถือทั้ง company และ mentor — ฝั่งบริษัทเห็นคิวแต่พิจารณาไม่ได้ (spec-D 14.1 · 14.5)
-    // สลับไปฝั่งพี่เลี้ยงก่อน แบบเดียวกับ company-mentor-permissions
-    await page.getByTestId('role-switch').selectOption('mentor');
+    // 2. Mentor logs in (mentor1 — ฝั่งบริษัทเห็นคิวแต่พิจารณาไม่ได้ ตามที่ company-mentor-permissions คุมไว้)
+    await loginAs(page, 'mentor1');
 
     // Navigate to Report Outlines tab
     await goToMenu(page, 'report_outlines');

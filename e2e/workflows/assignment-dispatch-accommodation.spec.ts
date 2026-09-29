@@ -42,21 +42,8 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
 
-      const mentorRes = await client.query(`
-        INSERT INTO mentors (mentor_id, company_id, name, position, department, phone) 
-        VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-        ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name
-        RETURNING mentor_id`, 
-        [companyRes.rows[0].created_by || 1, companyId] // Fallback if created_by missing
-      );
-      // Ensure the insert worked, if error we might need to query existing mentor
-      let mentorId;
-      if (mentorRes.rowCount && mentorRes.rowCount > 0) {
-        mentorId = mentorRes.rows[0].mentor_id;
-      } else {
-         const m = await client.query("SELECT mentor_id FROM mentors LIMIT 1");
-         mentorId = m.rows[0].mentor_id;
-      }
+      // พี่เลี้ยง = mentor1 (seed ไว้แล้วโดย seedTestData)
+      const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       await client.query(
         // end_date ต้องมี — หน้าแผนงานคำนวณเดือน (สหกิจ 07 หน้า 3) และจำนวนสัปดาห์จากช่วงวันจริง

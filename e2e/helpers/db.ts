@@ -41,6 +41,17 @@ export async function dbExec(sql: string, params?: any[]): Promise<number> {
   return withDb(async (db) => (await db.query(sql, params)).rowCount ?? 0);
 }
 
+/**
+ * user_id ของพี่เลี้ยงที่ seed ไว้ (`mentor1@test.com` — role mentor อย่างเดียว
+ * มีแถว `mentors` ผูกกับบริษัท seed แล้วโดย `seedTestData`)
+ * ใช้เป็น `intent_forms.mentor_id` ของเคสที่ต้องมีพี่เลี้ยง
+ */
+export async function mentor1Id(): Promise<number> {
+  const id = await dbValue<number>("SELECT user_id FROM users WHERE email = 'mentor1@test.com'");
+  if (id === undefined) throw new Error('mentor1@test.com is missing — seedTestData() not called?');
+  return id;
+}
+
 /** Several statements in order, for arranging a scenario. */
 export async function dbExecAll(statements: Array<string | [string, any[]]>): Promise<void> {
   await withDb(async (db) => {

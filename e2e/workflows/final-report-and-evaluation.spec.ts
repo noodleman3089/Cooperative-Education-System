@@ -34,7 +34,7 @@ test.describe('Phase 4: Evaluation & Completion Workflow', () => {
       const studentRes = await client.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
       const studentId = studentRes.rows[0].user_id;
 
-      const companyRes = await client.query("SELECT company_id, created_by FROM companies LIMIT 1");
+      const companyRes = await client.query("SELECT company_id FROM companies LIMIT 1");
       const companyId = companyRes.rows[0].company_id;
 
       const jobRes = await client.query("SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1", [companyId]);
@@ -43,23 +43,8 @@ test.describe('Phase 4: Evaluation & Completion Workflow', () => {
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
 
-      // Seed Mentor profile if missing
-      const mentorRes = await client.query(`
-        INSERT INTO mentors (mentor_id, company_id, name, position, department, phone) 
-        VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-        ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name
-        RETURNING mentor_id`, 
-        [companyRes.rows[0].created_by || 1, companyId]
-      );
-      let mentorId = mentorRes.rows[0].mentor_id;
-
-      // Assign mentor role to the company user
-      await client.query(
-        `INSERT INTO user_roles (user_id, role_name) 
-         VALUES ($1, 'mentor') 
-         ON CONFLICT DO NOTHING`,
-        [mentorId]
-      );
+      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+      const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       // Insert Accepted Intent Form
       await client.query(
@@ -165,7 +150,7 @@ test.describe('Phase 4: Evaluation & Completion Workflow', () => {
     });
 
     await test.step('พี่เลี้ยงกรอกแบบประเมิน สหกิจ 15 และ 16', async () => {
-      await loginAs(page, 'company1');
+      await loginAs(page, 'mentor1');
       await goToMenu(page, 'final_evaluation');
       await expect(page.getByRole('heading', { name: 'รายชื่อประเมินผลนักศึกษาสหกิจศึกษา' })).toBeVisible();
 

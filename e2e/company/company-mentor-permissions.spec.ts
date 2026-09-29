@@ -4,7 +4,7 @@ import { API_URL } from '../helpers/env';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, dbRow, dbValue, withDb } from '../helpers/db';
+import { dbExec, dbRow, dbValue, mentor1Id, withDb } from '../helpers/db';
 
 /**
  * ชั้นสิทธิ์ของฝ่ายสถานประกอบการและพี่เลี้ยง — **ยิง API ตรง ไม่แตะหน้าจอ**
@@ -24,25 +24,14 @@ async function attachMentorTo(studentEmail: string): Promise<{ mentorId: number;
     const student = await db.query('SELECT user_id FROM users WHERE email = $1', [studentEmail]);
     const studentId = student.rows[0].user_id as number;
 
-    const company = await db.query('SELECT company_id, created_by FROM companies LIMIT 1');
+    const company = await db.query('SELECT company_id FROM companies LIMIT 1');
     const companyId = company.rows[0].company_id as number;
-    const mentorId = company.rows[0].created_by as number;
+    const mentorId = await mentor1Id();
 
     const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
-    await db.query(
-      `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-       VALUES ($1, $2, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888')
-       ON CONFLICT (mentor_id) DO UPDATE SET name = EXCLUDED.name`,
-      [mentorId, companyId]
-    );
-    // ⛔ บัญชีนี้ถือทั้ง company และ mentor เพราะ seed มีบัญชีภายนอกใบเดียว
-    //    นั่นทำให้เคส "company ทำไม่ได้" ต้องยิงตอนที่ยังไม่แปะ role mentor
-    await db.query(
-      `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-      [mentorId]
-    );
+    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน) แยกจาก company1 ที่เป็นบริษัทล้วน
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
        VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE)`,
@@ -213,7 +202,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
     const outlineId = await makeOutline('student2@test.com', companyId!);
 
-    // ยังไม่แปะ role mentor — บัญชีนี้เป็น "ฝ่ายบุคคล" ล้วน ๆ ตามที่ spec-D 14.1 ตั้งใจ
+    // company1 เป็น "ฝ่ายบุคคล" ล้วน ๆ ตามที่ spec-D 14.1 ตั้งใจ
     await apiLoginAs(request, 'company1');
     const denied = await request.put(`${API_URL}/outlines/${outlineId}/status`, {
       data: { status: 'pending_advisor' },
@@ -259,7 +248,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     // นักศึกษาที่ไม่มีใบความจำนงผูกกับพี่เลี้ยงคนนี้ แต่เป็นบริษัทเดียวกัน
     const notMine = await makeOutline(await makeOtherStudent(), companyId);
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
 
     const ok = await request.put(`${API_URL}/outlines/${mine}/status`, {
       data: { status: 'pending_advisor' },
@@ -282,9 +271,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     const { companyId } = await attachMentorTo('student2@test.com');
     await makeOutline('student2@test.com', companyId);
 
-    await loginAs(page, 'company1');
-    // บัญชีนี้ถือทั้ง company และ mentor — สลับไปฝั่งพี่เลี้ยงก่อนเข้าเมนู (spec-D 14.5)
-    await page.getByTestId('role-switch').selectOption('mentor');
+    await loginAs(page, 'mentor1');
     await goToMenu(page, 'report_outlines');
 
     await page.getByRole('button', { name: 'ตรวจอนุมัติ' }).click();
@@ -298,7 +285,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     expect((await request.get(`${API_URL}/mentor/pending`)).status()).toBe(403);
 
     await attachMentorTo('student2@test.com');
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     const ok = await request.get(`${API_URL}/mentor/pending`);
     expect(ok.status(), await ok.text()).toBe(200);
   });
@@ -314,7 +301,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
       (await request.patch(`${API_URL}/intents/${formId}/daily-log-required`, { data: { value: true } })).status()
     ).toBe(403);
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     const ok = await request.patch(`${API_URL}/intents/${formId}/daily-log-required`, {
       data: { value: true },
     });
