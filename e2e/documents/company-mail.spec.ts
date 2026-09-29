@@ -8,7 +8,7 @@ import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs, ACCOUNTS } from '../helpers/auth';
 import type { AccountKey } from '../helpers/auth';
-import { approveIntentThroughOfficer } from '../helpers/intent';
+import { approveIntentThroughOfficer, coverLetterDocId, deanSign, walkToSigned } from '../helpers/intent';
 
 /**
  * นักศึกษาส่งหนังสือขอความอนุเคราะห์ + แบบตอบรับถึงสถานประกอบการเอง
@@ -60,27 +60,6 @@ async function setCompanyEmail(formId: number, email: string): Promise<void> {
       WHERE company_id = (SELECT company_id FROM intent_forms WHERE form_id = $2)`,
     [email, formId]
   );
-}
-
-async function coverLetterDocId(): Promise<number> {
-  return (await dbValue<number>(
-    "SELECT doc_id FROM official_documents WHERE type = 'cover_letter' ORDER BY doc_id DESC LIMIT 1"
-  )) as number;
-}
-
-async function deanSign(request: APIRequestContext, docId: number): Promise<void> {
-  await apiLoginAs(request, 'dean1');
-  const signed = await request.post(`${API_URL}/documents/batch-sign`, {
-    data: { doc_ids: [docId] },
-  });
-  expect(signed.status(), await signed.text()).toBe(200);
-  expect((await signed.json()).signed_count).toBe(1);
-}
-
-/** เดินให้ถึงจุดที่คณบดีลงนามหนังสือขอความอนุเคราะห์แล้ว (สถานะใบ = approved_by_dept_head) */
-async function walkToSigned(request: APIRequestContext, formId: number): Promise<void> {
-  await approveIntentThroughOfficer(request, formId);
-  await deanSign(request, await coverLetterDocId());
 }
 
 /** เดินถึง `accepted` แล้วออกหนังสือส่งตัว (pending_sign) — คืน doc_id ของหนังสือส่งตัว */
@@ -563,6 +542,18 @@ test.describe('ส่งอีเมลล้ม (backend แยก · SMTP ใ�
     } finally {
       await client.dispose();
     }
+
+    // ลิงก์ตอบรับที่ออกไว้ก่อนส่ง (ครั้งละหนึ่งใบ) ต้องถูกยกเลิกทุกใบ — ส่งล้ม = ลิงก์ไม่ถึงมือบริษัท
+    // จึงห้ามมีลิงก์ที่ใช้ได้เหลืออยู่ในฐาน
+    expect(
+      await dbValue<string>('SELECT COUNT(*) FROM acceptance_link_tokens WHERE form_id = $1', [formId])
+    ).toBe('4');
+    expect(
+      await dbValue<string>(
+        'SELECT COUNT(*) FROM acceptance_link_tokens WHERE form_id = $1 AND revoked_at IS NULL',
+        [formId]
+      )
+    ).toBe('0');
 
     // รอเผื่อ audit ที่ (ไม่ควร) เขียนแบบ fire-and-forget
     await new Promise((r) => setTimeout(r, 1_000));

@@ -77,3 +77,29 @@ export async function approveIntentThroughOfficer(
     'approved_by_dept_head'
   );
 }
+
+/** doc_id ของหนังสือขอความอนุเคราะห์ล่าสุดในฐาน */
+export async function coverLetterDocId(): Promise<number> {
+  return (await dbValue<number>(
+    "SELECT doc_id FROM official_documents WHERE type = 'cover_letter' ORDER BY doc_id DESC LIMIT 1"
+  )) as number;
+}
+
+/** คณบดีลงนามเอกสารหนึ่งฉบับผ่าน `batch-sign` (ลายเซ็นจริงจาก seed) */
+export async function deanSign(request: APIRequestContext, docId: number): Promise<void> {
+  await apiLoginAs(request, 'dean1');
+  const signed = await request.post(`${API_URL}/documents/batch-sign`, {
+    data: { doc_ids: [docId] },
+  });
+  expect(signed.status(), await signed.text()).toBe(200);
+  expect((await signed.json()).signed_count).toBe(1);
+}
+
+/**
+ * เดินให้ถึงจุดที่คณบดีลงนามหนังสือขอความอนุเคราะห์แล้ว (สถานะใบ = approved_by_dept_head
+ * และ `acceptance_due_date` ถูกปั๊ม) — จุดที่นักศึกษาส่งหนังสือให้บริษัทได้
+ */
+export async function walkToSigned(request: APIRequestContext, formId: number): Promise<void> {
+  await approveIntentThroughOfficer(request, formId);
+  await deanSign(request, await coverLetterDocId());
+}

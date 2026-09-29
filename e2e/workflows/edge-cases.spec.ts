@@ -270,9 +270,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       const semesterId = semesterRes.rows[0].semester_id;
 
       await db.query("DELETE FROM intent_forms");
+      // ⛔ `acceptance_due_date` แทนข้อเท็จจริงว่าคณบดีลงนามหนังสือแล้ว — ฟอร์มรายงานผลของนักศึกษา
+      //    (`proof-*`) โผล่บนแดชบอร์ดเฉพาะหลังลงนาม (2026-09-29) ไม่ตั้งไว้ก็ไม่มีฟอร์มให้กรอก
       await db.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES ($1, $2, $3, 'approved_by_dept_head')`,
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, acceptance_due_date)
+         VALUES ($1, $2, $3, 'approved_by_dept_head',
+                 (NOW() AT TIME ZONE 'Asia/Bangkok')::date + 15)`,
         [studentId, companyId, semesterId]
       );
     });
@@ -280,9 +283,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // 3. Student logs in
     await loginAs(page, 'student2');
 
+    // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
+    await page.getByTestId('proof-open').click();
+
     // 4. Fill mentor onboarding form
     await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('วิโรจน์ แสนดี');
-    await page.locator('input[type="email"]').fill('wiroj@seagate.com');
+    await page.locator('input[placeholder="mentor@company.com"]').fill('wiroj@seagate.com');
     await page.locator('input[type="tel"]').fill('0815554444');
     await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
@@ -563,9 +569,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       const semesterId = semesterRes.rows[0].semester_id;
 
       await client.query("DELETE FROM intent_forms");
+      // ⛔ `acceptance_due_date` แทนข้อเท็จจริงว่าคณบดีลงนามหนังสือแล้ว — ฟอร์มรายงานผลของนักศึกษา
+      //    (`proof-*`) โผล่บนแดชบอร์ดเฉพาะหลังลงนาม (2026-09-29) ไม่ตั้งไว้ก็ไม่มีฟอร์มให้กรอก
       const insertRes = await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES ($1, $2, $3, 'approved_by_dept_head') RETURNING form_id`,
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, acceptance_due_date)
+         VALUES ($1, $2, $3, 'approved_by_dept_head',
+                 (NOW() AT TIME ZONE 'Asia/Bangkok')::date + 15) RETURNING form_id`,
         [studentId, companyId, semesterId]
       );
       intentFormId = insertRes.rows[0].form_id;
@@ -592,9 +601,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       // 2. Student logs in
       await loginAs(page, 'student2');
 
+      // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
+      await page.getByTestId('proof-open').click();
+
       // Fill in details
       await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('สุรเดช ใจดี');
-      await page.locator('input[type="email"]').fill('suradech@seagate.com');
+      await page.locator('input[placeholder="mentor@company.com"]').fill('suradech@seagate.com');
       await page.locator('input[type="tel"]').fill('0812223333');
       await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
       // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต

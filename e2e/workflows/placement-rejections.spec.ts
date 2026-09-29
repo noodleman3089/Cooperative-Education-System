@@ -198,9 +198,12 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
       const companyId = companyRes.rows[0].company_id;
       const semesterId = semesterRes.rows[0].semester_id;
 
+      // ⛔ `acceptance_due_date` แทนข้อเท็จจริงว่าคณบดีลงนามหนังสือแล้ว — ปุ่ม "สัมภาษณ์ไม่ผ่าน / บริษัทไม่รับ"
+      //    อยู่ในการ์ดสถานะเฉพาะช่วงที่หนังสือถึงมือบริษัทแล้ว (2026-09-29)
       const insertRes = await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES ($1, $2, $3, 'approved_by_dept_head') RETURNING form_id`,
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, acceptance_due_date)
+         VALUES ($1, $2, $3, 'approved_by_dept_head',
+                 (NOW() AT TIME ZONE 'Asia/Bangkok')::date + 15) RETURNING form_id`,
         [studentId, companyId, semesterId]
       );
       intentFormId = insertRes.rows[0].form_id;
@@ -216,10 +219,10 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     // Student should see their current application status
     await expect(placementCard(page).getByText('เจ้าหน้าที่รับคำร้องแล้ว · รอออกหนังสือ')).toBeVisible();
 
-    // Look for the "Report Failure" / "แจ้งสัมภาษณ์ไม่ผ่าน" button
-    const failButton = page.locator('button:has-text("แจ้งสัมภาษณ์ไม่ผ่าน")')
-      .or(page.locator('button:has-text("รายงานไม่ผ่าน")'))
-      .or(page.locator('button:has-text("ยกเลิกใบสมัคร")'));
+    // Look for the "Report Failure" button — ตอนนี้คือปุ่ม "สัมภาษณ์ไม่ผ่าน / บริษัทไม่รับ"
+    // ในการ์ดสถานะ (ทางเดิมที่เคยเป็นปุ่ม "แจ้งสัมภาษณ์ไม่ผ่าน" ในกล่องฟอร์มรายงานผล)
+    const failButton = page.getByTestId('fail-open');
+    await expect(failButton).toContainText('สัมภาษณ์ไม่ผ่าน / บริษัทไม่รับ');
     await expect(failButton).toBeVisible({
       message: 'BUG: Student cannot find "Report Interview Failure" button on the dashboard when intent is in approved_by_dept_head status.'
     });

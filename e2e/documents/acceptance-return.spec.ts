@@ -251,6 +251,9 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     page,
   }) => {
     await seedIntent(5);
+    // `signed` ที่ seedIntent ใช้ไม่ใช่สถานะจริงของใบความจำนง — การ์ดสถานะบนแดชบอร์ด (2026-09-29)
+    // เลือกเนื้อหาจากสถานะจริง (คณบดีลงนามแล้ว = approved_by_dept_head) จึงต้องตั้งให้ตรง
+    await dbExec("UPDATE intent_forms SET status = 'approved_by_dept_head'");
     await loginAs(page, 'student2');
     await expect(page.getByTestId('acceptance-due')).toContainText('ครบกำหนดตอบกลับโดยประมาณ');
 

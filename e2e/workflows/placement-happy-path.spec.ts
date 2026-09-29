@@ -176,6 +176,9 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     await loginAs(page, 'student2');
     await expect(placementCard(page).getByText('เจ้าหน้าที่รับคำร้องแล้ว · รอออกหนังสือ')).toBeVisible();
 
+    // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
+    await page.getByTestId('proof-open').click();
+
     // Fill the Placement Reporting form
     await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('สุรเดช ใจดี'); // Mentor Name
     await page.locator('input[placeholder="mentor@company.com"]').fill('suradech@seagate.com'); // Mentor Email
