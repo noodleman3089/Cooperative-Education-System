@@ -83,6 +83,15 @@ export class StudentController {
       );
       
       let activeIntent = null;
+      // ใบที่ถูกปิด (ตีกลับ/บริษัทไม่รับ) ล่าสุดของภาคนี้ — ให้การ์ดสถานะบอกเหตุผลได้
+      // ⛔ แยกจาก activeIntent โดยตั้งใจ: โค้ดอื่นอ่าน activeIntent === null ว่า "ยื่นใหม่ได้" ห้ามยัดใบที่ปิดแล้วลงไป
+      // · ส่งเฉพาะตอนไม่มี activeIntent · ส่งแค่ 4 ฟิลด์ (ไม่มีข้อมูลบริษัทอื่น — SEC-10)
+      let closedIntent: {
+        form_id: number;
+        status: string;
+        company_name_th: string;
+        reject_reason: string | null;
+      } | null = null;
       if ((semesterQuery.rowCount ?? 0) > 0) {
         const semesterId = semesterQuery.rows[0].semester_id;
         
@@ -93,7 +102,8 @@ export class StudentController {
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
-                  c.email AS company_email,
+                  c.email AS company_email, i.acceptance_source, i.job_position,
+                  i.acceptance_signer_name,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
                   m.position as mentor_position, m.department as mentor_department
            FROM intent_forms i
@@ -135,6 +145,10 @@ export class StudentController {
             company_mail_count: row.company_mail_count,
             company_mail_limit: COMPANY_MAIL_LIMIT,
             company_email: row.company_email,
+            // ที่มาของคำตอบรับ: 'link' = บริษัทตอบผ่านลิงก์ · 'student' = นักศึกษาอัปโหลดเอง · null = ยังไม่มี
+            acceptance_source: row.acceptance_source,
+            job_position: row.job_position,
+            acceptance_signer_name: row.acceptance_signer_name,
             // ชื่อผู้ลงนามแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — null = นักศึกษาต้องกรอกตอนอัปโหลด
             request_signers: await IntentFormModel.resolveRequestSigners(userId),
             mentor: row.mentor_id ? {
@@ -146,6 +160,26 @@ export class StudentController {
               department: row.mentor_department
             } : null
           };
+        } else {
+          const closedQuery = await query(
+            `SELECT i.form_id, i.status, c.name_th AS company_name_th, i.reject_reason
+             FROM intent_forms i
+             JOIN companies c ON i.company_id = c.company_id
+             WHERE i.student_id = $1 AND i.semester_id = $2
+               AND i.status IN ('rejected', 'company_rejected')
+             ORDER BY i.form_id DESC
+             LIMIT 1`,
+            [userId, semesterId]
+          );
+          if ((closedQuery.rowCount ?? 0) > 0) {
+            const row = closedQuery.rows[0];
+            closedIntent = {
+              form_id: row.form_id,
+              status: row.status,
+              company_name_th: row.company_name_th,
+              reject_reason: row.reject_reason,
+            };
+          }
         }
       }
 
@@ -214,6 +248,7 @@ export class StudentController {
           } : null
         },
         activeIntent,
+        closedIntent,
         documents: docQuery.rows
       });
 

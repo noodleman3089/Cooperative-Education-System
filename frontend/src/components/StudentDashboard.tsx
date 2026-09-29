@@ -6,6 +6,7 @@ import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile, IntentForm, OfficialDocument } from '../types/api';
 import { type PhaseGroup } from './CoopStepperBar';
 import CoopNowCard from './CoopNowCard';
+import StudentStatusCard, { RequestProgress, type StatusCardState, type StatusIntent } from './StudentStatusCard';
 import CoopJourneyBar from './CoopJourneyBar';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
@@ -31,10 +32,42 @@ interface Announcement {
   image_url?: string | null;
 }
 
+/**
+ * ใบความจำนงอยู่สถานะไหนของการ์ด "สิ่งที่ต้องทำตอนนี้" — ตัดสินจากฟิลด์เดียวกับที่เซิร์ฟเวอร์ใช้
+ * (`status` · `acceptance_due_date` · `reject_reason` · `company_mail_sent_at`) ไม่คำนวณวันทำการซ้ำ
+ * (อยู่ในไฟล์นี้ ไม่ใช่ `StudentStatusCard.tsx` เพราะไฟล์ที่ export คอมโพเนนต์ export ฟังก์ชันปนไม่ได้ — fast refresh)
+ */
+function deriveStatusState(intent: StatusIntent): StatusCardState | null {
+  switch (intent.status) {
+    case 'pending_advisor':
+      return 'submit-paper';
+    case 'pending_officer_request':
+      return 'wait-staff';
+    case 'approved_by_dept_head':
+      // คณบดียังไม่ลงนาม = ยังไม่มีกำหนดตอบกลับ = ส่งอะไรให้บริษัทไม่ได้ (เซิร์ฟเวอร์ 409)
+      if (!intent.acceptance_due_date) return 'wait-dean';
+      if (intent.reject_reason) return 'returned';
+      return intent.company_mail_sent_at ? 'wait-company' : 'send';
+    case 'pending_officer_approval':
+      return 'wait-confirm';
+    case 'company_rejected':
+      return 'company-rejected';
+    case 'rejected':
+      return 'rejected';
+    case 'accepted':
+      return 'accepted';
+    default:
+      // สถานะที่ไม่รู้จัก = ไม่แต่งเรื่องให้ · ป้ายสถานะอื่นในหน้ายังโชว์ค่าดิบอยู่
+      return null;
+  }
+}
+
 const StudentDashboard: React.FC = () => {
   const [data, setData] = useState<{
     student: StudentProfile & { advisor?: { email: string; name?: string }; supervisor?: { email: string; name?: string } };
     activeIntent: IntentForm | null;
+    /** ใบที่ถูกปิดล่าสุดของภาคนี้ — มีเฉพาะตอน activeIntent เป็น null */
+    closedIntent?: { form_id: number; status: string; company_name_th: string; reject_reason: string | null } | null;
     documents: OfficialDocument[];
     /** ความคืบหน้าเฟส 2–4 นับจากแถวจริง — `GET /students/dashboard` */
     progress?: {
@@ -77,6 +110,9 @@ const StudentDashboard: React.FC = () => {
   const [confirmingCompanyMail, setConfirmingCompanyMail] = useState(false);
   const [sendingCompanyMail, setSendingCompanyMail] = useState(false);
   const [companyMailError, setCompanyMailError] = useState<string | null>(null);
+  // ฟอร์มรายงานผลของนักศึกษา (ทางสำรอง) พับไว้หลังปุ่ม · กล่องส่งซ้ำพับไว้หลังปุ่มตอนรอบริษัทตอบ
+  const [proofOpen, setProofOpen] = useState(false);
+  const [mailResendOpen, setMailResendOpen] = useState(false);
   // 404 from /students/dashboard means "not onboarded yet", not "broken".
   const [needsProfile, setNeedsProfile] = useState(false);
 
@@ -224,6 +260,7 @@ const StudentDashboard: React.FC = () => {
     try {
       await api.post(`/acceptances/student/${activeIntent.form_id}/upload-proof`, formData);
       setConfirmingProof(false);
+      setProofOpen(false);
       // Reset states
       setMentorName('');
       setMentorEmail('');
@@ -251,6 +288,7 @@ const StudentDashboard: React.FC = () => {
     try {
       const res = await api.post(`/intents/${formId}/send-to-company`, { company_email: companyEmail });
       setConfirmingCompanyMail(false);
+      setMailResendOpen(false);
       // ใช้ค่าจาก 200 ที่ตอบกลับโดยตรง — ไม่พึ่ง poll รอบถัดไปเพื่อให้ "ส่งถึง …" ขึ้นทันที
       setData((prev) =>
         prev && prev.activeIntent
@@ -702,160 +740,52 @@ const StudentDashboard: React.FC = () => {
     }
   ];
 
-  return (
-    <div className="space-y-6 page-enter">
-      {/* PR Announcements Banner */}
-      {announcementBanner}
+  // ===== การ์ด "สิ่งที่ต้องทำตอนนี้" (แบบ A) =====
+  // ตัวเลือกสถานะอยู่ที่ `deriveStatusState` ที่เดียว · ก้อนฟอร์ม/กล่องส่งอีเมลข้างล่างยังเป็นของหน้านี้
+  // (state กับ handler อยู่ที่นี่) แล้วส่งเข้าการ์ดเป็น slot — ย้ายที่แสดง ไม่ได้เปลี่ยนพฤติกรรม
+  // ไม่มี activeIntent แต่มีใบที่ถูกปิดในภาคนี้ (ตีกลับ / บริษัทไม่รับ) = การ์ดบอกเหตุผลแล้วชวนหาที่ใหม่
+  // (`closedIntent` มาจาก backend แยกจาก activeIntent — โค้ดอื่นยังอ่าน activeIntent === null ว่ายื่นใหม่ได้)
+  const statusIntent = (activeIntent ?? data.closedIntent ?? null) as StatusIntent | null;
+  const statusState = statusIntent ? deriveStatusState(statusIntent) : null;
 
-      {/* Co-op Calendar Banner — separate system, sits under the PR notice */}
-      {calendarBanner}
+  // นับถอยหลังกำหนดตอบกลับ
+  // ⚠️ วันครบกำหนดคำนวณโดยข้ามเฉพาะเสาร์-อาทิตย์ ระบบไม่มีตารางวันหยุด
+  // นักขัตฤกษ์ จึงเรียกว่า "โดยประมาณ" ไม่ใช่เส้นตาย — และเลยกำหนดแล้ว
+  // ก็ยังอัปโหลดได้ เซิร์ฟเวอร์แค่ติดธงว่าส่งช้า ไม่ได้ปิดประตู
+  const dueNote = acceptanceDue ? (
+    <p
+      data-testid="acceptance-due"
+      className={`text-sm font-semibold ${
+        acceptanceDue.overdue
+          ? 'text-red-700 dark:text-red-400'
+          : acceptanceDue.daysLeft <= 3
+            ? 'text-amber-700 dark:text-amber-400'
+            : 'text-gray-700 dark:text-gray-300'
+      }`}
+    >
+      {acceptanceDue.overdue
+        ? `เลยกำหนดตอบกลับมาแล้ว ${-acceptanceDue.daysLeft} วัน (ครบกำหนด ${formatThaiDate(acceptanceDue.due)}) — ยังส่งได้ แต่ระบบจะบันทึกว่าส่งช้า และควรยื่นบันทึกข้อความชี้แจง`
+        : `ครบกำหนดตอบกลับโดยประมาณวันที่ ${formatThaiDate(acceptanceDue.due)} — เหลืออีก ${acceptanceDue.daysLeft} วัน`}
+    </p>
+  ) : null;
 
-      {/*
-        "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
-
-        หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
-        *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
-        คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
-
-        การ์ดอ่าน `phases` ชุดเดียวกับแถบเส้นทางด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
-      */}
-      <CoopNowCard
-        phases={phases}
-        deadline={
-          acceptanceDue
-            ? {
-                label: 'กำหนดส่งหลักฐานตอบรับ',
-                date: formatThaiDate(acceptanceDue.due),
-                daysLeft: acceptanceDue.daysLeft,
-                overdue: acceptanceDue.overdue,
-              }
-            : null
-        }
-      />
-
-      {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">ที่ฝึกงานของคุณ</h3>
-          {activeIntent?.company_name_th ? (
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {activeIntent.company_name_th}
-                </span>
-                {activeIntent.job_title && (
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    ตำแหน่ง {activeIntent.job_title}
-                  </span>
-                )}
-                <StatusBadge
-                  domain="intent"
-                  status={intentDisplayStatus(activeIntent.status, coverLetter?.status)}
-                  className="mt-1 self-start"
-                />
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-              ยังไม่ได้เลือกสถานประกอบการ — เลือกได้จากเมนู “หาที่ฝึกงาน”
-            </p>
-          )}
-        </section>
-
-        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-white">อาจารย์ที่ปรึกษาของคุณ</h3>
-          {data.student.advisor ? (
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
-                {(data.student.advisor.name || 'อ').charAt(0)}
-              </div>
-              <div className="flex min-w-0 flex-col gap-1">
-                <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                  {data.student.advisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)'}
-                </span>
-                <span className="truncate text-xs text-gray-600 dark:text-gray-400">
-                  {data.student.advisor.email}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-              รอหัวหน้าสาขาวิชาจัดสรร — ยังไม่ต้องทำอะไร ระบบจะแจ้งเมื่อมีชื่อแล้ว
-            </p>
-          )}
-        </section>
-      </div>
-
-      {/*
-        เส้นทางสหกิจแบบย่อ — 7 ขั้นที่นักศึกษาพูดถึงจริง ไม่ใช่ 13 ขั้นย่อยตามเอกสาร
-        การจับคู่อยู่ตรงนี้ ติดกับ `phases` ที่เป็นแหล่งความจริง ไม่ได้แยกไปไฟล์อื่น
-        เพิ่ม/ลดขั้นในเฟสเมื่อไหร่ จะเห็นทันทีว่าต้องมาแก้การจับคู่ตรงนี้ด้วย
-      */}
-      <CoopJourneyBar
-        phases={phases}
-        steps={[
-          // มาถึงหน้านี้ได้แปลว่ามีแถวใน students แล้วเสมอ — ไม่มีแถว แดชบอร์ดตอบ 404
-          { label: 'กรอกประวัติ', subStepIds: [], state: 'completed' as const },
-          { label: 'เลือกสถานประกอบการ', subStepIds: ['1.1'] },
-          { label: 'ขอหนังสือขอความอนุเคราะห์', subStepIds: ['1.2', '1.3'], pendingLabel: 'รอเจ้าหน้าที่' },
-          { label: 'รอหนังสือตอบรับ', subStepIds: ['1.4', '1.5'], pendingLabel: 'รอสถานประกอบการ' },
-          { label: 'แจ้งที่พักและแผนงาน', subStepIds: ['2.1', '2.2'] },
-          { label: 'ปฏิบัติงานและส่งบันทึก', subStepIds: ['3.1', '3.2', '3.3'] },
-          { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
-        ]}
-      />
-
-      {/* Main Content Sections */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Placement / Application status block */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
-          <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">สถานะคำขอสมัครงานปัจจุบัน</h3>
-
-          {activeIntent ? (
-            <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-gray-50 border border-gray-100 dark:bg-gray-800 dark:border-gray-800">
-                <span className="block text-xs text-gray-600 dark:text-gray-400">สถานประกอบการ</span>
-                <span className="block text-sm font-bold text-gray-800 dark:text-white mt-0.5">
-                  {activeIntent.company_name_th}
-                </span>
-                <span className="block text-xs text-gray-500 mt-1 dark:text-gray-400">
-                  ตำแหน่ง: {activeIntent.job_title || 'ระบุทั่วไป / ไม่ผ่านโควตาสาขา'}
-                </span>
-              </div>
-
-              {/* Status Display and Conditional Operations */}
-              <div>
-                <span className="text-xs text-gray-500 block mb-2 dark:text-gray-400">สถานะการพิจารณา:</span>
-                <div className="flex items-center gap-2">
-                  {/* domain="intent": `pending_advisor` ของใบความจำนงแปลว่า
-                      "เอาแบบคำร้องไปให้ลงนาม" ไม่ใช่ "รออาจารย์กดปุ่ม" เหมือน
-                      โครงร่างรายงานที่ใช้ key เดียวกัน */}
-                  <StatusBadge status={intentDisplayStatus(activeIntent.status, coverLetter?.status)} domain="intent" />
-                </div>
-              </div>
-
-              {/* เอกสารหมายเลข 1 — พิมพ์ได้ทันทีที่ยื่นคำร้อง และอัปโหลดไฟล์ที่ลงนามแล้ว
-                  แสดงเฉพาะระหว่างรอลงนาม (pending_advisor) หรือรอเจ้าหน้าที่ตรวจสอบ (pending_officer_request) */}
-              {(activeIntent.status === 'pending_advisor' ||
-                activeIntent.status === 'pending_officer_request') && (
+  // เอกสารหมายเลข 1 — พิมพ์ได้ทันทีที่ยื่นคำร้อง และอัปโหลดไฟล์ที่ลงนามแล้ว
+  // การ์ดเรียกเฉพาะสถานะรอลงนาม (pending_advisor) และรอเจ้าหน้าที่ตรวจ (pending_officer_request)
+  const renderRequestForm = (intent: IntentForm) => (
                 <div className="border-t border-gray-100 pt-4 dark:border-gray-800">
                   <span className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
                     แบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)
                   </span>
 
                   {/* ponytail: ซ่อนปุ่มสั่งพิมพ์และคำแนะนำเมื่อส่งแบบคำร้องแล้ว */}
-                  {!activeIntent.request_form_path && (
+                  {!intent.request_form_path && (
                     <div className="mb-3">
                       <p className="text-xs text-gray-600 mb-2 leading-relaxed dark:text-gray-400">
                         พิมพ์ออกมากรอกช่องที่เว้นไว้ด้วยปากกา แล้วนำไปให้อาจารย์ที่ปรึกษาและ
                         หัวหน้าสาขาวิชาลงนาม
                       </p>
                       <a
-                        href={`${API_BASE_URL}/intents/${activeIntent.form_id}/request-form`}
+                        href={`${API_BASE_URL}/intents/${intent.form_id}/request-form`}
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid="print-request-form"
@@ -871,7 +801,7 @@ const StudentDashboard: React.FC = () => {
 
                   {/* ขั้นถัดไป: อัปโหลดกระดาษที่ลงนามแล้ว */}
                   <div>
-                    {activeIntent.request_form_path ? (
+                    {intent.request_form_path ? (
                       <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -880,7 +810,7 @@ const StudentDashboard: React.FC = () => {
                           ส่งแบบคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ
                         </span>
                         <a
-                          href={`${API_BASE_URL}/files/${activeIntent.request_form_path}`}
+                          href={`${API_BASE_URL}/files/${intent.request_form_path}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-bold text-brand-blue underline dark:text-blue-400"
@@ -893,14 +823,14 @@ const StudentDashboard: React.FC = () => {
                       {/* ผู้ลงนามสองช่องบนกระดาษ — ระบบดึงชื่อที่รู้ให้ ที่ยังไม่รู้ให้นักศึกษากรอก */}
                       <AlertBanner variant="error" message={requestFormError} />
                       <div className="mb-3 space-y-2" data-testid="request-signers">
-                        {(!activeIntent.request_signers?.advisor_name || !activeIntent.request_signers?.dept_head_name) && (
+                        {(!intent.request_signers?.advisor_name || !intent.request_signers?.dept_head_name) && (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
                             ระบบยังไม่มีชื่อผู้ลงนามบางคน — พิมพ์ชื่อตามที่ลงนามบนกระดาษ
                           </p>
                         )}
-                        {activeIntent.request_signers?.advisor_name ? (
+                        {intent.request_signers?.advisor_name ? (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
-                            อาจารย์ที่ปรึกษา: <span className="font-bold text-gray-800 dark:text-gray-200">{activeIntent.request_signers.advisor_name}</span>
+                            อาจารย์ที่ปรึกษา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.advisor_name}</span>
                           </p>
                         ) : (
                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
@@ -914,9 +844,9 @@ const StudentDashboard: React.FC = () => {
                             />
                           </label>
                         )}
-                        {activeIntent.request_signers?.dept_head_name ? (
+                        {intent.request_signers?.dept_head_name ? (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
-                            หัวหน้าสาขาวิชา: <span className="font-bold text-gray-800 dark:text-gray-200">{activeIntent.request_signers.dept_head_name}</span>
+                            หัวหน้าสาขาวิชา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.dept_head_name}</span>
                           </p>
                         ) : (
                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
@@ -947,14 +877,14 @@ const StudentDashboard: React.FC = () => {
                           accept=".pdf,.png,.jpg,.jpeg"
                           disabled={uploadingRequestForm}
                           data-testid="upload-request-form"
-                          onChange={(e) => handleRequestFormUpload(e, activeIntent.form_id)}
+                          onChange={(e) => handleRequestFormUpload(e, intent.form_id)}
                           className="sr-only"
                         />
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
                             uploadingRequestForm
                               ? 'border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-600'
-                              : 'border-gray-300 bg-gray-50 text-gray-700 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700'
+                              : 'border-brand-blue bg-brand-blue text-white hover:bg-brand-navy'
                           }`}
                         >
                           <Upload className="h-3.5 w-3.5" />
@@ -972,13 +902,13 @@ const StudentDashboard: React.FC = () => {
 
                   {/* เจ้าหน้าที่ตีกลับ — เหตุผลอยู่บนแถว ไม่ใช่แค่ audit_log (SEC-07)
                       เพราะคนที่ต้องอ่านคือนักศึกษา */}
-                  {activeIntent.status === 'pending_advisor' && activeIntent.reject_reason && (
+                  {intent.status === 'pending_advisor' && intent.reject_reason && (
                     <div className="mt-3">
                       <AlertBanner
                         variant="warning"
                         message={
                           <>
-                            <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {activeIntent.reject_reason}
+                            <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {intent.reject_reason}
                             <br />
                             แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย
                           </>
@@ -987,33 +917,111 @@ const StudentDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
-              )}
+  );
 
-              {activeIntent.status === 'approved_by_dept_head' && (
-                <div className="border-t border-gray-100 pt-4 mt-4 dark:border-gray-800 space-y-4">
-                  <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 dark:bg-blue-950/10 dark:border-blue-900/50">
-                    <span className="block text-xs font-bold text-brand-blue mb-1 dark:text-blue-400">
-                      การรายงานผลการสมัครและตอบรับเข้าปฏิบัติสหกิจศึกษา (Placement Reporting)
-                    </span>
-                    <p className="text-xs text-gray-500 leading-relaxed dark:text-gray-400">
-                      หากสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว (กรณีบริษัทให้เอกสารตอบรับกระดาษ / นอกระบบ) กรุณากรอกรายละเอียดพี่เลี้ยง (Mentor) กำหนดวันเริ่มงาน และอัปโหลดไฟล์หลักฐานเพื่อขึ้นทะเบียน หรือหากสัมภาษณ์ไม่ผ่าน สามารถกดปุ่มรายงานสัมภาษณ์ล้มเหลวด้านล่างเพื่อปลดล็อกสิทธิ์
-                    </p>
-                  </div>
+  // ส่งหนังสือให้สถานประกอบการทางอีเมล — การ์ดเรียกเฉพาะเมื่อคณบดีลงนามแล้ว (`acceptance_due_date` ไม่ว่าง)
+  // สถานะอื่นเซิร์ฟเวอร์ตอบ 409 อยู่แล้ว จึงไม่แสดงกล่องให้กดแล้วเจอ error
+  // · send/returned = เปิดกล่องเต็ม · wait = พับ เหลือแค่สถานะ "ส่งถึง …" กับปุ่มส่งซ้ำ
+  const renderMailBox = (intent: IntentForm, mode: 'send' | 'returned' | 'wait') => {
+    const collapsed = mode === 'wait' && !mailResendOpen;
+    const sendLabel = mode === 'returned' ? 'ส่งลิงก์ให้บริษัทอีกครั้ง' : mode === 'wait' ? 'ส่งอีเมลอีกครั้ง' : 'ส่งหนังสือทางอีเมล';
+    return (
+      <div
+        data-testid="company-mail-box"
+        className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm dark:border-gray-700 dark:bg-gray-800"
+      >
+        <span className="block font-bold text-gray-800 dark:text-gray-200">ส่งหนังสือให้สถานประกอบการ</span>
+        {!collapsed && (
+          <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+            ระบบจะส่งอีเมลถึงสถานประกอบการพร้อมแนบ 2 ไฟล์ คือ หนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
+            และแบบตอบรับ (เอกสารหมายเลข 2) พร้อมลิงก์ให้บริษัทตอบรับออนไลน์ ·
+            สถานประกอบการตอบกลับมาที่อีเมลมหาวิทยาลัยของท่านโดยตรง
+          </p>
+        )}
 
-                  {/* เจ้าหน้าที่ตีกลับแบบตอบรับ (เอกสารหมายเลข 2) — ใบกลับมาขั้นนี้ ไฟล์เดิมถูกล้าง
-                      ส่งใหม่ได้ในใบเดิม · reject_reason ถูกล้างตอนเจ้าหน้าที่รับคำร้อง จึงไม่ปนกับเหตุผลเก่า */}
-                  {activeIntent.reject_reason && (
-                    <AlertBanner
-                      variant="warning"
-                      message={
-                        <>
-                          <strong>เจ้าหน้าที่ตีกลับแบบตอบรับ</strong> — {activeIntent.reject_reason}
-                          <br />
-                          แก้ไขตามที่แจ้งแล้วส่งแบบตอบรับใหม่ได้เลย
-                        </>
-                      }
-                    />
-                  )}
+        {!collapsed && (
+          <>
+            <label htmlFor="company-mail-input" className="mt-3 block text-xs font-semibold text-gray-700 dark:text-gray-300">
+              อีเมลฝ่ายบุคคลของบริษัท
+            </label>
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+              <Input
+                id="company-mail-input"
+                type="email"
+                size="sm"
+                data-testid="company-mail-input"
+                value={companyMailInput ?? intent.company_mail_to ?? intent.company_email ?? ''}
+                onChange={(e) => setCompanyMailInput(e.target.value)}
+                placeholder="hr@company.com"
+                disabled={companyMailLeft === 0 || sendingCompanyMail}
+              />
+              <Button
+                size="sm"
+                data-testid="company-mail-send"
+                disabled={companyMailLeft === 0 || !companyMailAddress}
+                onClick={() => {
+                  setCompanyMailError(null);
+                  setConfirmingCompanyMail(true);
+                }}
+                className="shrink-0"
+              >
+                {sendLabel}
+              </Button>
+            </div>
+          </>
+        )}
+
+        {companyMailLeft === 0 && (
+          <p data-testid="company-mail-limit" className="mt-2 text-amber-700 dark:text-amber-400">
+            ส่งครบ {companyMailLimit} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — หากต้องส่งอีกครั้ง โปรดติดต่อเจ้าหน้าที่ หรือเปิด PDF ไปยื่นด้วยตนเอง
+          </p>
+        )}
+
+        {intent.company_mail_sent_at && intent.company_mail_to && (
+          <p data-testid="company-mail-status" className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">
+            ส่งถึง {intent.company_mail_to} เมื่อ {formatThaiDate(intent.company_mail_sent_at)}
+            {companyMailLeft > 0 && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
+          </p>
+        )}
+        {!intent.company_mail_sent_at && companyMailLeft > 0 && (
+          <p className="mt-2 text-gray-600 dark:text-gray-400">ส่งได้ {companyMailLeft} ครั้ง</p>
+        )}
+
+        {collapsed && companyMailLeft > 0 && (
+          <Button
+            variant="secondary"
+            size="sm"
+            data-testid="company-mail-resend-open"
+            className="mt-3"
+            onClick={() => setMailResendOpen(true)}
+          >
+            ส่งซ้ำ / เปลี่ยนอีเมล (เหลือ {companyMailLeft} ครั้ง)
+          </Button>
+        )}
+
+        {companyMailError && (
+          <div data-testid="company-mail-error" className="mt-2">
+            <AlertBanner variant="error" message={companyMailError} />
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ฟอร์มรายงานผลของนักศึกษา (D7) — ทางสำรองเมื่อบริษัทคืนเอกสารตอบรับมาที่นักศึกษาเอง
+  // การ์ดเรียกเฉพาะสถานะที่คณบดีลงนามแล้ว และพับไว้หลังปุ่ม `proof-open` · ช่องกรอกอยู่ใน state ของหน้านี้
+  // ปิดฟอร์มแล้วค่าที่กรอกไว้ไม่หาย
+  const proofFormEl = (
+    <div data-testid="proof-form" className="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
+      <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/10">
+        <span className="mb-1 block text-xs font-bold text-brand-blue dark:text-blue-400">
+          การรายงานผลการตอบรับเข้าปฏิบัติสหกิจศึกษา (Placement Reporting)
+        </span>
+        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+          หากสถานประกอบการคืนเอกสารตอบรับกระดาษมาให้คุณ (นอกระบบ) กรุณากรอกรายละเอียดพี่เลี้ยง (Mentor)
+          กำหนดวันเริ่มงาน และอัปโหลดไฟล์หลักฐานเพื่อขึ้นทะเบียนแทนบริษัท
+        </p>
+      </div>
 
                   <form onSubmit={handleProofSubmit} className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300">รายละเอียดพี่เลี้ยงผู้ดูแลสหกิจศึกษา</h4>
@@ -1146,38 +1154,187 @@ const StudentDashboard: React.FC = () => {
                     </div>
 
                     <AlertBanner variant="error" message={proofError} />
-                    <div className="flex flex-col sm:flex-row gap-2 pt-3 border-t border-gray-100 dark:border-gray-800">
-                      <button
-                        type="submit"
-                        disabled={submittingProof || reportingFail}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg bg-brand-blue hover:bg-blue-600 text-white text-xs font-bold transition-all disabled:opacity-50"
-                      >
-                        {submittingProof ? 'กำลังส่งข้อมูล...' : 'ส่งรายงานตัวเข้าปฏิบัติงาน'}
-                      </button>
+      <div className="flex flex-col gap-2 border-t border-gray-100 pt-3 dark:border-gray-800 sm:flex-row">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={submittingProof || reportingFail}
+          className="flex-1"
+        >
+          {submittingProof ? 'กำลังส่งข้อมูล...' : 'ส่งรายงานตัวเข้าปฏิบัติงาน'}
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="proof-close"
+          disabled={submittingProof}
+          onClick={() => setProofOpen(false)}
+        >
+          ปิดฟอร์ม
+        </Button>
+      </div>
+    </form>
+    </div>
+  );
 
-                      <button
-                        type="button"
-                        onClick={() => setConfirmingFailure(true)}
-                        disabled={submittingProof || reportingFail}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 px-4 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-900/30 dark:text-red-400 dark:hover:bg-red-950/20 text-xs font-bold transition-all disabled:opacity-50"
-                      >
-                        {reportingFail ? 'กำลังดำเนินการ...' : 'แจ้งสัมภาษณ์ไม่ผ่าน'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
+  return (
+    <div className="space-y-6 page-enter">
+      {/* PR Announcements Banner */}
+      {announcementBanner}
+
+      {/* Co-op Calendar Banner — separate system, sits under the PR notice */}
+      {calendarBanner}
+
+      {/*
+        "ตอนนี้ต้องทำอะไร" มาก่อนทุกอย่าง (2026-09-07)
+
+        หน้านี้เคยเปิดด้วยแบนเนอร์โปรไฟล์ — รูป ชื่อ เกรด อาจารย์ที่ปรึกษา ซึ่งตอบว่า
+        *คุณคือใคร* ทั้งที่คำถามที่นักศึกษาเปิดหน้านี้มาถามคือ *ตอนนี้ต้องทำอะไร*
+        คำตอบนั้นเดิมอยู่ในแถบความคืบหน้าที่ต้องเลื่อนลงไปอีกจอหนึ่งถึงจะเห็น
+
+        การ์ดอ่าน `phases` ชุดเดียวกับแถบเส้นทางด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
+      */}
+      {/* การ์ด "สิ่งที่ต้องทำตอนนี้" ของช่วงขอที่ฝึกงาน (แบบ A) — ขอบฟ้า = ต้องทำ · เทา = รอ · เขียว = ได้แล้ว */}
+      {statusIntent && statusState && (
+        <StudentStatusCard
+          state={statusState}
+          intent={statusIntent}
+          dueNote={dueNote}
+          requestForm={activeIntent ? renderRequestForm(activeIntent) : null}
+          mailBox={
+            !activeIntent
+              ? null
+              : statusState === 'send'
+                ? renderMailBox(activeIntent, 'send')
+                : statusState === 'returned'
+                  ? renderMailBox(activeIntent, 'returned')
+                  : statusState === 'wait-company'
+                    ? renderMailBox(activeIntent, 'wait')
+                    : null
+          }
+          proofForm={proofFormEl}
+          proofOpen={proofOpen}
+          onOpenProof={() => setProofOpen((open) => !open)}
+          onFail={() => setConfirmingFailure(true)}
+          failBusy={reportingFail}
+          onFindPlacement={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'jobs' }))}
+          onGoAccommodation={() =>
+            window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
+          }
+        />
+      )}
+
+      <CoopNowCard
+        phases={phases}
+        deadline={
+          acceptanceDue
+            ? {
+                label: 'กำหนดส่งหลักฐานตอบรับ',
+                date: formatThaiDate(acceptanceDue.due),
+                daysLeft: acceptanceDue.daysLeft,
+                overdue: acceptanceDue.overdue,
+              }
+            : null
+        }
+      />
+
+      {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">ที่ฝึกงานของคุณ</h3>
+          {activeIntent?.company_name_th ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {activeIntent.company_name_th}
+                </span>
+                {activeIntent.job_title && (
+                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                    ตำแหน่ง {activeIntent.job_title}
+                  </span>
+                )}
+                <StatusBadge
+                  domain="intent"
+                  status={intentDisplayStatus(activeIntent.status, coverLetter?.status)}
+                  className="mt-1 self-start"
+                />
+              </div>
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-600 dark:text-gray-400 text-xs">
+            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+              ยังไม่ได้เลือกสถานประกอบการ — เลือกได้จากเมนู “หาที่ฝึกงาน”
+            </p>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+          <h3 className="text-sm font-bold text-gray-900 dark:text-white">อาจารย์ที่ปรึกษาของคุณ</h3>
+          {data.student.advisor ? (
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-brand-navy dark:bg-blue-950/40 dark:text-blue-400">
+                {(data.student.advisor.name || 'อ').charAt(0)}
+              </div>
+              <div className="flex min-w-0 flex-col gap-1">
+                <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {data.student.advisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)'}
+                </span>
+                <span className="truncate text-xs text-gray-600 dark:text-gray-400">
+                  {data.student.advisor.email}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+              รอหัวหน้าสาขาวิชาจัดสรร — ยังไม่ต้องทำอะไร ระบบจะแจ้งเมื่อมีชื่อแล้ว
+            </p>
+          )}
+        </section>
+      </div>
+
+      {/*
+        เส้นทางสหกิจแบบย่อ — 7 ขั้นที่นักศึกษาพูดถึงจริง ไม่ใช่ 13 ขั้นย่อยตามเอกสาร
+        การจับคู่อยู่ตรงนี้ ติดกับ `phases` ที่เป็นแหล่งความจริง ไม่ได้แยกไปไฟล์อื่น
+        เพิ่ม/ลดขั้นในเฟสเมื่อไหร่ จะเห็นทันทีว่าต้องมาแก้การจับคู่ตรงนี้ด้วย
+      */}
+      <CoopJourneyBar
+        phases={phases}
+        steps={[
+          // มาถึงหน้านี้ได้แปลว่ามีแถวใน students แล้วเสมอ — ไม่มีแถว แดชบอร์ดตอบ 404
+          { label: 'กรอกประวัติ', subStepIds: [], state: 'completed' as const },
+          { label: 'เลือกสถานประกอบการ', subStepIds: ['1.1'] },
+          { label: 'ขอหนังสือขอความอนุเคราะห์', subStepIds: ['1.2', '1.3'], pendingLabel: 'รอเจ้าหน้าที่' },
+          { label: 'รอหนังสือตอบรับ', subStepIds: ['1.4', '1.5'], pendingLabel: 'รอสถานประกอบการ' },
+          { label: 'แจ้งที่พักและแผนงาน', subStepIds: ['2.1', '2.2'] },
+          { label: 'ปฏิบัติงานและส่งบันทึก', subStepIds: ['3.1', '3.2', '3.3'] },
+          { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
+        ]}
+      />
+
+      {/* ความคืบหน้าการขอที่ฝึกงาน (6 ขั้น) + เอกสารของฉัน — ใต้การ์ดสถานะ
+          ⛔ สถานะที่ไม่รู้จัก (statusState = null) ไม่แต่งความคืบหน้าให้ · ป้ายสถานะในการ์ด "ที่ฝึกงานของคุณ" โชว์ค่าดิบอยู่แล้ว */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {statusState ? (
+          <RequestProgress state={statusState} />
+        ) : (
+          !statusIntent && (
+            <div
+              data-testid="no-intent-card"
+              className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400"
+            >
               ยังไม่มีคำขอยื่นความจำนง กรุณาไปที่เมนู "ตำแหน่งงาน / สมัครงาน" เพื่อกดยื่นคำขอสมัครสหกิจศึกษา
             </div>
-          )}
-        </div>
+          )
+        )}
 
-        {/* Official Letter Status */}
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 dark:bg-gray-900 dark:border-gray-800">
-          <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">หนังสือขอความอนุเคราะห์ & เอกสารทางการ</h3>
+        {/* เอกสารของฉัน — PDF ทุกใบที่มีอยู่แล้วมารวมที่นี่ (ย้ายมา ไม่ได้เพิ่มใบใหม่) */}
+        <section
+          id="my-documents"
+          className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+        >
+          <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-4">เอกสารของฉัน</h3>
 
           {data.documents && data.documents.length > 0 ? (
             <div className="space-y-3">
@@ -1220,35 +1377,14 @@ const StudentDashboard: React.FC = () => {
                 แหล่งเดียวกับที่เซิร์ฟเวอร์ใช้ตัดสิน จึงไม่มีทางที่หน้าจอกับ API
                 จะไม่ตรงกัน (ถ้าอ่านจาก `documents` จะเป็นแหล่งความจริงที่สอง) */}
           {activeIntent?.acceptance_due_date && (
-            <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
+            <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
               <span className="block font-bold text-gray-700 dark:text-gray-300">
                 แบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2)
               </span>
               <p className="mt-0.5 text-gray-600 dark:text-gray-400">
                 พิมพ์ไปพร้อมหนังสือขอความอนุเคราะห์ ให้สถานประกอบการกรอก ลงนามและประทับตรา
-                <span className="font-semibold"> ภายใน 15 วันทำการ</span> แล้วนำกลับมาอัปโหลดที่นี่
+                <span className="font-semibold"> ภายใน 15 วันทำการ</span> — ทางสำรองกรณีบริษัทรับกระดาษ
               </p>
-
-              {/* นับถอยหลังกำหนดตอบกลับ
-                  ⚠️ วันครบกำหนดคำนวณโดยข้ามเฉพาะเสาร์-อาทิตย์ ระบบไม่มีตารางวันหยุด
-                  นักขัตฤกษ์ จึงเรียกว่า "โดยประมาณ" ไม่ใช่เส้นตาย — และเลยกำหนดแล้ว
-                  ก็ยังอัปโหลดได้ เซิร์ฟเวอร์แค่ติดธงว่าส่งช้า ไม่ได้ปิดประตู */}
-              {acceptanceDue && (
-                <p
-                  data-testid="acceptance-due"
-                  className={`mt-2 font-semibold ${
-                    acceptanceDue.overdue
-                      ? 'text-red-700 dark:text-red-400'
-                      : acceptanceDue.daysLeft <= 3
-                        ? 'text-amber-700 dark:text-amber-400'
-                        : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {acceptanceDue.overdue
-                    ? `เลยกำหนดตอบกลับมาแล้ว ${-acceptanceDue.daysLeft} วัน (ครบกำหนด ${formatThaiDate(acceptanceDue.due)}) — ยังส่งได้ แต่ระบบจะบันทึกว่าส่งช้า และควรยื่นบันทึกข้อความชี้แจง`
-                    : `ครบกำหนดตอบกลับโดยประมาณวันที่ ${formatThaiDate(acceptanceDue.due)} — เหลืออีก ${acceptanceDue.daysLeft} วัน`}
-                </p>
-              )}
               <a
                 href={`${API_BASE_URL}/intents/${activeIntent.form_id}/acceptance-form`}
                 target="_blank"
@@ -1260,74 +1396,7 @@ const StudentDashboard: React.FC = () => {
               </a>
             </div>
           )}
-
-          {/* ส่งให้สถานประกอบการทางอีเมล — เงื่อนไข "ลงนามแล้ว" ใช้ acceptance_due_date เดียวกับกล่องด้านบน
-              ปุ่มเปิด PDF ด้านบนยังอยู่ครบ เป็นทางสำรองกรณีบริษัทรับกระดาษ
-              · สถานะอื่นเซิร์ฟเวอร์ตอบ 409 อยู่แล้ว จึงไม่แสดงกล่องให้กดแล้วเจอ error */}
-          {activeIntent?.acceptance_due_date && intentStatus === 'approved_by_dept_head' && (
-            <div
-              data-testid="company-mail-box"
-              className="mt-4 rounded-lg border border-gray-200 bg-white p-3 text-xs dark:border-gray-700 dark:bg-gray-900"
-            >
-              <span className="block font-bold text-gray-700 dark:text-gray-300">ส่งหนังสือให้สถานประกอบการ</span>
-              <p className="mt-0.5 text-gray-600 dark:text-gray-400">
-                ระบบจะส่งอีเมลถึงสถานประกอบการพร้อมแนบ 2 ไฟล์ คือ หนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
-                และแบบตอบรับ (เอกสารหมายเลข 2) · สถานประกอบการตอบกลับมาที่อีเมลมหาวิทยาลัยของท่านโดยตรง
-              </p>
-
-              <label htmlFor="company-mail-input" className="mt-3 block font-semibold text-gray-700 dark:text-gray-300">
-                อีเมลสถานประกอบการ
-              </label>
-              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
-                <Input
-                  id="company-mail-input"
-                  type="email"
-                  size="sm"
-                  data-testid="company-mail-input"
-                  value={companyMailInput ?? activeIntent.company_mail_to ?? activeIntent.company_email ?? ''}
-                  onChange={(e) => setCompanyMailInput(e.target.value)}
-                  placeholder="hr@company.com"
-                  disabled={companyMailLeft === 0 || sendingCompanyMail}
-                />
-                <Button
-                  size="sm"
-                  data-testid="company-mail-send"
-                  disabled={companyMailLeft === 0 || !companyMailAddress}
-                  onClick={() => {
-                    setCompanyMailError(null);
-                    setConfirmingCompanyMail(true);
-                  }}
-                  className="shrink-0"
-                >
-                  ส่งอีเมล
-                </Button>
-              </div>
-
-              {companyMailLeft === 0 && (
-                <p data-testid="company-mail-limit" className="mt-2 text-amber-700 dark:text-amber-400">
-                  ส่งครบ {companyMailLimit} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — หากต้องส่งอีกครั้ง โปรดติดต่อเจ้าหน้าที่ หรือเปิด PDF ไปยื่นด้วยตนเอง
-                </p>
-              )}
-
-              {activeIntent.company_mail_sent_at && activeIntent.company_mail_to && (
-                <p data-testid="company-mail-status" className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">
-                  ส่งถึง {activeIntent.company_mail_to} เมื่อ {formatThaiDate(activeIntent.company_mail_sent_at)}
-                  {companyMailLeft > 0 && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
-                </p>
-              )}
-              {!activeIntent.company_mail_sent_at && companyMailLeft > 0 && (
-                <p className="mt-2 text-gray-600 dark:text-gray-400">ส่งได้ {companyMailLeft} ครั้ง</p>
-              )}
-
-              {companyMailError && (
-                <div data-testid="company-mail-error" className="mt-2">
-                  <AlertBanner variant="error" message={companyMailError} />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
+        </section>
       </div>
 
       {/* Announcement Detail Modal */}
@@ -1387,6 +1456,7 @@ const StudentDashboard: React.FC = () => {
                   { label: 'สถานประกอบการ', value: activeIntent?.company_name_th ?? '' },
                   { label: 'ไฟล์แนบ 1', value: 'หนังสือขอความอนุเคราะห์ (คณบดีลงนามแล้ว)' },
                   { label: 'ไฟล์แนบ 2', value: 'แบบตอบรับ (เอกสารหมายเลข 2)' },
+                  { label: 'ลิงก์ตอบรับ', value: 'ลิงก์ให้บริษัทตอบรับออนไลน์ (ใช้ได้ครั้งเดียว · ส่งใหม่แล้วลิงก์เก่าใช้ไม่ได้)' },
                   { label: 'ตอบกลับไปที่', value: 'อีเมลมหาวิทยาลัยของท่าน' },
                 ],
               },
