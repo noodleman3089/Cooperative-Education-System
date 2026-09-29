@@ -220,6 +220,8 @@ export const sendCoverLetterToCompany = async (params: {
   /** พาธของหนังสือที่ลงนามแล้ว (`official_documents.generated_file_path`) */
   coverLetterPath: string;
   acceptanceForm: AcceptanceFormData;
+  /** ลิงก์ตอบรับออนไลน์ (`utils/acceptanceLinkToken.ts`) + วันสุดท้ายที่ใช้ได้ YYYY-MM-DD — url สร้างจากค่าของระบบล้วน */
+  acceptanceLink: { url: string; expiresOn: string };
 }): Promise<void> => {
   const absolutePath = path.isAbsolute(params.coverLetterPath)
     ? params.coverLetterPath
@@ -241,8 +243,17 @@ export const sendCoverLetterToCompany = async (params: {
       <li>แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา (เอกสารหมายเลข ๒)</li>
     </ol>
     <p>ขอความกรุณาท่านกรอกและลงนามพร้อมประทับตราในแบบยืนยันแบบตอบรับ (เอกสารหมายเลข ๒)
-       ภายใน ๑๕ วันทำการหลังจากได้รับหนังสือฯ แล้วส่งกลับมายังนักศึกษาโดยตรง
-       (ตอบกลับอีเมลฉบับนี้ได้เลย ข้อความจะถึงนักศึกษา)</p>
+       ภายใน ๑๕ วันทำการหลังจากได้รับหนังสือฯ <b>ตอบรับออนไลน์ได้ที่ปุ่มด้านล่าง</b>
+       (แนบไฟล์แบบตอบรับที่ลงนามแล้วและกรอกแบบแจ้งรายละเอียดงาน สหกิจ 07 ในหน้าเดียวกัน)
+       หรือส่งกลับมายังนักศึกษาโดยตรงก็ได้ (ตอบกลับอีเมลฉบับนี้ ข้อความจะถึงนักศึกษา)</p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${esc(params.acceptanceLink.url)}"
+         style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        ตอบรับออนไลน์
+      </a>
+    </div>
+    <p style="color: #6b7280; font-size: 13px;">ลิงก์ใช้ได้ครั้งเดียว หมดอายุสิ้นวันที่ <b>${esc(formatThaiDate(params.acceptanceLink.expiresOn))}</b>
+       · ถ้านักศึกษาส่งหนังสือให้ท่านอีกครั้ง ลิงก์ในอีเมลฉบับก่อนจะใช้ไม่ได้ ให้ใช้ลิงก์ในฉบับล่าสุด</p>
     <p>ขอบพระคุณเป็นอย่างสูงมา ณ โอกาสนี้</p>
   `;
 

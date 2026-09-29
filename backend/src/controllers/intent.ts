@@ -30,6 +30,12 @@ import {
 } from '../utils/dispatchLetterPdf';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
+import {
+  IssuedAcceptanceLink,
+  createAcceptanceLinkToken,
+  revokeAcceptanceLinkToken,
+  revokeOtherAcceptanceLinkTokens,
+} from '../utils/acceptanceLinkToken';
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
 
@@ -245,6 +251,10 @@ export class IntentFormController {
                i.acceptance_due_date, i.acceptance_submitted_late,
                i.acceptance_signer_name, i.acceptance_signer_position, i.acceptance_signed_date,
                i.dispatch_document_no, i.end_date, men.name AS mentor_name,
+               men.phone AS mentor_phone, men.position AS mentor_position, men.department AS mentor_department,
+               u_men.email AS mentor_email,
+               -- ที่มาของคำตอบรับ + สหกิจ 07 ที่บริษัทกรอกผ่านลิงก์ (พักไว้ ยังไม่เข้า companies จนกดรับ)
+               i.acceptance_source, i.company_form07_pending, i.job_position, i.job_description,
                doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
@@ -254,6 +264,7 @@ export class IntentFormController {
         -- พี่เลี้ยงที่สถานประกอบการมอบหมาย — เจ้าหน้าที่ต้องเห็นตอนตรวจก่อนออกหนังสือส่งตัว
         -- เพราะชื่อนี้ถูกพิมพ์ลงหนังสือฉบับที่คณบดีเซ็น (SEC-10: บริษัทถูกตัดฟิลด์ด้านล่างอยู่แล้ว)
         LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
+        LEFT JOIN users u_men ON i.mentor_id = u_men.user_id
         -- ⛔ ห้ามใส่ backtick ในคอมเมนต์ก้อนนี้ — SQL ทั้งก้อนอยู่ใน template literal
         --    ของ JS มันจะปิดสตริงกลางทาง (พลาดมาแล้วสองครั้ง 2026-08-27)
         -- ใบความจำนงหยุดอยู่ที่ approved_by_dept_head ตั้งแต่เจ้าหน้าที่กดรับคำร้อง
@@ -1175,7 +1186,12 @@ export class IntentFormController {
         return;
       }
 
+      // ลิงก์ตอบรับออนไลน์ (ใช้ครั้งเดียว · หมดอายุ ๑๕ วันทำการ) — สร้างหลังจองโควตา ก่อนส่งเมล
+      // ⛔ ยังไม่ยกเลิกลิงก์เก่าตรงนี้ — ทำหลังส่งสำเร็จเท่านั้น เพื่อให้ส่งล้มไม่ฆ่าลิงก์ที่บริษัทถืออยู่แล้ว
+      //    และไม่ถือทรานแซกชันค้างระหว่างรอ SMTP
+      let link: IssuedAcceptanceLink | null = null;
       try {
+        link = await createAcceptanceLinkToken(formId, companyEmail);
         await sendCoverLetterToCompany({
           toEmail: companyEmail,
           replyTo: row.student_email,
@@ -1192,9 +1208,16 @@ export class IntentFormController {
             major_name_th: row.major_name_th,
             dispatch_document_no: null,
           },
+          acceptanceLink: { url: link.url, expiresOn: link.lastDay },
         });
       } catch (sendError) {
         console.error(`[Email] Send cover letter to company failed for intent ${formId}:`, sendError);
+        // ลิงก์ใหม่ยังไม่ถึงมือบริษัท — ต้องใช้ไม่ได้ (ลิงก์เก่าที่บริษัทถืออยู่ยังอยู่ครบ)
+        if (link) {
+          await revokeAcceptanceLinkToken(link.tokenId).catch((revokeError) =>
+            console.error(`[Email] Failed to revoke unsent acceptance link for intent ${formId}:`, revokeError)
+          );
+        }
         // คืนที่ที่จองไว้ — ส่งไม่สำเร็จต้องไม่ถูกนับ
         await query(
           `UPDATE intent_forms
@@ -1219,6 +1242,9 @@ export class IntentFormController {
         [formId, companyEmail]
       );
       const saved = sent.rows[0];
+
+      // ส่งสำเร็จแล้ว — ยกเลิกลิงก์เก่าที่ยังไม่ใช้ของใบนี้ (เหลือแต่ลิงก์ในอีเมลฉบับล่าสุด)
+      await revokeOtherAcceptanceLinkTokens(formId, link.tokenId);
 
       writeAudit(
         {

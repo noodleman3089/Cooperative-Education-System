@@ -763,23 +763,47 @@ export class IntentFormModel {
         throw new Error('Unauthorized. You are not the representative of the company assigned to this intent form.');
       }
 
-      assertAllowedTransition('company_reject', intent.status, COMPANY_DECISION_FROM);
-
-      await releaseJobSeat(client, intent.job_id);
-
-      const updateRes = await client.query(
-        `UPDATE intent_forms SET status = 'company_rejected', reject_reason = $2 WHERE form_id = $1`,
-        [intentId, reason]
-      );
+      const rejected = await IntentFormModel.rejectByCompanyWithClient(client, intentId, reason);
 
       await client.query('COMMIT');
-      return (updateRes.rowCount ?? 0) > 0;
+      return rejected;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * แกนของ "สถานประกอบการไม่รับ" — **ไม่ตรวจว่าใครเป็นคนเรียก** (ผู้เรียกต้องตรวจสิทธิ์เอง) และไม่ BEGIN/COMMIT
+   * ใช้ร่วมกันระหว่างบัญชีบริษัท (`rejectByCompany`) กับลิงก์ตอบรับ (`PublicAcceptanceController.decline`)
+   * ผู้เรียกต้องอยู่ในทรานแซกชันของตัวเอง · ล็อกแถวที่นี่ซ้ำได้ (ทรานแซกชันเดียวกัน)
+   */
+  static async rejectByCompanyWithClient(
+    client: PoolClient,
+    intentId: number,
+    reason: string,
+    allowedFrom: string[] = COMPANY_DECISION_FROM
+  ): Promise<boolean> {
+    const intentRes = await client.query(
+      `SELECT form_id, job_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+      [intentId]
+    );
+    if ((intentRes.rowCount ?? 0) === 0) {
+      throw new Error('Intent form not found.');
+    }
+    const intent = intentRes.rows[0];
+
+    assertAllowedTransition('company_reject', intent.status, allowedFrom);
+
+    await releaseJobSeat(client, intent.job_id);
+
+    const updateRes = await client.query(
+      `UPDATE intent_forms SET status = 'company_rejected', reject_reason = $2 WHERE form_id = $1`,
+      [intentId, reason]
+    );
+    return (updateRes.rowCount ?? 0) > 0;
   }
 
   /**
@@ -806,144 +830,207 @@ export class IntentFormModel {
     try {
       await client.query('BEGIN');
 
-      // 1. Lock intent form FOR UPDATE
-      const intentRes = await client.query(
-        `SELECT form_id, student_id, company_id, semester_id, job_id, status 
-         FROM intent_forms 
-         WHERE form_id = $1 
-         FOR UPDATE`,
-        [intentId]
-      );
-
-      if ((intentRes.rowCount ?? 0) === 0) {
-        throw new Error('Intent form not found.');
-      }
-
-      const intent = intentRes.rows[0];
-
-      // 2. Validate that it belongs to the logged-in student
-      if (intent.student_id !== studentUserId) {
-        throw new Error('Unauthorized. You can only upload acceptance proof for your own intent form.');
-      }
-
-      assertAllowedTransition('student_accept', intent.status, STUDENT_ACCEPT_FROM);
-
-      // 3. Handle Mentor Account Onboarding Transactionally
-      const cleanEmail = mentorData.email.trim().toLowerCase();
-
-      // SEC-03: a student must never be able to nominate themselves as their own
-      // mentor — that would make them the evaluator on their own placement.
-      const selfCheck = await client.query('SELECT email, alt_email FROM users u LEFT JOIN students s ON s.student_id = u.user_id WHERE u.user_id = $1', [studentUserId]);
-      if ((selfCheck.rowCount ?? 0) > 0) {
-        const own = selfCheck.rows[0];
-        const ownEmails = [own.email, own.alt_email]
-          .filter(Boolean)
-          .map((e: string) => e.trim().toLowerCase());
-        if (ownEmails.includes(cleanEmail)) {
-          throw new Error('ไม่สามารถใช้อีเมลของตนเองเป็นอีเมลพี่เลี้ยงได้');
-        }
-      }
-
-      const userCheck = await client.query(
-        `SELECT u.user_id,
-                COALESCE(json_agg(r.role_name) FILTER (WHERE r.role_name IS NOT NULL), '[]') as roles
-         FROM users u
-         LEFT JOIN user_roles r ON u.user_id = r.user_id
-         WHERE u.email = $1
-         GROUP BY u.user_id`,
-        [cleanEmail]
-      );
-
-      let mentorUserId: number;
-
-      if ((userCheck.rowCount ?? 0) === 0) {
-        // No password and inactive until officer approval, which is also when
-        // the invitation goes out. Nothing is emailed from here.
-        const insertUser = await client.query(
-          `INSERT INTO users (email, password_hash, is_active)
-           VALUES ($1, NULL, FALSE)
-           RETURNING user_id`,
-          [cleanEmail]
-        );
-        mentorUserId = insertUser.rows[0].user_id;
-
-        await client.query(
-          `INSERT INTO user_roles (user_id, role_name)
-           VALUES ($1, 'mentor')`,
-          [mentorUserId]
-        );
-
-        await client.query(
-          `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [
-            mentorUserId,
-            intent.company_id,
-            mentorData.name.trim(),
-            mentorData.position?.trim() || null,
-            mentorData.department?.trim() || null,
-            mentorData.phone.trim(),
-          ]
-        );
-        
-        console.log(`Generated new pending mentor account for ${cleanEmail}.`);
-      } else {
-        const existingUser = userCheck.rows[0];
-        mentorUserId = existingUser.user_id;
-        const roles: string[] = typeof existingUser.roles === 'string' ? JSON.parse(existingUser.roles) : existingUser.roles;
-
-        const mentorProfileCheck = await client.query(
-          `SELECT mentor_id, company_id FROM mentors WHERE mentor_id = $1`,
-          [mentorUserId]
-        );
-
-        if ((mentorProfileCheck.rowCount ?? 0) === 0) {
-          // SEC-03: refuse to graft a 'mentor' role onto an account that already
-          // exists for some other purpose. Doing so let a student nominate their
-          // own address (self-evaluation) or a staff member's address (which the
-          // officer-approval step would then password-reset and re-activate).
-          throw new Error(
-            'อีเมลนี้ถูกใช้งานในระบบแล้วและไม่ใช่บัญชีพี่เลี้ยง กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการโดยตรง'
-          );
-        }
-
-        if (!roles.includes('mentor')) {
-          throw new Error(
-            'อีเมลนี้ถูกใช้งานในระบบแล้วและไม่ใช่บัญชีพี่เลี้ยง กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการโดยตรง'
-          );
-        }
-
-        const mentorProfile = mentorProfileCheck.rows[0];
-        if (mentorProfile.company_id !== intent.company_id) {
-          throw new Error('This mentor email is already registered under a different company.');
-        }
-      }
-
-      // 4. Update Intent Form status to pending_officer_approval
-      const updateRes = await client.query(
-        `UPDATE intent_forms 
-         SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
-             acceptance_evidence_path = $3, acceptance_submitted_late = $5,
-             acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8,
-             reject_reason = NULL -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
-         WHERE form_id = $4
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date,
-                   acceptance_evidence_path, acceptance_submitted_late`,
-        [
-          mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate,
-          signer?.name ?? null, signer?.position ?? null, signer?.signedDate ?? null,
-        ]
-      );
+      const updated = await IntentFormModel.acceptWithClient(client, {
+        intentId,
+        source: 'student',
+        studentUserId,
+        mentorData,
+        startDate,
+        evidencePath,
+        submittedLate,
+        signer,
+      });
 
       await client.query('COMMIT');
 
-      return updateRes.rows[0] as IntentForm;
+      return updated;
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
     } finally {
       client.release();
     }
+  }
+
+  /**
+   * แกนของ "ตอบรับ" ที่ใช้ร่วมกันสองทาง — นักศึกษาอัปโหลดเอง (`source: 'student'`) และบริษัทตอบ
+   * ผ่านลิงก์ (`source: 'link'`) · **ไม่ BEGIN/COMMIT** ผู้เรียกถือทรานแซกชันเอง (ลิงก์ต้อง burn token
+   * ในทรานแซกชันเดียวกัน) · ทุกด่าน SEC-03 อยู่ที่นี่ที่เดียว ห้ามแยกสำเนาให้ทางใดทางหนึ่ง
+   *
+   * - `student`: ผู้เรียกต้องเป็นเจ้าของใบ (`studentUserId`) · เริ่มจาก STUDENT_ACCEPT_FROM
+   * - `link`: ไม่มีผู้ใช้ — ตัวตนนักศึกษามาจากใบเอง · เริ่มจาก `approved_by_dept_head` เท่านั้น
+   *   (ลิงก์ออกตอนใบอยู่ขั้นนั้นขั้นเดียว ใบที่เลยไปแล้วต้องตอบไม่ได้)
+   */
+  static async acceptWithClient(
+    client: PoolClient,
+    p: {
+      intentId: number;
+      source: 'student' | 'link';
+      /** จำเป็นเมื่อ source = 'student' */
+      studentUserId?: number;
+      mentorData: {
+        name: string;
+        email: string;
+        phone: string;
+        position?: string;
+        department?: string;
+        fax?: string;
+      };
+      startDate: string;
+      evidencePath: string;
+      /** ส่งกลับหลังพ้น ๑๕ วันทำการ — ผู้เรียกเป็นคนตัดสินโดยเทียบวันที่ฐาน */
+      submittedLate: boolean;
+      /** ผู้ลงนามบนแบบตอบรับ (เอกสารหมายเลข 2) — ผู้เรียกตรวจแล้ว */
+      signer: { name: string; position: string; signedDate: string } | null;
+      /** งานที่มอบหมาย (สหกิจ 07) — ใส่เมื่อมีเท่านั้น ไม่ทับค่าเดิมด้วยว่าง */
+      jobPosition?: string | null;
+      jobDescription?: string | null;
+      /** ข้อมูลบริษัทส่วน สหกิจ 07 ที่พักไว้รอเจ้าหน้าที่กดรับ (D5) — ไม่เขียน companies ตรงนี้ */
+      form07Pending?: Record<string, unknown> | null;
+    }
+  ): Promise<IntentForm> {
+    const { intentId, source, studentUserId, mentorData, startDate, evidencePath, submittedLate, signer } = p;
+    // 1. Lock intent form FOR UPDATE
+    const intentRes = await client.query(
+      `SELECT form_id, student_id, company_id, semester_id, job_id, status
+       FROM intent_forms
+       WHERE form_id = $1
+       FOR UPDATE`,
+      [intentId]
+    );
+
+    if ((intentRes.rowCount ?? 0) === 0) {
+      throw new Error('Intent form not found.');
+    }
+
+    const intent = intentRes.rows[0];
+
+    // 2. Validate that it belongs to the logged-in student (ทางลิงก์ไม่มีผู้ใช้ — ใบคือตัวตนเดียว)
+    if (source === 'student' && intent.student_id !== studentUserId) {
+      throw new Error('Unauthorized. You can only upload acceptance proof for your own intent form.');
+    }
+
+    assertAllowedTransition(
+      source === 'link' ? 'company_accept_via_link' : 'student_accept',
+      intent.status,
+      source === 'link' ? ['approved_by_dept_head'] : STUDENT_ACCEPT_FROM
+    );
+
+    // 3. Handle Mentor Account Onboarding Transactionally
+    const cleanEmail = mentorData.email.trim().toLowerCase();
+
+    // SEC-03: a student must never be able to nominate themselves as their own
+    // mentor — that would make them the evaluator on their own placement.
+    // ใช้นักศึกษาเจ้าของใบเสมอ (ทางลิงก์ก็เช่นกัน — บริษัทกรอกอีเมลนักศึกษาเป็นพี่เลี้ยงไม่ได้)
+    const selfCheck = await client.query('SELECT email, alt_email FROM users u LEFT JOIN students s ON s.student_id = u.user_id WHERE u.user_id = $1', [intent.student_id]);
+    if ((selfCheck.rowCount ?? 0) > 0) {
+      const own = selfCheck.rows[0];
+      const ownEmails = [own.email, own.alt_email]
+        .filter(Boolean)
+        .map((e: string) => e.trim().toLowerCase());
+      if (ownEmails.includes(cleanEmail)) {
+        throw new Error('ไม่สามารถใช้อีเมลของตนเองเป็นอีเมลพี่เลี้ยงได้');
+      }
+    }
+
+    const userCheck = await client.query(
+      `SELECT u.user_id,
+              COALESCE(json_agg(r.role_name) FILTER (WHERE r.role_name IS NOT NULL), '[]') as roles
+       FROM users u
+       LEFT JOIN user_roles r ON u.user_id = r.user_id
+       WHERE u.email = $1
+       GROUP BY u.user_id`,
+      [cleanEmail]
+    );
+
+    let mentorUserId: number;
+
+    if ((userCheck.rowCount ?? 0) === 0) {
+      // No password and inactive until officer approval, which is also when
+      // the invitation goes out. Nothing is emailed from here.
+      const insertUser = await client.query(
+        `INSERT INTO users (email, password_hash, is_active)
+         VALUES ($1, NULL, FALSE)
+         RETURNING user_id`,
+        [cleanEmail]
+      );
+      mentorUserId = insertUser.rows[0].user_id;
+
+      await client.query(
+        `INSERT INTO user_roles (user_id, role_name)
+         VALUES ($1, 'mentor')`,
+        [mentorUserId]
+      );
+
+      await client.query(
+        `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone, fax)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          mentorUserId,
+          intent.company_id,
+          mentorData.name.trim(),
+          mentorData.position?.trim() || null,
+          mentorData.department?.trim() || null,
+          mentorData.phone.trim(),
+          mentorData.fax?.trim() || null,
+        ]
+      );
+
+      console.log(`Generated new pending mentor account for ${cleanEmail}.`);
+    } else {
+      const existingUser = userCheck.rows[0];
+      mentorUserId = existingUser.user_id;
+      const roles: string[] = typeof existingUser.roles === 'string' ? JSON.parse(existingUser.roles) : existingUser.roles;
+
+      const mentorProfileCheck = await client.query(
+        `SELECT mentor_id, company_id FROM mentors WHERE mentor_id = $1`,
+        [mentorUserId]
+      );
+
+      if ((mentorProfileCheck.rowCount ?? 0) === 0) {
+        // SEC-03: refuse to graft a 'mentor' role onto an account that already
+        // exists for some other purpose. Doing so let a student nominate their
+        // own address (self-evaluation) or a staff member's address (which the
+        // officer-approval step would then password-reset and re-activate).
+        throw new Error(
+          'อีเมลนี้ถูกใช้งานในระบบแล้วและไม่ใช่บัญชีพี่เลี้ยง กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการโดยตรง'
+        );
+      }
+
+      if (!roles.includes('mentor')) {
+        throw new Error(
+          'อีเมลนี้ถูกใช้งานในระบบแล้วและไม่ใช่บัญชีพี่เลี้ยง กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการโดยตรง'
+        );
+      }
+
+      const mentorProfile = mentorProfileCheck.rows[0];
+      if (mentorProfile.company_id !== intent.company_id) {
+        throw new Error('This mentor email is already registered under a different company.');
+      }
+    }
+
+    // 4. Update Intent Form status to pending_officer_approval
+    const updateRes = await client.query(
+      `UPDATE intent_forms 
+       SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
+           acceptance_evidence_path = $3, acceptance_submitted_late = $5,
+           acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8,
+           reject_reason = NULL, -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
+           acceptance_source = $9,
+           job_position = COALESCE($10, job_position),
+           job_description = COALESCE($11, job_description),
+           company_form07_pending = $12::jsonb
+       WHERE form_id = $4
+       RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date,
+                 acceptance_evidence_path, acceptance_submitted_late, acceptance_source`,
+      [
+        mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate,
+        signer?.name ?? null, signer?.position ?? null, signer?.signedDate ?? null,
+        source, p.jobPosition ?? null, p.jobDescription ?? null,
+        p.form07Pending ? JSON.stringify(p.form07Pending) : null,
+      ]
+    );
+    return updateRes.rows[0] as IntentForm;
   }
 
   /**

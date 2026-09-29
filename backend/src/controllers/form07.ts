@@ -183,7 +183,7 @@ async function requireOwnCompany(req: Request, res: Response): Promise<number | 
  * ⛔ ยังห้ามแก้ `name_th` `name_en` และ `is_verified` — ชื่อทางการเป็นของทะเบียนที่
  *    เจ้าหน้าที่รับรอง และถูกพิมพ์ลงใบรับรองภาษาอังกฤษของนักศึกษา
  */
-const FORM07_WRITABLE_FIELDS = [
+export const FORM07_WRITABLE_FIELDS = [
   'house_no', 'road', 'soi', 'subdistrict', 'district', 'province', 'postal_code',
   'phone', 'fax', 'email',
   'manager_name', 'manager_position', 'manager_department', 'manager_phone',
@@ -192,7 +192,7 @@ const FORM07_WRITABLE_FIELDS = [
   'contact_phone', 'contact_fax',
 ] as const;
 
-async function updateCompanyFields(client: Client, companyId: number, input: Record<string, unknown>) {
+export async function updateCompanyFields(client: Client, companyId: number, input: Record<string, unknown>) {
   const sets: string[] = [];
   const values: unknown[] = [];
   for (const field of FORM07_WRITABLE_FIELDS) {

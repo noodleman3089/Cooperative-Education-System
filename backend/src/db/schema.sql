@@ -26,6 +26,7 @@ DROP TABLE IF EXISTS official_documents CASCADE;
 DROP TABLE IF EXISTS document_templates CASCADE;
 -- coop_applications (สหกิจ 01) ถูกตัดทั้งชุด 2026-09-14 · migration 032 — บรรทัด DROP เก็บไว้ล้างฐาน dev เก่า
 DROP TABLE IF EXISTS coop_applications CASCADE;
+DROP TABLE IF EXISTS acceptance_link_tokens CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
 DROP TABLE IF EXISTS student_memos CASCADE;
@@ -551,6 +552,13 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     company_mail_to VARCHAR(254),
     company_mail_sent_at TIMESTAMPTZ,
     company_mail_count INT NOT NULL DEFAULT 0,
+    -- ที่มาของคำตอบรับ: 'link' = บริษัทตอบผ่านลิงก์ในอีเมล · 'student' = นักศึกษาอัปโหลดแทน
+    -- (NULL = ยังไม่มีคำตอบรับ หรือถูกเจ้าหน้าที่ตีกลับแล้ว)
+    acceptance_source VARCHAR(16) CHECK (acceptance_source IN ('link', 'student')),
+    -- ข้อมูลบริษัทส่วน สหกิจ 07 ที่บริษัทกรอกมาทางลิงก์ — **พักไว้ที่ใบ ยังไม่เขียนทับ companies**
+    -- เพราะลิงก์ไปถึงอีเมลที่นักศึกษาพิมพ์ ใครถือลิงก์ก็แก้ทะเบียนบริษัทได้ถ้าเขียนทันที
+    -- เขียนลง companies ตอนเจ้าหน้าที่กดรับ (officer-approve) ในทรานแซกชันเดียวกัน แล้วล้างคอลัมน์นี้
+    company_form07_pending JSONB,
     -- หนังสือส่งตัว (ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ) — ออกหลังเจ้าหน้าที่รับแบบตอบรับแล้ว
     -- ⛔ เลขนี้ต้องถูกพิมพ์กลับลงช่อง "ส่วนของเจ้าหน้าที่ฯ" ของเอกสารหมายเลข ๒
     --    ซึ่งวาดสดจาก intent_forms ล้วน จึงเก็บที่นี่ด้วย ไม่ใช่แค่ official_documents
@@ -586,6 +594,21 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     CONSTRAINT intent_forms_work_period_order
         CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 );
+
+-- ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2 + สหกิจ 07) — ออกตอนนักศึกษากดส่งหนังสือถึงบริษัท
+-- ใช้ครั้งเดียว · หมดอายุ 15 วันทำการนับจากวันส่ง · นักศึกษาส่งใหม่ = ลิงก์เก่าที่ยังไม่ใช้ถูกยกเลิก (revoked_at)
+-- ⛔ token เปิดได้เฉพาะใบเดียวที่ผูกไว้ · ไม่สร้าง session · ดู utils/acceptanceLinkToken.ts และ SEC-14
+CREATE TABLE IF NOT EXISTS acceptance_link_tokens (
+    token_id SERIAL PRIMARY KEY,
+    token UUID NOT NULL UNIQUE,
+    form_id INT NOT NULL REFERENCES intent_forms(form_id) ON DELETE CASCADE,
+    sent_to VARCHAR(254) NOT NULL,
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    revoked_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_acceptance_link_tokens_form ON acceptance_link_tokens(form_id);
 
 -- 8. Document Templates Table
 CREATE TABLE IF NOT EXISTS document_templates (
