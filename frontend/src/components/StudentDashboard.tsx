@@ -72,6 +72,11 @@ const StudentDashboard: React.FC = () => {
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
   const [confirmingFailure, setConfirmingFailure] = useState(false);
+  // ส่งหนังสือให้สถานประกอบการทางอีเมล — null = ยังไม่พิมพ์เอง ใช้ค่าเริ่มต้นจากที่ระบบรู้
+  const [companyMailInput, setCompanyMailInput] = useState<string | null>(null);
+  const [confirmingCompanyMail, setConfirmingCompanyMail] = useState(false);
+  const [sendingCompanyMail, setSendingCompanyMail] = useState(false);
+  const [companyMailError, setCompanyMailError] = useState<string | null>(null);
   // 404 from /students/dashboard means "not onboarded yet", not "broken".
   const [needsProfile, setNeedsProfile] = useState(false);
 
@@ -237,6 +242,40 @@ const StudentDashboard: React.FC = () => {
       setProofError(getErrorMessage(err, 'การอัปโหลดหลักฐานการตอบรับล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSubmittingProof(false);
+    }
+  };
+
+  const submitCompanyMail = async (formId: number, companyEmail: string) => {
+    setSendingCompanyMail(true);
+    setCompanyMailError(null);
+    try {
+      const res = await api.post(`/intents/${formId}/send-to-company`, { company_email: companyEmail });
+      setConfirmingCompanyMail(false);
+      // ใช้ค่าจาก 200 ที่ตอบกลับโดยตรง — ไม่พึ่ง poll รอบถัดไปเพื่อให้ "ส่งถึง …" ขึ้นทันที
+      setData((prev) =>
+        prev && prev.activeIntent
+          ? {
+              ...prev,
+              activeIntent: {
+                ...prev.activeIntent,
+                company_mail_to: res.company_mail_to,
+                company_mail_sent_at: res.company_mail_sent_at,
+                company_mail_count: res.company_mail_count,
+                company_mail_limit: res.company_mail_limit,
+              },
+            }
+          : prev,
+      );
+      setCompanyMailInput(null);
+    } catch (err) {
+      // ⛔ ไม่ใช้ setError — แทนที่ทั้งหน้า · error อยู่ในกล่องส่งเอง (400/409/429/502 เซิร์ฟเวอร์ให้ข้อความไทย)
+      setConfirmingCompanyMail(false);
+      setCompanyMailError(getErrorMessage(err, 'ส่งอีเมลไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+      setTimeout(() => {
+        document.querySelector('[data-testid="company-mail-error"]')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 0);
+    } finally {
+      setSendingCompanyMail(false);
     }
   };
 
@@ -506,6 +545,12 @@ const StudentDashboard: React.FC = () => {
   })();
   const step1_5Done = intentStatus === 'accepted';
 
+  // ส่งหนังสือให้สถานประกอบการทางอีเมล — ค่าทั้งหมดมาจาก `GET /students/dashboard` และ 200 ของ send-to-company
+  const companyMailCount = activeIntent?.company_mail_count ?? 0;
+  const companyMailLimit = activeIntent?.company_mail_limit ?? 3;
+  const companyMailLeft = Math.max(0, companyMailLimit - companyMailCount);
+  const companyMailAddress = (companyMailInput ?? activeIntent?.company_mail_to ?? activeIntent?.company_email ?? '').trim();
+
   // ⛔ เฟส 2–4 อ่านจาก `progress` ที่ backend นับจากแถวจริงของแต่ละขั้น — ห้ามเดาจากสถานะใบความจำนง
   //    เดิม 2.x ติ๊กเสร็จทันทีที่บริษัทตอบรับ (ยังไม่ได้กรอกอะไรเลย) และ 3.x/4.x เป็น `&& false` ตลอดกาล
   //    · แต่ละขั้นเสร็จตามข้อมูลของตัวเอง ไม่ต่อโซ่กัน — ของจริงไม่เรียงเสมอ (นิเทศได้ก่อนโครงร่างผ่าน)
@@ -561,13 +606,13 @@ const StudentDashboard: React.FC = () => {
         {
           id: '1.3',
           title: '1.3 เจ้าหน้าที่รับคำร้อง & ออกเลขที่หนังสือ',
-          description: 'เจ้าหน้าที่ตรวจลายเซ็นบนกระดาษ กรอกชื่อผู้ลงนาม แล้วออกเลขที่หนังสือราชการ',
+          description: 'เจ้าหน้าที่ตรวจลายเซ็นบนกระดาษ แล้วออกเลขที่หนังสือออก',
           status: step1_3Done ? 'completed' : step1_2Done ? 'active' : 'pending'
         },
         {
           id: '1.4',
           title: '1.4 คณบดีลงนามหนังสือขอความอนุเคราะห์',
-          description: 'ลงนามแล้วดาวน์โหลดหนังสือไปยื่นสถานประกอบการด้วยตนเอง',
+          description: 'ลงนามแล้วส่งหนังสือให้สถานประกอบการทางอีเมลจากระบบ หรือดาวน์โหลดไปยื่นด้วยตนเอง',
           status: step1_4Done ? 'completed' : step1_3Done ? 'active' : 'pending'
         },
         {
@@ -1215,6 +1260,72 @@ const StudentDashboard: React.FC = () => {
               </a>
             </div>
           )}
+
+          {/* ส่งให้สถานประกอบการทางอีเมล — เงื่อนไข "ลงนามแล้ว" ใช้ acceptance_due_date เดียวกับกล่องด้านบน
+              ปุ่มเปิด PDF ด้านบนยังอยู่ครบ เป็นทางสำรองกรณีบริษัทรับกระดาษ
+              · สถานะอื่นเซิร์ฟเวอร์ตอบ 409 อยู่แล้ว จึงไม่แสดงกล่องให้กดแล้วเจอ error */}
+          {activeIntent?.acceptance_due_date && intentStatus === 'approved_by_dept_head' && (
+            <div
+              data-testid="company-mail-box"
+              className="mt-4 rounded-lg border border-gray-200 bg-white p-3 text-xs dark:border-gray-700 dark:bg-gray-900"
+            >
+              <span className="block font-bold text-gray-700 dark:text-gray-300">ส่งหนังสือให้สถานประกอบการ</span>
+              <p className="mt-0.5 text-gray-600 dark:text-gray-400">
+                ระบบจะส่งอีเมลถึงสถานประกอบการพร้อมแนบ 2 ไฟล์ คือ หนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
+                และแบบตอบรับ (เอกสารหมายเลข 2) · สถานประกอบการตอบกลับมาที่อีเมลมหาวิทยาลัยของท่านโดยตรง
+              </p>
+
+              <label htmlFor="company-mail-input" className="mt-3 block font-semibold text-gray-700 dark:text-gray-300">
+                อีเมลสถานประกอบการ
+              </label>
+              <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+                <Input
+                  id="company-mail-input"
+                  type="email"
+                  size="sm"
+                  data-testid="company-mail-input"
+                  value={companyMailInput ?? activeIntent.company_mail_to ?? activeIntent.company_email ?? ''}
+                  onChange={(e) => setCompanyMailInput(e.target.value)}
+                  placeholder="hr@company.com"
+                  disabled={companyMailLeft === 0 || sendingCompanyMail}
+                />
+                <Button
+                  size="sm"
+                  data-testid="company-mail-send"
+                  disabled={companyMailLeft === 0 || !companyMailAddress}
+                  onClick={() => {
+                    setCompanyMailError(null);
+                    setConfirmingCompanyMail(true);
+                  }}
+                  className="shrink-0"
+                >
+                  ส่งอีเมล
+                </Button>
+              </div>
+
+              {companyMailLeft === 0 && (
+                <p data-testid="company-mail-limit" className="mt-2 text-amber-700 dark:text-amber-400">
+                  ส่งครบ {companyMailLimit} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — หากต้องส่งอีกครั้ง โปรดติดต่อเจ้าหน้าที่ หรือเปิด PDF ไปยื่นด้วยตนเอง
+                </p>
+              )}
+
+              {activeIntent.company_mail_sent_at && activeIntent.company_mail_to && (
+                <p data-testid="company-mail-status" className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">
+                  ส่งถึง {activeIntent.company_mail_to} เมื่อ {formatThaiDate(activeIntent.company_mail_sent_at)}
+                  {companyMailLeft > 0 && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
+                </p>
+              )}
+              {!activeIntent.company_mail_sent_at && companyMailLeft > 0 && (
+                <p className="mt-2 text-gray-600 dark:text-gray-400">ส่งได้ {companyMailLeft} ครั้ง</p>
+              )}
+
+              {companyMailError && (
+                <div data-testid="company-mail-error" className="mt-2">
+                  <AlertBanner variant="error" message={companyMailError} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
       </div>
@@ -1256,6 +1367,34 @@ const StudentDashboard: React.FC = () => {
             />
           }
         />
+      <ConfirmDialog
+        open={confirmingCompanyMail && !!activeIntent}
+        title="ส่งหนังสือให้สถานประกอบการ"
+        confirmLabel="ยืนยันส่ง"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="company-mail-confirm"
+        cancelTestId="company-mail-confirm-cancel"
+        busy={sendingCompanyMail}
+        onCancel={() => setConfirmingCompanyMail(false)}
+        onConfirm={() => activeIntent && submitCompanyMail(activeIntent.form_id, companyMailAddress)}
+        message={
+          <ConfirmSummary
+            lead="ระบบจะส่งอีเมลถึงที่อยู่นี้ทันที"
+            groups={[
+              {
+                rows: [
+                  { label: 'ส่งถึง', value: companyMailAddress },
+                  { label: 'สถานประกอบการ', value: activeIntent?.company_name_th ?? '' },
+                  { label: 'ไฟล์แนบ 1', value: 'หนังสือขอความอนุเคราะห์ (คณบดีลงนามแล้ว)' },
+                  { label: 'ไฟล์แนบ 2', value: 'แบบตอบรับ (เอกสารหมายเลข 2)' },
+                  { label: 'ตอบกลับไปที่', value: 'อีเมลมหาวิทยาลัยของท่าน' },
+                ],
+              },
+            ]}
+            lockNote={`ส่งแล้วยกเลิกไม่ได้ และนับเป็น 1 ใน ${companyMailLimit} ครั้ง (เหลือ ${companyMailLeft} ครั้ง)`}
+          />
+        }
+      />
       {selectedAnnouncement && announcementModal}
 
       {/* Co-op Calendar Modal */}

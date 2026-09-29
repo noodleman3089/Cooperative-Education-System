@@ -385,6 +385,13 @@ export interface IntentForm {
    * `null` = คณบดียังไม่ลงนาม = ยังส่งแบบตอบรับไม่ได้ (เซิร์ฟเวอร์ตอบ 409)
    */
   acceptance_due_date?: string | null;
+  /** นักศึกษาสั่งระบบส่งหนังสือ + แบบตอบรับถึงสถานประกอบการ (เฉพาะ `GET /students/dashboard`) */
+  company_mail_to?: string | null;
+  company_mail_sent_at?: string | null;
+  company_mail_count?: number;
+  company_mail_limit?: number;
+  /** อีเมลที่สถานประกอบการลงทะเบียนไว้ — ใช้เติมช่องกรอกตอนแรก */
+  company_email?: string | null;
   acceptance_submitted_late?: boolean;
   acceptance_signer_name?: string | null;
   acceptance_signer_position?: string | null;
