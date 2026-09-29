@@ -21,6 +21,7 @@ const OnboardingPersonnel = lazy(() => import('../pages/Staff/OnboardingPersonne
 const SetPassword = lazy(() => import('../pages/SetPassword'));
 const AppointmentResponse = lazy(() => import('../pages/Mentor/AppointmentResponse'));
 const JobOffer02Token = lazy(() => import('../pages/CompanyLink/JobOffer02Token'));
+const AcceptanceLink = lazy(() => import('../pages/CompanyLink/AcceptanceLink'));
 const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
 const MentorEvaluation = lazy(() => import('../pages/Mentor/MentorEvaluation'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
@@ -93,6 +94,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/appointment-response" element={<AppointmentResponse />} />
       <Route path="/offer" element={<JobOffer02Token />} />
+      <Route path="/accept" element={<AcceptanceLink />} />
 
       <Route
         path="/set-password"
