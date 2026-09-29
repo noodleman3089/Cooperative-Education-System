@@ -43,6 +43,14 @@ export function checkEnvironment(env: Env = process.env): EnvCheckResult {
       errors.push('ENABLE_TEST_ROUTES=true บน production — เส้นทางสำหรับทดสอบต้องปิด');
     }
 
+    // MAIL_DRY_RUN ทำให้ระบบ "ไม่ส่งอีเมลจริง" แต่ยังตอบนักศึกษาว่าส่งแล้ว — บน production
+    // แปลว่าหนังสือที่คณบดีลงนามไม่เคยถึงสถานประกอบการเลยโดยไม่มีใครรู้
+    if (env.MAIL_DRY_RUN === 'true') {
+      errors.push(
+        'MAIL_DRY_RUN=true บน production — ระบบจะไม่ส่งอีเมลจริงแต่ตอบผู้ใช้ว่าส่งสำเร็จ ต้องปิด'
+      );
+    }
+
     // SEC-08: cookie ถูกตั้ง Secure ตอน production เบราว์เซอร์จึงส่งกลับเฉพาะบน https
     // ถ้า FRONTEND_URL ยังเป็น http จะล็อกอินไม่ได้เลยแบบหาสาเหตุยาก
     if (env.FRONTEND_URL && !env.FRONTEND_URL.startsWith('https://')) {
@@ -97,6 +105,9 @@ export function checkEnvironment(env: Env = process.env): EnvCheckResult {
     }
     if (env.ENABLE_TEST_ROUTES === 'true') {
       warnings.push('ENABLE_TEST_ROUTES=true (โหมด dev) — ต้องปิดก่อนขึ้น production');
+    }
+    if (env.MAIL_DRY_RUN === 'true') {
+      warnings.push('MAIL_DRY_RUN=true (โหมด dev) — ระบบไม่ส่งอีเมลจริง ต้องปิดก่อนขึ้น production');
     }
   }
 

@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import path from 'path';
+import { buildAcceptanceFormPdf, AcceptanceFormData } from './acceptanceFormPdf';
 import { escapeHtml as esc } from '../middlewares/validation';
 import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
 import { JOB_OFFER_TOKEN_TTL_LABEL } from './jobOfferToken';
@@ -15,14 +17,19 @@ import { query } from '../config/database';
  */
 
 // Configure transporter
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
-  port: parseInt(process.env.SMTP_PORT || '2525', 10),
-  auth: {
-    user: process.env.SMTP_USER || 'mock_user',
-    pass: process.env.SMTP_PASS || 'mock_pass',
-  },
-});
+// MAIL_DRY_RUN=true → ไม่ออกเน็ตเลย (คืน JSON ของเมลแทน) ไว้ให้ E2E ส่งเมลทางสำเร็จได้
+// โดยไม่มีจดหมายจริงออกไป · production ห้ามเปิด (`config/validateEnv.ts` ปฏิเสธสตาร์ท)
+const transporter =
+  process.env.MAIL_DRY_RUN === 'true'
+    ? nodemailer.createTransport({ jsonTransport: true })
+    : nodemailer.createTransport({
+        host: process.env.SMTP_HOST || 'smtp.mailtrap.io',
+        port: parseInt(process.env.SMTP_PORT || '2525', 10),
+        auth: {
+          user: process.env.SMTP_USER || 'mock_user',
+          pass: process.env.SMTP_PASS || 'mock_pass',
+        },
+      });
 
 const SMTP_FROM = process.env.SMTP_FROM || 'coop-system@rmutto.ac.th';
 
@@ -33,6 +40,8 @@ const renderEmailHtml = (options: {
   content: string;
   highlightBox?: string;
   footnote?: string;
+  /** แทนบรรทัด "กรุณาอย่าตอบกลับอีเมลนี้" — ข้อความตายตัวของผู้เรียก ห้ามใส่ข้อมูลผู้ใช้ */
+  replyNote?: string;
 }) => {
   const theme = options.themeColor || '#1a73e8';
   return `
@@ -48,7 +57,7 @@ const renderEmailHtml = (options: {
       <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
       <p style="font-size: 0.85em; color: #888; text-align: center;">
         จดหมายข่าวส่งอัตโนมัติโดยระบบบริหารจัดการงานสหกิจศึกษา RMUTTO<br>
-        กรุณาอย่าตอบกลับอีเมลนี้
+        ${options.replyNote ?? 'กรุณาอย่าตอบกลับอีเมลนี้'}
       </p>
     </div>
   `;
@@ -192,62 +201,68 @@ export const sendPasswordSetNoticeEmail = async (
 };
 
 /**
- * Sends signed official document to company representative.
+ * นักศึกษาสั่งระบบส่งหนังสือขอความอนุเคราะห์ (ลงนามแล้ว) + แบบตอบรับ (เอกสารหมายเลข 2)
+ * ไปยังสถานประกอบการ — เรียกจาก `IntentFormController.sendCoverLetterToCompany`
+ *
+ * ⛔ **ไม่กลืน error** — ต่างจากฟังก์ชันส่งเมลอื่นในไฟล์นี้โดยตั้งใจ ถ้าส่งไม่ออกแล้วเงียบ
+ *    นักศึกษาจะเห็นว่า "ส่งแล้ว" ทั้งที่บริษัทไม่ได้รับอะไร · ปล่อยให้ controller ตอบ 502
+ * ⛔ เนื้อความเป็นแม่แบบตายตัว ไม่มีข้อความอิสระ · ทุกค่าที่แทรกในมาร์กอัปผ่าน `esc()`
+ *    (ชื่อบริษัทมาจากที่นักศึกษาพิมพ์) · `replyTo` = อีเมลมหาวิทยาลัยของนักศึกษา
+ *    บริษัทจึงตอบกลับถึงนักศึกษาโดยตรง
  */
-export const sendSignedDocumentEmail = async (
-  toEmail: string,
-  companyName: string,
-  documentType: string,
-  pdfFilePath: string,
-  inviteLink?: string
-): Promise<void> => {
-  const docTypeLabel = documentType === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
-  // companyName is student-supplied on a self-found placement.
-  const safeCompanyName = esc(companyName);
+export const sendCoverLetterToCompany = async (params: {
+  toEmail: string;
+  replyTo: string;
+  studentName: string;
+  studentCode?: string | null;
+  majorName: string;
+  companyName: string;
+  /** พาธของหนังสือที่ลงนามแล้ว (`official_documents.generated_file_path`) */
+  coverLetterPath: string;
+  acceptanceForm: AcceptanceFormData;
+}): Promise<void> => {
+  const absolutePath = path.isAbsolute(params.coverLetterPath)
+    ? params.coverLetterPath
+    : path.resolve(process.cwd(), params.coverLetterPath);
+  const acceptancePdf = await buildAcceptanceFormPdf(params.acceptanceForm);
 
-  let content = `
-    <p>มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) ขอจัดส่งเอกสารจดหมายราชการ <b>${docTypeLabel}</b> เพื่อขอความอนุเคราะห์นำนักศึกษาเข้ารับการฝึกปฏิบัติงานสหกิจศึกษา ณ สถานประกอบการของท่าน</p>
-    <p>รายละเอียดเอกสารตัวจริงที่ได้รับการลงนามอนุมัติอิเล็กทรอนิกส์โดยคณบดีอย่างเป็นทางการ ได้แนบมาพร้อมกับอีเมลฉบับนี้ในรูปแบบไฟล์ PDF เรียบร้อยแล้ว</p>
+  const studentLabel = params.studentCode
+    ? `${params.studentName} (รหัสนักศึกษา ${params.studentCode})`
+    : params.studentName;
+
+  const content = `
+    <p>เรียน ผู้เกี่ยวข้อง ${esc(params.companyName)}</p>
+    <p>มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) ขอความอนุเคราะห์รับนักศึกษาเข้าฝึกปฏิบัติงานสหกิจศึกษา
+       โดย <b>${esc(studentLabel)}</b> สาขาวิชา ${esc(params.majorName)}
+       เป็นผู้ประสานงานและส่งเอกสารฉบับนี้ถึงท่านด้วยตนเองผ่านระบบงานสหกิจศึกษา</p>
+    <p>ได้แนบเอกสารมาพร้อมอีเมลนี้ 2 ฉบับ</p>
+    <ol>
+      <li>หนังสือขอความอนุเคราะห์รับนักศึกษาสหกิจศึกษา (ลงนามโดยคณบดีแล้ว)</li>
+      <li>แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา (เอกสารหมายเลข ๒)</li>
+    </ol>
+    <p>ขอความกรุณาท่านกรอกและลงนามพร้อมประทับตราในแบบยืนยันแบบตอบรับ (เอกสารหมายเลข ๒)
+       ภายใน ๑๕ วันทำการหลังจากได้รับหนังสือฯ แล้วส่งกลับมายังนักศึกษาโดยตรง
+       (ตอบกลับอีเมลฉบับนี้ได้เลย ข้อความจะถึงนักศึกษา)</p>
+    <p>ขอบพระคุณเป็นอย่างสูงมา ณ โอกาสนี้</p>
   `;
 
-  // A newly opened account gets an invitation link instead of a password.
-  if (inviteLink) {
-    content += `<p>นอกจากนี้ ระบบได้เปิดบัญชีเข้าใช้งานให้สถานประกอบการของท่าน (<b>${esc(toEmail)}</b>) เพื่อเข้าตรวจสอบ ติดตาม และตอบรับกระบวนการสหกิจศึกษา กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง:</p>`;
-    content += inviteCallToAction(inviteLink, '#2563eb');
-  } else {
-    content += `<p>ท่านสามารถเข้าสู่ระบบที่ <a href="${companyLoginUrl()}" style="color: #2563eb;">หน้าเข้าสู่ระบบสถานประกอบการ</a> เพื่อดำเนินการตอบรับนักศึกษา หรือตรวจสอบรายละเอียดตำแหน่งงาน</p>`;
-  }
-
-  content += `<p>หากมีข้อสงสัยกรุณาติดต่อประสานงานกลับมายังงานสหกิจศึกษาคณะ</p>`;
-
-  const mailOptions = {
+  await transporter.sendMail({
     from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
-    to: toEmail,
-    subject: `ส่งเอกสารทางการเรียนเชิญปฏิบัติงานสหกิจศึกษา - ${companyName}`,
+    to: params.toEmail,
+    replyTo: params.replyTo,
+    subject: `หนังสือขอความอนุเคราะห์รับนักศึกษาสหกิจศึกษา - ${params.companyName}`,
     html: renderEmailHtml({
-      title: `สวัสดีครับ/ค่ะ ตัวแทน ${safeCompanyName}`,
+      title: 'ขอความอนุเคราะห์รับนักศึกษาสหกิจศึกษา',
       themeColor: '#1a73e8',
       content,
-      footnote: inviteLink ? inviteFootnote(companyLoginUrl()) : undefined
+      replyNote: 'หากต้องการตอบกลับ ตอบกลับอีเมลนี้ได้โดยตรง ข้อความจะถึงนักศึกษาผู้ส่ง',
     }),
     attachments: [
-      {
-        filename: `${documentType}_signed.pdf`,
-        path: pdfFilePath,
-      }
-    ]
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Signed document email with PDF attachment successfully sent to: ${toEmail}`);
-  } catch (err: unknown) {
-    const error = err as { message?: string; response?: string };
-    console.error('========================================================');
-    console.error(`FAILED TO SEND SIGNED DOCUMENT EMAIL to ${toEmail}: ${error?.message || err}`);
-    if (error?.response) console.error(`SMTP Response: ${error.response}`);
-    console.error('========================================================');
-  }
+      { filename: 'cover-letter-signed.pdf', path: absolutePath },
+      { filename: 'acceptance-form.pdf', content: acceptancePdf, contentType: 'application/pdf' },
+    ],
+  });
+  console.log(`[Email] Cover letter + acceptance form sent to company address by student`);
 };
 
 /**
@@ -511,7 +526,11 @@ export const notifyStudentStatusChangeByDocId = async (
       statusLabel = 'คณบดีลงนามเอกสารเรียบร้อยแล้ว';
       detailsHtml = `
         <p>เอกสารราชการ <b>${docTypeLabel}</b> สำหรับการฝึกงานของคุณที่ <b>${safeCompanyName}</b> ได้รับการ<b>ลงนามอนุมัติอิเล็กทรอนิกส์โดยคณบดี</b>เป็นที่เรียบร้อยแล้ว</p>
-        <p>ระบบได้ส่งเอกสารดังกล่าวไปยังอีเมลผู้ติดต่อของสถานประกอบการเรียบร้อยแล้ว และคุณสามารถเข้าไปดาวน์โหลดเอกสาร PDF ดังกล่าวได้จากหน้าแดชบอร์ดนักศึกษาของคุณ</p>
+        <p>คุณสามารถเข้าไปดาวน์โหลดเอกสาร PDF ดังกล่าวได้จากหน้าแดชบอร์ดนักศึกษาของคุณ${
+          doc_type === 'cover_letter'
+            ? ' และส่งหนังสือพร้อมแบบตอบรับให้สถานประกอบการเองได้จากหน้าแดชบอร์ดเช่นกัน'
+            : ''
+        }</p>
       `;
     } else {
       statusLabel = status.replace(/_/g, ' ');

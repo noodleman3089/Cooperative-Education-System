@@ -1,10 +1,15 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { IntentFormModel, COMPANY_VISIBLE_STATUSES, LateStamp } from '../models/intent';
+import {
+  IntentFormModel,
+  COMPANY_MAIL_LIMIT,
+  COMPANY_VISIBLE_STATUSES,
+  LateStamp,
+} from '../models/intent';
 import { isLateWindow } from '../middlewares/calendarGate';
 import pool, { query } from '../config/database';
-import { notifyStudentStatusChange } from '../utils/email';
+import { notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
 import {
   assertCanAccessStudent,
   assertCanReviewStudentWork,
@@ -30,6 +35,9 @@ import { sendUnexpectedError } from '../utils/httpError';
 
 /** ความยาวขั้นต่ำของเหตุผลการส่งช้า — กติกาหน้าจอ ไม่ใช่ข้อบังคับของฐาน */
 const LATE_REASON_MIN_LENGTH = 20;
+
+/** อีเมลหนึ่งที่อยู่ล้วน — ไม่รับรูปแบบ "ชื่อ <a@b.c>" หรืออักขระที่ใช้ต่อหลายที่อยู่ */
+const SINGLE_EMAIL_REGEX = /^[^\s@,;<>()"[\]\\]+@[^\s@,;<>()"[\]\\]+\.[^\s@,;<>()"[\]\\]+$/;
 
 export class IntentFormController {
   /**
@@ -1049,6 +1057,193 @@ export class IntentFormController {
         error,
         'Get Acceptance Form Error',
         'เกิดข้อผิดพลาดขณะสร้างแบบตอบรับ'
+      );
+    }
+  }
+
+  /**
+   * นักศึกษาสั่งระบบส่งหนังสือขอความอนุเคราะห์ (ลงนามแล้ว) + แบบตอบรับ (เอกสารหมายเลข ๒)
+   * ไปยังอีเมลสถานประกอบการที่พิมพ์เอง
+   * Route: POST /api/intents/:id/send-to-company
+   * Access: student เจ้าของใบเท่านั้น
+   *
+   * ⛔ นี่คือช่องที่ให้ผู้ใช้สั่งระบบส่งเอกสารที่คณบดีลงนามจากโดเมนมหาวิทยาลัยไปที่อยู่ใดก็ได้
+   *    จึงต้องมีด่านครบตามลำดับ: เจ้าของใบ → หนังสือ signed → สถานะใบ → ที่อยู่เดียวที่รูปแบบถูก
+   *    → เพดาน COMPANY_MAIL_LIMIT ครั้งต่อใบ
+   * ⛔ ไม่ตรวจว่าอีเมลเป็นของบริษัทจริง (ระบบไม่มีทางรู้) · ไม่ผูกปฏิทินกิจกรรม (ไม่ใช่การยื่นเอกสาร)
+   * ⛔ เพดานจองที่ก่อนส่ง (นับ +1 ด้วย UPDATE เดียวที่มีเงื่อนไข `< limit` — แถวถูกล็อกจึงกันกดรัว
+   *    สองแท็บได้เทียบเท่า SELECT … FOR UPDATE) แล้วไม่ถือล็อกระหว่างรอ SMTP · ส่งล้ม = คืนที่ (−1)
+   *    และไม่ตั้ง sent_at/to
+   */
+  static async sendCoverLetterToCompany(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const result = await query(
+        `SELECT i.student_id, i.status, i.officer_document_no,
+                s.first_name, s.last_name, s.student_code,
+                u.email AS student_email,
+                mj.major_name_th, f.faculty_name_th,
+                c.name_th AS company_name,
+                doc.status AS cover_letter_status,
+                doc.generated_file_path AS cover_letter_path
+           FROM intent_forms i
+           JOIN students s        ON i.student_id = s.student_id
+           JOIN users u           ON s.student_id = u.user_id
+           JOIN master_major mj   ON s.major_id = mj.major_id
+           JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
+           JOIN companies c       ON i.company_id = c.company_id
+           LEFT JOIN LATERAL (
+             SELECT d.status, d.generated_file_path
+               FROM official_documents d
+              WHERE d.student_id = i.student_id
+                AND d.company_id = i.company_id
+                AND d.type = 'cover_letter'
+                AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+              ORDER BY d.doc_id DESC
+              LIMIT 1
+           ) doc ON TRUE
+          WHERE i.form_id = $1`,
+        [formId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
+        return;
+      }
+
+      const row = result.rows[0];
+
+      if (row.student_id !== req.user.userId) {
+        res.status(403).json({ message: 'คุณส่งหนังสือได้เฉพาะใบคำร้องของตัวเองเท่านั้น' });
+        return;
+      }
+
+      if (row.cover_letter_status !== 'signed' || !row.cover_letter_path) {
+        res.status(409).json({
+          message:
+            'ยังส่งหนังสือให้สถานประกอบการไม่ได้ เพราะคณบดียังไม่ลงนามหนังสือขอความอนุเคราะห์ของใบนี้',
+        });
+        return;
+      }
+
+      if (row.status !== 'approved_by_dept_head') {
+        res.status(409).json({
+          message:
+            'ส่งหนังสือให้สถานประกอบการได้เฉพาะช่วงที่ใบคำร้องอยู่ในขั้นรอสถานประกอบการตอบรับ ใบนี้เลยขั้นนั้นแล้วหรือถูกปฏิเสธ จึงส่งอีกไม่ได้',
+        });
+        return;
+      }
+
+      // ที่อยู่เดียวเท่านั้น — ห้าม , ; ช่องว่าง ขึ้นบรรทัดใหม่ (กัน header injection และกันส่งเป็นชุด)
+      const companyEmail =
+        typeof req.body?.company_email === 'string' ? req.body.company_email.trim() : '';
+      if (
+        !companyEmail ||
+        companyEmail.length > 254 ||
+        /[,;\s]/.test(companyEmail) ||
+        !SINGLE_EMAIL_REGEX.test(companyEmail)
+      ) {
+        res.status(400).json({
+          message:
+            'อีเมลสถานประกอบการไม่ถูกต้อง กรุณากรอกอีเมลเพียงหนึ่งที่อยู่ (ห้ามใส่หลายที่อยู่หรือเว้นวรรค) และไม่ยาวเกิน 254 ตัวอักษร',
+        });
+        return;
+      }
+
+      // จองที่ก่อนส่ง — UPDATE เดียวที่เช็คเพดานในตัว จึงไม่มีช่องให้สองคำขอลอดพร้อมกัน
+      const reserved = await query(
+        `UPDATE intent_forms
+            SET company_mail_count = company_mail_count + 1
+          WHERE form_id = $1 AND company_mail_count < $2
+          RETURNING company_mail_count`,
+        [formId, COMPANY_MAIL_LIMIT]
+      );
+      if ((reserved.rowCount ?? 0) === 0) {
+        res.status(429).json({
+          message: `ส่งหนังสือให้สถานประกอบการครบ ${COMPANY_MAIL_LIMIT} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ หากที่อยู่ไม่ถูกต้องให้ติดต่อเจ้าหน้าที่`,
+        });
+        return;
+      }
+
+      try {
+        await sendCoverLetterToCompany({
+          toEmail: companyEmail,
+          replyTo: row.student_email,
+          studentName: `${row.first_name ?? ''} ${row.last_name ?? ''}`.trim() || 'นักศึกษา',
+          studentCode: row.student_code,
+          majorName: (row.major_name_th ?? '').replace(/^สาขาวิชา\s*/, '') || '-',
+          companyName: row.company_name ?? '',
+          coverLetterPath: row.cover_letter_path,
+          acceptanceForm: {
+            faculty_name_th: row.faculty_name_th,
+            company_name: row.company_name,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            major_name_th: row.major_name_th,
+            dispatch_document_no: null,
+          },
+        });
+      } catch (sendError) {
+        console.error(`[Email] Send cover letter to company failed for intent ${formId}:`, sendError);
+        // คืนที่ที่จองไว้ — ส่งไม่สำเร็จต้องไม่ถูกนับ
+        await query(
+          `UPDATE intent_forms
+              SET company_mail_count = GREATEST(company_mail_count - 1, 0)
+            WHERE form_id = $1`,
+          [formId]
+        ).catch((releaseError) =>
+          console.error(`[Email] Failed to release mail quota for intent ${formId}:`, releaseError)
+        );
+        res.status(502).json({
+          message:
+            'ส่งอีเมลไม่สำเร็จ ระบบยังไม่ได้ส่งเอกสารถึงสถานประกอบการและยังไม่นับเป็นการส่ง กรุณาตรวจสอบอีเมลที่กรอกแล้วลองใหม่อีกครั้ง',
+        });
+        return;
+      }
+
+      const sent = await query(
+        `UPDATE intent_forms
+            SET company_mail_to = $2, company_mail_sent_at = NOW()
+          WHERE form_id = $1
+          RETURNING company_mail_to, company_mail_sent_at, company_mail_count`,
+        [formId, companyEmail]
+      );
+      const saved = sent.rows[0];
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_COVER_LETTER_EMAILED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: row.student_id,
+          detail: { to: companyEmail },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: 'ส่งหนังสือขอความอนุเคราะห์และแบบตอบรับถึงสถานประกอบการเรียบร้อยแล้ว',
+        company_mail_to: saved.company_mail_to,
+        company_mail_sent_at: saved.company_mail_sent_at,
+        company_mail_count: saved.company_mail_count,
+        company_mail_limit: COMPANY_MAIL_LIMIT,
+      });
+    } catch (error) {
+      sendUnexpectedError(
+        res,
+        error,
+        'Send Cover Letter To Company Error',
+        'เกิดข้อผิดพลาดขณะส่งหนังสือให้สถานประกอบการ'
       );
     }
   }

@@ -28,6 +28,7 @@ export const AuditAction = {
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',
   INTENT_OFFICER_APPROVED: 'intent.officer_approved',
   INTENT_OFFICER_REJECTED: 'intent.officer_rejected',
+  INTENT_COVER_LETTER_EMAILED: 'intent.cover_letter_emailed',
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',

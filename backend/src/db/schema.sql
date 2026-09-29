@@ -546,6 +546,11 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     acceptance_signer_name VARCHAR(255),
     acceptance_signer_position VARCHAR(255),
     acceptance_signed_date DATE,
+    -- นักศึกษาสั่งระบบส่งหนังสือขอความอนุเคราะห์ + แบบตอบรับถึงสถานประกอบการ
+    -- เก็บที่อยู่ล่าสุด · เวลาส่งล่าสุด · จำนวนครั้ง (เพดาน 3 ครั้ง/ใบ) — ประวัติทุกครั้งอยู่ใน audit_log
+    company_mail_to VARCHAR(254),
+    company_mail_sent_at TIMESTAMPTZ,
+    company_mail_count INT NOT NULL DEFAULT 0,
     -- หนังสือส่งตัว (ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ) — ออกหลังเจ้าหน้าที่รับแบบตอบรับแล้ว
     -- ⛔ เลขนี้ต้องถูกพิมพ์กลับลงช่อง "ส่วนของเจ้าหน้าที่ฯ" ของเอกสารหมายเลข ๒
     --    ซึ่งวาดสดจาก intent_forms ล้วน จึงเก็บที่นี่ด้วย ไม่ใช่แค่ official_documents

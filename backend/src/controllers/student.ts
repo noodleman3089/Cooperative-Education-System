@@ -10,7 +10,7 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { COMPANY_VISIBLE_STATUSES, IntentFormModel } from '../models/intent';
+import { COMPANY_MAIL_LIMIT, COMPANY_VISIBLE_STATUSES, IntentFormModel } from '../models/intent';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
@@ -92,6 +92,8 @@ export class StudentController {
                   i.job_id, j.title as job_title, i.status, i.start_date, i.acceptance_evidence_path,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
+                  i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
+                  c.email AS company_email,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
                   m.position as mentor_position, m.department as mentor_department
            FROM intent_forms i
@@ -126,6 +128,13 @@ export class StudentController {
             submitted_late: row.submitted_late,
             acceptance_due_date: row.acceptance_due_date,
             acceptance_submitted_late: row.acceptance_submitted_late,
+            // ส่งหนังสือ+แบบตอบรับถึงสถานประกอบการเอง · `company_email` ไว้เติมช่องอีเมลครั้งแรก
+            // (ส่งเฉพาะอีเมล ไม่ขยายฟิลด์บริษัทอื่น — SEC-10)
+            company_mail_to: row.company_mail_to,
+            company_mail_sent_at: row.company_mail_sent_at,
+            company_mail_count: row.company_mail_count,
+            company_mail_limit: COMPANY_MAIL_LIMIT,
+            company_email: row.company_email,
             // ชื่อผู้ลงนามแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — null = นักศึกษาต้องกรอกตอนอัปโหลด
             request_signers: await IntentFormModel.resolveRequestSigners(userId),
             mentor: row.mentor_id ? {

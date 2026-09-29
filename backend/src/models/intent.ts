@@ -34,6 +34,8 @@ export const COMPANY_VISIBLE_STATUSES = [
   'accepted',
   'company_rejected',
 ];
+/** นักศึกษาสั่งระบบส่งหนังสือ+แบบตอบรับถึงสถานประกอบการได้กี่ครั้งต่อใบ (`company_mail_count`) */
+export const COMPANY_MAIL_LIMIT = 3;
 export const STUDENT_ACCEPT_FROM = ['approved_by_dept_head', 'pending_sign', 'signed', 'pending_acceptance'];
 /** A student may report a failed interview any time before the placement is final. */
 export const STUDENT_FAIL_FROM = [

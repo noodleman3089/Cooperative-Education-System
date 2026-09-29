@@ -50,6 +50,8 @@ export default defineConfig({
     {
       command: 'npm.cmd --prefix backend run dev',
       url: `${SERVER_URL}/api/master-data`,
+      // E2E ต้องไม่ส่งอีเมลจริงเด็ดขาด — backend/.env ในเครื่องนี้ชี้ไป Gmail จริง
+      env: { MAIL_DRY_RUN: 'true' },
       reuseExistingServer: true,
       timeout: 120 * 1000,
     },

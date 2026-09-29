@@ -107,6 +107,15 @@ router.get('/:id/request-form', IntentFormController.getRequestForm);
 // ไม่ระบุ role ด้วยเหตุผลเดียวกับ request-form ด้านบน
 router.get('/:id/acceptance-form', IntentFormController.getAcceptanceForm);
 
+// Route: POST /api/intents/:id/send-to-company
+// นักศึกษาสั่งระบบส่งหนังสือขอความอนุเคราะห์ (ลงนามแล้ว) + แบบตอบรับถึงอีเมลสถานประกอบการ
+// ⛔ ไม่ผูกปฏิทินกิจกรรม (`requireCalendarWindow`) — การส่งอีเมลไม่ใช่การยื่นเอกสาร
+router.post(
+  '/:id/send-to-company',
+  authorizeRoles('student'),
+  IntentFormController.sendCoverLetterToCompany
+);
+
 // Route: PATCH /api/intents/:id/daily-log-required (พี่เลี้ยงเปิด/ปิดการบันทึกรายวัน สหกิจ 08)
 // ⛔ role `mentor` เท่านั้น — นักศึกษาปิดเองไม่ได้ เพราะเป็นการยกเลิกภาระงานของตัวเอง
 router.patch(
