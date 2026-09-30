@@ -115,14 +115,24 @@ export class AcceptanceController {
    * Access: student
    */
   static async acceptByStudent(req: Request, res: Response): Promise<void> {
+    // multer เขียนไฟล์ลงดิสก์ไปแล้วก่อนถึงตรงนี้ — ล้มตรงไหนหลังจากนี้ต้องลบทิ้ง ไม่งั้นค้างเป็นไฟล์กำพร้า
+    // (แบบเดียวกับ discardFile ของทางลิงก์ใน publicAcceptance.ts) · สำเร็จแล้วไฟล์เป็นของใบ ห้ามลบ
+    const file = req.file;
+    const discardFile = () => {
+      if (file) {
+        fs.promises.unlink(file.path).catch((e) => console.error('[Acceptance] cannot remove rejected upload:', e));
+      }
+    };
     try {
       if (!req.user) {
+        discardFile();
         res.status(401).json({ message: 'Unauthorized. Please log in.' });
         return;
       }
 
       const intentId = parseInt(req.params.intent_id, 10);
       if (isNaN(intentId)) {
+        discardFile();
         res.status(400).json({ message: 'Invalid intent form ID format.' });
         return;
       }
@@ -139,6 +149,7 @@ export class AcceptanceController {
         signer: req.body as Record<string, unknown>,
       });
       if (!input.ok) {
+        discardFile();
         res.status(input.status).json({ message: input.message });
         return;
       }
@@ -168,6 +179,7 @@ export class AcceptanceController {
         intentForm: updatedIntent,
       });
     } catch (error) {
+      discardFile();
       console.error('Student Accept Error:', error);
       res.status(400).json({
         message: getErrorMessage(error, 'An error occurred while submitting student acceptance.'),
@@ -378,12 +390,16 @@ export class AcceptanceController {
         );
         const previousPath: string | null = previous.rows[0]?.acceptance_evidence_path ?? null;
 
+        // company_mail_count = 0: ตีกลับแล้วนักศึกษาต้องส่งลิงก์ให้บริษัทใหม่ได้ครบ 3 ครั้งอีกรอบ (SEC-13 ด่าน 5)
+        // ไม่งั้นใบที่ถูกตีกลับหลายรอบโดนโควตาเดิมกิน (429 ทั้งที่ไม่ได้ทำผิด) · รีเซ็ตตรงนี้ปลอดภัย
+        // เพราะการตีกลับมีคนกดทุกครั้ง นักศึกษาใช้เป็นช่องส่งเมลซ้ำไม่ได้
         await client.query(
           `UPDATE intent_forms
               SET status = 'approved_by_dept_head', reject_reason = $2,
                   acceptance_evidence_path = NULL, acceptance_signer_name = NULL,
                   acceptance_signer_position = NULL, acceptance_signed_date = NULL,
-                  acceptance_source = NULL, company_form07_pending = NULL
+                  acceptance_source = NULL, company_form07_pending = NULL,
+                  company_mail_count = 0
             WHERE form_id = $1`,
           [intentId, reason]
         );

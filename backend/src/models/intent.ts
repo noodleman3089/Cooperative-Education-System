@@ -706,7 +706,9 @@ export class IntentFormModel {
 
         const mentorProfile = mentorProfileCheck.rows[0];
         if (mentorProfile.company_id !== intent.company_id) {
-          throw new Error('This mentor email is already registered under a different company.');
+          throw new Error(
+            'อีเมลนี้เป็นพี่เลี้ยงของสถานประกอบการอื่นอยู่แล้ว กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการนี้โดยตรง'
+          );
         }
       }
 
@@ -1005,7 +1007,9 @@ export class IntentFormModel {
 
       const mentorProfile = mentorProfileCheck.rows[0];
       if (mentorProfile.company_id !== intent.company_id) {
-        throw new Error('This mentor email is already registered under a different company.');
+        throw new Error(
+          'อีเมลนี้เป็นพี่เลี้ยงของสถานประกอบการอื่นอยู่แล้ว กรุณาใช้อีเมลของพี่เลี้ยงที่สถานประกอบการนี้โดยตรง'
+        );
       }
     }
 

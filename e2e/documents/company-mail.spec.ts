@@ -285,6 +285,51 @@ test.describe('นักศึกษาส่งหนังสือให้�
     expect(await mailState(formId)).toEqual(third);
   });
 
+  // รายการ (ฉ) ใน known_issues — ตีกลับแล้วนักศึกษาต้องส่งให้บริษัทใหม่ได้ครบ 3 ครั้งอีกรอบ
+  // (รีเซ็ตนับตอน "เจ้าหน้าที่ตีกลับ" เท่านั้น — มีคนกดทุกครั้ง จึงใช้เป็นช่องส่งเมลซ้ำไม่ได้)
+  test('M5b: เจ้าหน้าที่ตีกลับแบบตอบรับ → company_mail_count กลับเป็น 0 และส่งใหม่ได้', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToSigned(request, formId);
+
+    const today = (await dbValue<string>(
+      `SELECT (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text`
+    )) as string;
+    await apiLoginAs(request, 'student2');
+    const upload = await request.post(`${API_URL}/acceptances/student/${formId}/upload-proof`, {
+      multipart: {
+        evidence: {
+          name: 'acceptance.pdf',
+          mimeType: 'application/pdf',
+          buffer: fs.readFileSync(path.resolve(__dirname, '../fixtures/mock_official_letter.pdf')),
+        },
+        ...MENTOR,
+        signer_name: 'คุณสมชาย ทรงชัย',
+        signer_position: 'ผู้จัดการฝ่ายบุคคล',
+        signed_date: today,
+      },
+    });
+    expect(upload.status(), await upload.text()).toBe(200);
+
+    // จำลองว่านักศึกษาใช้โควตาหมดแล้ว
+    await dbExec('UPDATE intent_forms SET company_mail_count = 3 WHERE form_id = $1', [formId]);
+    expect((await mailState(formId)).count).toBe(3);
+
+    await apiLoginAs(request, 'staff1');
+    const returned = await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, {
+      data: { action: 'rejected', reason: 'ลายเซ็นบนแบบตอบรับไม่ชัด' },
+    });
+    expect(returned.status(), await returned.text()).toBe(200);
+    expect((await mailState(formId)).count).toBe(0);
+
+    await apiLoginAs(request, 'student2');
+    const resend = await sendMail(request, formId, { company_email: 'hr-resend@example.com' });
+    expect(resend.status(), await resend.text()).toBe(200);
+    expect((await resend.json()).company_mail_count).toBe(1);
+  });
+
   test('M6: สถานะใบไม่ใช่ approved_by_dept_head (accepted / company_rejected / rejected) → 409', async ({
     request,
   }) => {

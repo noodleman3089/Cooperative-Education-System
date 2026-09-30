@@ -52,7 +52,7 @@ async function seedIntent(dueOffset: number | null): Promise<number> {
 
     const res = await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, status, acceptance_due_date)
-       VALUES ($1, $2, $3, 'signed',
+       VALUES ($1, $2, $3, 'approved_by_dept_head',
                CASE WHEN $4::int IS NULL THEN NULL
                     ELSE (NOW() AT TIME ZONE 'Asia/Bangkok')::date + $4::int END)
        RETURNING form_id`,
@@ -107,7 +107,7 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
 
     // สถานะต้องไม่ขยับ
     expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(
-      'signed'
+      'approved_by_dept_head'
     );
   });
 
@@ -180,7 +180,7 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     expect(partial.status()).toBe(400);
 
     expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(
-      'signed'
+      'approved_by_dept_head'
     );
   });
 
@@ -190,6 +190,26 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     const future = await uploadAcceptance(request, formId, { signed_date: '2099-01-01' });
     expect(future.status()).toBe(400);
     expect((await future.json()).message as string).toContain('อนาคต');
+  });
+
+  // รายการ (ก) ใน known_issues — multer เขียนไฟล์ไปแล้วก่อนตรวจช่อง ล้มแล้วต้องลบทิ้ง (ทางลิงก์ทำอยู่แล้ว L5/L9)
+  test('B6b: นักศึกษาส่งไฟล์แต่กรอกผู้ลงนามไม่ครบ → 400 และไม่มีไฟล์กำพร้าค้างบนดิสก์', async ({
+    request,
+  }) => {
+    const formId = await seedIntent(5);
+    const evidenceDir = path.resolve(__dirname, '../../backend/uploads/acceptance_evidence');
+    const countFiles = () => fs.readdirSync(evidenceDir).length;
+    const before = countFiles();
+
+    await apiLoginAs(request, 'student2');
+    const bare = await uploadAcceptance(request, formId, null);
+    expect(bare.status()).toBe(400);
+
+    // ลบไฟล์ทำหลังส่งคำตอบได้ (unlink แบบ async) — รอให้นิ่งก่อนเทียบ
+    await expect.poll(countFiles).toBe(before);
+    expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(
+      'approved_by_dept_head'
+    );
   });
 
   test('B7: ผู้ลงนามที่นักศึกษากรอกถูกเก็บ · เจ้าหน้าที่กดรับได้เลย และชื่อที่เจ้าหน้าที่ส่งมาถูกเมิน', async ({
@@ -251,9 +271,6 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     page,
   }) => {
     await seedIntent(5);
-    // `signed` ที่ seedIntent ใช้ไม่ใช่สถานะจริงของใบความจำนง — การ์ดสถานะบนแดชบอร์ด (2026-09-29)
-    // เลือกเนื้อหาจากสถานะจริง (คณบดีลงนามแล้ว = approved_by_dept_head) จึงต้องตั้งให้ตรง
-    await dbExec("UPDATE intent_forms SET status = 'approved_by_dept_head'");
     await loginAs(page, 'student2');
     await expect(page.getByTestId('acceptance-due')).toContainText('ครบกำหนดตอบกลับโดยประมาณ');
 

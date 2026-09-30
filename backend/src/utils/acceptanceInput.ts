@@ -62,12 +62,21 @@ export async function validateAcceptanceInput(
   const gate = await query(
     `SELECT i.acceptance_due_date::text AS due,
             (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
-            (SELECT d.dean_signature_date::date::text
-               FROM official_documents d
-              WHERE d.student_id = i.student_id AND d.company_id = i.company_id
-                AND d.type = 'cover_letter' AND d.status = 'signed'
-              ORDER BY d.doc_id DESC LIMIT 1) AS letter_signed_on
-       FROM intent_forms i WHERE i.form_id = $1`,
+            doc.signed_on AS letter_signed_on
+       FROM intent_forms i
+       -- LATERAL เดียวกับ SEC-13 ด่าน 2 / ด่านลิงก์ (เทียบ officer_document_no) — ห้ามอ่านวันลงนามจากที่อื่น
+       LEFT JOIN LATERAL (
+         SELECT d.dean_signature_date::date::text AS signed_on
+           FROM official_documents d
+          WHERE d.student_id = i.student_id
+            AND d.company_id = i.company_id
+            AND d.type = 'cover_letter'
+            AND d.status = 'signed'
+            AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+          ORDER BY d.doc_id DESC
+          LIMIT 1
+       ) doc ON TRUE
+      WHERE i.form_id = $1`,
     [formId]
   );
   if ((gate.rowCount ?? 0) === 0) return fail(404, 'ไม่พบใบแจ้งความจำนงที่ต้องการ');

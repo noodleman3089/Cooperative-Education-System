@@ -102,7 +102,10 @@ const evidenceStorage = multer.diskStorage({
     cb(null, EVIDENCES_DIR);
   },
   filename: (req, file, cb) => {
-    const userId = req.user?.userId || 'unknown';
+    // คำนำหน้า `evidence-user-<id>-` คือสิ่งที่ `/api/files/acceptance_evidence/:filename` ใช้ตัดสินว่าใครเป็นเจ้าของไฟล์
+    // · ทางลิงก์ของบริษัทไม่มี req.user — ใช้ id นักศึกษาเจ้าของใบจากด่าน token (`acceptanceTokenGate` ตั้งไว้ก่อน multer)
+    //   นักศึกษาคนนั้นจึงเปิดไฟล์ที่บริษัทแนบมาได้ คนอื่นยังโดน 403 · ไม่ได้ให้สิทธิ์เพิ่มแก่ใคร
+    const userId = req.user?.userId || req.res?.locals?.acceptanceLink?.student_id || 'unknown';
     const cleanOrigName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, '_');
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, `evidence-user-${userId}-${uniqueSuffix}${path.extname(cleanOrigName)}`);

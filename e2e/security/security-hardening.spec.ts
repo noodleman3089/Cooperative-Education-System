@@ -117,7 +117,7 @@ test.describe('Security hardening regressions', () => {
       await client.query('DELETE FROM intent_forms WHERE student_id = 2');
       intentId = (await client.query(
         `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, 1, $1, 'signed') RETURNING form_id`,
+         VALUES (2, 1, $1, 'approved_by_dept_head') RETURNING form_id`,
         [semesterId]
       )).rows[0].form_id;
     } finally {
