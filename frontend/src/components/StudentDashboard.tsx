@@ -302,6 +302,8 @@ const StudentDashboard: React.FC = () => {
                 company_mail_sent_at: res.company_mail_sent_at,
                 company_mail_count: res.company_mail_count,
                 company_mail_limit: res.company_mail_limit,
+                // backend ล้าง reject_reason เมื่อส่งสำเร็จ — ล้างตามให้การ์ดออกจาก "ตีกลับ" ทันที ไม่ต้องรอ poll
+                reject_reason: null,
               },
             }
           : prev,
