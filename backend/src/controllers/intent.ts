@@ -1234,9 +1234,10 @@ export class IntentFormController {
         return;
       }
 
+      // reject_reason = NULL: นักศึกษาลงมือตามที่ถูกตีกลับแล้ว (ส่งใหม่สำเร็จ) — เหตุผลยังอยู่ใน audit_log จากการตัดสินของเจ้าหน้าที่
       const sent = await query(
         `UPDATE intent_forms
-            SET company_mail_to = $2, company_mail_sent_at = NOW()
+            SET company_mail_to = $2, company_mail_sent_at = NOW(), reject_reason = NULL
           WHERE form_id = $1
           RETURNING company_mail_to, company_mail_sent_at, company_mail_count`,
         [formId, companyEmail]

@@ -22,6 +22,26 @@ export function formatThaiDate(isoDate: string): string {
   return `${Number(day)} ${monthName} ${Number(year) + 543}`;
 }
 
+const BANGKOK_PARTS = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'Asia/Bangkok',
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+
+/**
+ * แปลง **timestamp** (คอลัมน์ TIMESTAMPTZ ที่ `pg` ส่งมาเป็น ISO เช่น `2026-09-30T17:30:00.000Z`)
+ * เป็น `1 ต.ค. 2569 00:30 น.` ตามเวลา Asia/Bangkok — ห้ามส่ง timestamp เข้า `formatThaiDate`
+ * (มันคาดรูป `YYYY-MM-DD` ได้ `NaN`) และห้ามตัด `.slice(0, 10)` เพราะวันเพี้ยนได้ถ้าเวลาข้ามเที่ยงคืนไทย
+ * ค่าที่อ่านไม่ออกคืนสตริงเดิม ไม่แต่งวันที่ให้เอง
+ */
+export function formatThaiDateTime(timestamp: string): string {
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return timestamp;
+  const p: Record<string, string> = {};
+  for (const part of BANGKOK_PARTS.formatToParts(parsed)) p[part.type] = part.value;
+  return `${formatThaiDate(`${p.year}-${p.month}-${p.day}`)} ${p.hour}:${p.minute} น.`;
+}
+
 /** ช่วงวันที่ — ยุบเหลือวันเดียวเมื่อเริ่มและจบวันเดียวกัน */
 export function formatThaiRange(start: string, end: string): string {
   if (start === end) return formatThaiDate(start);

@@ -19,7 +19,7 @@ import { Building2, CalendarDays, Pin, Upload, UserPen } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input } from './ui/Input';
 import CoopCalendarModal from './CoopCalendarModal';
-import { formatThaiDate } from '../utils/thaiDate';
+import { formatThaiDate, formatThaiDateTime } from '../utils/thaiDate';
 import type { CoopCalendarResponse } from '../types/api';
 
 /** ประกาศจากงานสหกิจ — ที่ปักหมุดจะขึ้นเป็นแบนเนอร์บนสุดของแดชบอร์ด */
@@ -983,7 +983,7 @@ const StudentDashboard: React.FC = () => {
 
         {intent.company_mail_sent_at && intent.company_mail_to && (
           <p data-testid="company-mail-status" className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">
-            ส่งถึง {intent.company_mail_to} เมื่อ {formatThaiDate(intent.company_mail_sent_at)}
+            ส่งถึง {intent.company_mail_to} เมื่อ {formatThaiDateTime(intent.company_mail_sent_at)}
             {companyMailLeft > 0 && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
           </p>
         )}
@@ -1236,7 +1236,8 @@ const StudentDashboard: React.FC = () => {
         <CoopNowCard
           phases={phases}
           deadline={
-            acceptanceDue
+            // ได้ที่ฝึกงานแล้ว = จบช่วงขอที่ฝึกงาน — กำหนดส่งหลักฐานตอบรับไม่เกี่ยวแล้ว ห้ามค้างอยู่ข้างขั้นที่พัก
+            acceptanceDue && !step1_5Done
               ? {
                   label: 'กำหนดส่งหลักฐานตอบรับ',
                   date: formatThaiDate(acceptanceDue.due),

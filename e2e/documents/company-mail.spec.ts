@@ -330,6 +330,59 @@ test.describe('นักศึกษาส่งหนังสือให้�
     expect((await resend.json()).company_mail_count).toBe(1);
   });
 
+  // เจ้าหน้าที่ตีกลับ (reject_reason ตั้ง) → นักศึกษาส่งใหม่สำเร็จ = ลงมือตามที่ถูกตีกลับแล้ว
+  // เหตุผลต้องถูกล้างจากแถว ไม่งั้นการ์ด "สิ่งที่ต้องทำตอนนี้" ค้างที่ "ต้องทำ" ทั้งที่ส่งไปแล้ว
+  test('M5c: ตีกลับแล้วส่งใหม่สำเร็จ → reject_reason เป็น NULL · การ์ดสถานะเปลี่ยนจาก returned เป็น wait-company', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToSigned(request, formId);
+
+    const today = (await dbValue<string>(
+      `SELECT (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text`
+    )) as string;
+    await apiLoginAs(request, 'student2');
+    const upload = await request.post(`${API_URL}/acceptances/student/${formId}/upload-proof`, {
+      multipart: {
+        evidence: {
+          name: 'acceptance.pdf',
+          mimeType: 'application/pdf',
+          buffer: fs.readFileSync(path.resolve(__dirname, '../fixtures/mock_official_letter.pdf')),
+        },
+        ...MENTOR,
+        signer_name: 'คุณสมชาย ทรงชัย',
+        signer_position: 'ผู้จัดการฝ่ายบุคคล',
+        signed_date: today,
+      },
+    });
+    expect(upload.status(), await upload.text()).toBe(200);
+
+    await apiLoginAs(request, 'staff1');
+    const returned = await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, {
+      data: { action: 'rejected', reason: 'ลายเซ็นบนแบบตอบรับไม่ชัด' },
+    });
+    expect(returned.status(), await returned.text()).toBe(200);
+    expect(
+      await dbValue<string>('SELECT reject_reason FROM intent_forms WHERE form_id = $1', [formId])
+    ).toBe('ลายเซ็นบนแบบตอบรับไม่ชัด');
+
+    // ก่อนส่งใหม่ — การ์ดอยู่ที่ "ต้องทำ"
+    await loginAs(page, 'student2');
+    await expect(page.getByTestId('status-card')).toHaveAttribute('data-state', 'returned');
+
+    await apiLoginAs(request, 'student2');
+    const resend = await sendMail(request, formId, { company_email: 'hr-resend@example.com' });
+    expect(resend.status(), await resend.text()).toBe(200);
+    expect(
+      await dbValue<string | null>('SELECT reject_reason FROM intent_forms WHERE form_id = $1', [formId])
+    ).toBeNull();
+
+    await page.reload();
+    await expect(page.getByTestId('status-card')).toHaveAttribute('data-state', 'wait-company');
+  });
+
   test('M6: สถานะใบไม่ใช่ approved_by_dept_head (accepted / company_rejected / rejected) → 409', async ({
     request,
   }) => {
@@ -460,6 +513,10 @@ test.describe('นักศึกษาส่งหนังสือให้�
     await page.getByTestId('company-mail-confirm').click();
 
     await expect(page.getByTestId('company-mail-status')).toContainText(`ส่งถึง ${companyMail}`);
+    // วันที่ส่งต้องเป็นวันที่ไทย พ.ศ. (เช่น "1 ต.ค. 2569") — เคยขึ้น "NaN" เพราะส่ง timestamp เข้า formatThaiDate
+    const statusText = (await page.getByTestId('company-mail-status').textContent()) ?? '';
+    expect(statusText).not.toContain('NaN');
+    expect(statusText).toMatch(/เมื่อ \d{1,2} (ม\.ค\.|ก\.พ\.|มี\.ค\.|เม\.ย\.|พ\.ค\.|มิ\.ย\.|ก\.ค\.|ส\.ค\.|ก\.ย\.|ต\.ค\.|พ\.ย\.|ธ\.ค\.) 25\d{2}/);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     const state = await mailState(formId);
     expect(state.count).toBe(1);

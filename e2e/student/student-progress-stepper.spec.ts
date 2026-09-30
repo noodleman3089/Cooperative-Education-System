@@ -28,8 +28,8 @@ async function acceptedStudent2(): Promise<Ctx> {
     const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [company.company_id]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, start_date)
-       VALUES ($1, $2, $3, $4, 'accepted', CURRENT_DATE)`,
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, start_date, acceptance_due_date)
+       VALUES ($1, $2, $3, $4, 'accepted', CURRENT_DATE, CURRENT_DATE + 21)`,
       [s.student_id, company.company_id, semester.rows[0].semester_id, job.rows[0]?.job_id ?? null]
     );
     // เฟส 1 ต้องจบครบจริง — ขั้น 1.4 อ่านจากหนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
@@ -46,6 +46,8 @@ async function acceptedStudent2(): Promise<Ctx> {
 async function expectNow(page: Page, title: string) {
   await page.reload();
   await expect(page.getByTestId('now-card').getByRole('heading', { level: 2 })).toHaveText(title);
+  // ใบมี acceptance_due_date แต่ได้ที่ฝึกงานแล้ว — กำหนดส่งหลักฐานตอบรับต้องไม่ค้างข้างขั้นถัดไป
+  await expect(page.getByTestId('now-card')).not.toContainText('กำหนดส่งหลักฐานตอบรับ');
   // ได้ที่ฝึกงานแล้ว = การ์ดสถานะของช่วงขอที่ฝึกงานต้องหายไป เหลือการ์ด "ทำอะไรตอนนี้" ใบเดียว
   await expect(page.getByTestId('status-card')).toHaveCount(0);
   await expect(page.getByTestId('request-progress')).toHaveCount(0);
