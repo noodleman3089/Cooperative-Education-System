@@ -4,6 +4,7 @@ import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
@@ -182,6 +183,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceRow | null>(null);
   const [acceptanceBusy, setAcceptanceBusy] = useState(false);
   const [rejectingAcceptance, setRejectingAcceptance] = useState(false);
+  const [confirmingAcceptanceApprove, setConfirmingAcceptanceApprove] = useState(false);
   const [acceptanceRejectReason, setAcceptanceRejectReason] = useState('');
 
   // Modal Review States - Dispatch
@@ -370,6 +372,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const openAcceptanceReview = (row: AcceptanceRow) => {
     setReviewingAcceptance(row);
     setRejectingAcceptance(false);
+    setConfirmingAcceptanceApprove(false);
     setAcceptanceRejectReason('');
     setError(null);
     setSuccess(null);
@@ -417,6 +420,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกผลการตรวจแบบตอบรับได้'));
     } finally {
       setAcceptanceBusy(false);
+      setConfirmingAcceptanceApprove(false);
     }
   };
 
@@ -1355,7 +1359,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                   size="sm"
                   loading={acceptanceBusy}
                   data-testid="acceptance-approve-submit"
-                  onClick={() => submitAcceptanceDecision('accepted')}
+                  onClick={() => setConfirmingAcceptanceApprove(true)}
                 >
                   รับแบบตอบรับ
                 </Button>
@@ -1512,6 +1516,38 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         busy={officerBusy}
         onConfirm={submitOfficerApprove}
         onCancel={() => setConfirmingApprove(false)}
+      />
+
+      {/* ══ ConfirmDialog สำหรับรับแบบตอบรับ — กดแล้วเปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญออกนอกระบบ ══ */}
+      <ConfirmDialog
+        open={confirmingAcceptanceApprove && !!reviewingAcceptance}
+        title="ยืนยันการรับแบบตอบรับ"
+        confirmLabel="ยืนยันรับแบบตอบรับ"
+        cancelLabel="กลับไปตรวจ"
+        confirmTestId="acceptance-approve-confirm"
+        cancelTestId="acceptance-approve-cancel"
+        busy={acceptanceBusy}
+        onCancel={() => setConfirmingAcceptanceApprove(false)}
+        onConfirm={() => submitAcceptanceDecision('accepted')}
+        message={
+          <ConfirmSummary
+            lead="ระบบจะเปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญออกไปนอกระบบทันที"
+            rows={[
+              {
+                label: 'นักศึกษา',
+                value: `${[reviewingAcceptance?.first_name, reviewingAcceptance?.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance?.student_code || '-'})`,
+              },
+              { label: 'สถานประกอบการ', value: reviewingAcceptance?.company_name_th ?? '' },
+              { label: 'พี่เลี้ยง', value: reviewingAcceptance?.mentor_name ?? '' },
+              { label: 'ส่งลิงก์เชิญไปที่อีเมล', value: reviewingAcceptance?.mentor_email ?? '' },
+            ]}
+            lockNote={
+              reviewingAcceptance?.company_form07_pending
+                ? 'ข้อมูลสถานประกอบการ (สหกิจ 07) ที่บริษัทกรอกจะถูกบันทึกลงทะเบียนสถานประกอบการด้วย · อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้'
+                : 'อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้'
+            }
+          />
+        }
       />
     </div>
   );

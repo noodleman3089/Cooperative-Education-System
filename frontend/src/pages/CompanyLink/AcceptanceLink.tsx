@@ -351,10 +351,10 @@ const AcceptanceLink: React.FC = () => {
             <Link2Off className="h-8 w-8" aria-hidden="true" />
           </div>
           <h1 className="text-xl font-semibold text-gray-900 dark:text-white">ลิงก์นี้ใช้งานไม่ได้แล้ว</h1>
-          {serverMessage && <p className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">{serverMessage}</p>}
-          <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
-            ลิงก์อาจใช้ตอบไปแล้ว หมดอายุ หรือถูกยกเลิกเมื่อนักศึกษาส่งลิงก์ใหม่
-            หากต้องการตอบหรือแก้ไขคำตอบ กรุณาติดต่อนักศึกษาหรืองานสหกิจศึกษา
+          {/* ข้อความจากเซิร์ฟเวอร์บอกสาเหตุเฉพาะอยู่แล้ว — ข้อความทั่วไปแสดงเมื่อไม่มีเท่านั้น ไม่งั้นอ่านซ้ำสองย่อหน้า */}
+          <p data-testid="al-gone-message" className="text-sm leading-relaxed text-gray-700 dark:text-gray-200">
+            {serverMessage ||
+              'ลิงก์อาจใช้ตอบไปแล้ว หมดอายุ หรือถูกยกเลิกเมื่อนักศึกษาส่งลิงก์ใหม่ หากต้องการตอบหรือแก้ไขคำตอบ กรุณาติดต่อนักศึกษาหรืองานสหกิจศึกษา'}
           </p>
         </div>
       </ResultShell>
@@ -619,6 +619,7 @@ const AcceptanceLink: React.FC = () => {
                       type="radio"
                       name="al-decision"
                       value={o.v}
+                      aria-label={o.label}
                       checked={decision === o.v}
                       data-testid={o.testid}
                       onChange={() => {

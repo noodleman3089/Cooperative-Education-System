@@ -985,6 +985,8 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await dbExec("UPDATE intent_forms SET start_date = '2026-11-02' WHERE form_id = $1", [formId]);
     await loginAs(page, 'student2');
     await expect(page.getByTestId('now-card')).toBeVisible();
+    // ใบนี้ยังมี acceptance_due_date (due: 15) แต่ได้ที่แล้ว — กำหนดส่งหลักฐานตอบรับต้องไม่ค้างบนการ์ดเส้นทาง
+    await expect(page.getByTestId('now-card')).not.toContainText('กำหนดส่งหลักฐานตอบรับ');
     await expect(page.getByTestId('status-card')).toHaveCount(0);
     await expect(page.getByTestId('request-progress')).toHaveCount(0);
     await expect(page.locator('[data-state="accepted"]')).toHaveCount(0);
@@ -1058,5 +1060,90 @@ test.describe('นักศึกษาเปิดไฟล์ที่บร�
     } finally {
       await nobody.dispose();
     }
+  });
+});
+
+// รอบแก้จากการทดสอบบนจอจริง — ป้ายภาคเรียนเป็น พ.ศ. · หน้า 410 ย่อหน้าเดียว · radio อ่านออกเสียงเป็นไทย
+// · เจ้าหน้าที่ต้องยืนยันก่อนรับแบบตอบรับ (กดแล้วเปิดบัญชีพี่เลี้ยงและส่งอีเมลออกนอกระบบ)
+test.describe('หน้าลิงก์ตอบรับ — ภาษาและกล่องยืนยันของเจ้าหน้าที่', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    await seedTestData();
+  });
+
+  test('L13: ป้ายภาคเรียนเป็น พ.ศ. · radio รับ/ไม่รับ อ่านเป็นไทย · หน้า 410 มีย่อหน้าอธิบายเดียว', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { token, tokenId } = await readyLink(request);
+
+    const anon = await playwrightRequest.newContext();
+    try {
+      const info = await (await anon.get(`${PUB}?token=${token}`)).json();
+      expect(info.student.semester_label).toMatch(/^ภาคเรียนที่ \d\/25\d\d$/);
+    } finally {
+      await anon.dispose();
+    }
+
+    await page.goto(`/accept?token=${token}`);
+    // exact: "ไม่รับ" มีคำว่า "รับ" อยู่ข้างใน — ไม่ exact จะชนกันสองปุ่ม
+    await expect(page.getByRole('radio', { name: 'รับ', exact: true })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'ไม่รับ', exact: true })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'accept' })).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: 'decline' })).toHaveCount(0);
+
+    await dbExec('UPDATE acceptance_link_tokens SET revoked_at = NOW() WHERE token_id = $1', [tokenId]);
+    await page.reload();
+    const gone = page.getByTestId('al-gone');
+    await expect(gone).toBeVisible();
+    await expect(gone).toContainText('นักศึกษาส่งหนังสือฉบับใหม่ให้ท่าน');
+    await expect(gone.locator('p')).toHaveCount(1);
+    await expect(gone).not.toContainText('ลิงก์อาจใช้ตอบไปแล้ว');
+  });
+
+  test('L14: เจ้าหน้าที่กดรับแบบตอบรับ — ต้องผ่านกล่องยืนยันที่บอกนักศึกษา บริษัท พี่เลี้ยง อีเมล · ยกเลิก = ไม่เกิดอะไร', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { formId, token } = await readyLink(request);
+    const anon = await playwrightRequest.newContext();
+    try {
+      const res = await anon.post(`${PUB}/accept?token=${encodeURIComponent(token)}`, {
+        multipart: { evidence: pdfPart(), ...(await acceptFields()) },
+      });
+      expect(res.status(), await res.text()).toBe(200);
+    } finally {
+      await anon.dispose();
+    }
+    const who = await dbRow<{ company: string; code: string }>(
+      `SELECT c.name_th AS company, s.student_code AS code
+         FROM intent_forms i JOIN companies c ON c.company_id = i.company_id
+         JOIN students s ON s.student_id = i.student_id WHERE i.form_id = $1`,
+      [formId]
+    );
+
+    await loginAs(page, 'staff1');
+    await page.getByTestId(`review-acceptance-${formId}`).click();
+    await page.getByTestId('acceptance-approve-submit').click();
+
+    // กล่องยืนยัน — ระบุชัดว่าทำกับใคร และอีเมลเชิญไปที่ไหน · ระหว่างนี้ยังไม่มีอะไรเกิดขึ้น
+    const confirm = page.getByTestId('confirm-summary');
+    await expect(confirm).toContainText(who!.code);
+    await expect(confirm).toContainText(who!.company);
+    await expect(confirm).toContainText('สุรเดช ใจดี');
+    await expect(confirm).toContainText(MENTOR_EMAIL);
+    await expect(confirm).toContainText('สหกิจ 07');
+    expect(await formStatus(formId)).toBe('pending_officer_approval');
+
+    await page.getByTestId('acceptance-approve-cancel').click();
+    await expect(page.getByTestId('acceptance-approve-confirm')).toHaveCount(0);
+    expect(await formStatus(formId)).toBe('pending_officer_approval');
+
+    await page.getByTestId('acceptance-approve-submit').click();
+    await page.getByTestId('acceptance-approve-confirm').click();
+    await expect(page.getByText(/รับแบบตอบรับเรียบร้อยแล้ว/)).toBeVisible();
+    expect(await formStatus(formId)).toBe('accepted');
   });
 });

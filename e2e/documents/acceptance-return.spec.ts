@@ -260,6 +260,7 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     await expect(dialog.getByTestId('acceptance-signer')).toContainText('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await expect(dialog.getByTestId('acceptance-signer-name')).toHaveCount(0);
     await dialog.getByTestId('acceptance-approve-submit').click();
+    await page.getByTestId('acceptance-approve-confirm').click();
 
     await expect(page.getByText(/รับแบบตอบรับเรียบร้อยแล้ว/)).toBeVisible();
     expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(
