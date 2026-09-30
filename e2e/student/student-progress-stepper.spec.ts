@@ -46,6 +46,9 @@ async function acceptedStudent2(): Promise<Ctx> {
 async function expectNow(page: Page, title: string) {
   await page.reload();
   await expect(page.getByTestId('now-card').getByRole('heading', { level: 2 })).toHaveText(title);
+  // ได้ที่ฝึกงานแล้ว = การ์ดสถานะของช่วงขอที่ฝึกงานต้องหายไป เหลือการ์ด "ทำอะไรตอนนี้" ใบเดียว
+  await expect(page.getByTestId('status-card')).toHaveCount(0);
+  await expect(page.getByTestId('request-progress')).toHaveCount(0);
 }
 
 test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 อ่านจากข้อมูลจริง', () => {
@@ -129,6 +132,7 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     // ครบทุกขั้น — ไม่มีขั้นที่ต้องทำเหลือ การ์ดจึงหายไป · ไม่มีคำว่าเกรดเพราะระบบไม่เก็บเกรด
     await page.reload();
     await expect(page.getByTestId('now-card')).toHaveCount(0);
+    await expect(page.getByTestId('status-card')).toHaveCount(0);
 
     // `page.request` ใช้ cookie jar เดียวกับเบราว์เซอร์ = session ของ student2
     const progress = (await (await page.request.get(`${API_URL}/students/dashboard`)).json()).progress;

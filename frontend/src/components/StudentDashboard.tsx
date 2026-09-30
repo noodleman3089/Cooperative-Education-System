@@ -55,7 +55,9 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
     case 'rejected':
       return 'rejected';
     case 'accepted':
-      return 'accepted';
+      // ได้ที่ฝึกงานแล้ว = จบช่วงขอที่ฝึกงาน · การ์ด "สิ่งที่ต้องทำตอนนี้" ช่วงนี้หายไป
+      // เหลือ `CoopNowCard` ใบเดียวที่พาเดินต่อ (เจ้าของตัดสิน 2026-09-30: มีการ์ด "ทำอะไรตอนนี้" ได้ใบเดียวเสมอ)
+      return null;
     default:
       // สถานะที่ไม่รู้จัก = ไม่แต่งเรื่องให้ · ป้ายสถานะอื่นในหน้ายังโชว์ค่าดิบอยู่
       return null;
@@ -747,6 +749,8 @@ const StudentDashboard: React.FC = () => {
   // (`closedIntent` มาจาก backend แยกจาก activeIntent — โค้ดอื่นยังอ่าน activeIntent === null ว่ายื่นใหม่ได้)
   const statusIntent = (activeIntent ?? data.closedIntent ?? null) as StatusIntent | null;
   const statusState = statusIntent ? deriveStatusState(statusIntent) : null;
+  // พี่เลี้ยงที่ `GET /students/dashboard` แนบมากับใบ (IntentForm ยังไม่ได้ประกาศฟิลด์นี้)
+  const intentMentor = (activeIntent as StatusIntent | null)?.mentor;
 
   // นับถอยหลังกำหนดตอบกลับ
   // ⚠️ วันครบกำหนดคำนวณโดยข้ามเฉพาะเสาร์-อาทิตย์ ระบบไม่มีตารางวันหยุด
@@ -1200,6 +1204,11 @@ const StudentDashboard: React.FC = () => {
           state={statusState}
           intent={statusIntent}
           dueNote={dueNote}
+          evidenceHref={
+            activeIntent?.acceptance_evidence_path
+              ? `${API_BASE_URL}/files/${activeIntent.acceptance_evidence_path}`
+              : null
+          }
           requestForm={activeIntent ? renderRequestForm(activeIntent) : null}
           mailBox={
             !activeIntent
@@ -1218,25 +1227,26 @@ const StudentDashboard: React.FC = () => {
           onFail={() => setConfirmingFailure(true)}
           failBusy={reportingFail}
           onFindPlacement={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'jobs' }))}
-          onGoAccommodation={() =>
-            window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
-          }
         />
       )}
 
-      <CoopNowCard
-        phases={phases}
-        deadline={
-          acceptanceDue
-            ? {
-                label: 'กำหนดส่งหลักฐานตอบรับ',
-                date: formatThaiDate(acceptanceDue.due),
-                daysLeft: acceptanceDue.daysLeft,
-                overdue: acceptanceDue.overdue,
-              }
-            : null
-        }
-      />
+      {/* ⛔ การ์ด "ทำอะไรตอนนี้" มีได้ใบเดียวเสมอ — ช่วงขอที่ฝึกงานเป็นของ StudentStatusCard · ตั้งแต่ได้ที่ฝึกงานแล้ว
+          (หรือสถานะที่การ์ดนั้นไม่รู้จัก / ยังไม่มีคำร้อง) เป็นของ CoopNowCard */}
+      {!(statusIntent && statusState) && (
+        <CoopNowCard
+          phases={phases}
+          deadline={
+            acceptanceDue
+              ? {
+                  label: 'กำหนดส่งหลักฐานตอบรับ',
+                  date: formatThaiDate(acceptanceDue.due),
+                  daysLeft: acceptanceDue.daysLeft,
+                  overdue: acceptanceDue.overdue,
+                }
+              : null
+          }
+        />
+      )}
 
       {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -1254,6 +1264,18 @@ const StudentDashboard: React.FC = () => {
                 {activeIntent.job_title && (
                   <span className="text-xs text-gray-600 dark:text-gray-400">
                     ตำแหน่ง {activeIntent.job_title}
+                  </span>
+                )}
+                {/* ข้อมูลที่เดิมอยู่บนการ์ดสถานะตอน "ได้ที่ฝึกงานแล้ว" — ขึ้นเมื่อมีเท่านั้น */}
+                {intentMentor?.name && (
+                  <span data-testid="intent-mentor" className="text-xs text-gray-600 dark:text-gray-400">
+                    พี่เลี้ยง {intentMentor.name}
+                    {intentMentor.email ? ` · ${intentMentor.email}` : ''}
+                  </span>
+                )}
+                {activeIntent.start_date && (
+                  <span data-testid="intent-start-date" className="text-xs text-gray-600 dark:text-gray-400">
+                    เริ่มงาน {formatThaiDate(activeIntent.start_date.slice(0, 10))}
                   </span>
                 )}
                 <StatusBadge

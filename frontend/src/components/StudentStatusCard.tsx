@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import { Check } from 'lucide-react';
 import Button from './ui/Button';
 import type { IntentForm } from '../types/api';
-import { formatThaiDate } from '../utils/thaiDate';
 
 /**
  * การ์ด "สิ่งที่ต้องทำตอนนี้" ของแดชบอร์ดนักศึกษา (แบบ A) — ช่วงขอที่ฝึกงาน
@@ -26,8 +25,7 @@ export type StatusCardState =
   | 'wait-company'
   | 'wait-confirm'
   | 'company-rejected'
-  | 'rejected'
-  | 'accepted';
+  | 'rejected';
 
 /** ฟิลด์ที่ `GET /students/dashboard` ส่งมาแต่ `IntentForm` ยังไม่ได้ประกาศ — optional ทั้งหมด */
 export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm, 'status'>> & {
@@ -37,7 +35,7 @@ export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm,
   mentor?: { name?: string | null; email?: string | null } | null;
 };
 
-type Tone = 'act' | 'wait' | 'done';
+type Tone = 'act' | 'wait';
 
 const TONE: Record<StatusCardState, Tone> = {
   'submit-paper': 'act',
@@ -49,10 +47,10 @@ const TONE: Record<StatusCardState, Tone> = {
   'wait-dean': 'wait',
   'wait-company': 'wait',
   'wait-confirm': 'wait',
-  accepted: 'done',
 };
 
-// ขอบสีเต็มความหมายเดียวกันทุกสถานะ: ฟ้า = ต้องทำ · เทา = รอคนอื่น · เขียว = ได้ที่ฝึกงานแล้ว
+// ขอบสีเต็มความหมายเดียวกันทุกสถานะ: ฟ้า = ต้องทำ · เทา = รอคนอื่น
+// (ได้ที่ฝึกงานแล้ว = การ์ดนี้หายไป เหลือการ์ด "ขั้นตอนที่ต้องทำตอนนี้" ของ CoopNowCard ใบเดียว)
 const TONE_STYLE: Record<Tone, { box: string; label: string }> = {
   act: {
     box: 'border-blue-600 dark:border-blue-500',
@@ -62,13 +60,9 @@ const TONE_STYLE: Record<Tone, { box: string; label: string }> = {
     box: 'border-gray-300 dark:border-gray-600',
     label: 'text-gray-700 dark:text-gray-300',
   },
-  done: {
-    box: 'border-emerald-600 dark:border-emerald-500',
-    label: 'text-emerald-700 dark:text-emerald-400',
-  },
 };
 
-/** ขั้นที่ "กำลังอยู่" ในรายการ 6 ขั้น (นับจาก 0) — 6 = ครบทุกขั้น */
+/** ขั้นที่ "กำลังอยู่" ในรายการ 6 ขั้น (นับจาก 0) */
 const ACTIVE_STEP: Record<StatusCardState, number> = {
   'submit-paper': 0,
   'wait-staff': 1,
@@ -77,7 +71,6 @@ const ACTIVE_STEP: Record<StatusCardState, number> = {
   'wait-company': 4,
   returned: 4,
   'wait-confirm': 5,
-  accepted: 6,
   // เริ่มขั้น 1 ใหม่ — ใบเดิมปิดแล้ว
   'company-rejected': 0,
   rejected: 0,
@@ -100,8 +93,6 @@ function headerLabel(state: StatusCardState): string {
     case 'company-rejected':
     case 'rejected':
       return 'สิ่งที่ต้องทำตอนนี้ · เริ่มขั้น 1 ใหม่';
-    case 'accepted':
-      return 'ได้ที่ฝึกงานแล้ว · ขั้นต่อไป';
     default:
       return TONE[state] === 'act'
         ? `สิ่งที่ต้องทำตอนนี้ · ขั้น ${step} จาก 6`
@@ -147,6 +138,8 @@ interface StudentStatusCardProps {
   intent: StatusIntent;
   /** ย่อหน้านับถอยหลังกำหนดตอบกลับ (`acceptance-due`) — ส่งมาจากหน้าจอ ไม่คำนวณซ้ำในนี้ */
   dueNote: ReactNode;
+  /** ไฟล์เอกสาร 2 ที่บริษัทแนบ (path ใต้ `/files/`) — ลิงก์ขึ้นเฉพาะ wait-confirm และเมื่อมีไฟล์ */
+  evidenceHref: string | null;
   /** บล็อกเอกสารหมายเลข 1: พิมพ์ · อัปโหลดกระดาษที่ลงนามแล้ว · เหตุผลที่เจ้าหน้าที่ตีกลับ */
   requestForm: ReactNode;
   /** กล่องส่งอีเมล `company-mail-*` — หน้าจอเลือกแบบเปิด/พับตามสถานะเอง */
@@ -158,13 +151,13 @@ interface StudentStatusCardProps {
   onFail: () => void;
   failBusy: boolean;
   onFindPlacement: () => void;
-  onGoAccommodation: () => void;
 }
 
 const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   state,
   intent,
   dueNote,
+  evidenceHref,
   requestForm,
   mailBox,
   proofForm,
@@ -173,7 +166,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   onFail,
   failBusy,
   onFindPlacement,
-  onGoAccommodation,
 }) => {
   const tone = TONE_STYLE[TONE[state]];
   const company = intent.company_name_th ?? 'สถานประกอบการ';
@@ -195,8 +187,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         return <Pill tone="bad">บริษัทไม่รับ</Pill>;
       case 'rejected':
         return <Pill tone="bad">คำร้องถูกตีกลับ</Pill>;
-      case 'accepted':
-        return intent.start_date ? <Pill tone="good">เริ่มงาน {formatThaiDate(intent.start_date)}</Pill> : null;
       default:
         return null;
     }
@@ -304,8 +294,17 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
             <p className="text-sm text-gray-600 dark:text-gray-400">
               เจ้าหน้าที่ตรวจเอกสาร 2 ที่แนบมา แล้วรับเข้าฝึกงาน · ไม่ต้องทำอะไรตอนนี้
             </p>
-            {/* ⛔ ไม่มีลิงก์ "ดูเอกสาร 2 ที่บริษัทแนบ" ตามแบบร่าง — `/api/files/acceptance_evidence` ให้เปิดเฉพาะไฟล์ที่
-                ชื่อขึ้นต้น `evidence-user-<id>` ของเจ้าตัว ไฟล์ที่บริษัทแนบผ่านลิงก์อาจตอบ 403 ใส่ปุ่มไปก็เจอหน้าเสีย */}
+            {evidenceHref && (
+              <a
+                href={evidenceHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="open-acceptance-evidence"
+                className="text-sm font-semibold text-brand-blue underline dark:text-blue-400"
+              >
+                ดูเอกสาร 2 ที่บริษัทแนบ
+              </a>
+            )}
           </>
         );
       }
@@ -336,23 +335,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
                 หาที่ฝึกงานใหม่
               </Button>
               <span className="text-sm text-gray-600 dark:text-gray-400">คำร้องเดิมปิดแล้ว ไม่ต้องยกเลิกเอง</span>
-            </div>
-          </>
-        );
-      case 'accepted':
-        return (
-          <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">ยินดีด้วย ได้ฝึกงานที่ {company}</h2>
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              {intent.mentor?.name
-                ? `พี่เลี้ยง ${intent.mentor.name}${intent.mentor.email ? ` · ${intent.mentor.email}` : ''}`
-                : 'ขั้นต่อไปคือแจ้งที่พักและแผนปฏิบัติงาน'}
-            </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button data-testid="status-primary" onClick={onGoAccommodation}>
-                แจ้งที่พักและแผนงาน
-              </Button>
-              <span className="text-sm text-gray-600 dark:text-gray-400">ต้องส่งภายในสัปดาห์แรกของการฝึกงาน</span>
             </div>
           </>
         );

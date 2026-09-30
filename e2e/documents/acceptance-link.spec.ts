@@ -856,6 +856,11 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
   });
 
   const card = (page: import('@playwright/test').Page) => page.getByTestId('status-card');
+  // การ์ด "ทำอะไรตอนนี้" มีใบเดียวเสมอ — ช่วงขอที่ฝึกงานเห็นการ์ดสถานะ และต้องไม่เห็นการ์ดเส้นทางสหกิจ (now-card) ซ้อน
+  const onlyStatusCard = async (page: import('@playwright/test').Page) => {
+    await expect(card(page)).toHaveCount(1);
+    await expect(page.getByTestId('now-card')).toHaveCount(0);
+  };
 
   test('L11: การ์ดเปลี่ยนตามสถานะ · ฟอร์มรายงานผลซ่อนจนกดปุ่ม และไม่โผล่ก่อนคณบดีลงนาม', async ({ page }) => {
     test.setTimeout(180_000);
@@ -864,6 +869,8 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await putIntent({ status: 'approved_by_dept_head', due: null });
     await loginAs(page, 'student2');
     await expect(card(page)).toHaveAttribute('data-state', 'wait-dean');
+    await onlyStatusCard(page);
+    await expect(page.getByTestId('acceptance-due')).toHaveCount(0);
     await expect(card(page)).toContainText('รอคณบดีลงนาม');
     await expect(page.getByTestId('company-mail-box')).toHaveCount(0);
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
@@ -874,6 +881,8 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await putIntent({ status: 'approved_by_dept_head', due: 15 });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'send');
+    await onlyStatusCard(page);
+    await expect(card(page).getByTestId('acceptance-due')).toContainText('ครบกำหนดตอบกลับโดยประมาณ');
     await expect(card(page).getByTestId('company-mail-box')).toBeVisible();
     // ทางสำรอง: ปุ่มมี แต่ฟอร์มยังพับ
     await expect(page.getByTestId('proof-open')).toBeVisible();
@@ -894,6 +903,8 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await putIntent({ status: 'approved_by_dept_head', due: 15, mailSent: true });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'wait-company');
+    await onlyStatusCard(page);
+    await expect(card(page).getByTestId('acceptance-due')).toContainText('ครบกำหนดตอบกลับโดยประมาณ');
     await expect(card(page)).toContainText('รอบริษัทตอบรับ');
     await expect(card(page)).toContainText('ไม่ต้องทำอะไรตอนนี้');
     await expect(page.getByTestId('proof-open')).toBeVisible();
@@ -903,12 +914,24 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await putIntent({ status: 'approved_by_dept_head', due: 15, mailSent: true, rejectReason: 'ตราประทับไม่ชัดเจน' });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'returned');
+    await onlyStatusCard(page);
+    await expect(card(page).getByTestId('acceptance-due')).toContainText('ครบกำหนดตอบกลับโดยประมาณ');
     await expect(card(page)).toContainText('ตราประทับไม่ชัดเจน');
+
+    // เลยกำหนดที่บริษัทต้องตอบ: ป้ายเปลี่ยนเป็นแบบเลยกำหนด
+    await putIntent({ status: 'approved_by_dept_head', due: -2, mailSent: true });
+    await page.reload();
+    await expect(card(page)).toHaveAttribute('data-state', 'wait-company');
+    await expect(card(page).getByTestId('acceptance-due')).toContainText('เลยกำหนดตอบกลับมาแล้ว');
 
     // บริษัทตอบรับแล้ว รอเจ้าหน้าที่: ไม่มีทางสำรองและไม่มีปุ่มบริษัทไม่รับ (ตอบไปแล้ว)
     await putIntent({ status: 'pending_officer_approval', due: 15, mailSent: true });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'wait-confirm');
+    await onlyStatusCard(page);
+    await expect(page.getByTestId('acceptance-due')).toHaveCount(0);
+    // ยังไม่มีไฟล์เอกสาร 2 บนใบ = ไม่มีลิงก์ (ไม่ใส่ปุ่มที่เปิดแล้วเจอหน้าเสีย)
+    await expect(page.getByTestId('open-acceptance-evidence')).toHaveCount(0);
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
     await expect(page.getByTestId('proof-form')).toHaveCount(0);
     await expect(page.getByTestId('fail-open')).toHaveCount(0);
@@ -922,6 +945,7 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'company-rejected');
+    await onlyStatusCard(page);
     await expect(card(page)).toContainText('เหตุผลจากบริษัท: ไม่มีตำแหน่งงานที่ตรงกับสาขา');
     await expect(page.getByTestId('status-primary')).toContainText('หาที่ฝึกงานใหม่');
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
@@ -934,18 +958,105 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await putIntent({ status: 'pending_advisor' });
     await loginAs(page, 'student2');
     await expect(card(page)).toHaveAttribute('data-state', 'submit-paper');
+    await onlyStatusCard(page);
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
     await expect(page.getByTestId('company-mail-box')).toHaveCount(0);
 
     await putIntent({ status: 'pending_officer_request' });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'wait-staff');
+    await onlyStatusCard(page);
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
 
     await putIntent({ status: 'rejected', rejectReason: 'เอกสารไม่ครบ' });
     await page.reload();
     await expect(card(page)).toHaveAttribute('data-state', 'rejected');
+    await onlyStatusCard(page);
     await expect(card(page)).toContainText('เหตุผล: เอกสารไม่ครบ');
     await expect(page.getByTestId('proof-open')).toHaveCount(0);
+  });
+
+  test('L11c: ได้ที่ฝึกงานแล้ว — การ์ดสถานะและความคืบหน้าขอที่ฝึกงานหายไป เหลือการ์ดเส้นทางสหกิจใบเดียว · เอกสารของฉันยังอยู่', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+
+    const formId = await putIntent({ status: 'accepted', due: 15, mailSent: true });
+    await dbExec("UPDATE intent_forms SET start_date = '2026-11-02' WHERE form_id = $1", [formId]);
+    await loginAs(page, 'student2');
+    await expect(page.getByTestId('now-card')).toBeVisible();
+    await expect(page.getByTestId('status-card')).toHaveCount(0);
+    await expect(page.getByTestId('request-progress')).toHaveCount(0);
+    await expect(page.locator('[data-state="accepted"]')).toHaveCount(0);
+    // วันเริ่มงานย้ายมาอยู่การ์ด "ที่ฝึกงานของคุณ" · ยังไม่มีพี่เลี้ยงบนใบ = ไม่มีบรรทัดพี่เลี้ยง
+    await expect(page.getByTestId('intent-start-date')).toContainText('2569');
+    await expect(page.getByTestId('intent-mentor')).toHaveCount(0);
+    await expect(page.locator('#my-documents')).toBeVisible();
+  });
+
+  test('L11d: wait-confirm — ลิงก์ "ดูเอกสาร 2 ที่บริษัทแนบ" ขึ้นเมื่อใบมีไฟล์เท่านั้น', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    const formId = await putIntent({ status: 'pending_officer_approval', due: 15, mailSent: true });
+    await loginAs(page, 'student2');
+    await expect(card(page)).toHaveAttribute('data-state', 'wait-confirm');
+    await expect(page.getByTestId('open-acceptance-evidence')).toHaveCount(0);
+
+    await dbExec(
+      "UPDATE intent_forms SET acceptance_evidence_path = 'acceptance_evidence/evidence-user-1-test.pdf' WHERE form_id = $1",
+      [formId]
+    );
+    await page.reload();
+    const link = card(page).getByTestId('open-acceptance-evidence');
+    await expect(link).toContainText('ดูเอกสาร 2 ที่บริษัทแนบ');
+    await expect(link).toHaveAttribute('href', /\/files\/acceptance_evidence\/evidence-user-1-test\.pdf$/);
+    await expect(link).toHaveAttribute('target', '_blank');
+  });
+});
+
+// รายการ (ค) ใน known_issues — ไฟล์ที่บริษัทแนบผ่านลิงก์ตั้งชื่อด้วย id นักศึกษาเจ้าของใบ
+// (multer ไม่มี req.user บนเส้นทางสาธารณะ) → นักศึกษาคนนั้นเปิดได้ผ่าน /api/files ที่มีอยู่ · คนอื่นไม่ได้
+test.describe('นักศึกษาเปิดไฟล์ที่บริษัทแนบมาทางลิงก์', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    await seedTestData();
+  });
+
+  test('L12: บริษัทแนบไฟล์ทางลิงก์ → นักศึกษาเจ้าของใบเปิดได้ (200) · นักศึกษาคนอื่น 403 · ไม่ล็อกอิน 401', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { formId, token } = await readyLink(request);
+
+    const anon = await playwrightRequest.newContext();
+    try {
+      const res = await anon.post(`${PUB}/accept?token=${encodeURIComponent(token)}`, {
+        multipart: { evidence: pdfPart(), ...(await acceptFields()) },
+      });
+      expect(res.status(), await res.text()).toBe(200);
+    } finally {
+      await anon.dispose();
+    }
+
+    const row = await dbRow<{ evidence: string; student_id: number }>(
+      'SELECT acceptance_evidence_path AS evidence, student_id FROM intent_forms WHERE form_id = $1',
+      [formId]
+    );
+    expect(row?.evidence).toMatch(new RegExp(`^acceptance_evidence/evidence-user-${row?.student_id}-`));
+    const url = `${API_URL}/files/${row?.evidence}`;
+
+    await apiLoginAs(request, 'student2');
+    const owner = await request.get(url);
+    expect(owner.status(), await owner.text()).toBe(200);
+
+    await apiLoginAs(request, 'student1');
+    expect((await request.get(url)).status()).toBe(403);
+
+    const nobody = await playwrightRequest.newContext();
+    try {
+      expect((await nobody.get(url)).status()).toBe(401);
+    } finally {
+      await nobody.dispose();
+    }
   });
 });
