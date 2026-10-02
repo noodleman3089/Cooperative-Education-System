@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/auth';
+import { MentorLinkController } from '../controllers/mentorLink';
 import { validateLogin } from '../middlewares/validation';
 import { authenticateToken } from '../middlewares/auth';
 
@@ -28,5 +29,10 @@ router.post('/reset-password', AuthController.resetPassword);
 
 // Route: POST /api/auth/claim-personnel (authenticated — claim profile with employee code)
 router.post('/claim-personnel', authenticateToken, AuthController.claimPersonnelProfile);
+
+// Routes: POST /api/auth/mentor-link/{request,consume,resend} (public — พี่เลี้ยงเข้าสู่ระบบด้วยลิงก์ในอีเมล ไม่มีรหัสผ่าน)
+router.post('/mentor-link/request', MentorLinkController.request);
+router.post('/mentor-link/consume', MentorLinkController.consume);
+router.post('/mentor-link/resend', MentorLinkController.resend);
 
 export default router;

@@ -27,6 +27,7 @@ DROP TABLE IF EXISTS document_templates CASCADE;
 -- coop_applications (สหกิจ 01) ถูกตัดทั้งชุด 2026-09-14 · migration 032 — บรรทัด DROP เก็บไว้ล้างฐาน dev เก่า
 DROP TABLE IF EXISTS coop_applications CASCADE;
 DROP TABLE IF EXISTS acceptance_link_tokens CASCADE;
+DROP TABLE IF EXISTS mentor_login_tokens CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
 DROP TABLE IF EXISTS student_memos CASCADE;
@@ -609,6 +610,20 @@ CREATE TABLE IF NOT EXISTS acceptance_link_tokens (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_acceptance_link_tokens_form ON acceptance_link_tokens(form_id);
+
+-- ลิงก์เข้าสู่ระบบของพี่เลี้ยง (คนนอก ไม่มีรหัสผ่าน) — ออกตอนเจ้าหน้าที่กดรับแบบตอบรับ หรือพี่เลี้ยงกดขอเอง
+-- ใช้ครั้งเดียว · อายุ 7 วัน (ระบบส่งให้) หรือ 30 นาที (พี่เลี้ยงขอเอง) · `target` = หน้าที่จะพาไปหลังเข้าสู่ระบบ (path ภายในเท่านั้น)
+-- ⛔ ออกให้เฉพาะบัญชีที่มีโปรไฟล์ mentors และมีบทบาท 'mentor' บทบาทเดียว (SEC-03) · ดู utils/mentorLoginLink.ts
+CREATE TABLE IF NOT EXISTS mentor_login_tokens (
+    token_id SERIAL PRIMARY KEY,
+    token UUID NOT NULL UNIQUE,
+    user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    target VARCHAR(300),
+    expires_at TIMESTAMPTZ NOT NULL,
+    used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mentor_login_tokens_user ON mentor_login_tokens(user_id);
 
 -- 8. Document Templates Table
 CREATE TABLE IF NOT EXISTS document_templates (

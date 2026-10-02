@@ -23,6 +23,10 @@ export const AuditAction = {
   USER_DELETED: 'user.deleted',
   USER_AUTO_DEACTIVATED: 'user.auto_deactivated',
   PASSWORD_RESET: 'user.password_reset',
+  // พี่เลี้ยงเข้าสู่ระบบด้วยลิงก์ในอีเมล (ไม่มีรหัสผ่าน) — ไม่มีผู้ใช้ที่ล็อกอินให้ตามย้อน
+  // เก็บ token_id ไม่เก็บ token · ลิงก์ออกจาก 3 ทาง ดู detail.ttl ('requested' | 'resend' | 'system')
+  MENTOR_LINK_ISSUED: 'auth.mentor_link_issued',
+  MENTOR_LINK_LOGIN: 'auth.mentor_link_login',
   // เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดในระบบ
   // จึงเป็นจุดเดียวที่มีคนรับผิดชอบให้ตามย้อนได้ว่าใครปล่อยคำร้องใบไหนผ่าน
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',

@@ -5,6 +5,7 @@ import { escapeHtml as esc } from '../middlewares/validation';
 import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
 import { JOB_OFFER_TOKEN_TTL_LABEL } from './jobOfferToken';
 import { formatThaiDate } from './thaiDate';
+import { mentorLoginPageUrl } from './mentorLoginLink';
 import { query } from '../config/database';
 
 /**
@@ -846,6 +847,92 @@ export const sendJobOfferSurveyEmail = async (
     if (error?.response) console.error(`  SMTP Response: ${error.response}`);
     console.error(`  To: ${toEmail}`);
     console.error(`  Link: ${answerLink}`);
+    console.error('════════════════════════════════════════════════════');
+    return false;
+  }
+};
+
+/**
+ * ส่งลิงก์เข้าสู่ระบบให้พี่เลี้ยง (ไม่มีรหัสผ่าน — ลิงก์ใช้ครั้งเดียวคือ credential ตัวเดียวในเมลนี้)
+ *
+ * 'welcome' = ระบบส่งให้เองตอนเจ้าหน้าที่กดรับแบบตอบรับ (อายุยาว) ·
+ * 'requested' = พี่เลี้ยงกดขอเองที่หน้าเข้าสู่ระบบ/ขอใหม่จากลิงก์เดิม (อายุ 30 นาที)
+ *
+ * คืน `true` เมื่อ SMTP รับจดหมายไปแล้ว · `false` เมื่อส่งไม่ออก — ไม่โยน error
+ * ⛔ ล้มแล้วไม่ log ลิงก์ — ผู้เรียกต้องเพิกถอนลิงก์ทิ้ง (`revokeMentorLoginLink`) และลิงก์เข้าสู่ระบบ
+ *    ไม่ควรไปนอนใน log
+ */
+export const sendMentorLoginLinkEmail = async (
+  toEmail: string,
+  url: string,
+  opts: { expiresAt: Date; kind: 'welcome' | 'requested' }
+): Promise<boolean> => {
+  const tz = 'Asia/Bangkok';
+  const expiresLabel =
+    `${formatThaiDate(opts.expiresAt.toLocaleDateString('en-CA', { timeZone: tz }))} ` +
+    `เวลา ${opts.expiresAt.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' })} น.`;
+
+  const button = `
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${esc(url)}"
+         style="display: inline-block; padding: 12px 32px; background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        เข้าสู่ระบบ
+      </a>
+    </div>
+  `;
+
+  const welcome = opts.kind === 'welcome';
+  const content = welcome
+    ? `
+      <p>บัญชี<b>พี่เลี้ยงนักศึกษาสหกิจศึกษา (Coop Mentor)</b> ของท่านในระบบบริหารจัดการงานสหกิจศึกษาออนไลน์
+         มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO) พร้อมใช้งานแล้ว</p>
+      <p>บัญชีของท่านคือ <b>${esc(toEmail)}</b> กดปุ่มด้านล่างเพื่อเข้าสู่ระบบได้ทันที <b>ไม่ต้องตั้งรหัสผ่าน</b></p>
+      ${button}
+    `
+    : `
+      <p>ท่านขอลิงก์เข้าสู่ระบบสหกิจศึกษา RMUTTO ในฐานะพี่เลี้ยงนักศึกษา กดปุ่มด้านล่างเพื่อเข้าสู่ระบบ</p>
+      ${button}
+    `;
+
+  const footnote = welcome
+    ? `
+      <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+        ลิงก์นี้ใช้ได้ครั้งเดียวและใช้ได้ถึง ${esc(expiresLabel)}<br/>
+        หากลิงก์หมดอายุแล้ว ท่านขอลิงก์ใหม่ได้ที่ ${esc(mentorLoginPageUrl())} ระบบจะส่งกลับมาที่อีเมลฉบับนี้เท่านั้น<br/>
+        อย่าส่งต่ออีเมลฉบับนี้ให้ผู้อื่น เพราะผู้ที่ถือลิงก์เข้าสู่ระบบแทนท่านได้
+      </p>
+    `
+    : `
+      <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+        ลิงก์นี้ใช้ได้ครั้งเดียวและมีอายุ 30 นาที (ถึง ${esc(expiresLabel)})<br/>
+        หากท่านไม่ได้เป็นผู้ขอลิงก์นี้ ไม่ต้องทำอะไร และอย่าส่งต่ออีเมลฉบับนี้ให้ผู้อื่น
+      </p>
+    `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: welcome
+      ? 'บัญชีพี่เลี้ยงพร้อมใช้งานแล้ว - ระบบสหกิจศึกษาออนไลน์'
+      : 'ลิงก์เข้าสู่ระบบสหกิจศึกษาออนไลน์ของท่าน',
+    html: renderEmailHtml({
+      title: welcome ? 'บัญชีพี่เลี้ยงพร้อมใช้งานแล้ว' : 'ลิงก์เข้าสู่ระบบของท่าน',
+      themeColor: '#2e7d32',
+      content,
+      footnote,
+    }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Mentor login link email successfully sent to: ${toEmail}`);
+    return true;
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] MENTOR LOGIN LINK (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
+    console.error(`  To: ${toEmail}`);
     console.error('════════════════════════════════════════════════════');
     return false;
   }
