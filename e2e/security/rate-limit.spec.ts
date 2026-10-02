@@ -56,6 +56,10 @@ test.describe('Rate limiting (โหมด production จริง)', () => {
         FRONTEND_URL: 'https://localhost:5173',
         ALLOW_SIMULATED_SSO: 'false',
         ENABLE_TEST_ROUTES: 'false',
+        // playwright.config.ts ตั้ง MAIL_DRY_RUN=true ให้ทุก worker (กันเทสต์ส่งอีเมลจริง) แต่ validateEnv
+        // ปฏิเสธค่านี้บน production — เซิร์ฟเวอร์ลูกตัวนี้จึงต้องไม่ได้ค่านั้นมา · เทสต์นี้ยิงแต่ล็อกอินผิดกับ
+        // endpoint อ่าน ไม่มีเส้นทางส่งอีเมลเลย
+        MAIL_DRY_RUN: 'false',
       },
       shell: true,
       stdio: 'ignore',
