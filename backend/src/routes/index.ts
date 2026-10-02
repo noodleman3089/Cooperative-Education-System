@@ -9,6 +9,7 @@ import jobOfferRoutes from './jobOffer';
 import publicJobOfferRoutes from './publicJobOffer';
 import publicAcceptanceRoutes from './publicAcceptance';
 import mentorRoutes from './mentor';
+import mentorFollowupRoutes from './mentorFollowup';
 import form07Routes from './form07';
 import intentRoutes from './intent';
 import documentRoutes from './document';
@@ -52,6 +53,8 @@ router.use('/public/job-offer', publicJobOfferRoutes);
 router.use('/public/acceptance', publicAcceptanceRoutes);
 // ฝ่ายพี่เลี้ยง — คิวงานค้างและการรับรองบันทึก
 router.use('/mentor', mentorRoutes);
+// คณะตามพี่เลี้ยง — เจ้าหน้าที่/หัวหน้าสาขา/อาจารย์ดูงานค้างของพี่เลี้ยงและกดเตือน
+router.use('/mentor-followup', mentorFollowupRoutes);
 // สหกิจ 07 หน้า 1-2 — ตำแหน่งงานและพนักงานที่ปรึกษา (สถานประกอบการกรอก)
 router.use('/form07', form07Routes);
 router.use('/intents', intentRoutes);

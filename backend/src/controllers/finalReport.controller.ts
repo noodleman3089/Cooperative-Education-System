@@ -421,7 +421,7 @@ export class FinalReportController {
 
       await assertCanReviewStudentWork(req.user.userId, req.user.roles, studentId);
 
-      const sent = await FinalReportController.sendMentorNotificationHelper(studentId);
+      const sent = await FinalReportController.sendMentorNotificationHelper(studentId, req.user.userId);
 
       if (sent) {
         res.status(200).json({
@@ -442,7 +442,7 @@ export class FinalReportController {
   /**
    * Helper function for sending mentor notification email with rate limiting
    */
-  private static async sendMentorNotificationHelper(studentId: number): Promise<boolean> {
+  private static async sendMentorNotificationHelper(studentId: number, sentBy: number | null = null): Promise<boolean> {
     // 1. Fetch mentor credentials and student name
     const infoRes = await query(
       `SELECT i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, s.first_name || ' ' || s.last_name as student_name, s.student_code
@@ -508,6 +508,18 @@ export class FinalReportController {
       student_code,
       loginLink && 'url' in loginLink ? loginLink.url : undefined
     );
+
+    // นับเป็นการเตือนพี่เลี้ยงหนึ่งครั้ง (หน้า คณะตามพี่เลี้ยง · การ์ดนักศึกษา) — เขียนไม่ได้ก็ไม่ทำให้คำขอล้ม
+    // เพราะเมลออกไปแล้วและ cooldown ของ mentor_notifications บันทึกไปแล้ว
+    try {
+      await query(
+        `INSERT INTO mentor_reminders (mentor_id, student_id, kind, sent_by)
+         VALUES ($1, $2, 'final_report', $3)`,
+        [mentor_id, studentId, sentBy]
+      );
+    } catch (error) {
+      console.error('[FinalReport] Failed to record mentor reminder', error);
+    }
     return true;
   }
 }

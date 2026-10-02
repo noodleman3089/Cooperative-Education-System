@@ -1,0 +1,250 @@
+import { query } from '../config/database';
+import { AccessDeniedError, resolveMajorScope } from '../utils/access';
+import { MENTOR_QUEUE_KINDS, MentorQueueKind, MentorQueueModel } from './mentorQueue';
+
+/**
+ * คณะตามพี่เลี้ยง (Phase 2) — มุมมอง "พี่เลี้ยงคนไหนมีงานค้าง" สำหรับเจ้าหน้าที่/หัวหน้าสาขา/อาจารย์
+ *
+ * ⛔ ไม่เขียน SQL คิวงานค้างซ้ำ — ใช้ `MentorQueueModel.pendingItems` แล้วกรองตามนักศึกษาในขอบเขต
+ * ⛔ ขอบเขต fail closed (SEC-06): หัวหน้าสาขาไม่มีโปรไฟล์ = 403 · บทบาทอื่นนอกสามบทบาท = 403
+ *    · ผู้ใช้หลายบทบาทได้ขอบเขตกว้างสุดตามลำดับ staff > dept_head > advisor
+ * ⛔ "การจัดวาง (placement)" = `intent_forms` สถานะ 'accepted' ที่มี mentor_id — ที่เดียวกับที่ MentorQueueModel ใช้
+ */
+
+export type FollowupScope =
+  | { kind: 'staff' }
+  | { kind: 'dept_head'; majorId: number }
+  | { kind: 'advisor'; userId: number };
+
+export interface FollowupPlacement {
+  mentor_id: number;
+  student_id: number;
+  student_name: string;
+}
+
+export interface FollowupMentorRow {
+  mentor_id: number;
+  name: string;
+  email: string;
+  company_name: string | null;
+  is_active: boolean;
+  student_count: number;
+  students: { student_id: number; student_name: string }[];
+  pending_total: number;
+  pending_overdue: number;
+  oldest_days_waiting: number | null;
+  pending_by_kind: Record<MentorQueueKind, number>;
+  eval_missing_students: number;
+  last_reminded_at: string | null;
+  reminder_count: number;
+  last_login_at: string | null;
+}
+
+const toIso = (v: unknown): string | null => {
+  if (!v) return null;
+  return (v instanceof Date ? v : new Date(v as string)).toISOString();
+};
+
+export class MentorFollowupModel {
+  /**
+   * บทบาทของผู้เรียก → ขอบเขตที่เห็นพี่เลี้ยงได้ · โยน AccessDeniedError เมื่อไม่มีสิทธิ์/ไม่มีโปรไฟล์
+   */
+  static async resolveScope(userId: number, roles: string[]): Promise<FollowupScope> {
+    if (roles.includes('staff')) return { kind: 'staff' };
+
+    if (roles.includes('dept_head')) {
+      // ส่งเฉพาะ 'dept_head' — ไม่งั้น `resolveMajorScope` เห็น 'dean' แล้วคืน "ไม่จำกัดสาขา" ให้ผู้ใช้สองบทบาท
+      const { majorId } = await resolveMajorScope(userId, ['dept_head']);
+      if (majorId === null) {
+        throw new AccessDeniedError('ไม่พบข้อมูลสาขาวิชาที่ท่านสังกัด กรุณาติดต่อเจ้าหน้าที่เพื่อตั้งค่าโปรไฟล์บุคลากรก่อนใช้งาน');
+      }
+      return { kind: 'dept_head', majorId };
+    }
+
+    if (roles.includes('advisor')) return { kind: 'advisor', userId };
+
+    throw new AccessDeniedError('Forbidden. You do not have access to this resource.');
+  }
+
+  /** นักศึกษาที่ฝึกงานอยู่กับพี่เลี้ยง (ในขอบเขตของผู้เรียก) — ใส่ `mentorId` เพื่อจำกัดเหลือพี่เลี้ยงคนเดียว */
+  static async placementsInScope(scope: FollowupScope, mentorId?: number): Promise<FollowupPlacement[]> {
+    const params: unknown[] = [];
+    let scopeSql = '';
+    if (scope.kind === 'dept_head') {
+      params.push(scope.majorId);
+      scopeSql = ` AND s.major_id = $${params.length}`;
+    } else if (scope.kind === 'advisor') {
+      params.push(scope.userId);
+      scopeSql = ` AND (s.advisor_id = $${params.length} OR s.supervisor_id = $${params.length})`;
+    }
+    let mentorSql = '';
+    if (mentorId !== undefined) {
+      params.push(mentorId);
+      mentorSql = ` AND i.mentor_id = $${params.length}`;
+    }
+
+    const res = await query(
+      `SELECT DISTINCT i.mentor_id, s.student_id,
+              btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS student_name
+         FROM intent_forms i
+         JOIN students s ON s.student_id = i.student_id
+        WHERE i.status = 'accepted' AND i.mentor_id IS NOT NULL${scopeSql}${mentorSql}`,
+      params
+    );
+    return res.rows.map((r) => ({
+      mentor_id: Number(r.mentor_id),
+      student_id: Number(r.student_id),
+      student_name: r.student_name as string,
+    }));
+  }
+
+  /**
+   * นักศึกษาที่ส่งเล่มรายงาน (ฉบับของอาจารย์ reviewer_kind='advisor' — แบบเดียวกับที่อีเมลแจ้งประเมินใช้)
+   * แล้วแต่พี่เลี้ยงยังกรอก สหกิจ 15 หรือ 16 ไม่ครบ
+   */
+  static async evalMissingStudentIds(studentIds: number[]): Promise<Set<number>> {
+    if (studentIds.length === 0) return new Set();
+    const res = await query(
+      `SELECT s.student_id
+         FROM students s
+        WHERE s.student_id = ANY($1::int[])
+          AND EXISTS (SELECT 1 FROM final_reports r
+                       WHERE r.student_id = s.student_id AND r.reviewer_kind = 'advisor')
+          AND (SELECT COUNT(DISTINCT e.form_code) FROM final_evaluations e
+                WHERE e.student_id = s.student_id AND e.evaluator_role = 'mentor'
+                  AND e.form_code IN ('sahatkit_15', 'sahatkit_16')) < 2`,
+      [studentIds]
+    );
+    return new Set(res.rows.map((r) => Number(r.student_id)));
+  }
+
+  /** รายการพี่เลี้ยงสำหรับหน้า "คณะตามพี่เลี้ยง" — หนึ่งแถวต่อพี่เลี้ยง นับเฉพาะนักศึกษาในขอบเขต */
+  static async list(scope: FollowupScope): Promise<FollowupMentorRow[]> {
+    const placements = await MentorFollowupModel.placementsInScope(scope);
+    if (placements.length === 0) return [];
+
+    const byMentor = new Map<number, FollowupPlacement[]>();
+    for (const p of placements) {
+      const list = byMentor.get(p.mentor_id) ?? [];
+      list.push(p);
+      byMentor.set(p.mentor_id, list);
+    }
+    const mentorIds = [...byMentor.keys()];
+
+    const infoRes = await query(
+      `SELECT m.mentor_id, m.name, u.email, u.is_active, c.name_th AS company_name,
+              (SELECT COUNT(*)::int FROM mentor_reminders r WHERE r.mentor_id = m.mentor_id) AS reminder_count,
+              (SELECT MAX(r.created_at) FROM mentor_reminders r WHERE r.mentor_id = m.mentor_id) AS last_reminded_at,
+              (SELECT MAX(t.used_at) FROM mentor_login_tokens t WHERE t.user_id = m.mentor_id) AS last_login_at
+         FROM mentors m
+         JOIN users u ON u.user_id = m.mentor_id
+         LEFT JOIN companies c ON c.company_id = m.company_id
+        WHERE m.mentor_id = ANY($1::int[])`,
+      [mentorIds]
+    );
+
+    const missing = await MentorFollowupModel.evalMissingStudentIds([...new Set(placements.map((p) => p.student_id))]);
+
+    const rows = await Promise.all(
+      infoRes.rows.map(async (info): Promise<FollowupMentorRow> => {
+        const mentorId = Number(info.mentor_id);
+        const mine = (byMentor.get(mentorId) ?? []).sort((a, b) => a.student_name.localeCompare(b.student_name, 'th'));
+        const inScope = new Set(mine.map((p) => p.student_id));
+
+        const items = (await MentorQueueModel.pendingItems(mentorId)).filter((it) => inScope.has(Number(it.student_id)));
+        const byKind = Object.fromEntries(MENTOR_QUEUE_KINDS.map((k) => [k, 0])) as Record<MentorQueueKind, number>;
+        let oldest: number | null = null;
+        for (const it of items) {
+          byKind[it.kind] += 1;
+          if (it.days_waiting !== null && (oldest === null || it.days_waiting > oldest)) oldest = it.days_waiting;
+        }
+
+        return {
+          mentor_id: mentorId,
+          name: info.name,
+          email: info.email,
+          company_name: info.company_name ?? null,
+          is_active: info.is_active === true,
+          student_count: mine.length,
+          students: mine.map((p) => ({ student_id: p.student_id, student_name: p.student_name })),
+          pending_total: items.length,
+          pending_overdue: items.filter((it) => it.is_overdue).length,
+          oldest_days_waiting: oldest,
+          pending_by_kind: byKind,
+          eval_missing_students: mine.filter((p) => missing.has(p.student_id)).length,
+          last_reminded_at: toIso(info.last_reminded_at),
+          reminder_count: Number(info.reminder_count),
+          last_login_at: toIso(info.last_login_at),
+        };
+      })
+    );
+
+    return rows.sort(
+      (a, b) =>
+        b.pending_overdue - a.pending_overdue ||
+        b.pending_total - a.pending_total ||
+        String(a.name).localeCompare(String(b.name), 'th')
+    );
+  }
+
+  /**
+   * งานค้างทั้งหมดของพี่เลี้ยงคนนี้ (ไม่จำกัดขอบเขต — เป็นงานของพี่เลี้ยงเอง) ไว้ประกอบอีเมลเตือน
+   * `evalMissingStudents` นับจากนักศึกษาทุกคนที่ผูกกับพี่เลี้ยง
+   */
+  static async fullSummary(mentorId: number) {
+    const items = await MentorQueueModel.pendingItems(mentorId);
+    const byKind: Record<string, number> = Object.fromEntries(MENTOR_QUEUE_KINDS.map((k) => [k, 0]));
+    for (const it of items) byKind[it.kind] += 1;
+
+    const all = await MentorFollowupModel.placementsInScope({ kind: 'staff' }, mentorId);
+    const missing = await MentorFollowupModel.evalMissingStudentIds(all.map((p) => p.student_id));
+
+    return {
+      byKind,
+      evalMissingStudents: missing.size,
+      items: items.map((it) => ({ studentName: it.student_name, label: it.label })),
+    };
+  }
+
+  /** เตือนล่าสุดภายใน 24 ชม. หรือไม่ (ทุกชนิด) */
+  static async remindedWithin24h(mentorId: number): Promise<boolean> {
+    const res = await query(
+      `SELECT 1 FROM mentor_reminders
+        WHERE mentor_id = $1 AND created_at > NOW() - INTERVAL '24 hours' LIMIT 1`,
+      [mentorId]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * จองสิทธิ์เตือนหนึ่งครั้ง — INSERT เงื่อนไข cooldown เดียวกันในคำสั่งเดียว (กันสองคำขอซ้อนที่ผ่านด่านอ่านพร้อมกัน)
+   * คืน null = มีคนเตือนไปแล้วภายใน 24 ชม. · ผู้เรียกต้อง `releaseReminder` ถ้าส่งเมลไม่สำเร็จ
+   * (READ COMMITTED ไม่ serialize สองคำสั่งที่เริ่มพร้อมกันเป๊ะ — ช่องแคบมาก ผลคือเมลเตือนซ้ำหนึ่งฉบับ ไม่ใช่การข้ามด่านสิทธิ์)
+   */
+  static async claimReminder(mentorId: number, sentBy: number): Promise<{ reminderId: number; createdAt: Date } | null> {
+    const res = await query(
+      `INSERT INTO mentor_reminders (mentor_id, kind, sent_by)
+       SELECT $1::int, 'summary', $2::int
+        WHERE NOT EXISTS (
+                SELECT 1 FROM mentor_reminders r
+                 WHERE r.mentor_id = $1::int AND r.created_at > NOW() - INTERVAL '24 hours'
+              )
+       RETURNING reminder_id, created_at`,
+      [mentorId, sentBy]
+    );
+    if ((res.rowCount ?? 0) === 0) return null;
+    return { reminderId: Number(res.rows[0].reminder_id), createdAt: res.rows[0].created_at as Date };
+  }
+
+  static async releaseReminder(reminderId: number): Promise<void> {
+    await query(`DELETE FROM mentor_reminders WHERE reminder_id = $1`, [reminderId]);
+  }
+
+  static async reminderStats(mentorId: number): Promise<{ count: number; last_at: string | null }> {
+    const res = await query(
+      `SELECT COUNT(*)::int AS count, MAX(created_at) AS last_at FROM mentor_reminders WHERE mentor_id = $1`,
+      [mentorId]
+    );
+    return { count: Number(res.rows[0].count), last_at: toIso(res.rows[0].last_at) };
+  }
+}

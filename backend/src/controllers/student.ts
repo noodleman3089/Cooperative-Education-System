@@ -219,8 +219,23 @@ export class StudentController {
         [userId]
       );
 
+      // 5. จำนวนครั้งที่คณะ/อาจารย์เตือนพี่เลี้ยงของที่ฝึก (ทุกชนิดการเตือน) — การ์ดพี่เลี้ยงบนหน้าแรกอ่านจากตรงนี้
+      // ⛔ ส่งแค่จำนวนกับเวลาล่าสุด — ไม่บอกว่าใครกดเตือน ไม่เปิดอีเมลพี่เลี้ยงเพิ่ม · ไม่มีที่ฝึกที่ตอบรับ = 0 / null
+      const reminderQuery = await query(
+        `SELECT COUNT(*)::int AS count, MAX(r.created_at) AS last_at
+           FROM mentor_reminders r
+          WHERE r.mentor_id IN (SELECT i.mentor_id FROM intent_forms i
+                                 WHERE i.student_id = $1 AND i.status = 'accepted' AND i.mentor_id IS NOT NULL)`,
+        [userId]
+      );
+      const reminderRow = reminderQuery.rows[0];
+
       res.status(200).json({
         progress: progressQuery.rows[0],
+        mentor_reminders: {
+          count: Number(reminderRow?.count ?? 0),
+          last_at: reminderRow?.last_at ? new Date(reminderRow.last_at).toISOString() : null,
+        },
         student: {
           student_id: student.student_id,
           student_code: student.student_code,

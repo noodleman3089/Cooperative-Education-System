@@ -27,6 +27,11 @@ export const AuditAction = {
   // เก็บ token_id ไม่เก็บ token · ลิงก์ออกจาก 3 ทาง ดู detail.ttl ('requested' | 'resend' | 'system')
   MENTOR_LINK_ISSUED: 'auth.mentor_link_issued',
   MENTOR_LINK_LOGIN: 'auth.mentor_link_login',
+  // คณะตามพี่เลี้ยง (Phase 2) — เตือนงานค้างรวม · เจ้าหน้าที่ส่งลิงก์เปล่า · เจ้าหน้าที่แก้อีเมล
+  // อีเมลที่เปลี่ยนคือปลายทางของลิงก์เข้าสู่ระบบ จึงต้องตามย้อนได้ว่าใครเปลี่ยนจากอะไรเป็นอะไร
+  MENTOR_REMINDER_SENT: 'mentor.reminder_sent',
+  MENTOR_LINK_SENT_BY_STAFF: 'mentor.link_sent_by_staff',
+  MENTOR_EMAIL_CHANGED: 'mentor.email_changed',
   // เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดในระบบ
   // จึงเป็นจุดเดียวที่มีคนรับผิดชอบให้ตามย้อนได้ว่าใครปล่อยคำร้องใบไหนผ่าน
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',

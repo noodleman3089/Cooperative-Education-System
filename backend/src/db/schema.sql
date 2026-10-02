@@ -28,6 +28,7 @@ DROP TABLE IF EXISTS document_templates CASCADE;
 DROP TABLE IF EXISTS coop_applications CASCADE;
 DROP TABLE IF EXISTS acceptance_link_tokens CASCADE;
 DROP TABLE IF EXISTS mentor_login_tokens CASCADE;
+DROP TABLE IF EXISTS mentor_reminders CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
 DROP TABLE IF EXISTS student_memos CASCADE;
@@ -624,6 +625,19 @@ CREATE TABLE IF NOT EXISTS mentor_login_tokens (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_mentor_login_tokens_user ON mentor_login_tokens(user_id);
+
+-- ประวัติการเตือนพี่เลี้ยง — คณะ/เจ้าหน้าที่กดเตือนงานค้าง (summary) · ระบบส่งเตือนแจ้งประเมินรายนักศึกษา (final_report)
+-- 'auto' สงวนไว้สำหรับเฟสถัดไป (ยังไม่มีโค้ดไหนเขียน) · ใช้นับ "เตือนไปกี่ครั้ง" และเป็นตัวกัน cooldown 24 ชม. ต่อพี่เลี้ยง
+-- student_id = NULL เมื่อเป็นสรุปรวมหลายคน · sent_by = NULL เมื่อไม่ทราบผู้กด/ระบบส่งเอง
+CREATE TABLE IF NOT EXISTS mentor_reminders (
+    reminder_id SERIAL PRIMARY KEY,
+    mentor_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+    student_id INT REFERENCES students(student_id) ON DELETE SET NULL,
+    kind VARCHAR(20) NOT NULL CHECK (kind IN ('summary', 'final_report', 'auto')),
+    sent_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_mentor_reminders_mentor ON mentor_reminders(mentor_id, created_at DESC);
 
 -- 8. Document Templates Table
 CREATE TABLE IF NOT EXISTS document_templates (

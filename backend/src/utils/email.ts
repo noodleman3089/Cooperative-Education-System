@@ -953,3 +953,106 @@ export const sendMentorLoginLinkEmail = async (
     return false;
   }
 };
+
+/** ชื่อชนิดงานค้างของพี่เลี้ยงในอีเมลเตือน — คีย์ตรงกับ `MENTOR_QUEUE_KINDS` ใน models/mentorQueue.ts */
+const MENTOR_REMINDER_KIND_LABELS: Record<string, string> = {
+  weekly_log: 'บันทึกประจำสัปดาห์',
+  monthly_log: 'บันทึกประจำเดือน',
+  daily_log: 'บันทึกรายวัน',
+  work_plan: 'แผนปฏิบัติงาน',
+  report_outline: 'โครงร่างรายงาน',
+  report_draft: 'ร่างรายงาน',
+};
+
+export interface MentorReminderSummary {
+  /** จำนวนงานค้างต่อชนิด (คีย์ตาม MENTOR_QUEUE_KINDS) */
+  byKind: Record<string, number>;
+  /** นักศึกษาที่ส่งเล่มรายงานแล้วแต่พี่เลี้ยงยังไม่ได้กรอกแบบประเมิน สหกิจ 15 และ 16 */
+  evalMissingStudents: number;
+  /** รายการงานค้างเรียงตามที่ควรโชว์ก่อน — โชว์ไม่เกิน 10 บรรทัดที่เหลือสรุปเป็น "และอีก N รายการ" */
+  items: { studentName: string; label: string }[];
+}
+
+/** ที่ขึ้นบรรทัดสูงสุดในอีเมลเตือน */
+const MENTOR_REMINDER_MAX_LINES = 10;
+
+/**
+ * เตือนพี่เลี้ยงว่ามีงานค้าง — อีเมลสรุปฉบับเดียว + ลิงก์เข้าสู่ระบบใช้ครั้งเดียว (คณะตามพี่เลี้ยง Phase 2)
+ *
+ * ข้อความตายตัว ไม่รับข้อความอิสระจากผู้กด · ทุกค่าที่แทรกลง HTML ผ่าน `esc()`
+ * คืน `true` เมื่อ SMTP รับจดหมายไปแล้ว · `false` เมื่อส่งไม่ออก — ไม่โยน error
+ * ⛔ ล้มแล้วไม่ log ลิงก์ — ผู้เรียกต้องเพิกถอนลิงก์ทิ้ง (`revokeMentorLoginLink`)
+ */
+export const sendMentorReminderEmail = async (
+  toEmail: string,
+  mentorName: string,
+  summary: MentorReminderSummary,
+  loginUrl: string,
+  expiresAt: Date
+): Promise<boolean> => {
+  const tz = 'Asia/Bangkok';
+  const expiresLabel =
+    `${formatThaiDate(expiresAt.toLocaleDateString('en-CA', { timeZone: tz }))} ` +
+    `เวลา ${expiresAt.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' })} น.`;
+
+  const countLines = Object.entries(MENTOR_REMINDER_KIND_LABELS)
+    .filter(([kind]) => (summary.byKind[kind] ?? 0) > 0)
+    .map(([kind, label]) => `<li>${esc(label)} ${esc(String(summary.byKind[kind]))} รายการ</li>`);
+  if (summary.evalMissingStudents > 0) {
+    countLines.push(
+      `<li>แบบประเมิน สหกิจ 15 และ 16 ของนักศึกษา ${esc(String(summary.evalMissingStudents))} คน</li>`
+    );
+  }
+
+  const shown = summary.items.slice(0, MENTOR_REMINDER_MAX_LINES);
+  const rest = summary.items.length - shown.length;
+  const itemLines = shown.map((it) => `<li>${esc(it.studentName)} — ${esc(it.label)}</li>`);
+  const detail = itemLines.length
+    ? `
+      <ul style="padding-left: 20px; margin: 8px 0;">${itemLines.join('')}</ul>
+      ${rest > 0 ? `<p style="margin: 4px 0;">และอีก ${esc(String(rest))} รายการ</p>` : ''}
+    `
+    : '';
+
+  const content = `
+    <p>เรียน พี่เลี้ยงคุณ <b>${esc(mentorName || '')}</b>,</p>
+    <p>มีงานที่รอท่านดำเนินการในระบบสหกิจศึกษา RMUTTO ดังนี้</p>
+    <ul style="padding-left: 20px; margin: 8px 0;">${countLines.join('')}</ul>
+    ${detail}
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${esc(loginUrl)}"
+         style="display: inline-block; padding: 12px 32px; background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        เข้าสู่ระบบเพื่อดำเนินการ
+      </a>
+    </div>
+  `;
+
+  const footnote = `
+    <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
+      ลิงก์นี้ใช้ได้ครั้งเดียวและใช้ได้ถึง ${esc(expiresLabel)}<br/>
+      หากลิงก์หมดอายุแล้ว ท่านขอลิงก์ใหม่ได้ที่ ${esc(mentorLoginPageUrl())} ระบบจะส่งกลับมาที่อีเมลฉบับนี้เท่านั้น<br/>
+      อย่าส่งต่ออีเมลฉบับนี้ให้ผู้อื่น เพราะผู้ที่ถือลิงก์เข้าสู่ระบบแทนท่านได้
+    </p>
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: 'มีงานรอท่านอยู่ - ระบบสหกิจศึกษาออนไลน์',
+    html: renderEmailHtml({ title: 'มีงานรอท่านอยู่', themeColor: '#2e7d32', content, footnote }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Mentor reminder email successfully sent to: ${toEmail}`);
+    return true;
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] MENTOR REMINDER (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
+    console.error(`  To: ${toEmail}`);
+    console.error('════════════════════════════════════════════════════');
+    return false;
+  }
+};
