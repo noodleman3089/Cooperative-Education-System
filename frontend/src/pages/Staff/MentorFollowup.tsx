@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BellRing, Building2, Mail, Pencil, RefreshCw, Search, Users } from 'lucide-react';
+import { BellRing, Building2, Info, Mail, Pencil, PhoneCall, RefreshCw, Search, Users } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
@@ -48,10 +48,23 @@ export interface MentorFollowupRow {
   last_reminded_at: string | null;
   reminder_count: number;
   last_login_at: string | null;
+  /** จำนวนครั้งที่ระบบเตือนอัตโนมัติในรอบปัจจุบัน (backend รุ่นเก่าอาจไม่ส่งมา) */
+  auto_reminder_count?: number;
+  /** ระบบเตือนอัตโนมัติครบสูงสุดแล้ว พี่เลี้ยงยังเงียบและยังมีงานค้าง */
+  silent_after_max?: boolean;
+}
+
+export interface AutoRemindConfig {
+  enabled: boolean;
+  after_days: number;
+  every_days: number;
+  max: number;
 }
 
 export interface MentorFollowupResponse {
   can_edit: boolean;
+  /** ไม่มี = backend รุ่นเก่า → ไม่แสดงแถบบอกสถานะเตือนอัตโนมัติ */
+  auto_remind?: AutoRemindConfig;
   mentors: MentorFollowupRow[];
 }
 
@@ -64,13 +77,14 @@ const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> =
   ['report_draft', 'ร่างรายงาน'],
 ];
 
-type Filter = 'all' | 'pending' | 'never_login';
+type Filter = 'all' | 'pending' | 'never_login' | 'silent';
 
 const hasWork = (m: MentorFollowupRow) => m.pending_total > 0 || m.eval_missing_students > 0;
 
 const MentorFollowup: React.FC = () => {
   const [mentors, setMentors] = useState<MentorFollowupRow[]>([]);
   const [canEdit, setCanEdit] = useState(false);
+  const [autoRemind, setAutoRemind] = useState<AutoRemindConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -95,6 +109,7 @@ const MentorFollowup: React.FC = () => {
       const res = (await api.get('/mentor-followup')) as MentorFollowupResponse;
       setMentors(res.mentors ?? []);
       setCanEdit(!!res.can_edit);
+      setAutoRemind(res.auto_remind ?? null);
     } catch (err) {
       setLoadError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลการติดตามพี่เลี้ยงได้'));
     } finally {
@@ -119,6 +134,7 @@ const MentorFollowup: React.FC = () => {
       total: mentors.length,
       pending: mentors.filter((m) => m.pending_total > 0).length,
       overdue: mentors.filter((m) => m.pending_overdue > 0).length,
+      silent: mentors.filter((m) => m.silent_after_max).length,
     }),
     [mentors]
   );
@@ -128,6 +144,7 @@ const MentorFollowup: React.FC = () => {
     return mentors.filter((m) => {
       if (filter === 'pending' && !hasWork(m)) return false;
       if (filter === 'never_login' && m.last_login_at) return false;
+      if (filter === 'silent' && !m.silent_after_max) return false;
       if (!q) return true;
       return (
         m.name.toLowerCase().includes(q) ||
@@ -261,6 +278,21 @@ const MentorFollowup: React.FC = () => {
         </button>
       </div>
 
+      {autoRemind && (
+        <div
+          data-testid="mf-auto-banner"
+          data-enabled={autoRemind.enabled ? 'true' : 'false'}
+          className="flex items-start gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3.5 py-2.5 text-[13px] leading-relaxed text-blue-900 dark:border-blue-800/50 dark:bg-blue-950/40 dark:text-blue-200"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0" />
+          <span className="min-w-0 break-words">
+            {autoRemind.enabled
+              ? `ระบบเตือนพี่เลี้ยงอัตโนมัติเปิดอยู่ — เตือนเมื่อมีงานค้างเกิน ${autoRemind.after_days} วัน ซ้ำทุก ${autoRemind.every_days} วัน สูงสุด ${autoRemind.max} ครั้ง แล้วแจ้งเจ้าหน้าที่ทุกสัปดาห์`
+              : 'ระบบเตือนอัตโนมัติยังปิดอยู่ — ต้องกดเตือนเอง'}
+          </span>
+        </div>
+      )}
+
       <div ref={bannerRef} className="space-y-3 scroll-mt-4">
         <AlertBanner variant="error" message={actionError} />
         <AlertBanner variant="success" message={success} />
@@ -305,6 +337,12 @@ const MentorFollowup: React.FC = () => {
               summary.overdue,
               'bg-red-50 border-red-200 text-red-700 dark:bg-red-950/40 dark:border-red-800/50 dark:text-red-400'
             )}
+            {chip(
+              'mf-summary-silent',
+              'เตือนครบแล้วยังเงียบ',
+              summary.silent,
+              'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800/50 dark:text-amber-400'
+            )}
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
@@ -323,6 +361,7 @@ const MentorFollowup: React.FC = () => {
             {filterBtn('all', 'ทั้งหมด')}
             {filterBtn('pending', 'มีงานค้าง')}
             {filterBtn('never_login', 'ไม่เคยเปิดลิงก์')}
+            {filterBtn('silent', 'เงียบหลังเตือนครบ')}
           </div>
 
           {visible.length === 0 ? (
@@ -427,7 +466,24 @@ const MentorFollowup: React.FC = () => {
                           {m.reminder_count > 0 && m.last_reminded_at
                             ? `เตือนแล้ว ${m.reminder_count} ครั้ง · ล่าสุด ${formatThaiDateTime(m.last_reminded_at)}`
                             : 'ยังไม่เคยเตือน'}
+                          {autoRemind && (m.auto_reminder_count ?? 0) > 0 && (
+                            <span data-testid={`mf-auto-count-${m.mentor_id}`}>
+                              {' '}
+                              (อัตโนมัติ {m.auto_reminder_count}/{autoRemind.max})
+                            </span>
+                          )}
                         </div>
+                        {m.silent_after_max && (
+                          <div
+                            data-testid={`mf-silent-${m.mentor_id}`}
+                            className="mt-1.5 inline-flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs font-bold text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/50 dark:text-amber-300"
+                          >
+                            <PhoneCall className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                            <span className="min-w-0 break-words">
+                              เตือนอัตโนมัติครบแล้ว ยังเงียบ — ควรโทรตามหรือตรวจอีเมล
+                            </span>
+                          </div>
+                        )}
                         <div>
                           {m.last_login_at
                             ? `เปิดลิงก์ล่าสุด ${formatThaiDateTime(m.last_login_at)}`
