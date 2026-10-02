@@ -7,6 +7,12 @@ dotenv.config({ path: path.resolve(__dirname, 'backend/.env') });
 
 import { APP_URL, SERVER_URL } from './e2e/helpers/env';
 
+// ⛔ E2E ต้องไม่ส่งอีเมลจริงเด็ดขาด — backend/.env ในเครื่องนี้ชี้ไป Gmail จริง
+// worker ของ Playwright สืบทอด env จากโปรเซสที่โหลด config นี้ ดังนั้น spec ที่ import โมดูล backend ตรง ๆ
+// (เช่น utils/email.ts ที่เลือก dry-run/SMTP จริงครั้งเดียวตอน import) จะไม่แตะ SMTP จริง
+// ตั้งหลัง dotenv.config เพื่อทับค่าใน .env (dotenv ไม่ทับค่าที่ตั้งไว้แล้ว แต่ต้องการให้ชนะเสมอ)
+process.env.MAIL_DRY_RUN = 'true';
+
 export default defineConfig({
   testDir: './e2e',
   /* Maximum time one test can run for. */

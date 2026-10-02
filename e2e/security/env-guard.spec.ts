@@ -17,6 +17,7 @@ const productionBase = {
   SMTP_USER: 'coop',
   GOOGLE_CLIENT_ID: 'client-id',
   SENSITIVE_DATA_ENCRYPTION_KEY: '11'.repeat(32),
+  MENTOR_AUTO_REMIND: 'true',
 };
 
 test.describe('Production env guard', () => {
@@ -78,6 +79,16 @@ test.describe('Production env guard', () => {
       SENSITIVE_DATA_ENCRYPTION_KEY: 'z'.repeat(64), // 'z' ไม่ใช่เลขฐานสิบหก
     });
     expect(notHex.warnings.join(' ')).toContain('SENSITIVE_DATA_ENCRYPTION_KEY');
+  });
+
+  test('MENTOR_AUTO_REMIND ไม่ได้ตั้งหรือไม่ใช่ true บน production เป็นคำเตือนข้อเดียว ไม่ใช่การหยุดสตาร์ท', () => {
+    // เฟส 3 เตือนพี่เลี้ยงอัตโนมัติปิดเป็นค่าเริ่มต้น — ระบบยังใช้งานได้ครบ แค่เจ้าหน้าที่ต้องกดเตือนเอง
+    for (const value of [undefined, 'false']) {
+      const result = checkEnvironment({ ...productionBase, MENTOR_AUTO_REMIND: value });
+      expect(result.errors, `MENTOR_AUTO_REMIND=${String(value)}`).toEqual([]);
+      expect(result.warnings, `MENTOR_AUTO_REMIND=${String(value)}`).toHaveLength(1);
+      expect(result.warnings[0]).toContain('MENTOR_AUTO_REMIND');
+    }
   });
 
   test('โหมด dev เปิด simulated SSO ได้ แต่ต้องเตือนไว้', () => {
