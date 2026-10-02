@@ -182,6 +182,12 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 3H8a2 2 0 00-2 2v14l6-3 6 3V5a2 2 0 00-2-2Z" />
       </svg>
     ),
+    // 24. Mentor follow-up (ติดตามพี่เลี้ยง)
+    mentor_followup: (
+      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+    ),
     // 23. Certify (รับรองงานนักศึกษา)
     certify: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -226,6 +232,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'students', label: 'นักศึกษาในสาขา', icon: icons.students, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'report_outlines', label: 'เห็นชอบโครงร่าง (สหกิจ 11)', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
+      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'final_evaluation', label: 'ตรวจรับเล่มรายงาน (สหกิจ 14)', icon: icons.evaluation, group: 'ปลายภาค' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
@@ -234,6 +241,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'students', label: 'นักศึกษาที่ฉันนิเทศ', icon: icons.students, group: 'การนิเทศ' },
       { id: 'supervision', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.supervision, group: 'การนิเทศ' },
       { id: 'supervision_record', label: 'บันทึกการนิเทศ (สหกิจ 13)', icon: icons.evaluation, group: 'การนิเทศ' },
+      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'การนิเทศ' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     dept_head: [
@@ -243,6 +251,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
       { id: 'approval', label: 'ติดตามคำร้อง (เอกสารหมายเลข 1)', icon: icons.approval, group: 'งานของสาขาวิชา' },
       { id: 'final_progress', label: 'ติดตามเอกสาร & ผลประเมิน', icon: icons.summary, group: 'งานของสาขาวิชา' },
+      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'งานของสาขาวิชา' },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'งานของสาขาวิชา' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
@@ -258,6 +267,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies, group: 'งานตามฤดูกาล' },
       { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
       { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },
+      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'งานตามฤดูกาล' },
       { id: 'calendar', label: 'ปฏิทินสหกิจศึกษา', icon: icons.calendar, group: 'ตั้งค่าของคณะ' },
       { id: 'import', label: 'รายชื่อนักศึกษา & เกรด', icon: icons.import, group: 'ตั้งค่าของคณะ' },
       { id: 'users', label: 'บัญชี สิทธิ์ และข้อมูลหลัก', icon: icons.users, group: 'ตั้งค่าของคณะ' },

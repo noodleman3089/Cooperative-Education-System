@@ -52,6 +52,7 @@ const MentorEvaluation = lazy(() => import('./Mentor/MentorEvaluation'));
 const MentorProfile = lazy(() => import('./Mentor/MentorProfile'));
 const AdvisorEvaluation = lazy(() => import('./Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('./Staff/FinalProgressDashboard'));
+const MentorFollowup = lazy(() => import('./Staff/MentorFollowup'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
@@ -411,6 +412,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'report_outlines') return <OutlineReview />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
+        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         return <AdvisorHome view="advisor" />;
 
       case 'supervisor':
@@ -428,11 +430,13 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
+        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         return <AdvisorHome view="supervisor" />;
         
       case 'dept_head':
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
         //   แทนที่จะเปิดหน้าว่าง · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
@@ -455,6 +459,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'companies') return <CompanyDirectory />;
         if (activeMenu === 'calendar') return <CoopCalendarManager />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
+        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <StaffHome />;
         

@@ -71,6 +71,8 @@ const StudentDashboard: React.FC = () => {
     /** ใบที่ถูกปิดล่าสุดของภาคนี้ — มีเฉพาะตอน activeIntent เป็น null */
     closedIntent?: { form_id: number; status: string; company_name_th: string; reject_reason: string | null } | null;
     documents: OfficialDocument[];
+    /** คณะเตือนพี่เลี้ยงของนักศึกษาคนนี้ไปกี่ครั้ง — แสดงให้รู้ว่าไม่ต้องตามเอง (ไม่มี = ไม่แสดงอะไร) */
+    mentor_reminders?: { count: number; last_at: string | null };
     /** ความคืบหน้าเฟส 2–4 นับจากแถวจริง — `GET /students/dashboard` */
     progress?: {
       accommodation_submitted: boolean;
@@ -1274,6 +1276,15 @@ const StudentDashboard: React.FC = () => {
                   <span data-testid="intent-mentor" className="text-xs text-gray-600 dark:text-gray-400">
                     พี่เลี้ยง {intentMentor.name}
                     {intentMentor.email ? ` · ${intentMentor.email}` : ''}
+                  </span>
+                )}
+                {data.mentor_reminders && data.mentor_reminders.count > 0 && (
+                  <span data-testid="student-mentor-reminders" className="text-xs text-gray-600 dark:text-gray-400">
+                    คณะแจ้งเตือนพี่เลี้ยงแล้ว {data.mentor_reminders.count} ครั้ง
+                    {data.mentor_reminders.last_at
+                      ? ` (ล่าสุด ${formatThaiDateTime(data.mentor_reminders.last_at)})`
+                      : ''}{' '}
+                    — ไม่ต้องตามเอง
                   </span>
                 )}
                 {activeIntent.start_date && (
