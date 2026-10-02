@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Briefcase } from 'lucide-react';
 import LoginCard from '../components/auth/LoginCard';
 import PasswordLoginForm from '../components/auth/PasswordLoginForm';
@@ -71,6 +71,15 @@ const LoginCompany: React.FC = () => {
       <p className="mt-5 text-center text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
         หากท่านเพิ่งได้รับอีเมลเชิญเข้าใช้งาน กรุณากดลิงก์{' '}
         <span className="font-semibold">ตั้งรหัสผ่านและเข้าใช้งาน</span> ในอีเมลก่อนเข้าสู่ระบบครั้งแรก
+      </p>
+
+      <p className="mt-3 text-center text-xs text-gray-600 dark:text-gray-400">
+        <Link
+          to="/login/mentor"
+          className="font-medium text-brand-blue hover:text-brand-navy dark:text-blue-400 dark:hover:text-blue-300"
+        >
+          พี่เลี้ยง: เข้าด้วยลิงก์ทางอีเมล
+        </Link>
       </p>
     </LoginCard>
   );
