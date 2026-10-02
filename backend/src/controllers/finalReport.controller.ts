@@ -4,6 +4,7 @@ import { sendFinalReportNotificationEmail } from '../utils/email';
 import { assertAssignedDuty, assertCanReviewStudentWork, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
+import { issueMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
 
 export class FinalReportController {
   /**
@@ -444,7 +445,7 @@ export class FinalReportController {
   private static async sendMentorNotificationHelper(studentId: number): Promise<boolean> {
     // 1. Fetch mentor credentials and student name
     const infoRes = await query(
-      `SELECT m.name as mentor_name, u_men.email as mentor_email, s.first_name || ' ' || s.last_name as student_name, s.student_code
+      `SELECT i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, s.first_name || ' ' || s.last_name as student_name, s.student_code
        FROM intent_forms i
        JOIN mentors m ON i.mentor_id = m.mentor_id
        JOIN users u_men ON i.mentor_id = u_men.user_id
@@ -458,7 +459,7 @@ export class FinalReportController {
       return false;
     }
 
-    const { mentor_name, mentor_email, student_name, student_code } = infoRes.rows[0];
+    const { mentor_id, mentor_name, mentor_email, student_name, student_code } = infoRes.rows[0];
 
     // 2. Check Cooldown (24 hours)
     const notifyRes = await query(
@@ -493,7 +494,20 @@ export class FinalReportController {
     }
 
     // 3. Send the Email
-    await sendFinalReportNotificationEmail(mentor_email, mentor_name, student_name, student_code);
+    // ลิงก์เข้าสู่ระบบใช้ครั้งเดียวพาไปหน้าประเมินเลย — ไม่ได้ลิงก์ก็ส่งแค่ที่ชี้ไปหน้าขอลิงก์เอง
+    const loginLink = await issueMentorLoginLink({
+      userId: mentor_id,
+      target: '/dashboard?menu=final_evaluation',
+      ttlMs: MENTOR_LINK_TTL_SYSTEM_MS,
+      skipCooldown: true,
+    });
+    await sendFinalReportNotificationEmail(
+      mentor_email,
+      mentor_name,
+      student_name,
+      student_code,
+      loginLink && 'url' in loginLink ? loginLink.url : undefined
+    );
     return true;
   }
 }

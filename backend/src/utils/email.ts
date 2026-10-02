@@ -664,7 +664,9 @@ export const sendSupervisionAppointmentEmail = async (
     mentorTime: string;
     tourRequested: boolean;
   },
-  tokenLink: string
+  tokenLink: string,
+  // ลิงก์เข้าสู่ระบบใช้ครั้งเดียวของพี่เลี้ยง (ไม่ส่ง = มีแค่ปุ่มตอบรับเดิม)
+  loginLink?: string
 ): Promise<void> => {
   const subject = 'ขอนัดหมายนิเทศนักศึกษาสหกิจศึกษา — RMUTTO';
 
@@ -717,6 +719,15 @@ export const sendSupervisionAppointmentEmail = async (
     </div>
     
     <p>ท่านสามารถคลิกปุ่มด้านบนเพื่อ <b>ตอบรับการนัดหมาย</b> หรือ <b>เสนอเวลาใหม่</b> ได้โดยไม่ต้องเข้าสู่ระบบ</p>
+    ${loginLink ? `
+    <div style="text-align: center; margin: 16px 0 4px;">
+      <a href="${esc(loginLink)}"
+         style="display: inline-block; padding: 8px 20px; background-color: #ffffff; color: #2e7d32; border: 1px solid #2e7d32; font-weight: bold; font-size: 13px; text-decoration: none; border-radius: 8px;">
+        เข้าสู่ระบบสหกิจศึกษา
+      </a>
+    </div>
+    <p style="text-align: center; font-size: 12px; color: #666;">ลิงก์เข้าสู่ระบบนี้ใช้ได้ครั้งเดียว</p>
+    ` : ''}
   `;
 
   try {
@@ -739,7 +750,9 @@ export const sendFinalReportNotificationEmail = async (
   mentorEmail: string,
   mentorName: string,
   studentName: string,
-  studentCode: string
+  studentCode: string,
+  // ลิงก์เข้าสู่ระบบใช้ครั้งเดียวของพี่เลี้ยง — ไม่ส่งก็ชี้ไปหน้าที่พี่เลี้ยงขอลิงก์เอง
+  loginLink?: string
 ): Promise<void> => {
   // Subject is plain text and stays verbatim; the markup below gets escaped.
   const subject = `แจ้งเตือนทำแบบประเมินผลการฝึกงานของนักศึกษา: ${studentName} - ระบบสหกิจศึกษาออนไลน์`;
@@ -764,11 +777,14 @@ export const sendFinalReportNotificationEmail = async (
     <p>นักศึกษาในความดูแลของท่าน ได้ทำการอัปโหลด <b>รายงานปฏิบัติงานสหกิจศึกษาฉบับสมบูรณ์ (Final Report)</b> เข้าสู่ระบบเรียบร้อยแล้ว</p>
     <p>ขอความอนุเคราะห์ท่านเข้าสู่ระบบสหกิจศึกษา RMUTTO เพื่อทำ <b>แบบประเมินพฤติกรรมและผลงานของนักศึกษา (สหกิจ 15 & 16)</b> เพื่อที่ทางมหาวิทยาลัยจะได้นำคะแนนไปประมวลผลการตัดเกรดต่อไป</p>
     <div style="text-align: center; margin: 24px 0;">
-      <a href="${companyLoginUrl()}"
+      <a href="${esc(loginLink ?? mentorLoginPageUrl())}"
          style="display: inline-block; padding: 12px 32px; background-color: #2e7d32; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
         เข้าสู่ระบบเพื่อประเมิน
       </a>
     </div>
+    <p style="text-align: center; font-size: 12px; color: #666;">${loginLink
+      ? 'ลิงก์นี้ใช้ได้ครั้งเดียว หากหมดอายุขอลิงก์ใหม่ได้ที่หน้าเข้าสู่ระบบพี่เลี้ยง'
+      : 'กรอกอีเมลของท่านที่หน้านี้ ระบบจะส่งลิงก์เข้าสู่ระบบให้ทางอีเมล'}</p>
   `;
 
   try {

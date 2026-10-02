@@ -6,6 +6,7 @@ import type { JwtPayload } from 'jsonwebtoken';
 import { sendUnexpectedError } from '../utils/httpError';
 import { assertAssignedDuty, sendAccessError } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { issueMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
 import { buildTravelRequestPdf, TRAVEL_REQUEST_MAX_ROWS } from '../utils/travelRequestPdf';
 
 /** คู่มือกำหนดนิเทศสหกิจ 2 ครั้ง · ไม่มีสถานะยกเลิกนัด จึงไม่มีนัดที่ 3 */
@@ -254,6 +255,14 @@ export class AppointmentController {
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       const tokenLink = `${frontendUrl}/appointment-response?token=${token}`;
 
+      // ปุ่มเข้าสู่ระบบใช้ครั้งเดียวในอีเมลเดียวกัน — ไม่ได้ลิงก์ (ไม่ใช่พี่เลี้ยงล้วน/ติด cooldown) ก็ส่งแค่ปุ่มตอบรับเดิม
+      const loginLink = await issueMentorLoginLink({
+        userId: app.mentor_id,
+        target: '/dashboard',
+        ttlMs: MENTOR_LINK_TTL_SYSTEM_MS,
+        skipCooldown: true,
+      });
+
       await sendSupervisionAppointmentEmail(
         mentorEmail,
         {
@@ -264,7 +273,8 @@ export class AppointmentController {
           mentorTime: app.mentor_time,
           tourRequested: app.tour_requested
         },
-        tokenLink
+        tokenLink,
+        loginLink && 'url' in loginLink ? loginLink.url : undefined
       );
 
       // Update status
