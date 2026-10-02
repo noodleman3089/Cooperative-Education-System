@@ -31,7 +31,7 @@ import type {
  *
  * SEC-01: บุคลากรตั้งต้นที่ไม่มีอีเมล claim ไม่ได้ หน้าจอต้องขึ้นป้ายว่าแถวนั้นยังผูกบัญชีไม่ได้
  * SEC-03: บทบาท mentor ห้ามชนกับบทบาทอื่น
- * ปุ่ม "ส่งลิงก์เชิญใหม่" แสดงเฉพาะบัญชีสถานประกอบการ/พี่เลี้ยงที่ยังไม่ได้ตั้งรหัสเท่านั้น
+ * ปุ่ม "ส่งลิงก์เชิญใหม่" แสดงเฉพาะบัญชีสถานประกอบการที่ยังไม่ได้ตั้งรหัสเท่านั้น
  */
 
 const ROLE_LABELS: Record<string, string> = {
@@ -615,8 +615,9 @@ export const UsersAndMasterData: React.FC = () => {
     : [];
 
   const getLoginMethod = (u: UserRow) => {
-    const isCompanyOrMentor = (u.roles || []).some((r) => r === 'company' || r === 'mentor');
-    if (!isCompanyOrMentor) return 'Google (มหาวิทยาลัย)';
+    const roles = u.roles || [];
+    if (roles.includes('mentor') && !roles.includes('company')) return 'ลิงก์ทางอีเมล (ไม่มีรหัสผ่าน)';
+    if (!roles.includes('company')) return 'Google (มหาวิทยาลัย)';
     if (u.is_invited && !u.is_password_set) return 'ลิงก์เชิญ · ยังไม่ได้ตั้งรหัส';
     return 'ลิงก์เชิญ · ตั้งรหัสแล้ว';
   };
@@ -721,8 +722,7 @@ export const UsersAndMasterData: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-xs">
                   {users.map((u) => {
-                    const isCompanyOrMentor = (u.roles || []).some((r) => r === 'company' || r === 'mentor');
-                    const isPendingInvite = isCompanyOrMentor && u.is_invited && !u.is_password_set;
+                    const isPendingInvite = (u.roles || []).includes('company') && u.is_invited && !u.is_password_set;
 
                     return (
                       <tr
@@ -775,7 +775,7 @@ export const UsersAndMasterData: React.FC = () => {
                         </td>
                         <td className="p-3 sm:px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* ปุ่มส่งลิงก์เชิญใหม่ แสดงเฉพาะบัญชีสถานประกอบการ/พี่เลี้ยงที่ยังไม่ได้ตั้งรหัส */}
+                            {/* ปุ่มส่งลิงก์เชิญใหม่ แสดงเฉพาะบัญชีสถานประกอบการที่ยังไม่ได้ตั้งรหัส (พี่เลี้ยงไม่มีรหัสผ่าน — ส่งลิงก์ซ้ำที่หน้าติดตามพี่เลี้ยง) */}
                             {isPendingInvite && (
                               <button
                                 type="button"
@@ -809,7 +809,10 @@ export const UsersAndMasterData: React.FC = () => {
 
           <div className="p-4 sm:px-5 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 leading-relaxed bg-gray-50/30 dark:bg-gray-800/20 space-y-1">
             <p>
-              คนนอกเข้าระบบด้วย <strong className="font-bold text-gray-800 dark:text-gray-200">ลิงก์เชิญใช้ครั้งเดียว อายุ 48 ชม.</strong> ไม่ใช่รหัสผ่านที่ส่งทางเมล · ปุ่ม “ส่งลิงก์เชิญใหม่” ใช้ได้เฉพาะบัญชีสถานประกอบการและพี่เลี้ยง — นักศึกษาและบุคลากรใช้ Google จึงถูกปฏิเสธโดยตั้งใจ
+              คนนอกเข้าระบบด้วย <strong className="font-bold text-gray-800 dark:text-gray-200">ลิงก์เชิญใช้ครั้งเดียว อายุ 48 ชม.</strong> ไม่ใช่รหัสผ่านที่ส่งทางเมล · ปุ่ม “ส่งลิงก์เชิญใหม่” ใช้ได้เฉพาะบัญชีสถานประกอบการ — นักศึกษาและบุคลากรใช้ Google จึงถูกปฏิเสธโดยตั้งใจ
+            </p>
+            <p>
+              พี่เลี้ยงไม่มีรหัสผ่าน เข้าระบบด้วยลิงก์ทางอีเมลเท่านั้น · ส่งลิงก์ซ้ำได้ที่หน้า “ติดตามพี่เลี้ยง”
             </p>
             <p>
               ⛔ แปะบทบาท “พี่เลี้ยง” ทับบัญชีที่มีบทบาทอื่นอยู่แล้วไม่ได้ ระบบตอบปฏิเสธพร้อมบอกให้ใช้อีเมลอื่น
@@ -1613,7 +1616,7 @@ export const UsersAndMasterData: React.FC = () => {
                   บทบาทในระบบ *
                 </span>
                 <div className="grid grid-cols-2 gap-2 text-xs">
-                  {Object.entries(ROLE_LABELS).map(([k, lbl]) => (
+                  {Object.entries(ROLE_LABELS).filter(([k]) => k !== 'mentor').map(([k, lbl]) => (
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
                         type="checkbox"
@@ -1628,6 +1631,9 @@ export const UsersAndMasterData: React.FC = () => {
                     </label>
                   ))}
                 </div>
+                <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                  พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ
+                </p>
               </div>
               {needsMajor && (
                 <div>

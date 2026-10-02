@@ -1,5 +1,5 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Mail } from 'lucide-react';
 import LoginCard from '../components/auth/LoginCard';
 import AlertBanner from '../components/ui/AlertBanner';
@@ -100,14 +100,6 @@ const LoginMentor: React.FC = () => {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-xs text-gray-600 dark:text-gray-400">
-        <Link
-          to="/login/company"
-          className="font-medium text-brand-blue hover:text-brand-navy dark:text-blue-400 dark:hover:text-blue-300"
-        >
-          เข้าสู่ระบบด้วยรหัสผ่าน
-        </Link>
-      </p>
     </LoginCard>
   );
 };
