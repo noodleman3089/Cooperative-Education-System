@@ -151,7 +151,7 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
 
   test('ความคืบหน้าเป็นของตัวเองเท่านั้น — role อื่นเรียก /students/dashboard ไม่ได้', async ({ request }) => {
     await acceptedStudent2();
-    for (const who of ['company1', 'advisor1'] as const) {
+    for (const who of ['mentor1', 'advisor1'] as const) {
       await apiLoginAs(request, who);
       expect((await request.get(`${API_URL}/students/dashboard`)).status(), who).toBe(403);
     }

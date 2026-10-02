@@ -14,8 +14,9 @@ import { apiLoginAs, ACCOUNTS, DEFAULT_PASSWORD } from '../helpers/auth';
  * (ข้อมูลเก่า / ใครยัดมา) · บัญชีอื่น (นักศึกษา · บุคลากร · เจ้าหน้าที่ · mentor+บทบาทอื่น) ต้องไม่เปลี่ยน
  *
  * N1 login ด้วยรหัสผ่าน · N2 set-password · N3 forgot-password · N4 reset-password
- * N5 เจ้าหน้าที่สร้างบัญชี mentor ด้วยมือ · N6 เติมบทบาท mentor ให้บัญชีอื่น · N7 resend-invite
+ * N5 เจ้าหน้าที่สร้างบัญชี mentor ด้วยมือ · N6 เติมบทบาท mentor ให้บัญชีอื่น
  * N8 ผลของ migration 041 (ล้าง hash เฉพาะพี่เลี้ยงล้วน)
+ * (N7 resend-invite ถูกถอด 2026-10-02 พร้อม route — ตอบ 404 คุมที่ company-role-removed.spec.ts)
  *
  * ข้อมูลทั้งหมดเป็นของปลอม · ไม่มีการส่งเมลจริง (`MAIL_DRY_RUN=true`)
  */
@@ -187,26 +188,6 @@ test.describe('SEC-15: พี่เลี้ยงไม่มีรหัสผ
     });
     expect(keep.status(), await keep.text()).toBe(200);
     expect(await rolesOf(MENTOR1)).toEqual(['mentor']);
-  });
-
-  test('N7: resend-invite ของพี่เลี้ยง = 400 · ไม่มี reset_token ไม่มี login token · บัญชีอื่นยังส่งได้', async ({
-    request,
-  }) => {
-    await apiLoginAs(request, 'staff1');
-    const mentor = await userRow(MENTOR1);
-
-    const res = await request.post(`${API_URL}/users/${mentor!.user_id}/resend-invite`);
-    expect(res.status(), await res.text()).toBe(400);
-    expect((await userRow(MENTOR1))!.has_reset).toBe(false);
-    expect(
-      await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens WHERE user_id = $1', [mentor!.user_id])
-    ).toBe('0');
-
-    // ตัวควบคุม: บริษัท (ไม่ใช่พี่เลี้ยง) ยังส่งลิงก์เชิญได้
-    const company = await userRow('company1@test.com');
-    const ok = await request.post(`${API_URL}/users/${company!.user_id}/resend-invite`);
-    expect(ok.status(), await ok.text()).toBe(200);
-    expect((await userRow('company1@test.com'))!.has_reset).toBe(true);
   });
 
   test('N8: migration 041 — ล้าง hash/reset_token เฉพาะพี่เลี้ยงล้วน · นักศึกษา เจ้าหน้าที่ และ mentor+advisor ไม่ถูกแตะ', async () => {

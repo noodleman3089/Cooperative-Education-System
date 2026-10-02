@@ -178,44 +178,8 @@ test.describe('Security hardening regressions', () => {
     });
   });
 
-  // SEC-04 — company acceptance only refused an already-'accepted' form, so a
-  // company could accept an intent that had not passed the advisor or dept head.
-  test('SEC-04: a company cannot accept an intent that has not cleared approval', async ({ request }) => {
-    const client = await pool.connect();
-    let intentId: number;
-    try {
-      const semesterId = (await client.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0].semester_id;
-      await client.query('DELETE FROM intent_forms WHERE student_id = 2');
-      await client.query(
-        `UPDATE companies SET created_by = (SELECT user_id FROM users WHERE email = 'company1@test.com') WHERE company_id = 1`
-      );
-      intentId = (await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, 1, $1, 'pending_advisor') RETURNING form_id`,
-        [semesterId]
-      )).rows[0].form_id;
-    } finally {
-      client.release();
-    }
-
-    await apiLoginAs(request, 'company1');
-    const res = await request.patch(`${API_URL}/acceptances/company/${intentId}/status`, {
-      data: {
-        status: 'accepted',
-        name: 'พี่เลี้ยง',
-        email: 'sec04-mentor@test.com',
-        phone: '0812345678',
-        start_date: '2026-11-02',
-      },
-    });
-    expect(res.status()).toBe(400);
-    expect((await res.json()).message).toContain('pending_advisor');
-
-    await withDb(async (db) => {
-      const row = await db.query('SELECT status FROM intent_forms WHERE form_id = $1', [intentId]);
-      expect(row.rows[0].status).toBe('pending_advisor');
-    });
-  });
+  // SEC-04 (ด่านรับตอบรับของบริษัทด้วยบัญชี) ถอดแล้ว 2026-10-02 — route `PATCH /acceptances/company/:id/status` ถูกลบพร้อมบทบาท company
+  // ด่านสถานะของทางที่เหลือ (ลิงก์สาธารณะ) คุมที่ acceptance-link.spec.ts L9 (ใบไม่อยู่ใน approved_by_dept_head = 410)
 
   // ⛔ เคส "การออกหนังสือราชการต้องผ่านการรับรองสถานประกอบการก่อน" ถูกลบเมื่อ
   // 2026-08-26 พร้อมกับ POST /documents/generate — ไม่มีการออกเอกสารในระบบแล้ว
@@ -241,147 +205,18 @@ test.describe('Security hardening regressions', () => {
     expect((await asStudent.json()).some((c: { company_id: number }) => c.company_id === 1)).toBe(false);
   });
 
-  // SEC-10 — GET /api/intents is one query shared by five roles, so it selected
-  // the union of everything any of them needed and handed all of it to a
-  // company: home address, mobile number, alternate email, and both parents'
-  // names and phone numbers. The paper equivalent of that screen is สหกิจ 04,
-  // which lists a name, student code, major and job title and nothing else;
-  // anything personal reaches the company inside the student's own สหกิจ 03,
-  // i.e. the resume file, which is still linked.
-  test('SEC-10: a company receives only the สหกิจ 04 fields, never student or parent contacts', async ({ request }) => {
-    const semesterId = await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
-
-    await withDb(async (db) => {
-      await db.query('DELETE FROM intent_forms WHERE student_id = 2');
-      await db.query(
-        `UPDATE companies SET created_by = (SELECT user_id FROM users WHERE email = 'company1@test.com') WHERE company_id = 1`
-      );
-      // Fill in every field the endpoint used to leak, so their absence below
-      // means they were dropped rather than simply never set.
-      await db.query(
-        `UPDATE students
-         SET current_address = '99/9 ถนนทดสอบ', phone = '0800000001', alt_email = 'leak@test.com',
-             parent_name = 'ผู้ปกครองทดสอบ', parent_phone = '0800000002', nickname = 'ชื่อเล่น'
-         WHERE student_id = 2`
-      );
-      await db.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, 1, $1, 'approved_by_dept_head')`,
-        [semesterId]
-      );
-    });
-
-    await apiLoginAs(request, 'company1');
-    const rows = await (await request.get(`${API_URL}/intents`)).json();
-    expect(rows.length).toBeGreaterThan(0);
-
-    const leaked = ['current_address', 'student_phone', 'alt_email', 'parent_name', 'parent_phone',
-                    'nickname', 'year_level', 'parental_consent_path', 'acceptance_evidence_path'];
-    for (const row of rows) {
-      for (const field of leaked) {
-        expect(row, `company must not receive ${field}`).not.toHaveProperty(field);
-      }
-      // สหกิจ 04's own columns, plus the link to สหกิจ 03, must survive.
-      for (const kept of ['student_code', 'first_name', 'last_name', 'major_name_th', 'status', 'resume_file']) {
-        expect(row).toHaveProperty(kept);
-      }
-    }
-  });
-
-  // SEC-10 — the same screen also listed placements the faculty had not sent to
-  // the company yet: the query scoped by company_id but not by status, so an
-  // application showed up the moment the student filed it.
-  test('SEC-10: a company cannot see a placement before the department head releases it', async ({ request }) => {
-    const semesterId = await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
-
-    await withDb(async (db) => {
-      await db.query('DELETE FROM intent_forms WHERE student_id = 2');
-      await db.query(
-        `UPDATE companies SET created_by = (SELECT user_id FROM users WHERE email = 'company1@test.com') WHERE company_id = 1`
-      );
-      await db.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, 1, $1, 'pending_advisor')`,
-        [semesterId]
-      );
-    });
-
-    await apiLoginAs(request, 'company1');
-    expect(await (await request.get(`${API_URL}/intents`)).json()).toEqual([]);
-
-    // Once the department head has released it, the same row appears.
-    await withDb(async (db) => {
-      await db.query(`UPDATE intent_forms SET status = 'approved_by_dept_head' WHERE student_id = 2`);
-    });
-    expect((await (await request.get(`${API_URL}/intents`)).json()).length).toBe(1);
-  });
-
-  // SEC-10 — the list endpoint was trimmed in round 39, but GET /intents/:id
-  // was left returning the whole row to every role that passed the access
-  // check. A company linked to the placement could therefore read the very
-  // fields the list had just been fixed to withhold — GPA, the student's login
-  // e-mail, the eligibility flags — by opening the detail instead of the list.
-  test('SEC-10: the intent detail is trimmed for a company too, not only the list', async ({
-    request,
-  }) => {
-    const semesterId = await dbValue<number>(
-      'SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1'
-    );
-    const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
-
-    const formId = await withDb(async (db) => {
-      await db.query('DELETE FROM intent_forms WHERE student_id = 2');
-      await db.query(
-        `UPDATE companies SET created_by = (SELECT user_id FROM users WHERE email = 'company1@test.com')
-          WHERE company_id = $1`,
-        [companyId]
-      );
-      // ตั้งค่าที่เคยรั่วให้มีค่าจริง การที่มันหายไปข้างล่างจึงแปลว่า "ถูกตัด"
-      // ไม่ใช่ "ไม่เคยมีค่ามาตั้งแต่ต้น"
-      await db.query(
-        `UPDATE students SET cumulative_gpa = 3.45, current_address = '99/9 ถนนทดสอบ',
-                             parent_name = 'ผู้ปกครองทดสอบ'
-          WHERE student_id = 2`
-      );
-      const res = await db.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, $1, $2, 'approved_by_dept_head') RETURNING form_id`,
-        [companyId, semesterId]
-      );
-      return res.rows[0].form_id as number;
-    });
-
-    await apiLoginAs(request, 'company1');
-    const asCompany = await request.get(`${API_URL}/intents/${formId}`);
-    expect(asCompany.status()).toBe(200);
-    const seen = await asCompany.json();
-
-    for (const field of [
-      'cumulative_gpa',
-      'student_email',
-      'student_id',
-      'faculty_name_th',
-    ]) {
-      expect(seen, `company must not receive ${field}`).not.toHaveProperty(field);
-    }
-    // ตัดแล้วต้องยังใช้งานได้ — ของที่บริษัทเป็นเจ้าของเองต้องอยู่ครบ
-    expect(seen.student_code).toBeTruthy();
-    expect(seen.company_id).toBe(companyId);
-
-    // เจ้าหน้าที่ยังต้องเห็นครบเหมือนเดิม ไม่งั้นการตัดนี้ไปทำหน้าจอคนอื่นพัง
-    await apiLoginAs(request, 'staff1');
-    const asStaff = await (await request.get(`${API_URL}/intents/${formId}`)).json();
-    expect(Number(asStaff.cumulative_gpa)).toBe(3.45);
-  });
+  // SEC-10 (ถอดแล้ว 2026-10-02) — สามเคส "บริษัทเห็นเฉพาะฟิลด์สหกิจ 04 / ไม่เห็นใบก่อนปล่อย / รายละเอียดใบถูกตัด"
+  // เป็นของบทบาท company ซึ่งถูกลบแล้ว · GET /intents และ /intents/:id เปิดเฉพาะคณะ/เจ้าหน้าที่/คณบดี
+  // ข้อมูลที่บริษัทเห็นตอนนี้มาจากลิงก์สาธารณะ /public/acceptance เท่านั้น → คุมที่ acceptance-link.spec.ts L3 (allow-list)
 
   // SEC-10 — the file endpoint checked permissions *after* falling back to a
   // blank template for a missing file, so a request that should have been
   // refused came back 200 with a PDF. Nothing leaked (the template is empty),
   // but it made every file-permission test unreliable.
   test('SEC-10: a missing file is refused before the fallback template is offered', async ({ request }) => {
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
 
-    // A resume that does not exist and does not belong to this company.
+    // A resume that does not exist and does not belong to this mentor's student.
     const res = await request.get(`${API_URL}/files/resumes/resume-user-99999-nonexistent.pdf`);
     expect(res.status()).toBe(403);
     expect(res.headers()['content-type'] || '').not.toContain('pdf');
@@ -651,125 +486,7 @@ test.describe('Security hardening regressions', () => {
     expect((await page.request.get(`${API_URL}/intents/me`)).status()).toBe(401);
   });
 
-  // SEC-09 — company and mentor accounts used to be opened with a generated
-  // password that was emailed in plaintext. Company addresses are frequently
-  // shared mailboxes (hr@, contact@) and nothing ever forced a rotation, so the
-  // mailbox became a permanent credential store.
-  test('SEC-09: a company account is opened by invitation, never with a mailed password', async ({ page, request }) => {
-    const email = `sec09-company-${Date.now()}@partner.test`;
-
-    await withDb(async (db) => {
-      await db.query('DELETE FROM users WHERE email LIKE $1', ['sec09-company-%']);
-    });
-
-    await apiLoginAs(request, 'staff1');
-    const created = await request.post(`${API_URL}/users`, {
-      data: { email, role: 'company' },
-    });
-    expect(created.status()).toBe(201);
-
-    const body = await created.json();
-    // Nothing password-shaped comes back, and an invite link does.
-    expect(body.generatedPassword).toBeUndefined();
-    expect(body.user.password_hash).toBeUndefined();
-    // The invite lands on the company login page itself, not a separate page.
-    expect(body.inviteLink, 'inviteLink is needed to drive this flow without SMTP').toContain('/login/company?token=');
-
-    await withDb(async (db) => {
-      const row = (await db.query(
-        'SELECT password_hash, reset_token, reset_token_expires FROM users WHERE email = $1',
-        [email]
-      )).rows[0];
-      expect(row.password_hash).toBeNull();
-      expect(row.reset_token).toBeTruthy();
-      expect(new Date(row.reset_token_expires).getTime()).toBeGreaterThan(Date.now());
-    });
-
-    // Until the invite is used the account cannot be logged into, and the
-    // refusal must not tell an external partner to use a university Google account.
-    const tooEarly = await request.post(`${API_URL}/auth/login`, {
-      data: { email, password: 'anything-at-all' },
-    });
-    expect(tooEarly.status()).toBe(400);
-    expect((await tooEarly.json()).message).not.toContain('Google');
-
-    // Follow the emailed link — it opens the company login page in activation mode.
-    const token = new URL(body.inviteLink).searchParams.get('token')!;
-    await page.goto(`/login/company?token=${token}`);
-    await expect(page.locator('text=ตั้งรหัสผ่านเพื่อเปิดใช้งานบัญชี')).toBeVisible();
-    await page.locator('input[type="password"]').first().fill('PartnerPass123');
-    await page.locator('input[type="password"]').nth(1).fill('PartnerPass123');
-    await page.click('button[type="submit"]');
-    await expect(page.locator('text=ตั้งรหัสผ่านสำเร็จ')).toBeVisible();
-
-    // The chosen password works...
-    const nowWorks = await request.post(`${API_URL}/auth/login`, {
-      data: { email, password: 'PartnerPass123' },
-    });
-    expect(nowWorks.status()).toBe(200);
-
-    // ...and the invite token is single-use.
-    const replay = await request.post(`${API_URL}/auth/reset-password`, {
-      data: { token, password: 'Hijacked12345', confirmPassword: 'Hijacked12345' },
-    });
-    expect(replay.status()).toBe(400);
-
-    await withDb(async (db) => {
-      await db.query('DELETE FROM users WHERE email = $1', [email]);
-    });
-  });
-
-  // A partner who never received their invitation, or let it expire, cannot
-  // reach the login form and therefore cannot reach "forgot password" either.
-  // Staff reissuing it is the only route back, so it has to work — and it must
-  // not become a second way into a student or staff account.
-  test('SEC-09: staff can reissue an invitation, and only to external partners', async ({ request }) => {
-    await apiLoginAs(request, 'staff1');
-
-    const users = await (await request.get(`${API_URL}/users`)).json();
-    const company = users.find((u: any) => u.email === 'company1@test.com');
-    const student = users.find((u: any) => u.email === 'student2@test.com');
-    expect(company, 'seeded company account').toBeTruthy();
-
-    const before = await pool.connect();
-    let previousToken: string | null;
-    try {
-      previousToken = (await before.query('SELECT reset_token FROM users WHERE user_id = $1', [company.user_id]))
-        .rows[0].reset_token;
-    } finally {
-      before.release();
-    }
-
-    const resent = await request.post(`${API_URL}/users/${company.user_id}/resend-invite`);
-    expect(resent.status()).toBe(200);
-    const resentBody = await resent.json();
-    expect(resentBody.inviteLink).toContain('/login/company?token=');
-
-    // A fresh token replaces whatever was there, so an older link stops working.
-    await withDb(async (db) => {
-      const row = (await db.query(
-        'SELECT reset_token, reset_token_expires FROM users WHERE user_id = $1',
-        [company.user_id]
-      )).rows[0];
-      expect(row.reset_token).toBeTruthy();
-      expect(row.reset_token).not.toBe(previousToken);
-      // 48h TTL, not the 1h a password reset uses.
-      const hours = (new Date(row.reset_token_expires).getTime() - Date.now()) / 3_600_000;
-      expect(hours).toBeGreaterThan(24);
-      expect(hours).toBeLessThanOrEqual(48);
-    });
-
-    // Students sign in with Google; an invite link would be a weaker second door.
-    const refused = await request.post(`${API_URL}/users/${student.user_id}/resend-invite`);
-    expect(refused.status()).toBe(400);
-
-    await withDb(async (db) => {
-      const row = (await db.query('SELECT reset_token FROM users WHERE user_id = $1', [student.user_id])).rows[0];
-      expect(row.reset_token).toBeNull();
-      // leave the seeded company account as the rest of the suite expects it
-      await db.query('UPDATE users SET reset_token = NULL, reset_token_expires = NULL WHERE user_id = $1', [
-        company.user_id,
-      ]);
-    });
-  });
+  // SEC-09 (ถอดแล้ว 2026-10-02) — เคส "เปิดบัญชีบริษัทด้วยลิงก์เชิญ" และ "ส่งลิงก์เชิญซ้ำ" ถูกลบพร้อมบทบาท company
+  // และ resend-invite · บริษัทไม่มีบัญชี พี่เลี้ยงเข้าด้วยลิงก์อีเมลครั้งเดียว (SEC-15) ·
+  // ที่ยังต้องจริงคือ "ไม่มีรหัสผ่านถูกส่งทางเมล" → mentor-no-password.spec.ts · "ไม่มีบทบาท company" → company-role-removed.spec.ts
 });

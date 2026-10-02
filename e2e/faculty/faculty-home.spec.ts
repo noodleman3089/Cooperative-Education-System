@@ -176,7 +176,7 @@ test.describe('SB-F1 · หน้าแรกอาจารย์', () => {
   test('H4: fail closed — ไม่มีสาขาในโปรไฟล์ 403 · บทบาทอื่น 403 · ไม่ล็อกอิน 401', async ({ request }) => {
     expect((await request.get(`${API_URL}/faculty/home/advisor?view=advisor`)).status()).toBe(401);
 
-    for (const who of ['student2', 'staff1', 'company1'] as const) {
+    for (const who of ['student2', 'staff1', 'mentor1'] as const) {
       await apiLoginAs(request, who);
       expect((await request.get(`${API_URL}/faculty/home/advisor?view=advisor`)).status(), who).toBe(403);
     }

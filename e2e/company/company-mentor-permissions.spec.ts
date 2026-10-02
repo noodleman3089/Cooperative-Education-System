@@ -31,7 +31,7 @@ async function attachMentorTo(studentEmail: string): Promise<{ mentorId: number;
     const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
-    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน) แยกจาก company1 ที่เป็นบริษัทล้วน
+    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน)
     await db.query(
       `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
        VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE)`,
@@ -112,8 +112,8 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
     const body = { company_ids: [companyId], semester_id: semesterId, due_date: dueDate };
 
-    // บริษัทสั่งให้ระบบส่งแบบสำรวจหาตัวเองไม่ได้ — คณะเป็นฝ่ายเริ่มเสมอ
-    await apiLoginAs(request, 'company1');
+    // ฝั่งสถานประกอบการ (พี่เลี้ยง) สั่งให้ระบบส่งแบบสำรวจไม่ได้ — คณะเป็นฝ่ายเริ่มเสมอ
+    await apiLoginAs(request, 'mentor1');
     expect((await request.post(`${API_URL}/job-offers/send`, { data: body })).status()).toBe(403);
 
     await apiLoginAs(request, 'student1');
@@ -153,7 +153,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     expect(Number(afterFirst)).toBeLessThanOrEqual(1);
   });
 
-  test('บัญชีสถานประกอบการลงประกาศรับสมัครงานเองไม่ได้', async ({ request }) => {
+  test('บัญชีพี่เลี้ยงลงประกาศรับสมัครงานเองไม่ได้', async ({ request }) => {
     // ⛔ ในระบบนี้ไม่มี "บริษัทลงประกาศ" — บริษัท *ตอบ* แบบเสนองาน สหกิจ 02
     //    แล้วเจ้าหน้าที่เป็นคนกด publish · ประตูนี้เคยเปิดค้างไว้จนถึง 2026-09-09
     const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
@@ -165,7 +165,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
       expire_date: await futureDate(60),
     };
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     expect((await request.post(`${API_URL}/jobs`, { data: body })).status()).toBe(403);
 
     await apiLoginAs(request, 'staff1');
@@ -196,20 +196,21 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     expect(after.some((j: { job_id: number }) => j.job_id === jobId)).toBe(false);
   });
 
-  test('บัญชีสถานประกอบการเห็นชอบหัวข้อรายงานแทนพี่เลี้ยงไม่ได้ แต่ยังเห็นรายการ', async ({
+  test('เจ้าหน้าที่เห็นชอบหัวข้อรายงานแทนพี่เลี้ยงไม่ได้ · พี่เลี้ยงยังเห็นรายการของบริษัท', async ({
     request,
   }) => {
     const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
     const outlineId = await makeOutline('student2@test.com', companyId!);
 
-    // company1 เป็น "ฝ่ายบุคคล" ล้วน ๆ ตามที่ spec-D 14.1 ตั้งใจ
-    await apiLoginAs(request, 'company1');
+    // ⛔ คนที่เห็นชอบหัวข้อคือพี่เลี้ยง/อาจารย์ที่ปรึกษา (spec-D 14.1) — เจ้าหน้าที่ธุรการกดแทนไม่ได้
+    await apiLoginAs(request, 'staff1');
     const denied = await request.put(`${API_URL}/outlines/${outlineId}/status`, {
       data: { status: 'pending_advisor' },
     });
     expect(denied.status()).toBe(403);
 
-    // ⛔ ห้ามซ่อนรายการทิ้ง — ฝ่ายบุคคลต้องรู้ว่ามีอะไรค้าง แค่กดแทนไม่ได้
+    // ⛔ ห้ามซ่อนรายการทิ้ง — พี่เลี้ยงต้องเห็นว่ามีอะไรค้างของบริษัทตัวเอง
+    await apiLoginAs(request, 'mentor1');
     const list = await request.get(`${API_URL}/outlines/company`);
     expect(list.status(), await list.text()).toBe(200);
     expect((await list.json()).data.length).toBeGreaterThan(0);
@@ -217,29 +218,6 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     expect(
       await dbValue<string>('SELECT status FROM report_outlines WHERE outline_id = $1', [outlineId])
     ).toBe('pending_mentor');
-  });
-
-  /**
-   * ข้อ 3 ของ PROMPT-sonnet-R1-close-company.md — API ข้างบนคุมไว้แล้วว่า
-   * `PUT /outlines/:id/status` ตอบ 403 ให้บัญชีสถานประกอบการ เคสนี้เพิ่มฝั่งหน้าจอ:
-   * ต้องไม่มีปุ่มที่กดแล้วชน 403 นั้นให้ผู้ใช้เห็นเลย (⛔ "ห้ามแสดงปุ่มที่กดแล้ว 403")
-   */
-  test('หน้าจอบริษัทเห็นโครงร่างแต่ปุ่มเป็นข้อความรอพี่เลี้ยง ไม่ใช่ปุ่มที่กดแล้วพัง', async ({
-    page,
-  }) => {
-    const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
-    await makeOutline('student2@test.com', companyId!);
-
-    await loginAs(page, 'company1');
-    await goToMenu(page, 'report_outlines');
-
-    await expect(page.getByText('รอพนักงานที่ปรึกษาเป็นผู้พิจารณา')).toBeVisible();
-    // ⛔ ห้ามมีปุ่ม "ตรวจอนุมัติ" หลุดมาให้บัญชีบริษัทกด — นั่นคือปุ่มของพี่เลี้ยงเท่านั้น
-    await expect(page.getByRole('button', { name: 'ตรวจอนุมัติ' })).toHaveCount(0);
-
-    await page.getByText('รอพนักงานที่ปรึกษาเป็นผู้พิจารณา').click();
-    await expect(page.getByText('รอพนักงานที่ปรึกษาเป็นผู้พิจารณาโครงร่างรายงานฉบับนี้')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'ตีกลับให้นักศึกษาแก้ไข' })).toHaveCount(0);
   });
 
   test('พี่เลี้ยงเห็นชอบหัวข้อได้เฉพาะนักศึกษาที่ตัวเองดูแล', async ({ request }) => {
@@ -280,8 +258,8 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     await expect(page.getByText('อนุมัติโครงร่างรายงาน (สหกิจ 11) และส่งต่อให้อาจารย์ที่ปรึกษาพิจารณาเรียบร้อยแล้ว')).toBeVisible();
   });
 
-  test('คิวรอรับรองเป็นของพี่เลี้ยง ฝ่ายบุคคลเปิดไม่ได้', async ({ request }) => {
-    await apiLoginAs(request, 'company1');
+  test('คิวรอรับรองเป็นของพี่เลี้ยง เจ้าหน้าที่เปิดไม่ได้', async ({ request }) => {
+    await apiLoginAs(request, 'staff1');
     expect((await request.get(`${API_URL}/mentor/pending`)).status()).toBe(403);
 
     await attachMentorTo('student2@test.com');
@@ -383,38 +361,4 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     }
   });
 
-  /**
-   * ⛔ หน้าแรกบริษัทต้องไม่พูดเกินข้อมูล (กฎ 5.3)
-   *   · "นักศึกษาที่อยู่กับท่านตอนนี้" = ใบที่ **ตอบรับแล้ว** เท่านั้น — ใบที่ยังรอท่านตัดสินใจ
-   *     อยู่ในกล่องด้านบน · ของเดิมเอามารวมกันทั้งสองกล่อง
-   *   · ไม่มีตำแหน่ง = "–" ไม่ใช่ "ฝึกงานทั่วไป" ที่แต่งขึ้น (ใบที่หาที่ฝึกเองยังไม่มีตำแหน่ง
-   *     จนกว่าสถานประกอบการจะกรอก สหกิจ 07)
-   */
-  test('หน้าแรกบริษัท: ใบที่ยังรอตัดสินใจไม่นับเป็น "อยู่กับท่านตอนนี้" และไม่มีตำแหน่งปลอม', async ({
-    page,
-  }) => {
-    await withDb(async (db) => {
-      const studentId = (
-        await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")
-      ).rows[0].user_id as number;
-      const company = await db.query('SELECT company_id FROM companies LIMIT 1');
-      const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
-      // ใบที่คณะส่งมาให้พิจารณา ยังไม่ตอบรับ · ไม่มี job_id = นักศึกษาหาที่ฝึกเอง
-      await db.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES ($1, $2, $3, 'approved_by_dept_head')`,
-        [studentId, company.rows[0].company_id, semester.rows[0].semester_id]
-      );
-    });
-
-    await loginAs(page, 'company1');
-
-    const candidate = page.getByText('สมชาย สายดี · 640101001');
-    await expect(candidate).toBeVisible();
-    await expect(page.getByText('ฝึกงานทั่วไป')).toHaveCount(0);
-    await expect(page.getByText('สมัครตำแหน่ง –')).toBeVisible();
-
-    // กล่อง "อยู่กับท่านตอนนี้" ต้องยังว่าง เพราะยังไม่มีใครถูกตอบรับ
-    await expect(page.getByText('ยังไม่มีนักศึกษาในความดูแลของภาคนี้')).toBeVisible();
-  });
 });

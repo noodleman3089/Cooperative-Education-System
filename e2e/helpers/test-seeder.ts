@@ -27,17 +27,17 @@ export async function seedTestData() {
     // 3. Find User IDs
     const studentRes = await client.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
     const advisorRes = await client.query("SELECT user_id FROM users WHERE email = 'advisor1@test.com'");
-    const companyRes = await client.query("SELECT user_id FROM users WHERE email = 'company1@test.com'");
     const staffRes = await client.query("SELECT user_id FROM users WHERE email = 'staff1@test.com'");
 
-    if (studentRes.rowCount === 0 || advisorRes.rowCount === 0 || companyRes.rowCount === 0) {
+    if (studentRes.rowCount === 0 || advisorRes.rowCount === 0 || staffRes.rowCount === 0) {
       throw new Error('Required default users are missing after db:setup.');
     }
 
     const studentId = studentRes.rows[0].user_id;
     const advisorId = advisorRes.rows[0].user_id;
-    const companyUserId = companyRes.rows[0].user_id;
     const staffId = staffRes.rows[0].user_id;
+    // บริษัทไม่มีบัญชีแล้ว — เจ้าหน้าที่เป็นผู้บันทึกบริษัท/ประกาศงานของ seed (companies.created_by · job_posts.created_by)
+    const companyUserId = staffId;
 
     // 4. advisor1 เป็นทั้งอาจารย์ที่ปรึกษาและอาจารย์นิเทศของ student2 (กรณีที่พบบ่อยที่สุด)
     //    ⛔ ต้องตั้งทั้งสองคอลัมน์ — ตั้งแต่ SB-F9 งานนิเทศ (สหกิจ 12 · 13) เขียนได้เฉพาะ supervisor_id
@@ -77,7 +77,7 @@ export async function seedTestData() {
     );
     const companyId = companyInsertRes.rows[0].company_id;
 
-    // 6b. mentor1 = พี่เลี้ยงของบริษัทนี้ (บัญชี role mentor ล้วน แยกจาก company1)
+    // 6b. mentor1 = พี่เลี้ยงของบริษัทนี้ (บัญชี role mentor ล้วน)
     await client.query(
       `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
        SELECT user_id, $1, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888'

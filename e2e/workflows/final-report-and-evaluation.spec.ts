@@ -43,7 +43,7 @@ test.describe('Phase 4: Evaluation & Completion Workflow', () => {
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
 
-      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน)
       const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       // Insert Accepted Intent Form
@@ -316,11 +316,11 @@ test.describe('สิทธิ์เล่มรายงานฉบับส�
     expect((await request.get(r.read)).status()).toBe(200);
   });
 
-  test('FR2: นักศึกษาและสถานประกอบการ เข้าเส้นทางของบุคลากรไม่ได้', async ({ request }) => {
+  test('FR2: นักศึกษาและพี่เลี้ยง เข้าเส้นทางของบุคลากรไม่ได้', async ({ request }) => {
     const { studentId, reportId } = await seedReport();
     const r = REPORT_ROUTES(studentId, reportId);
 
-    for (const who of ['student2', 'company1'] as const) {
+    for (const who of ['student2', 'mentor1'] as const) {
       await apiLoginAs(request, who);
       // ⛔ แม้แต่เจ้าของเล่มเองก็อนุมัติเล่มตัวเองไม่ได้ — นั่นคือประเด็นของด่านนี้
       expect((await request.get(r.read)).status(), `${who} อ่านประวัติเล่ม`).toBe(403);

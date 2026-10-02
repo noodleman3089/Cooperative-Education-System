@@ -24,7 +24,7 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
 
-      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+      // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน)
       const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       await client.query(
@@ -331,7 +331,7 @@ test.describe('สิทธิ์บันทึกรายสัปดาห�
     expect((await request.get(logsOf(student2))).status()).toBe(200);
   });
 
-  test('WL3: ไม่ล็อกอิน → 401 · สถานประกอบการ → 403 · id ไม่ใช่ตัวเลข → 400', async ({
+  test('WL3: ไม่ล็อกอิน → 401 · เจ้าหน้าที่ → 403 · id ไม่ใช่ตัวเลข → 400', async ({
     request,
   }) => {
     const student2 = (await dbValue<number>(
@@ -340,9 +340,9 @@ test.describe('สิทธิ์บันทึกรายสัปดาห�
 
     expect((await request.get(logsOf(student2))).status()).toBe(401);
 
-    // ⛔ บทบาท `company` ไม่อยู่ใน allow-list ของเส้นทางนี้ — บันทึกรายสัปดาห์เป็น
-    //    ของนักศึกษากับผู้ดูแลการปฏิบัติงาน ไม่ใช่ของฝ่ายบุคคล
-    await apiLoginAs(request, 'company1');
+    // ⛔ บทบาท `staff` ไม่อยู่ใน allow-list ของเส้นทางนี้ — บันทึกรายสัปดาห์เป็น
+    //    ของนักศึกษากับผู้ดูแลการปฏิบัติงาน ไม่ใช่ของเจ้าหน้าที่ธุรการ
+    await apiLoginAs(request, 'staff1');
     expect((await request.get(logsOf(student2))).status()).toBe(403);
 
     await apiLoginAs(request, 'student2');

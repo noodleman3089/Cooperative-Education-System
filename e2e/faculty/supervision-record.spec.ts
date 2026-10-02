@@ -226,7 +226,7 @@ test.describe('สหกิจ 13 — แบบบันทึกการนิ
     expect(res.status()).toBe(409);
   });
 
-  test('V8: สิทธิ์ — นักศึกษาและบริษัทเข้าไม่ได้เลย · อาจารย์นอกความดูแลก็ไม่ได้', async ({
+  test('V8: สิทธิ์ — นักศึกษาและพี่เลี้ยงเข้าไม่ได้เลย · อาจารย์นอกความดูแลก็ไม่ได้', async ({
     request,
   }) => {
     await apiLoginAs(request, 'advisor1');
@@ -240,8 +240,8 @@ test.describe('สหกิจ 13 — แบบบันทึกการนิ
       ).status()
     ).toBe(200);
 
-    // ⛔ ส่วนที่ 1 คือความเห็นของอาจารย์ต่อบริษัท — บริษัทต้องไม่มีทางเห็น
-    await apiLoginAs(request, 'company1');
+    // ⛔ ส่วนที่ 1 คือความเห็นของอาจารย์ต่อบริษัท — ฝั่งสถานประกอบการ (พี่เลี้ยง) ต้องไม่มีทางเห็น
+    await apiLoginAs(request, 'mentor1');
     expect(
       (await request.get(`${API_URL}/supervision-records/student/${studentId}`)).status()
     ).toBe(403);

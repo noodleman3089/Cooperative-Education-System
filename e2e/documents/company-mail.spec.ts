@@ -244,7 +244,7 @@ test.describe('นักศึกษาส่งหนังสือให้�
     const missing = await sendMail(request, 999999, payload);
     expect(missing.status()).toBe(404);
 
-    const roles: AccountKey[] = ['staff1', 'advisor1', 'head1', 'dean1', 'company1'];
+    const roles: AccountKey[] = ['staff1', 'advisor1', 'head1', 'dean1', 'mentor1'];
     for (const role of roles) {
       await apiLoginAs(request, role);
       const res = await sendMail(request, formId, payload);
@@ -409,8 +409,8 @@ test.describe('นักศึกษาส่งหนังสือให้�
   test('M8a: คณบดีลงนามหนังสือขอความอนุเคราะห์ → ไม่สร้างบัญชี ไม่นับการส่ง', async ({ request }) => {
     test.setTimeout(180_000);
     const formId = await seedIntent();
-    // ⚠️ ต้องเป็นอีเมลที่ยังไม่มีบัญชี — company1@test.com ของ seed มีบัญชีอยู่แล้ว
-    //    ระบบเดิมจึงไม่สร้างอะไรอยู่ดี เทสต์จะผ่านทั้งที่ไม่พิสูจน์อะไร
+    // ⚠️ ต้องเป็นอีเมลที่ยังไม่มีบัญชี — ถ้ามีบัญชีอยู่แล้วระบบก็ไม่สร้างอะไรอยู่ดี
+    //    เทสต์จะผ่านทั้งที่ไม่พิสูจน์อะไร
     const fresh = 'm8-fresh-company@example.com';
     await setCompanyEmail(formId, fresh);
     expect(await dbValue<string>('SELECT COUNT(*) FROM users WHERE email = $1', [fresh])).toBe('0');

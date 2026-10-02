@@ -162,12 +162,12 @@ test.describe('สิทธิ์ข่าวประชาสัมพัน�
     await seedTestData();
   });
 
-  test('PR1: นักศึกษาและสถานประกอบการ สร้าง/ลบ/ปักหมุดประกาศไม่ได้เลย', async ({ request }) => {
+  test('PR1: นักศึกษาและพี่เลี้ยง สร้าง/ลบ/ปักหมุดประกาศไม่ได้เลย', async ({ request }) => {
     const id = await createAs(request, 'staff1', 'ประกาศของงานสหกิจ');
     const before = await countAnnouncements();
 
     // ⛔ อ่านได้ (ประกาศมีไว้ให้ทุกคนเห็น) แต่ **เขียนไม่ได้ทั้งสามทาง**
-    for (const who of ['student2', 'company1'] as const) {
+    for (const who of ['student2', 'mentor1'] as const) {
       await apiLoginAs(request, who);
 
       const read = await request.get(`${API_URL}/announcements`);

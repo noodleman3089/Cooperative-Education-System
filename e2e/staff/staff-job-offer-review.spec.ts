@@ -96,7 +96,7 @@ test.describe('เจ้าหน้าที่ตรวจแบบเสน�
   test('ทั้งห้าเส้นเป็นของเจ้าหน้าที่เท่านั้น', async ({ request }) => {
     const { offerId, semesterId } = await makeSubmittedOffer();
 
-    for (const account of ['company1', 'student1'] as const) {
+    for (const account of ['mentor1', 'student1'] as const) {
       await apiLoginAs(request, account);
       expect(
         (await request.get(`${API_URL}/job-offers/recipients?semester_id=${semesterId}`)).status(),
@@ -373,7 +373,7 @@ test.describe('เจ้าหน้าที่ตรวจแบบเสน�
   test('SB6 ใบที่ตรวจแล้วส่งลิงก์ให้แก้ไม่ได้ และคนนอกกดไม่ได้', async ({ request }) => {
     const { offerId } = await makeSubmittedOffer(1);
 
-    for (const account of ['company1', 'student1'] as const) {
+    for (const account of ['mentor1', 'student1'] as const) {
       await apiLoginAs(request, account);
       expect(
         (await request.post(`${API_URL}/job-offers/${offerId}/resend-link`)).status(),

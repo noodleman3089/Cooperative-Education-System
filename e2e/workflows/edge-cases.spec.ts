@@ -411,14 +411,14 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     ).toContain('ขาดลายเซ็นหัวหน้าสาขาวิชา');
   });
 
-  test('Test S1: RBAC - Company JWT → Student APIs → 403', async ({ page }) => {
+  test('Test S1: RBAC - Mentor session → Student APIs → 403', async ({ page }) => {
     // 1. Seed database state
     await seedTestData();
 
-    // 2. Company logs in to get JWT token
-    await loginAs(page, 'company1');
+    // 2. Mentor logs in (link login) to get a session cookie
+    await loginAs(page, 'mentor1');
 
-    // 3. Make direct backend request mimicking company attempting student-only APIs
+    // 3. Make direct backend request mimicking a mentor attempting student-only APIs
     const context = page.request;
 
     // Test GET /api/students/dashboard

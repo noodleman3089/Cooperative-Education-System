@@ -150,7 +150,7 @@ test.describe('การยื่นล่าช้า (ช่วงผ่อน
     ).toBe(true);
   });
 
-  test('L6: SEC-10 — สถานประกอบการต้องไม่เห็นเหตุผลการส่งช้า แต่เจ้าหน้าที่ต้องเห็น', async ({
+  test('L6: SEC-10 — ฝั่งสถานประกอบการ (พี่เลี้ยง) เปิดรายการใบความจำนงไม่ได้จึงไม่เห็นเหตุผลการส่งช้า แต่เจ้าหน้าที่ต้องเห็น', async ({
     request,
   }) => {
     await seedTestData();
@@ -163,19 +163,15 @@ test.describe('การยื่นล่าช้า (ช่วงผ่อน
     expect(created.status(), await created.text()).toBe(201);
     const formId = (await created.json()).intentForm.form_id as number;
 
-    // ต้องเดินให้ถึงสถานะที่บริษัทมองเห็นก่อน ไม่งั้นเทสต์นี้ผ่านเพราะรายการว่าง
+    // ต้องเดินให้ถึงสถานะที่ใบมีตัวตนครบก่อน ไม่งั้นเทสต์นี้ผ่านเพราะรายการว่าง
     await approveIntentThroughOfficer(request, formId);
     await dbExec(`UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`, [formId]);
 
-    await apiLoginAs(request, 'company1');
-    const asCompany = await request.get(`${API_URL}/intents`);
-    expect(asCompany.status()).toBe(200);
-    const companyRows = (await asCompany.json()) as Record<string, unknown>[];
-    expect(companyRows.length).toBeGreaterThan(0);
-    for (const row of companyRows) {
-      expect(row).not.toHaveProperty('late_reason');
-      expect(row).not.toHaveProperty('submitted_late');
-    }
+    // บริษัทไม่มีบัญชีแล้ว — ฝั่งสถานประกอบการที่ล็อกอินได้คือพี่เลี้ยง ซึ่งไม่อยู่ใน allow-list ของรายการนี้
+    await apiLoginAs(request, 'mentor1');
+    const asMentor = await request.get(`${API_URL}/intents`);
+    expect(asMentor.status(), await asMentor.text()).toBe(403);
+    expect(await asMentor.text()).not.toContain('late_reason');
 
     await apiLoginAs(request, 'staff1');
     const asStaff = await request.get(`${API_URL}/intents`);

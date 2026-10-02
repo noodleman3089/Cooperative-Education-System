@@ -30,7 +30,7 @@ async function seedPlacedWithMentor(): Promise<void> {
     const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0]
       .semester_id;
     const company = (await db.query('SELECT company_id FROM companies LIMIT 1')).rows[0];
-    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน แยกจาก company1)
+    // พี่เลี้ยง = mentor1 (seed ไว้แล้ว role mentor ล้วน)
     const mentorId = (await db.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
     await db.query('UPDATE students SET advisor_id = $1, supervisor_id = $1 WHERE student_id = $2', [
       advisorId,

@@ -607,7 +607,7 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       ['อีเมลของนักศึกษาเอง (ตัวพิมพ์ใหญ่)', 'STUDENT2@Test.com'],
       ['บัญชีเจ้าหน้าที่', 'staff1@test.com'],
       ['บัญชีอาจารย์ที่ปรึกษา', 'advisor1@test.com'],
-      ['บัญชีบริษัท (role company)', 'company1@test.com'],
+      ['บัญชีคณบดี', 'dean1@test.com'],
     ]) {
       const res = await postAccept(token, await acceptFields({ mentor_email: email }));
       expect(res.status(), `${label}: ${await res.text()}`).toBe(400);

@@ -98,8 +98,10 @@ async function main() {
   if (!fs.existsSync(emailJs)) throw new Error('ไม่พบ backend/dist — รัน npm.cmd --prefix backend run build ก่อน');
   const email = await import(emailJs.href);
 
-  await email.sendCompanyInviteEmail('hr@example.com', 'https://example.com/login/company?token=abc');
-  await email.sendMentorInviteEmail('mentor@example.com', 'https://example.com/login/company?token=def');
+  // อีเมลเชิญบริษัท/พี่เลี้ยงด้วยรหัสผ่านถูกถอดแล้ว (2026-10-02) — เหลือลิงก์เข้าสู่ระบบของพี่เลี้ยง 2 แบบ
+  const in30 = new Date(Date.now() + 30 * 60_000);
+  await email.sendMentorLoginLinkEmail('mentor@example.com', 'https://example.com/m?token=abc', { expiresAt: in30, kind: 'welcome' });
+  await email.sendMentorLoginLinkEmail('mentor2@example.com', 'https://example.com/m?token=def', { expiresAt: in30, kind: 'requested' });
 
   await new Promise((r) => setTimeout(r, 500));
   server.close();

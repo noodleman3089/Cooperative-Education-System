@@ -75,40 +75,7 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     );
     await approveIntentThroughOfficer(page.request, formId as number);
 
-    // 5. Company logs in and accepts the student (Onboards Mentor)
-    // Note: Due to workflow logic, the company dashboard expects status 'approved_by_advisor'
-    // but the backend status is now 'approved_by_dept_head'. We test if the buttons are visible
-    // and attempt to complete the onboarding details form.
-    await loginAs(page, 'company1');
-    await expect(page.locator('text=บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด')).toBeVisible();
-
-    // Verify the student applicant is listed — แถวผู้สมัคร (รหัสขึ้นสองที่บนหน้าแรกบริษัท)
-    await expect(page.getByText('สมชาย สายดี · 640101001')).toBeVisible();
-
-    // CRITICAL workflow bug test: Expect "ตอบรับเข้างาน" button to be visible.
-    // If this fails, it indicates the UI bug where company cannot approve when status is 'approved_by_dept_head'.
-    const acceptBtn = page.locator('button:has-text("ตอบรับเข้างาน")').first();
-    await expect(acceptBtn).toBeVisible({ message: 'BUG: Company cannot accept student because status is approved_by_dept_head but frontend only checks approved_by_advisor!' });
-    await acceptBtn.click();
-
-    // Fill Mentor Onboarding details modal
-    await expect(page.locator('text=ระบุข้อมูลพี่เลี้ยงดูแลรับนักศึกษา')).toBeVisible();
-    await page.locator('input[type="text"]').nth(0).fill('สมศักดิ์ รักเรียน'); // Mentor Name
-    await page.locator('input[type="email"]').fill('somsak@seagate.com'); // Mentor Email
-    await page.locator('input[type="text"]').nth(1).fill('0819998888'); // Mentor Phone
-    await page.locator('input[type="text"]').nth(2).fill('Lead Engineer'); // Mentor Position
-    await page.locator('input[type="text"]').nth(3).fill('Software Dept'); // Mentor Dept
-    await page.locator('input[type="date"]').fill('2026-11-01'); // Start Date
-
-    // Submit mentor onboarding and accept student
-    await page.locator('button:has-text("ตอบรับและบันทึกข้อมูลพี่เลี้ยง")').click();
-
-    // Verify success response
-    await expect(page.locator('text=ยืนยันตอบรับนักศึกษาเข้าฝึกปฏิบัติงานสหกิจเรียบร้อยแล้ว')).toBeVisible();
-
-    // Logout company
-    await logout(page);
-    await expect(page).toHaveURL(/\/login/);
+    // 5. (ขั้น "บริษัทล็อกอินตอบรับ" ถูกถอดแล้ว — บริษัทไม่มีบัญชี ตอบทางลิงก์ /accept ซึ่งคุมที่ acceptance-link.spec.ts)
 
     // 6. ไม่ต้องยัดเอกสารเข้าคิวเองแล้ว — หนังสือขอความอนุเคราะห์ถูกออกให้อัตโนมัติ
     //    ตอนเจ้าหน้าที่รับคำร้องในขั้นที่ 4 (ก้อน 3 ของแผนเอกสารหมายเลข 1)

@@ -89,81 +89,29 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     );
   });
 
-  test('Test R2: Company Rejects Student → Student Can Re-apply', async ({ page }) => {
+  test('Test R2: บริษัทไม่รับ (company_rejected) → นักศึกษาสมัครที่อื่นได้อีก', async ({ page }) => {
     // ==========================================
-    // Business Rule: Company can reject an intent, which sets status to 'company_rejected'.
-    // Student should then be unlocked (1-active-app rule lifted) and able to re-apply.
-    // Route: PATCH /api/acceptances/company/:intent_id/status { status: 'rejected' }
+    // Business Rule: ใบที่บริษัทไม่รับ (status 'company_rejected') ปลดล็อกกฎ 1-active-app
+    // นักศึกษาต้องสมัครงานอื่นต่อได้ · ตัวบริษัทตอบทางลิงก์สาธารณะ /accept (คุมที่ acceptance-link.spec.ts L4)
+    // — ตรงนี้จึงยัดสถานะลงฐานตรง ๆ แล้วตรวจฝั่งนักศึกษาอย่างเดียว (ทางตอบด้วยบัญชี company ถูกถอดแล้ว)
     // ==========================================
 
-    // 1. Seed DB and inject intent in 'approved_by_dept_head' status
     console.log('Seeding database for Test R2...');
     await seedTestData();
 
-    const client = await pool.connect();
-    let intentFormId: number;
-    try {
-      const studentRes = await client.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
-      const companyRes = await client.query("SELECT company_id FROM companies WHERE name_th = 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด'");
-      const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
-
-      const studentId = studentRes.rows[0].user_id;
-      const companyId = companyRes.rows[0].company_id;
-      const semesterId = semesterRes.rows[0].semester_id;
-
-      const insertRes = await client.query(
+    await withDb(async (db) => {
+      const studentId = (await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")).rows[0].user_id;
+      const companyId = (await db.query("SELECT company_id FROM companies WHERE name_th = 'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด'")).rows[0].company_id;
+      const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0].semester_id;
+      await db.query(
         `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES ($1, $2, $3, 'approved_by_dept_head') RETURNING form_id`,
+         VALUES ($1, $2, $3, 'company_rejected')`,
         [studentId, companyId, semesterId]
       );
-      intentFormId = insertRes.rows[0].form_id;
-      console.log(`Injected intent form ID: ${intentFormId} with approved_by_dept_head status.`);
-    } finally {
-      client.release();
-    }
-
-    // 2. Company logs in and rejects the student
-    console.log('Step 1: Company rejects student...');
-    await loginAs(page, 'company1');
-
-    // Verify student applicant is listed — ในรายการที่คณะส่งมาให้พิจารณา
-    // (รหัสนี้ขึ้นสองที่บนหน้าแรกบริษัท จึงต้องเจาะแถวผู้สมัคร)
-    await expect(page.getByText('สมชาย สายดี · 640101001')).toBeVisible();
-
-    // Click the reject button
-    const rejectBtn = page.locator('button:has-text("ปฏิเสธ")').first()
-      .or(page.locator('button:has-text("ไม่ตอบรับ")').first());
-    await expect(rejectBtn).toBeVisible({ 
-      message: 'BUG: Company rejection button is not visible on the company dashboard.' 
     });
-    await rejectBtn.click();
 
-    // Rejecting is irreversible for the student, so it goes through a dialog
-    // rather than happening on the first click — and that dialog now insists on
-    // a reason, because the student has to know what to fix before applying
-    // elsewhere. Refusing in silence is rejected first.
-    const dialog = page.getByRole('dialog');
-    await dialog.getByRole('button', { name: 'ยืนยันไม่รับนักศึกษา' }).click();
-    await expect(dialog.getByText('กรุณาเลือกหรือระบุเหตุผล', { exact: false })).toBeVisible();
-
-    await dialog.locator('select').selectOption('คุณสมบัติหรือทักษะยังไม่ตรงกับตำแหน่งที่เปิดรับ');
-    await dialog.getByRole('button', { name: 'ยืนยันไม่รับนักศึกษา' }).click();
-
-    // Assert the actual success message. This used to be
-    // text=ปฏิเสธ .or(company_rejected) .or(rejected), which passed on any
-    // element anywhere containing the word "ปฏิเสธ" — including the reject
-    // button that had just been clicked, so it could not tell a completed
-    // rejection from a failed one.
-    await expect(
-      page.getByText('ปฏิเสธการรับเข้างานของนักศึกษาแล้ว', { exact: false })
-    ).toBeVisible();
-
-    // Logout company
-    await logout(page);
-    await expect(page).toHaveURL(/\/login/);
-
-    // 3. Student logs in and verifies they can re-apply
-    console.log('Step 2: Student verifies ability to re-apply...');
+    // Student logs in and verifies they can re-apply
+    console.log('Step: Student verifies ability to re-apply...');
     await loginAs(page, 'student2');
 
     // Navigate to job board

@@ -198,7 +198,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     ).toBe('1');
   });
 
-  test('D4: สิทธิ์ — นักศึกษาและสถานประกอบการสั่งออกเองไม่ได้ (403)', async ({ request }) => {
+  test('D4: สิทธิ์ — นักศึกษาและพี่เลี้ยงสั่งออกเองไม่ได้ (403)', async ({ request }) => {
     test.setTimeout(180_000);
     const formId = await seedIntent();
     await walkToAccepted(request, formId);
@@ -206,7 +206,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     await apiLoginAs(request, 'student2');
     expect((await issue(request, formId)).status()).toBe(403);
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     expect((await issue(request, formId)).status()).toBe(403);
 
     expect(

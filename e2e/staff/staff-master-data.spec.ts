@@ -51,7 +51,7 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
     });
     expect(anon.status()).toBe(401);
 
-    for (const account of ['student1', 'advisor1', 'company1', 'dean1'] as const) {
+    for (const account of ['student1', 'advisor1', 'mentor1', 'dean1'] as const) {
       await apiLoginAs(request, account);
       const calls = [
         request.post(`${API_URL}/master-data/faculties`, { data: { faculty_name_th: 'x' } }),

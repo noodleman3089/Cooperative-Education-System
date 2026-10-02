@@ -124,7 +124,7 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
 
   test('เป็นของเจ้าหน้าที่เท่านั้น', async ({ request }) => {
     expect((await request.get(`${API_URL}/staff/home`)).status()).toBe(401);
-    for (const account of ['student1', 'advisor1', 'company1', 'dean1', 'head1'] as const) {
+    for (const account of ['student1', 'advisor1', 'mentor1', 'dean1', 'head1'] as const) {
       await apiLoginAs(request, account);
       expect(
         (await request.get(`${API_URL}/staff/home`)).status(),

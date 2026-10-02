@@ -22,7 +22,7 @@ import { dbExec, dbValue } from '../helpers/db';
  *   5. error ต้องขึ้น**ในกล่อง** และกล่องไม่ปิด — ทั้งกล่องเพิ่มและกล่องแก้ไข · เส้นนี้เป็นของเจ้าหน้าที่เท่านั้น
  *   6. ไม่มี checkbox "ผู้ดูแลระบบ" (`admin`) — ไม่มีใน VALID_ROLES และ DB CHECK ติ๊กได้ก็ใช้ไม่ได้
  *      · โมดัลแก้ไขไม่มีช่องรหัสผ่าน — backend ไม่เคยอ่าน กรอกแล้วเงียบ
- * `role: 'company'` แบบสตริงเดียว (ลิงก์เชิญ SEC-09) คุมอยู่ใน security-hardening แล้ว
+ * `role: 'company'` ถูกปฏิเสธ (บริษัทไม่มีบัญชีแล้ว) คุมอยู่ใน security/company-role-removed.spec.ts
  */
 
 const NEW_EMAIL = 'add-user-e2e@rmutto.ac.th';

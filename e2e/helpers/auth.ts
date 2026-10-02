@@ -7,8 +7,8 @@ import { dbExec, dbValue } from './db';
 /**
  * The seeded accounts, and which door each one comes through. Spelling the
  * address and the login path out at 56 call sites meant that when the login
- * pages changed — as they did when the company page moved to an invitation
- * flow — every one of them was a place the change could have been missed.
+ * pages changed — as they did when the company role was removed and mentors
+ * moved to link login — every one of them was a place the change could have been missed.
  */
 export const ACCOUNTS = {
   student1: { email: 'student1@test.com', path: '/login/student', field: 'text' },
@@ -18,9 +18,7 @@ export const ACCOUNTS = {
   dean1: { email: 'dean1@test.com', path: '/login/personnel', field: 'text' },
   staff1: { email: 'staff1@test.com', path: '/login/personnel', field: 'text' },
   head1: { email: 'head1@test.com', path: '/login/personnel', field: 'text' },
-  // External partners have no university Google account and no card on /login.
-  company1: { email: 'company1@test.com', path: '/login/company', field: 'email' },
-  // พี่เลี้ยง (role mentor อย่างเดียว) — คนละบัญชีกับ company1 · ไม่มีรหัสผ่าน (SEC-15)
+  // พี่เลี้ยง (role mentor อย่างเดียว) — ไม่มีรหัสผ่าน (SEC-15)
   // เข้าด้วยลิงก์อีเมลครั้งเดียวทาง /login/mentor → /m?token=… จึงไม่ผ่านฟอร์มรหัสผ่าน
   mentor1: { email: 'mentor1@test.com', path: '/login/mentor', field: 'email' },
 } as const;

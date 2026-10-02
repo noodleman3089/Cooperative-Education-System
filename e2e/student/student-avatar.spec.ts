@@ -124,7 +124,7 @@ test.describe('รูปโปรไฟล์นักศึกษา', () => {
     await expect.poll(() => onDisk(first), { timeout: 5000 }).toBe(false);
   });
 
-  test('P6: สิทธิ์ — เพื่อนเปิดรูปไม่ได้ · อาจารย์เปิดได้ · บริษัทยังไม่ได้', async ({
+  test('P6: สิทธิ์ — เพื่อนเปิดรูปไม่ได้ · อาจารย์เปิดได้ · พี่เลี้ยงที่ไม่ได้ดูแลยังไม่ได้', async ({
     request,
   }) => {
     await apiLoginAs(request, 'student2');
@@ -133,7 +133,7 @@ test.describe('รูปโปรไฟล์นักศึกษา', () => {
     await apiLoginAs(request, 'student1');
     expect((await request.get(`${API_URL}/files/${saved}`)).status()).toBe(403);
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     expect((await request.get(`${API_URL}/files/${saved}`)).status()).toBe(403);
 
     await apiLoginAs(request, 'advisor1');

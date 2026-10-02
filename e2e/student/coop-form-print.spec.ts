@@ -134,14 +134,13 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
 
   // ── ๑. สิทธิ์ของใบ สหกิจ 03 ────────────────────────────────────────────────
 
-  test('F1: มีแต่นักศึกษาเจ้าของเท่านั้นที่เปิดใบ สหกิจ 03 ได้ — บริษัท/เจ้าหน้าที่/อาจารย์เปิดไม่ได้', async ({
+  test('F1: มีแต่นักศึกษาเจ้าของเท่านั้นที่เปิดใบ สหกิจ 03 ได้ — พี่เลี้ยง/เจ้าหน้าที่/อาจารย์เปิดไม่ได้', async ({
     request,
   }) => {
     await seedAcceptedIntent();
 
-    // ⛔ บริษัทที่ผูกกันอยู่จริงก็ยังเปิดไม่ได้ — มันอ่านใบสมัครได้ทาง company-view
-    //    ซึ่งตัดชั้น C (เลขบัตร · เชื้อชาติ · ศาสนา) ออกหมดแล้ว ใบพิมพ์ไม่ได้ตัด
-    for (const who of ['company1', 'staff1', 'advisor1', 'head1', 'dean1'] as const) {
+    // ⛔ ใบพิมพ์มีชั้น C (เลขบัตร · เชื้อชาติ · ศาสนา) ครบ — ฝั่งสถานประกอบการ (พี่เลี้ยง) ต้องเปิดไม่ได้
+    for (const who of ['mentor1', 'staff1', 'advisor1', 'head1', 'dean1'] as const) {
       await apiLoginAs(request, who);
       const res = await request.get(PRINT_03);
       expect(res.status(), `${who} ต้องเปิดใบ สหกิจ 03 ไม่ได้`).toBe(403);
@@ -308,7 +307,7 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
 
     // ⛔ ปุ่มพิมพ์ต้องไม่หลวมกว่าหน้าอ่าน — ถ้าใครแก้ด่านหน้าอ่านให้แน่นขึ้นแล้วลืมตรงนี้
     //    เทสต์นี้จะแดง เพราะมันเทียบสองเส้นทางกันเอง ไม่ได้ตรึงตัวเลขไว้
-    for (const who of ['advisor2', 'company1'] as const) {
+    for (const who of ['advisor2', 'mentor1'] as const) {
       await apiLoginAs(request, who);
       const printed = await request.get(printPath);
       const read = await request.get(readPath);

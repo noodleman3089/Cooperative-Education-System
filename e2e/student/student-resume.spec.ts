@@ -124,7 +124,7 @@ test.describe('เรซูเม่นักศึกษา', () => {
     expect(onDisk(first)).toBe(false);
   });
 
-  test('R6: สิทธิ์ — เพื่อนเปิดไม่ได้ · บริษัทที่ไม่ได้ถูกสมัครเปิดไม่ได้ · อาจารย์เปิดได้', async ({
+  test('R6: สิทธิ์ — เพื่อนเปิดไม่ได้ · พี่เลี้ยงที่ไม่ได้ดูแลนักศึกษาคนนี้เปิดไม่ได้ · อาจารย์เปิดได้', async ({
     request,
   }) => {
     await apiLoginAs(request, 'student2');
@@ -134,8 +134,8 @@ test.describe('เรซูเม่นักศึกษา', () => {
     await apiLoginAs(request, 'student1');
     expect((await request.get(`${API_URL}/files/${saved}`)).status()).toBe(403);
 
-    // company1 ยังไม่มีใบความจำนงของ student2 ในฐานที่ seed ใหม่
-    await apiLoginAs(request, 'company1');
+    // mentor1 ยังไม่ได้ดูแล student2 (ไม่มีใบความจำนงผูกพี่เลี้ยง) ในฐานที่ seed ใหม่
+    await apiLoginAs(request, 'mentor1');
     expect((await request.get(`${API_URL}/files/${saved}`)).status()).toBe(403);
 
     await apiLoginAs(request, 'advisor1');

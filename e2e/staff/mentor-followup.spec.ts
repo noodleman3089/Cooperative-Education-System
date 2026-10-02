@@ -296,13 +296,13 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     fx = await buildFixture();
   });
 
-  test('F1: เข้าได้เฉพาะเจ้าหน้าที่/หัวหน้าสาขา/อาจารย์ — นักศึกษา พี่เลี้ยง บริษัท คณบดี = 403 ทุกเส้นทาง · ไม่ล็อกอิน = 401', async ({
+  test('F1: เข้าได้เฉพาะเจ้าหน้าที่/หัวหน้าสาขา/อาจารย์ — นักศึกษา พี่เลี้ยง คณบดี = 403 ทุกเส้นทาง · ไม่ล็อกอิน = 401', async ({
     request,
   }) => {
     await addMentor1Work(fx);
 
     // ⛔ มีงานค้างจริง + ฐานพร้อมเตือน → ถ้าด่านรั่ว เส้นทางเตือนจะตอบ 200 ไม่ใช่ 403 (ไม่ใช่ 400 ที่ดูเหมือนปลอดภัย)
-    for (const who of ['student1', 'student2', 'mentor1', 'company1', 'dean1'] as const) {
+    for (const who of ['student1', 'student2', 'mentor1', 'dean1'] as const) {
       await apiLoginAs(request, who);
       expect((await request.get(BASE)).status(), `${who} ดูรายการ`).toBe(403);
       expect((await remind(request, fx.mentor1)).status(), `${who} เตือน`).toBe(403);

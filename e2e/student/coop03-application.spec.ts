@@ -199,7 +199,7 @@ test.describe('สหกิจ 03 — ใบสมัครงาน (ตัว�
     expect((await request.get(`${API_URL}/students/coop-application`)).status()).toBe(403);
     expect((await save(request, { first_name_en: 'X' })).status()).toBe(403);
 
-    await apiLoginAs(request, 'company1');
+    await apiLoginAs(request, 'mentor1');
     expect((await request.get(`${API_URL}/students/coop-application`)).status()).toBe(403);
   });
 
@@ -294,70 +294,6 @@ test.describe('สหกิจ 03 — ใบสมัครงาน (ตัว�
     const back = await readBack(request);
     expect(back.training_history).toHaveLength(1);
     expect(back.training_history[0].topic).toBe('อบรม ก');
-  });
-
-  test('C14: SEC-10 — บริษัทที่ผูกกันอ่านใบสมัครได้ แต่ห้ามเห็นชั้น C', async ({ request }) => {
-    const sid = await studentId();
-
-    await apiLoginAs(request, 'student2');
-    expect(
-      (
-        await save(request, {
-          national_id: ID_13,
-          ethnicity: 'ไทย',
-          religion: 'พุทธ',
-          sensitive_data_consent: true,
-          first_name_en: 'Somchai',
-          career_objective: 'อยากเป็นนักพัฒนาระบบ',
-          education_history: [{ institution: 'โรงเรียนทดสอบ' }],
-        })
-      ).status()
-    ).toBe(200);
-
-    // ยังไม่มีใบความจำนงผูกกับบริษัทนี้ → ต้องเข้าไม่ได้ (fail closed)
-    await apiLoginAs(request, 'company1');
-    expect(
-      (await request.get(`${API_URL}/students/${sid}/coop-application/company-view`)).status()
-    ).toBe(403);
-
-    await dbExec(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-       VALUES ($1, (SELECT company_id FROM companies LIMIT 1),
-               (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1), 'accepted')`,
-      [sid]
-    );
-
-    const res = await request.get(`${API_URL}/students/${sid}/coop-application/company-view`);
-    expect(res.status(), await res.text()).toBe(200);
-    const view = await res.json();
-
-    // เห็นสิ่งที่ใบสมัครงานบนกระดาษให้จริง
-    expect(view.first_name_en).toBe('Somchai');
-    expect(view.career_objective).toBe('อยากเป็นนักพัฒนาระบบ');
-    expect(view.education_history[0].institution).toBe('โรงเรียนทดสอบ');
-
-    // ⛔⛔ ชั้น C ห้ามหลุดไม่ว่ารูปแบบไหน รวมทั้งมาสก์
-    const raw = JSON.stringify(view);
-    expect(raw).not.toContain(ID_13);
-    expect(raw).not.toContain('x-xxxx-xxxxx');
-    expect(view.national_id_masked).toBeUndefined();
-    expect(view.has_ethnicity).toBeUndefined();
-    expect(view.has_religion).toBeUndefined();
-    expect(view.sensitive_data_consented_at).toBeUndefined();
-    expect(view.national_id_issued_district).toBeUndefined();
-  });
-
-  test('C15: บทบาทอื่นเรียก company-view ไม่ได้', async ({ request }) => {
-    const sid = await studentId();
-    await apiLoginAs(request, 'student2');
-    expect(
-      (await request.get(`${API_URL}/students/${sid}/coop-application/company-view`)).status()
-    ).toBe(403);
-
-    await apiLoginAs(request, 'advisor1');
-    expect(
-      (await request.get(`${API_URL}/students/${sid}/coop-application/company-view`)).status()
-    ).toBe(403);
   });
 
   test('C16: หน้าจอ — เพิ่ม/ลบแถวประวัติแล้วบันทึกได้จริง', async ({ page }) => {

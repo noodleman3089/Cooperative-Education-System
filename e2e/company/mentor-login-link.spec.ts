@@ -147,7 +147,7 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
   });
 
   test('M2: SEC-03 — บัญชีที่ไม่ใช่พี่เลี้ยงล้วน ขอลิงก์ไม่ได้ token และ ใช้ลิงก์ที่ยัดมาก็ไม่ได้ (403) ไม่มี session', async () => {
-    const others = ['staff1', 'advisor1', 'student1', 'dean1', 'company1'].map((k) => `${k}@test.com`);
+    const others = ['staff1', 'advisor1', 'student1', 'dean1'].map((k) => `${k}@test.com`);
 
     const baseline = await (await requestLink('nobody-m2@example.com')).json();
     for (const email of others) {
