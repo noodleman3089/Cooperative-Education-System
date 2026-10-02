@@ -12,6 +12,7 @@ import apiRouter from './routes';
 import { query } from './config/database';
 import { assertEnvironment } from './config/validateEnv';
 import { initDeactivationScheduler } from './utils/deactivationScheduler';
+import { initMentorAutoRemindScheduler } from './utils/mentorAutoRemind';
 
 // Load environment variables
 dotenv.config();
@@ -392,4 +393,7 @@ app.listen(PORT, () => {
 
   // Start the automatic user deactivation checker
   initDeactivationScheduler();
+
+  // เตือนพี่เลี้ยงอัตโนมัติ (เฟส 3) — ปิดเป็นค่าเริ่มต้น เปิดด้วย MENTOR_AUTO_REMIND=true
+  initMentorAutoRemindScheduler();
 });

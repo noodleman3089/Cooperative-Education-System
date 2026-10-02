@@ -32,6 +32,8 @@ export const AuditAction = {
   MENTOR_REMINDER_SENT: 'mentor.reminder_sent',
   MENTOR_LINK_SENT_BY_STAFF: 'mentor.link_sent_by_staff',
   MENTOR_EMAIL_CHANGED: 'mentor.email_changed',
+  // เฟส 3: ระบบเตือนพี่เลี้ยงเอง (ไม่มีผู้กด — actor = 'system') · detail เก็บ auto_count ของรอบนั้นไว้ตามย้อน
+  MENTOR_REMINDER_AUTO_SENT: 'mentor.reminder_auto_sent',
   // เอกสารหมายเลข 1 — ลายเซ็นอยู่บนกระดาษ เจ้าหน้าที่เป็นคนเดียวที่กดในระบบ
   // จึงเป็นจุดเดียวที่มีคนรับผิดชอบให้ตามย้อนได้ว่าใครปล่อยคำร้องใบไหนผ่าน
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',

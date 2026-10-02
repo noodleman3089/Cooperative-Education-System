@@ -988,7 +988,9 @@ export const sendMentorReminderEmail = async (
   mentorName: string,
   summary: MentorReminderSummary,
   loginUrl: string,
-  expiresAt: Date
+  expiresAt: Date,
+  /** เฟส 3: ระบบส่งเอง — เพิ่มบรรทัดตายตัวบอกเหตุผล (ไม่รับข้อความจากภายนอก) */
+  auto?: boolean
 ): Promise<boolean> => {
   const tz = 'Asia/Bangkok';
   const expiresLabel =
@@ -1017,6 +1019,7 @@ export const sendMentorReminderEmail = async (
   const content = `
     <p>เรียน พี่เลี้ยงคุณ <b>${esc(mentorName || '')}</b>,</p>
     <p>มีงานที่รอท่านดำเนินการในระบบสหกิจศึกษา RMUTTO ดังนี้</p>
+    ${auto ? '<p style="color: #6b7280; font-size: 13px; margin: 4px 0;">อีเมลฉบับนี้ส่งโดยระบบอัตโนมัติ เนื่องจากมีงานค้างเกิน 5 วัน</p>' : ''}
     <ul style="padding-left: 20px; margin: 8px 0;">${countLines.join('')}</ul>
     ${detail}
     <div style="text-align: center; margin: 24px 0;">
@@ -1050,6 +1053,91 @@ export const sendMentorReminderEmail = async (
     const error = err as { message?: string; response?: string };
     console.error('════════════════════════════════════════════════════');
     console.error(`[Email] MENTOR REMINDER (SMTP failed: ${error?.message || err})`);
+    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
+    console.error(`  To: ${toEmail}`);
+    console.error('════════════════════════════════════════════════════');
+    return false;
+  }
+};
+
+export interface SilentMentorDigestRow {
+  name: string;
+  companyName: string | null;
+  email: string;
+  oldestDaysWaiting: number;
+  /** เตือนล่าสุด (ทุกชนิด) — null = ไม่มีแถวเตือนเลย */
+  lastRemindedAt: Date | null;
+}
+
+/** ที่ขึ้นบรรทัดสูงสุดในอีเมลสรุปประจำสัปดาห์ถึงเจ้าหน้าที่ */
+const SILENT_DIGEST_MAX_LINES = 50;
+
+/**
+ * สรุปประจำสัปดาห์ถึงเจ้าหน้าที่: พี่เลี้ยงที่ระบบเตือนครบเพดานแล้วแต่ยังเงียบ (เฟส 3 เตือนอัตโนมัติ)
+ *
+ * ข้อความตายตัว · ทุกค่าที่แทรกลง HTML ผ่าน `esc()` · ปลายทางมาจากทะเบียน (ผู้ใช้บทบาท staff) ไม่ใช่จากคำขอ
+ * คืน `true` เมื่อ SMTP รับจดหมายไปแล้ว · `false` เมื่อส่งไม่ออก — ไม่โยน error
+ */
+export const sendMentorSilentDigestEmail = async (
+  toEmail: string,
+  rows: SilentMentorDigestRow[],
+  followupUrl: string
+): Promise<boolean> => {
+  const tz = 'Asia/Bangkok';
+  const shown = rows.slice(0, SILENT_DIGEST_MAX_LINES);
+  const rest = rows.length - shown.length;
+  const lines = shown.map((r) => {
+    const last = r.lastRemindedAt
+      ? formatThaiDate(r.lastRemindedAt.toLocaleDateString('en-CA', { timeZone: tz }))
+      : '-';
+    return `
+      <tr>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${esc(r.name)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${esc(r.companyName ?? '-')}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${esc(r.email)}</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #eee; text-align: right;">${esc(String(r.oldestDaysWaiting))} วัน</td>
+        <td style="padding: 6px 8px; border-bottom: 1px solid #eee;">${esc(last)}</td>
+      </tr>`;
+  });
+
+  const content = `
+    <p>เรียน เจ้าหน้าที่ดูแลงานสหกิจศึกษา,</p>
+    <p>ระบบเตือนพี่เลี้ยงอัตโนมัติครบจำนวนครั้งสูงสุดแล้ว แต่พี่เลี้ยง <b>${esc(String(rows.length))} คน</b> ด้านล่างนี้ยังมีงานค้างและยังไม่เข้าระบบ
+       กรุณาติดต่อพี่เลี้ยงโดยตรง</p>
+    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+      <tr style="background-color: #f5f5f5; text-align: left;">
+        <th style="padding: 6px 8px;">พี่เลี้ยง</th>
+        <th style="padding: 6px 8px;">สถานประกอบการ</th>
+        <th style="padding: 6px 8px;">อีเมล</th>
+        <th style="padding: 6px 8px; text-align: right;">ค้างนานสุด</th>
+        <th style="padding: 6px 8px;">เตือนล่าสุด</th>
+      </tr>
+      ${lines.join('')}
+    </table>
+    ${rest > 0 ? `<p style="margin: 4px 0;">และอีก ${esc(String(rest))} คน</p>` : ''}
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${esc(followupUrl)}"
+         style="display: inline-block; padding: 12px 32px; background-color: #1a73e8; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        เปิดหน้าติดตามพี่เลี้ยง
+      </a>
+    </div>
+  `;
+
+  const mailOptions = {
+    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+    to: toEmail,
+    subject: 'พี่เลี้ยงที่ยังเงียบหลังระบบเตือนครบแล้ว - ระบบสหกิจศึกษาออนไลน์',
+    html: renderEmailHtml({ title: 'พี่เลี้ยงที่ยังเงียบหลังระบบเตือนครบแล้ว', themeColor: '#1a73e8', content }),
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log(`Mentor silent digest email successfully sent to: ${toEmail}`);
+    return true;
+  } catch (err: unknown) {
+    const error = err as { message?: string; response?: string };
+    console.error('════════════════════════════════════════════════════');
+    console.error(`[Email] MENTOR SILENT DIGEST (SMTP failed: ${error?.message || err})`);
     if (error?.response) console.error(`  SMTP Response: ${error.response}`);
     console.error(`  To: ${toEmail}`);
     console.error('════════════════════════════════════════════════════');

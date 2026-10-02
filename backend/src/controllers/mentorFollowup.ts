@@ -6,6 +6,12 @@ import { AuditAction, writeAudit } from '../utils/audit';
 import { sendMentorLoginLinkEmail, sendMentorReminderEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import {
+  AUTO_REMIND_AFTER_DAYS,
+  AUTO_REMIND_EVERY_DAYS,
+  AUTO_REMIND_MAX,
+  isAutoRemindEnabled,
+} from '../utils/mentorAutoRemind';
+import {
   MENTOR_LINK_TTL_SYSTEM_MS,
   hasOnlyMentorRole,
   isPureMentor,
@@ -42,7 +48,17 @@ export class MentorFollowupController {
       }
       const scope = await MentorFollowupModel.resolveScope(req.user.userId, req.user.roles);
       const mentors = await MentorFollowupModel.list(scope);
-      res.status(200).json({ can_edit: req.user.roles.includes('staff'), mentors });
+      res.status(200).json({
+        can_edit: req.user.roles.includes('staff'),
+        mentors,
+        // เฟส 3: ให้หน้าจอรู้ว่าระบบเตือนเองอยู่หรือไม่ + กติกา (ค่าเดียวกับที่ตัวเตือนใช้จริง)
+        auto_remind: {
+          enabled: isAutoRemindEnabled(),
+          after_days: AUTO_REMIND_AFTER_DAYS,
+          every_days: AUTO_REMIND_EVERY_DAYS,
+          max: AUTO_REMIND_MAX,
+        },
+      });
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Mentor followup list error', 'ไม่สามารถโหลดรายการพี่เลี้ยงได้');

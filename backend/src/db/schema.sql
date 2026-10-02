@@ -29,6 +29,7 @@ DROP TABLE IF EXISTS coop_applications CASCADE;
 DROP TABLE IF EXISTS acceptance_link_tokens CASCADE;
 DROP TABLE IF EXISTS mentor_login_tokens CASCADE;
 DROP TABLE IF EXISTS mentor_reminders CASCADE;
+DROP TABLE IF EXISTS auto_job_log CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
 DROP TABLE IF EXISTS student_memos CASCADE;
@@ -627,7 +628,7 @@ CREATE TABLE IF NOT EXISTS mentor_login_tokens (
 CREATE INDEX IF NOT EXISTS idx_mentor_login_tokens_user ON mentor_login_tokens(user_id);
 
 -- ประวัติการเตือนพี่เลี้ยง — คณะ/เจ้าหน้าที่กดเตือนงานค้าง (summary) · ระบบส่งเตือนแจ้งประเมินรายนักศึกษา (final_report)
--- 'auto' สงวนไว้สำหรับเฟสถัดไป (ยังไม่มีโค้ดไหนเขียน) · ใช้นับ "เตือนไปกี่ครั้ง" และเป็นตัวกัน cooldown 24 ชม. ต่อพี่เลี้ยง
+-- 'auto' = ระบบเตือนเอง (เฟส 3 · utils/mentorAutoRemind.ts · sent_by = NULL) · ใช้นับ "เตือนไปกี่ครั้ง" และเป็นตัวกัน cooldown 24 ชม. ต่อพี่เลี้ยง
 -- student_id = NULL เมื่อเป็นสรุปรวมหลายคน · sent_by = NULL เมื่อไม่ทราบผู้กด/ระบบส่งเอง
 CREATE TABLE IF NOT EXISTS mentor_reminders (
     reminder_id SERIAL PRIMARY KEY,
@@ -638,6 +639,16 @@ CREATE TABLE IF NOT EXISTS mentor_reminders (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_mentor_reminders_mentor ON mentor_reminders(mentor_id, created_at DESC);
+
+-- สมุดจดงานอัตโนมัติของระบบ (เฟส 3 เตือนพี่เลี้ยงเอง) — ใช้จำแค่ "ส่งสรุปประจำสัปดาห์ถึงเจ้าหน้าที่ไปเมื่อไหร่" (job_name = 'mentor_silent_digest')
+-- ไม่ใช่ audit_log (ไม่มีผู้กด) และไม่เก็บข้อมูลส่วนตัว · detail = จำนวนที่ส่ง/จำนวนพี่เลี้ยงที่เงียบ
+CREATE TABLE IF NOT EXISTS auto_job_log (
+    log_id SERIAL PRIMARY KEY,
+    job_name VARCHAR(40) NOT NULL,
+    ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    detail JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_auto_job_log_job ON auto_job_log(job_name, ran_at DESC);
 
 -- 8. Document Templates Table
 CREATE TABLE IF NOT EXISTS document_templates (

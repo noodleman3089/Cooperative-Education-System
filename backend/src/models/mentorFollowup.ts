@@ -11,6 +11,14 @@ import { MENTOR_QUEUE_KINDS, MentorQueueKind, MentorQueueModel } from './mentorQ
  * ⛔ "การจัดวาง (placement)" = `intent_forms` สถานะ 'accepted' ที่มี mentor_id — ที่เดียวกับที่ MentorQueueModel ใช้
  */
 
+/**
+ * เฟส 3 "เตือนอัตโนมัติ" — กติกาอยู่ที่นี่ที่เดียว (utils/mentorAutoRemind.ts re-export ให้)
+ * ⛔ ประกาศที่โมเดลไม่ใช่ที่ util เพราะ util import โมเดลนี้อยู่แล้ว — กลับกันจะเป็นวงกลม
+ */
+export const AUTO_REMIND_AFTER_DAYS = 5; // งานรอ ≥ กี่วันถึงเข้าเกณฑ์เตือน
+export const AUTO_REMIND_EVERY_DAYS = 7; // เตือนซ้ำห่างกันอย่างน้อยกี่วัน (นับทุกชนิดการเตือน)
+export const AUTO_REMIND_MAX = 4; // เตือนอัตโนมัติได้กี่ครั้งต่อ "รอบ" (รอบ = นับจากครั้งล่าสุดที่พี่เลี้ยงใช้ลิงก์เข้าระบบ)
+
 export type FollowupScope =
   | { kind: 'staff' }
   | { kind: 'dept_head'; majorId: number }
@@ -38,6 +46,10 @@ export interface FollowupMentorRow {
   last_reminded_at: string | null;
   reminder_count: number;
   last_login_at: string | null;
+  /** เฟส 3: เตือนอัตโนมัติไปกี่ครั้งในรอบปัจจุบัน (นับตั้งแต่ลิงก์ที่พี่เลี้ยงใช้ล่าสุด) */
+  auto_reminder_count: number;
+  /** เฟส 3: เตือนอัตโนมัติครบเพดานแล้วแต่ยังมีงานค้างเข้าเกณฑ์ — คนนี้ต้องให้เจ้าหน้าที่ตามเอง */
+  silent_after_max: boolean;
 }
 
 const toIso = (v: unknown): string | null => {
@@ -144,6 +156,7 @@ export class MentorFollowupModel {
     );
 
     const missing = await MentorFollowupModel.evalMissingStudentIds([...new Set(placements.map((p) => p.student_id))]);
+    const autoCounts = await MentorFollowupModel.autoCycleCounts(mentorIds);
 
     const rows = await Promise.all(
       infoRes.rows.map(async (info): Promise<FollowupMentorRow> => {
@@ -151,7 +164,15 @@ export class MentorFollowupModel {
         const mine = (byMentor.get(mentorId) ?? []).sort((a, b) => a.student_name.localeCompare(b.student_name, 'th'));
         const inScope = new Set(mine.map((p) => p.student_id));
 
-        const items = (await MentorQueueModel.pendingItems(mentorId)).filter((it) => inScope.has(Number(it.student_id)));
+        const allItems = await MentorQueueModel.pendingItems(mentorId);
+        const items = allItems.filter((it) => inScope.has(Number(it.student_id)));
+        const autoCount = autoCounts.get(mentorId) ?? 0;
+        // "ยังเข้าเกณฑ์" คิดจากคิวทั้งหมดของพี่เลี้ยง ไม่ใช่เฉพาะนักศึกษาในขอบเขตของผู้ดู — ทุกคนต้องเห็นธงตรงกัน
+        let silent = false;
+        if (autoCount >= AUTO_REMIND_MAX) {
+          const wait = await MentorFollowupModel.autoTriggerWait(mentorId, allItems);
+          silent = wait !== null && wait >= AUTO_REMIND_AFTER_DAYS;
+        }
         const byKind = Object.fromEntries(MENTOR_QUEUE_KINDS.map((k) => [k, 0])) as Record<MentorQueueKind, number>;
         let oldest: number | null = null;
         for (const it of items) {
@@ -175,6 +196,8 @@ export class MentorFollowupModel {
           last_reminded_at: toIso(info.last_reminded_at),
           reminder_count: Number(info.reminder_count),
           last_login_at: toIso(info.last_login_at),
+          auto_reminder_count: autoCount,
+          silent_after_max: silent,
         };
       })
     );
@@ -206,6 +229,59 @@ export class MentorFollowupModel {
     };
   }
 
+  /**
+   * จำนวนครั้งที่เตือนอัตโนมัติในรอบปัจจุบันของพี่เลี้ยงแต่ละคน
+   * รอบ = นับจากครั้งล่าสุดที่พี่เลี้ยง "ใช้" ลิงก์เข้าระบบ (`mentor_login_tokens.used_at`) · ไม่เคยใช้ = นับตั้งแต่ต้น
+   * พี่เลี้ยงที่ไม่มีแถวเตือนเลยไม่อยู่ใน Map (ผู้เรียกใช้ `?? 0`)
+   */
+  static async autoCycleCounts(mentorIds: number[]): Promise<Map<number, number>> {
+    if (mentorIds.length === 0) return new Map();
+    const res = await query(
+      `SELECT r.mentor_id, COUNT(*)::int AS n
+         FROM mentor_reminders r
+        WHERE r.mentor_id = ANY($1::int[]) AND r.kind = 'auto'
+          AND r.created_at > COALESCE(
+                (SELECT MAX(t.used_at) FROM mentor_login_tokens t WHERE t.user_id = r.mentor_id),
+                '-infinity'::timestamptz)
+        GROUP BY r.mentor_id`,
+      [mentorIds]
+    );
+    return new Map(res.rows.map((r) => [Number(r.mentor_id), Number(r.n)]));
+  }
+
+  /**
+   * ที่รอนานที่สุดของพี่เลี้ยง (จำนวนวัน) ที่เข้าเกณฑ์เตือนอัตโนมัติ — null = ไม่มีงานค้างเลย
+   *  (ก) งานในคิวที่ค้างนานสุด (`days_waiting` ของ pendingItems) หรือ
+   *  (ข) นักศึกษาที่ส่งเล่มรายงานฉบับของอาจารย์แล้วแต่พี่เลี้ยงยังกรอก สหกิจ 15/16 ไม่ครบ — นับจากวันที่ส่งเล่มครั้งแรก
+   * ⛔ นับวันที่ Postgres ตามเวลาไทย ไม่ใช่นาฬิกา Node · ผู้เรียกที่โหลดคิวมาแล้วส่ง `items` มาเพื่อไม่ต้องคิวรีซ้ำ
+   */
+  static async autoTriggerWait(
+    mentorId: number,
+    items?: { days_waiting: number | null }[]
+  ): Promise<number | null> {
+    const queue = items ?? (await MentorQueueModel.pendingItems(mentorId));
+    let oldest: number | null = null;
+    for (const it of queue) {
+      if (it.days_waiting !== null && (oldest === null || it.days_waiting > oldest)) oldest = it.days_waiting;
+    }
+
+    const res = await query(
+      `SELECT MAX((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (f.first_at AT TIME ZONE 'Asia/Bangkok')::date) AS days
+         FROM (SELECT DISTINCT i.student_id FROM intent_forms i
+                WHERE i.mentor_id = $1 AND i.status = 'accepted') p
+         JOIN LATERAL (SELECT MIN(r.submitted_at) AS first_at FROM final_reports r
+                        WHERE r.student_id = p.student_id AND r.reviewer_kind = 'advisor') f
+           ON f.first_at IS NOT NULL
+        WHERE (SELECT COUNT(DISTINCT e.form_code) FROM final_evaluations e
+                WHERE e.student_id = p.student_id AND e.evaluator_role = 'mentor'
+                  AND e.form_code IN ('sahatkit_15', 'sahatkit_16')) < 2`,
+      [mentorId]
+    );
+    const evalWait = res.rows[0]?.days === null || res.rows[0]?.days === undefined ? null : Number(res.rows[0].days);
+    if (evalWait !== null && (oldest === null || evalWait > oldest)) oldest = evalWait;
+    return oldest;
+  }
+
   /** เตือนล่าสุดภายใน 24 ชม. หรือไม่ (ทุกชนิด) */
   static async remindedWithin24h(mentorId: number): Promise<boolean> {
     const res = await query(
@@ -220,17 +296,24 @@ export class MentorFollowupModel {
    * จองสิทธิ์เตือนหนึ่งครั้ง — INSERT เงื่อนไข cooldown เดียวกันในคำสั่งเดียว (กันสองคำขอซ้อนที่ผ่านด่านอ่านพร้อมกัน)
    * คืน null = มีคนเตือนไปแล้วภายใน 24 ชม. · ผู้เรียกต้อง `releaseReminder` ถ้าส่งเมลไม่สำเร็จ
    * (READ COMMITTED ไม่ serialize สองคำสั่งที่เริ่มพร้อมกันเป๊ะ — ช่องแคบมาก ผลคือเมลเตือนซ้ำหนึ่งฉบับ ไม่ใช่การข้ามด่านสิทธิ์)
+   *
+   * เฟส 3: `kind: 'auto'` + `sentBy: null` + `spacingHours` กว้างขึ้น (7 วัน) สำหรับระบบเตือนเอง · ค่าเริ่มต้น = ปุ่มของเจ้าหน้าที่ (summary · 24 ชม.)
+   * ⛔ ด่านห่างกัน "นับทุกชนิด" เสมอ — ระบบไม่เตือนซ้ำทับที่คนเพิ่งกดเตือน และกลับกัน
    */
-  static async claimReminder(mentorId: number, sentBy: number): Promise<{ reminderId: number; createdAt: Date } | null> {
+  static async claimReminder(
+    mentorId: number,
+    sentBy: number | null,
+    opts: { kind?: 'summary' | 'auto'; spacingHours?: number } = {}
+  ): Promise<{ reminderId: number; createdAt: Date } | null> {
     const res = await query(
       `INSERT INTO mentor_reminders (mentor_id, kind, sent_by)
-       SELECT $1::int, 'summary', $2::int
+       SELECT $1::int, $2::varchar, $3::int
         WHERE NOT EXISTS (
                 SELECT 1 FROM mentor_reminders r
-                 WHERE r.mentor_id = $1::int AND r.created_at > NOW() - INTERVAL '24 hours'
+                 WHERE r.mentor_id = $1::int AND r.created_at > NOW() - ($4::int * INTERVAL '1 hour')
               )
        RETURNING reminder_id, created_at`,
-      [mentorId, sentBy]
+      [mentorId, opts.kind ?? 'summary', sentBy, opts.spacingHours ?? 24]
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return { reminderId: Number(res.rows[0].reminder_id), createdAt: res.rows[0].created_at as Date };
