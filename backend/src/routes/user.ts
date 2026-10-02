@@ -17,9 +17,6 @@ router.get('/:id', UserController.getUserById);
 // Route: POST /api/users (Manual create account with password)
 router.post('/', UserController.createUser);
 
-// Route: POST /api/users/:id/resend-invite (Reissue an external partner's invitation link)
-router.post('/:id/resend-invite', UserController.resendInvite);
-
 // Route: PUT /api/users/:id (Update account email/role/is_active)
 router.put('/:id', UserController.updateUser);
 

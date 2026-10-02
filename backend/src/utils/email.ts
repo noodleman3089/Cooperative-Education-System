@@ -2,7 +2,6 @@ import nodemailer from 'nodemailer';
 import path from 'path';
 import { buildAcceptanceFormPdf, AcceptanceFormData } from './acceptanceFormPdf';
 import { escapeHtml as esc } from '../middlewares/validation';
-import { INVITE_TTL_LABEL, companyLoginUrl } from './invite';
 import { JOB_OFFER_TOKEN_TTL_LABEL } from './jobOfferToken';
 import { formatThaiDate } from './thaiDate';
 import { mentorLoginPageUrl } from './mentorLoginLink';
@@ -62,107 +61,6 @@ const renderEmailHtml = (options: {
       </p>
     </div>
   `;
-};
-
-/**
- * Renders the "set your password" call to action shared by both invitation
- * emails. The link is the only credential these emails carry — no password is
- * ever mailed, so nothing usable is left behind in the recipient's inbox.
- */
-const inviteCallToAction = (inviteLink: string, buttonColor: string) => `
-  <div style="text-align: center; margin: 24px 0;">
-    <a href="${inviteLink}"
-       style="display: inline-block; padding: 12px 32px; background-color: ${buttonColor}; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
-      ตั้งรหัสผ่านและเข้าใช้งาน
-    </a>
-  </div>
-`;
-
-const inviteFootnote = (loginUrl: string) => `
-  <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
-    ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${INVITE_TTL_LABEL}<br/>
-    หากลิงก์หมดอายุแล้ว กรุณาไปที่ <a href="${loginUrl}" style="color: #2563eb;">หน้าเข้าสู่ระบบสถานประกอบการ</a>
-    แล้วกด "ลืมรหัสผ่าน" เพื่อขอลิงก์ใหม่<br/>
-    หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่ดูแลงานสหกิจศึกษา
-  </p>
-`;
-
-/**
- * Invites a company representative to set their own password.
- */
-export const sendCompanyInviteEmail = async (
-  toEmail: string,
-  inviteLink: string
-): Promise<void> => {
-  const content = `
-    <p>ท่านได้รับสิทธิ์การเข้าใช้งาน <b>ระบบบริหารจัดการงานสหกิจศึกษาออนไลน์ (Online Cooperative Education Management System)</b> ของ มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO)</p>
-    <p>บัญชีของท่านคือ <b>${esc(toEmail)}</b> กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง แล้วเข้าใช้งานระบบ</p>
-    ${inviteCallToAction(inviteLink, '#2563eb')}
-  `;
-
-  const mailOptions = {
-    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
-    to: toEmail,
-    subject: 'เชิญเปิดใช้งานบัญชีสำหรับสถานประกอบการ - ระบบสหกิจศึกษาออนไลน์',
-    html: renderEmailHtml({
-      title: 'สวัสดีครับ/ค่ะ ตัวแทนสถานประกอบการ',
-      themeColor: '#1a73e8',
-      content,
-      footnote: inviteFootnote(companyLoginUrl())
-    })
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Company invitation email successfully sent to: ${toEmail}`);
-  } catch (err: unknown) {
-    const error = err as { message?: string; response?: string };
-    console.error('════════════════════════════════════════════════════');
-    console.error(`[Email] COMPANY INVITE (SMTP failed: ${error?.message || err})`);
-    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
-    console.error(`  To: ${toEmail}`);
-    console.error(`  Link: ${inviteLink}`);
-    console.error('════════════════════════════════════════════════════');
-  }
-};
-
-/**
- * Invites a mentor to set their own password.
- */
-export const sendMentorInviteEmail = async (
-  toEmail: string,
-  inviteLink: string
-): Promise<void> => {
-  const content = `
-    <p>ท่านได้รับการลงทะเบียนเป็น <b>พี่เลี้ยงดูแลนักศึกษาฝึกปฏิบัติสหกิจศึกษา (Coop Mentor)</b> ในระบบบริหารจัดการงานสหกิจศึกษาออนไลน์ ของ มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก (RMUTTO)</p>
-    <p>บัญชีของท่านคือ <b>${esc(toEmail)}</b> กรุณากดปุ่มด้านล่างเพื่อตั้งรหัสผ่านด้วยตัวท่านเอง แล้วเข้าใช้งานเพื่อประเมินและติดตามนักศึกษา</p>
-    ${inviteCallToAction(inviteLink, '#2e7d32')}
-  `;
-
-  const mailOptions = {
-    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
-    to: toEmail,
-    subject: 'เชิญเปิดใช้งานบัญชีสำหรับพี่เลี้ยงนักศึกษาสหกิจ - ระบบสหกิจศึกษาออนไลน์',
-    html: renderEmailHtml({
-      title: 'สวัสดีครับ/ค่ะ พี่เลี้ยงนักศึกษา (Mentor)',
-      themeColor: '#2e7d32',
-      content,
-      footnote: inviteFootnote(companyLoginUrl())
-    })
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Mentor invitation email successfully sent to: ${toEmail}`);
-  } catch (err: unknown) {
-    const error = err as { message?: string; response?: string };
-    console.error('════════════════════════════════════════════════════');
-    console.error(`[Email] MENTOR INVITE (SMTP failed: ${error?.message || err})`);
-    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
-    console.error(`  To: ${toEmail}`);
-    console.error(`  Link: ${inviteLink}`);
-    console.error('════════════════════════════════════════════════════');
-  }
 };
 
 /**

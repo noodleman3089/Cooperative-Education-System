@@ -14,20 +14,6 @@ router.post(
   CompanyController.googleSearchCompany
 );
 
-// Route: GET /api/companies/my-company (Company role self-view)
-router.get(
-  '/my-company',
-  authorizeRoles('company'),
-  CompanyController.getMyCompany
-);
-
-// Route: PUT /api/companies/my-company/contact-info (Company role self-edit)
-router.put(
-  '/my-company/contact-info',
-  authorizeRoles('company'),
-  CompanyController.updateMyCompanyContactInfo
-);
-
 // Route: GET /api/companies (Company Directory with role-based filters)
 router.get(
   '/',

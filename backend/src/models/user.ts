@@ -1,7 +1,7 @@
 import { query } from '../config/database';
 import { User } from '../types';
 
-export const VALID_ROLES = ['student', 'advisor', 'dean', 'staff', 'dept_head', 'company', 'mentor'];
+export const VALID_ROLES = ['student', 'advisor', 'dean', 'staff', 'dept_head', 'mentor'];
 
 export class UserModel {
   /**

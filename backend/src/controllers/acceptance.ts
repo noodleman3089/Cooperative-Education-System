@@ -2,113 +2,16 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { IntentFormModel } from '../models/intent';
-import { CompanyAcceptPayload, StudentAcceptPayload } from '../types';
+import { StudentAcceptPayload } from '../types';
 import { notifyStudentStatusChange, sendMentorLoginLinkEmail } from '../utils/email';
 import { issueMentorLoginLink, revokeMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { validateAcceptanceInput } from '../utils/acceptanceInput';
-import { updateCompanyFields } from './form07';
+import { updateCompanyFields } from '../utils/companyFields';
 
 export class AcceptanceController {
-  /**
-   * Update company acceptance status (accept or reject).
-   * Route: PATCH /api/acceptances/company/:intent_id/status
-   * Access: company
-   */
-  static async updateCompanyAcceptanceStatus(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const intentId = parseInt(req.params.intent_id, 10);
-      if (isNaN(intentId)) {
-        res.status(400).json({ message: 'Invalid intent form ID format.' });
-        return;
-      }
-
-      const { status } = req.body;
-      if (!status || !['accepted', 'rejected'].includes(status)) {
-        res.status(400).json({ message: 'Required field: status must be either "accepted" or "rejected".' });
-        return;
-      }
-
-      const companyUserId = req.user.userId;
-
-      if (status === 'accepted') {
-        const body = req.body as CompanyAcceptPayload;
-        const { name, email, phone, position, department, start_date } = body;
-
-        // Validate required fields
-        if (!name || !email || !phone || !start_date) {
-          res.status(400).json({ message: 'Required fields: name, email, phone, start_date.' });
-          return;
-        }
-
-        // Basic email validation
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          res.status(400).json({ message: 'Invalid email address format.' });
-          return;
-        }
-
-        // Date validation
-        if (isNaN(Date.parse(start_date))) {
-          res.status(400).json({ message: 'Invalid start_date format.' });
-          return;
-        }
-
-        const updatedIntent = await IntentFormModel.acceptByCompanyWithTransaction(
-          intentId,
-          companyUserId,
-          { name, email, phone, position, department },
-          start_date
-        );
-
-        // Notify student via email
-        notifyStudentStatusChange(intentId, 'accepted').catch(console.error);
-
-        res.status(200).json({
-          message: 'Student application accepted and mentor onboarding completed successfully.',
-          intentForm: updatedIntent,
-        });
-      } else {
-        // Status is 'rejected'
-        // A reason is mandatory, as it already is for the advisor and the
-        // department head. A student who is turned down has to re-apply
-        // somewhere else, and cannot do that well without knowing what went
-        // wrong.
-        const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
-        if (!reason) {
-          res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษาเข้าปฏิบัติงาน' });
-          return;
-        }
-
-        const success = await IntentFormModel.rejectByCompany(intentId, companyUserId, reason);
-        if (!success) {
-          res.status(400).json({ message: 'Failed to reject intent form.' });
-          return;
-        }
-
-        // Notify student via email
-        notifyStudentStatusChange(intentId, 'company_rejected', reason).catch(console.error);
-
-        res.status(200).json({
-          message: 'Student application rejected by company. Student is unlocked to apply again.',
-          intent_id: intentId,
-        });
-      }
-    } catch (error) {
-      console.error('Update Company Acceptance Status Error:', error);
-      res.status(400).json({
-        message: getErrorMessage(error, 'An error occurred while updating the application status.'),
-      });
-    }
-  }
-
   /**
    * Student uploads manual acceptance proof and onboard the mentor.
    * Route: POST /api/acceptances/student/:intent_id/upload-proof

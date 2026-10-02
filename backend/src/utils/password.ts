@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 
 /**
- * There is deliberately no password generator here. Companies and mentors are
- * onboarded with an invitation link and choose their own password (see
- * `utils/invite.ts`); the system never mints a credential on a user's behalf.
+ * There is deliberately no password generator here. Mentors sign in with an
+ * emailed single-use link (SEC-15) and companies have no account at all; the
+ * system never mints a credential on a user's behalf.
  */
 
 /**

@@ -172,8 +172,7 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
       // แบบคำร้อง (เอกสารหมายเลข 1) ที่ลงนามแล้ว — เจ้าหน้าที่ต้องเปิดดูก่อนกดผ่าน
       // และนักศึกษาต้องเปิดดูของตัวเองได้ว่าอัปไฟล์ไหนไป
       'request_forms',
-      // รูปโปรไฟล์นักศึกษา — เจ้าตัว · บุคลากร · และ**บริษัทที่นักศึกษาสมัครมา**
-      // (เปิดให้บริษัทเมื่อ 2026-09-03 พร้อมใบ สหกิจ 03 ซึ่งบนกระดาษมีรูปติดอยู่แล้ว)
+      // รูปโปรไฟล์นักศึกษา — เจ้าตัว · บุคลากร
       'avatars',
     ];
     if (!allowedCategories.includes(category)) {
@@ -198,34 +197,8 @@ app.get(['/api/files/:category/:filename', '/api/files/download/:category/:filen
     if (!isStaff) {
       let isAuthorizedPartner = false;
       
-      // บริษัทเปิดได้สองอย่างของนักศึกษาที่สมัครมาที่ตน: **เรซูเม่** และ **รูปถ่าย**
-      // ⛔ รูปถ่ายเพิ่งเปิดเมื่อ 2026-09-03 พร้อมกับใบ สหกิจ 03 (ก้อน 4c) — บนกระดาษ
-      //    รูป 1 นิ้วติดอยู่บนใบสมัครที่นักศึกษายื่นให้บริษัทเอง การให้เห็นในระบบจึงไม่ใช่
-      //    การเปิดเกินกระดาษ · **ห้ามขยายไปหมวดอื่นโดยไม่ถามว่า "กระดาษใบไหนให้สิ่งนี้"**
-      const COMPANY_READABLE: Record<string, RegExp> = {
-        resumes: /^resume-user-(\d+)-/,
-        avatars: /^avatar-user-(\d+)-/,
-      };
-      if (userRoles.includes('company') && COMPANY_READABLE[category] && userId !== undefined) {
-        const match = safeName.match(COMPANY_READABLE[category]);
-        const studentUserId = match ? parseInt(match[1], 10) : null;
-        if (studentUserId) {
-          const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);
-          if ((companyQuery.rowCount ?? 0) > 0) {
-            const companyId = companyQuery.rows[0].company_id;
-            const intentCheck = await query(
-              `SELECT 1 FROM intent_forms 
-               WHERE student_id = $1 AND company_id = $2 
-                 AND status NOT IN ('rejected', 'company_rejected')
-               LIMIT 1`,
-              [studentUserId, companyId]
-            );
-            if ((intentCheck.rowCount ?? 0) > 0) {
-              isAuthorizedPartner = true;
-            }
-          }
-        }
-      }
+      // ⛔ บริษัทไม่มีบัญชี (บทบาท `company` ถูกลบแล้ว) จึงไม่มีทางเปิดเรซูเม่/รูปถ่ายของนักศึกษา
+      //    ผ่านที่นี่ · ผู้ที่เหลือคือเจ้าของไฟล์ เจ้าหน้าที่/อาจารย์ และพี่เลี้ยง (เฉพาะเล่มรายงาน)
 
       // A mentor grades the report book, so they have to be able to open it.
       // Round 11 pointed both the advisor and student screens at this endpoint

@@ -5,13 +5,10 @@ import { PersonnelModel } from '../models/personnel';
 import { MasterModel } from '../models/master';
 import { query } from '../config/database';
 import { hashPassword } from '../utils/password';
-import { sendCompanyInviteEmail, sendMentorInviteEmail } from '../utils/email';
-import { createInviteLink } from '../utils/invite';
 import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
-import { hasOnlyMentorRole } from '../utils/mentorLoginLink';
 
 /** บทบาทที่มีแถวใน `personnel` — ตรงกับ PERSONNEL_CLAIMABLE_ROLES ใน auth.ts */
 const PERSONNEL_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
@@ -59,7 +56,7 @@ export class UserController {
   }
 
   /**
-   * Create a user account manually (e.g. for external companies).
+   * Create a user account manually (staff only).
    * Route: POST /api/users
    */
   static async createUser(req: Request, res: Response): Promise<void> {
@@ -106,13 +103,8 @@ export class UserController {
         return;
       }
 
-      // A company account is opened with no password at all: the representative
-      // sets their own through the invitation link, so nothing usable is ever
-      // mailed. Every other role still needs a password supplied here.
-      const isCompany = roleList.length === 1 && roleList[0] === 'company';
-
-      if (!password && !isCompany) {
-        res.status(400).json({ message: 'Password is required for non-company accounts.' });
+      if (!password) {
+        res.status(400).json({ message: 'Password is required.' });
         return;
       }
 
@@ -122,7 +114,7 @@ export class UserController {
         return;
       }
 
-      const passwordHash = password ? await hashPassword(password) : null;
+      const passwordHash = await hashPassword(password);
       const user = await UserModel.createUser(email, passwordHash, roleList[0]);
       for (const extraRole of roleList.slice(1)) {
         await UserModel.addRole(user.user_id, extraRole);
@@ -143,16 +135,6 @@ export class UserController {
         detail: { email, roles: roleList, ...(parsedMajorId !== null && { major_id: parsedMajorId }) },
       }, req).catch(() => undefined);
 
-      // Invite the company representative to set their own password.
-      let inviteLink: string | undefined;
-      if (isCompany && !password) {
-        inviteLink = await createInviteLink(user.user_id);
-        // Run in background and do not await to respond quickly to client
-        sendCompanyInviteEmail(email, inviteLink).catch((err) => {
-          console.error(`Email dispatch background error for ${email}:`, err);
-        });
-      }
-
       // password_hash never belongs in a response, not even to staff.
       const { password_hash: _omitted, ...safeUser } = user;
 
@@ -160,82 +142,9 @@ export class UserController {
         message: 'User created successfully.',
         user: safeUser,
         replaced_dept_heads: replacedDeptHeads,
-        // Surfaced outside production so the flow stays testable without SMTP.
-        inviteLink: process.env.NODE_ENV !== 'production' ? inviteLink : undefined
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Create User Error', 'An internal server error occurred while creating the user.');
-    }
-  }
-
-  /**
-   * Reissue an invitation link to an external partner.
-   * Route: POST /api/users/:id/resend-invite
-   * Access: staff
-   *
-   * Companies and mentors have no other way back in: they cannot reach the
-   * login form without the address from their email, so they cannot reach
-   * "forgot password" either. Without this, a partner who lost or never
-   * received their invitation could only be recovered by editing the database.
-   */
-  static async resendInvite(req: Request, res: Response): Promise<void> {
-    try {
-      const id = parseInt(req.params.id, 10);
-      if (isNaN(id)) {
-        res.status(400).json({ message: 'Invalid user ID.' });
-        return;
-      }
-
-      const user = await UserModel.findById(id);
-      if (!user) {
-        res.status(404).json({ message: 'ไม่พบบัญชีผู้ใช้' });
-        return;
-      }
-
-      // Students and personnel sign in with their university Google account —
-      // an invitation link would be a second, weaker way into those accounts.
-      const isCompany = user.roles.includes('company');
-      const isMentor = user.roles.includes('mentor');
-      if (!isCompany && !isMentor) {
-        res.status(400).json({
-          message: 'ส่งลิงก์เชิญได้เฉพาะบัญชีสถานประกอบการและพี่เลี้ยงเท่านั้น',
-        });
-        return;
-      }
-
-      // SEC-15: พี่เลี้ยงล้วนไม่มีรหัสผ่านและไม่ใช้ลิงก์ตั้งรหัสผ่าน — ใช้ลิงก์เข้าระบบของหน้าติดตามพี่เลี้ยงแทน
-      if (hasOnlyMentorRole(user.roles)) {
-        res.status(400).json({
-          message: 'พี่เลี้ยงเข้าระบบด้วยลิงก์ที่ส่งทางอีเมล ไม่ใช้ลิงก์ตั้งรหัสผ่าน กรุณากด "ส่งลิงก์เข้าระบบใหม่" ที่หน้าติดตามพี่เลี้ยง',
-        });
-        return;
-      }
-
-      if (!user.is_active) {
-        res.status(400).json({ message: 'บัญชีนี้ถูกระงับอยู่ กรุณาเปิดใช้งานบัญชีก่อนส่งลิงก์เชิญ' });
-        return;
-      }
-
-      const inviteLink = await createInviteLink(user.user_id);
-      const send = isCompany ? sendCompanyInviteEmail : sendMentorInviteEmail;
-      send(user.email, inviteLink).catch((err) => {
-        console.error(`Resend invite email failed for ${user.email}:`, err);
-      });
-
-      writeAudit({
-        action: AuditAction.USER_UPDATED,
-        entityType: 'user',
-        entityId: user.user_id,
-        subjectId: user.user_id,
-        detail: { action: 'invite_resent' },
-      }, req).catch(() => undefined);
-
-      res.status(200).json({
-        message: `ส่งลิงก์เชิญเข้าใช้งานไปที่ ${user.email} เรียบร้อยแล้ว`,
-        inviteLink: process.env.NODE_ENV !== 'production' ? inviteLink : undefined,
-      });
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Resend Invite Error', 'เกิดข้อผิดพลาดในการส่งลิงก์เชิญ');
     }
   }
 

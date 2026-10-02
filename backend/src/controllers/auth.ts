@@ -35,7 +35,7 @@ const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 export const PERSONNEL_CLAIMABLE_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
 
 /** Holding any of these means the account is already provisioned and must not self-claim. */
-const CLAIM_BLOCKING_ROLES = [...PERSONNEL_CLAIMABLE_ROLES, 'student', 'company', 'mentor'];
+const CLAIM_BLOCKING_ROLES = [...PERSONNEL_CLAIMABLE_ROLES, 'student', 'mentor'];
 
 
 export class AuthController {
@@ -253,14 +253,10 @@ export class AuthController {
 
       // If user is SSO-only (no password hash saved yet)
       // No password yet. Students and personnel get one by signing in with the
-      // university Google account; companies have no such account
-      // and are onboarded by an invitation link instead.
+      // university Google account (mentors never reach here — SEC-15 above).
       if (!user.password_hash) {
-        const isExternalPartner = user.roles.includes('company');
         res.status(400).json({
-          message: isExternalPartner
-            ? 'บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน กรุณากดลิงก์ "ตั้งรหัสผ่านและเข้าใช้งาน" ในอีเมลที่ระบบส่งให้ท่าน หรือกด "ลืมรหัสผ่าน" เพื่อขอลิงก์ใหม่'
-            : 'กรุณาเข้าสู่ระบบด้วย Google Account เพื่อตั้งรหัสผ่านสำหรับการใช้งานก่อน'
+          message: 'กรุณาเข้าสู่ระบบด้วย Google Account เพื่อตั้งรหัสผ่านสำหรับการใช้งานก่อน'
         });
         return;
       }

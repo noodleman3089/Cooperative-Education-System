@@ -12,11 +12,11 @@ router.post(
   FinalEvaluationController.submitEvaluation
 );
 
-// รายชื่อนักศึกษาบนหน้าจอประเมิน (พี่เลี้ยง: ให้คะแนนได้ · บริษัท: อ่านอย่างเดียว)
+// รายชื่อนักศึกษาบนหน้าจอประเมิน (พี่เลี้ยง)
 router.get(
   '/my-students',
   authenticateToken,
-  authorizeRoles('mentor', 'company'),
+  authorizeRoles('mentor'),
   FinalEvaluationController.getMyStudents
 );
 

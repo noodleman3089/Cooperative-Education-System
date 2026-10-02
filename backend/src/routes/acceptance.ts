@@ -9,12 +9,8 @@ const router = Router();
 // Apply authentication to all endpoints
 router.use(authenticateToken);
 
-// Company Acceptance status update (accept/reject)
-router.patch(
-  '/company/:intent_id/status',
-  authorizeRoles('company'),
-  AcceptanceController.updateCompanyAcceptanceStatus
-);
+// ⛔ สถานประกอบการไม่มีบัญชี — ตอบรับ/ปฏิเสธผ่านลิงก์ใช้ครั้งเดียวที่ /api/public/acceptance
+//    (routes/publicAcceptance.ts) · route PATCH /company/:intent_id/status ของบัญชี company ถูกลบแล้ว
 
 // Student Manual Acceptance Routes
 // นี่คือ "เอกสารหมายเลข 2" บนปฏิทินคณะ ซึ่งเขียนว่า **ภายในวันที่ …** จึงถูกคุม

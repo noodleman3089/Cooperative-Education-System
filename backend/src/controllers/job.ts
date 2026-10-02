@@ -62,14 +62,6 @@ export class JobPostController {
       // Create job post (default status: pending_approval)
       const userId = req.user.userId;
 
-      // SEC-06: company_id came straight from the request body, so a company
-      // account could publish postings in another company's name.
-      if (req.user.roles.includes('company') && !req.user.roles.some((r) => ['staff', 'dean', 'advisor'].includes(r))) {
-        if (company.created_by !== userId) {
-          res.status(403).json({ message: 'Forbidden. You can only post jobs for your own company.' });
-          return;
-        }
-      }
       const job = await JobPostModel.create({
         company_id: parsedCompanyId,
         title: title.trim(),
@@ -196,7 +188,7 @@ export class JobPostController {
   /**
    * Fetch all active published jobs (quota not filled, not expired) or filtered job lists.
    * Route: GET /api/jobs
-   * Access: Authenticated users (students, staff, advisors, deans, companies)
+   * Access: Authenticated users (students, staff, advisors, deans)
    */
   static async getAvailableJobs(req: Request, res: Response): Promise<void> {
     try {
@@ -205,20 +197,12 @@ export class JobPostController {
         return;
       }
 
-      const { roles, userId } = req.user;
+      const { roles } = req.user;
       const { status, created_by } = req.query;
 
       // Students can only see active published jobs
       if (roles.includes('student')) {
         const jobs = await JobPostModel.getAvailableJobs();
-        res.status(200).json(jobs);
-        return;
-      }
-
-      // If company is logged in, they see their own jobs unless they filter otherwise
-      // But company is restricted to only seeing their own posts
-      if (roles.includes('company')) {
-        const jobs = await JobPostModel.getJobsWithFilters({ created_by: userId });
         res.status(200).json(jobs);
         return;
       }

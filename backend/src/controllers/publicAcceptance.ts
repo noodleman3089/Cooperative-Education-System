@@ -9,7 +9,7 @@ import { validateAcceptanceInput } from '../utils/acceptanceInput';
 import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
 import { notifyStudentStatusChange } from '../utils/email';
 import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
-import { FORM07_WRITABLE_FIELDS } from './form07';
+import { FORM07_WRITABLE_FIELDS } from '../utils/companyFields';
 
 /**
  * ตอบรับ/ไม่รับนักศึกษาจากลิงก์ในอีเมล (เอกสารหมายเลข 2 + สหกิจ 07) — **ไม่ต้องเข้าสู่ระบบ**

@@ -22,7 +22,7 @@ router.post(
 router.get(
   '/company',
   authenticateToken,
-  authorizeRoles('mentor', 'company'),
+  authorizeRoles('mentor'),
   ReportOutlineController.getCompanyOutlines
 );
 
@@ -38,9 +38,8 @@ router.get(
 router.put(
   '/:id/status',
   authenticateToken,
-  // ⛔ ตัด 'company' ออกแล้ว (spec-D ข้อ 14.1) — คนที่เห็นชอบหัวข้อรายงานต้องเป็น
-  //    **พนักงานที่ปรึกษา** ซึ่งเป็นคนที่รู้ว่าอะไรเป็นความลับของบริษัท ไม่ใช่ฝ่ายบุคคล
-  //    · บัญชีสถานประกอบการยังเห็นรายการและสถานะครบผ่าน GET /outlines/company
+  // ⛔ คนที่เห็นชอบหัวข้อรายงานต้องเป็น **พนักงานที่ปรึกษา** ซึ่งเป็นคนที่รู้ว่าอะไรเป็นความลับ
+  //    ของบริษัท ไม่ใช่ฝ่ายบุคคล (spec-D ข้อ 14.1) · บทบาท `company` ถูกลบออกจากระบบแล้ว
   authorizeRoles('mentor', 'advisor'),
   ReportOutlineController.updateStatus
 );

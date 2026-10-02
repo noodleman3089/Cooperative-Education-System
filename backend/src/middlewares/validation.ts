@@ -195,7 +195,7 @@ export const validateProfileSetup = (req: Request, res: Response, next: NextFunc
         res.status(400).json({ message: 'role must be a valid string.' });
         return;
       }
-      const VALID_ROLES = ['student', 'advisor', 'dean', 'staff', 'dept_head', 'company', 'mentor'];
+      const VALID_ROLES = ['student', 'advisor', 'dean', 'staff', 'dept_head', 'mentor'];
       if (!VALID_ROLES.includes(role)) {
         res.status(400).json({ message: 'Invalid role value.' });
         return;

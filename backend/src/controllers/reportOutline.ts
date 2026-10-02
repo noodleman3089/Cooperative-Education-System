@@ -117,9 +117,7 @@ export class ReportOutlineController {
       const userId = req.user.userId;
       const { roles } = req.user;
       
-      // ⛔ `company` ไม่นับเป็นพี่เลี้ยงอีกแล้ว (spec-D 14.1) — เส้นนี้ปิดบัญชีบริษัท
-      //    ที่ระดับ route ไปแล้ว บรรทัดนี้จึงเป็นของตายที่เหลือค้าง แต่ถ้าวันหนึ่งมีคน
-      //    เติม 'company' กลับเข้า authorizeRoles มันจะกลายเป็นประตูหลังทันทีโดยไม่มีใครเห็น
+      // ⛔ บทบาท `company` ถูกลบออกจากระบบแล้ว (บริษัทไม่มีบัญชี) — มีแค่พี่เลี้ยงกับอาจารย์
       const isMentor = roles.includes('mentor');
       const isAdvisor = roles.includes('advisor');
 
@@ -380,7 +378,7 @@ export class ReportOutlineController {
   /**
    * Get report outlines for mentor's company
    * Route: GET /api/outlines/company
-   * Access: mentor, company
+   * Access: mentor
    */
   static async getCompanyOutlines(req: Request, res: Response): Promise<void> {
     try {
@@ -395,11 +393,6 @@ export class ReportOutlineController {
       const mentorRes = await query('SELECT company_id FROM mentors WHERE mentor_id = $1', [userId]);
       if ((mentorRes.rowCount ?? 0) > 0) {
         companyId = mentorRes.rows[0].company_id;
-      } else {
-        const companyRes = await query('SELECT company_id FROM companies WHERE created_by = $1', [userId]);
-        if ((companyRes.rowCount ?? 0) > 0) {
-          companyId = companyRes.rows[0].company_id;
-        }
       }
 
       if (!companyId) {

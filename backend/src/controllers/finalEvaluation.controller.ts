@@ -121,11 +121,10 @@ export class FinalEvaluationController {
   /**
    * รายชื่อนักศึกษาบนหน้าจอประเมิน
    * Route: GET /api/final-evaluations/my-students
-   * Access: mentor (ของตัวเอง ให้คะแนนได้) · company (ทั้งบริษัท อ่านอย่างเดียว)
+   * Access: mentor (ของตัวเอง ให้คะแนนได้)
    *
-   * บัญชีบริษัทกับพี่เลี้ยงเป็นคนละบัญชี (SEC-03 ปฏิเสธการแปะ role `mentor` ทับ
-   * บัญชีที่มีอยู่) ฝ่ายบุคคลจึงได้แค่ดูว่าใครถูกประเมินแล้ว — `canEvaluate` บอกว่า
-   * กำลังเสิร์ฟใคร ส่วนการให้คะแนนถูกกันไว้ที่ `submitEvaluation` อีกชั้น
+   * บทบาท `company` ถูกลบแล้ว (บริษัทไม่มีบัญชี) — `canEvaluate` คงไว้ให้หน้าจอเดิมอ่านได้
+   * และเป็น true เสมอสำหรับพี่เลี้ยง · การให้คะแนนถูกกันไว้ที่ `submitEvaluation` อีกชั้น
    */
   static async getMyStudents(req: Request, res: Response): Promise<void> {
     try {
@@ -138,18 +137,13 @@ export class FinalEvaluationController {
       const { roles } = req.user;
 
       const isMentor = roles.includes('mentor');
-      const isCompanyRep = roles.includes('company');
 
-      if (!isMentor && !isCompanyRep) {
+      if (!isMentor) {
         res.status(403).json({
-          message: 'Forbidden. Only mentors and company representatives can access this list.',
+          message: 'Forbidden. Only mentors can access this list.',
         });
         return;
       }
-
-      const scopeClause = isMentor
-        ? 'i.mentor_id = $1'
-        : 'i.company_id = (SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1)';
 
       const studentsRes = await query(
         `SELECT
@@ -181,7 +175,7 @@ export class FinalEvaluationController {
               AND eval15.evaluator_role = 'mentor' AND eval15.form_code = 'sahatkit_15'
          LEFT JOIN final_evaluations eval16 ON s.student_id = eval16.student_id
               AND eval16.evaluator_role = 'mentor' AND eval16.form_code = 'sahatkit_16'
-         WHERE ${scopeClause} AND i.status = 'accepted'`,
+         WHERE i.mentor_id = $1 AND i.status = 'accepted'`,
         [userId]
       );
 

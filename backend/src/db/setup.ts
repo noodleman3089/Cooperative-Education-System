@@ -99,8 +99,8 @@ export async function setupDatabase(quiet = false) {
       { email: 'advisor1@test.com', password: 'password123', role: 'advisor' },
       { email: 'dean1@test.com', password: 'password123', role: 'dean' },
       { email: 'staff1@test.com', password: 'password123', role: 'staff' },
-      { email: 'company1@test.com', password: 'password123', role: 'company' },
-      // พี่เลี้ยง = บัญชีของตัวเอง ไม่ใช่บัญชีเดียวกับบริษัท · แถว `mentors` ของมัน
+      // ⛔ ไม่มีบัญชีบริษัท — สถานประกอบการไม่มีบัญชี ตอบทางลิงก์สาธารณะอย่างเดียว
+      // พี่เลี้ยง · แถว `mentors` ของมัน
       // ต้องผูกกับบริษัท ซึ่งมีแค่ในชุด seed ของ E2E (`e2e/helpers/test-seeder.ts`)
       // SEC-15: พี่เลี้ยงไม่มีรหัสผ่าน (password: null) — เข้าด้วยลิงก์ในอีเมลเท่านั้น
       { email: 'mentor1@test.com', password: null, role: 'mentor' },

@@ -4,7 +4,6 @@ import path from 'path';
 import {
   IntentFormModel,
   COMPANY_MAIL_LIMIT,
-  COMPANY_VISIBLE_STATUSES,
   LateStamp,
 } from '../models/intent';
 import { isLateWindow } from '../middlewares/calendarGate';
@@ -204,7 +203,7 @@ export class IntentFormController {
   /**
    * Get list of intents with filtering.
    * Route: GET /api/intents
-   * Access: advisor, dept_head, staff, dean, company
+   * Access: advisor, dept_head, staff, dean
    */
   static async getIntents(req: Request, res: Response): Promise<void> {
     try {
@@ -214,24 +213,12 @@ export class IntentFormController {
       }
 
       const { roles, userId } = req.user;
-      const { status, major_id } = req.query;
-      let { company_id } = req.query;
+      const { status, major_id, company_id } = req.query;
 
-      // Restrict query for company role
-      const isCompany = roles.includes('company');
-      if (isCompany) {
-        const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);
-        if ((companyQuery.rowCount ?? 0) === 0) {
-          res.status(200).json([]);
-          return;
-        }
-        company_id = companyQuery.rows[0].company_id.toString();
-      }
-
-      const isStaffOrDeanOrCompany = roles.some((r: string) => ['staff', 'dean', 'company'].includes(r));
+      const isStaffOrDean = roles.some((r: string) => ['staff', 'dean'].includes(r));
       let userMajorId: number | null = null;
 
-      if (!isStaffOrDeanOrCompany) {
+      if (!isStaffOrDean) {
         // SEC-06: fails closed — an advisor/dept_head without a personnel profile
         // used to fall through with no filter and see every student's PII.
         userMajorId = (await resolveMajorScope(userId, roles)).majorId;
@@ -305,42 +292,9 @@ export class IntentFormController {
         queryStr += ` AND i.company_id = $${queryParams.length}`;
       }
 
-      // SEC-10: a company must not see a placement the faculty has not sent it.
-      // On paper nothing reaches the company until the department head has
-      // selected the students and สหกิจ 04 goes out; the screen now starts at the
-      // same point instead of listing applications from the moment they are filed.
-      if (isCompany) {
-        queryParams.push(COMPANY_VISIBLE_STATUSES);
-        queryStr += ` AND i.status = ANY($${queryParams.length}::text[])`;
-      }
-
       queryStr += ` ORDER BY i.form_id DESC`;
 
       const result = await query(queryStr, queryParams);
-
-      // SEC-10: one query serves five roles, so the columns it selects are the
-      // union of what all five need — and an advisor needs the student's home
-      // address and parent contacts. A company does not: its paper equivalent,
-      // สหกิจ 04, carries only the name, student code, major and job title, and
-      // everything personal reaches the company through the student's own
-      // สหกิจ 03 — the resume file they chose to attach, still linked below.
-      // The rest of each row is dropped here rather than by narrowing the query,
-      // because the other four roles genuinely use all of it.
-      if (isCompany) {
-        const visible = result.rows.map((row) => ({
-          form_id: row.form_id,
-          student_code: row.student_code,
-          first_name: row.first_name,
-          last_name: row.last_name,
-          major_name_th: row.major_name_th,
-          job_title: row.job_title,
-          status: row.status,
-          resume_file: row.resume_file,
-          reject_reason: row.reject_reason,
-        }));
-        res.status(200).json(visible);
-        return;
-      }
 
       res.status(200).json(result.rows);
     } catch (error) {
@@ -352,7 +306,7 @@ export class IntentFormController {
   /**
    * Get detailed view of an intent form.
    * Route: GET /api/intents/:id
-   * Access: student owner, advisor, dept_head, staff, dean, company
+   * Access: student owner, advisor, dept_head, staff, dean
    */
   static async getIntentDetail(req: Request, res: Response): Promise<void> {
     try {
@@ -403,7 +357,6 @@ export class IntentFormController {
       const { roles, userId } = req.user;
       
       let isAuthorized = false;
-      let isCompanyViewer = false;
 
       if (roles.some(r => ['staff', 'dean', 'advisor', 'dept_head'].includes(r))) {
         // SEC-06: personnel could previously open any intent detail regardless of
@@ -412,49 +365,10 @@ export class IntentFormController {
         isAuthorized = true;
       } else if (roles.includes('student') && row.student_id === userId) {
         isAuthorized = true;
-      } else if (roles.includes('company')) {
-        const companyQuery = await query('SELECT company_id FROM companies WHERE created_by = $1 LIMIT 1', [userId]);
-        if ((companyQuery.rowCount ?? 0) > 0 && companyQuery.rows[0].company_id === row.company_id) {
-          isAuthorized = true;
-          isCompanyViewer = true;
-        }
       }
 
       if (!isAuthorized) {
         res.status(403).json({ message: 'Forbidden. You do not have access to view this intent form.' });
-        return;
-      }
-
-      // SEC-10: endpoint นี้เคยคืนทั้งแถวให้ทุก role ที่ผ่านด่าน — รวมถึงบริษัท
-      // ซึ่งได้ `cumulative_gpa` · อีเมลนักศึกษา · ผลคัดกรอง ไปด้วยเต็มๆ ทั้งที่
-      // `GET /intents` (หน้าจอเดียวกัน) ตัดฟิลด์ให้เหลือเท่า สหกิจ 04 มาตั้งแต่รอบ 39
-      //
-      // ที่นี่ใช้ allow-list เหมือนกัน ไม่ใช่ blocklist: ฟิลด์ใหม่ที่ใครเพิ่มลง SELECT
-      // ข้างบนวันหลัง จะ **ไม่** หลุดไปหาบริษัทเองโดยอัตโนมัติ
-      //
-      // สิ่งที่ให้ = ของที่บริษัทเป็นเจ้าของเอง (บริษัท · ประกาศงาน · พี่เลี้ยงที่ตัวเอง
-      // ลงทะเบียน) + เท่าที่ สหกิจ 04 ให้ (รหัสนักศึกษา · สาขา) + แฟ้มประวัติที่นักศึกษา
-      // เลือกแนบเอง (สหกิจ 03) · ⛔ ห้ามเพิ่มเกรด ผลคัดกรอง หรือช่องทางติดต่อส่วนตัว
-      if (isCompanyViewer) {
-        res.status(200).json({
-          form_id: row.form_id,
-          status: row.status,
-          start_date: row.start_date,
-          student_code: row.student_code,
-          major_name_th: row.major_name_th,
-          resume_file: row.resume_file,
-          company_id: row.company_id,
-          company_name_th: row.company_name_th,
-          job_id: row.job_id,
-          job_title: row.job_title,
-          job_description: row.job_description,
-          mentor_id: row.mentor_id,
-          mentor_name: row.mentor_name,
-          mentor_email: row.mentor_email,
-          mentor_phone: row.mentor_phone,
-          mentor_position: row.mentor_position,
-          mentor_department: row.mentor_department,
-        });
         return;
       }
 

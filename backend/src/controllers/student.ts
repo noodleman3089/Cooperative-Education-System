@@ -10,7 +10,7 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { COMPANY_MAIL_LIMIT, COMPANY_VISIBLE_STATUSES, IntentFormModel } from '../models/intent';
+import { COMPANY_MAIL_LIMIT, IntentFormModel } from '../models/intent';
 import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
@@ -404,117 +404,6 @@ export class StudentController {
         error,
         'Get Coop Application Error',
         'เกิดข้อผิดพลาดขณะดึงข้อมูลใบสมัครงานสหกิจศึกษา'
-      );
-    }
-  }
-
-  /**
-   * สหกิจ 03 — สถานประกอบการอ่านใบสมัครงานของนักศึกษาที่สมัครมาที่ตน
-   * Route: GET /api/students/:id/coop-application/company-view
-   * Access: company (เฉพาะบริษัทที่นักศึกษาคนนั้นยื่นใบความจำนงมาจริง)
-   *
-   * ⛔ **นี่คือการขยาย allow-list ของ SEC-10 — ต้องอ่านก่อนแก้**
-   *
-   * ที่ผ่านมาบริษัทเห็นเท่าที่ **สหกิจ 04** ให้ (ชื่อ · รหัส · สาขา · ตำแหน่ง) เพราะ
-   * นั่นคือกระดาษใบเดียวที่ไปถึงบริษัทในขั้นตอนนั้น · แต่ **สหกิจ 03 คือใบสมัครงาน
-   * ที่นักศึกษาเป็นคนยื่นให้บริษัทเอง** บนกระดาษบริษัทได้เห็นทั้งใบอยู่แล้ว
-   * การให้เห็นในระบบจึงไม่ใช่การเปิดข้อมูลเกินกระดาษ แต่คือการแทนที่กระดาษ
-   *
-   * ⛔⛔ **สิ่งที่บริษัทห้ามเห็นเด็ดขาด (ชั้น C)**: เลขบัตรประชาชน (ทุกรูปแบบ
-   * รวมทั้งมาสก์) · เชื้อชาติ · ศาสนา · เขต/วันหมดอายุบัตร · เวลาที่ให้ความยินยอม
-   * — สามอย่างแรกเป็นข้อมูลอ่อนไหวที่ SEC-12 คุ้มครองอยู่ และ**ไม่มีเหตุผลใดที่
-   * นายจ้างต้องใช้ตอนพิจารณารับนักศึกษาฝึกงาน** · การสร้าง object ใหม่ทีละคีย์
-   * (ไม่ใช่ลบคีย์ออกจากแถวที่ SELECT มา) คือเหตุผลที่ฟิลด์ใหม่ที่ใครเพิ่มวันหลัง
-   * จะไม่หลุดไปหาบริษัทเอง — บรรทัดฐานเดียวกับ `GET /intents`
-   */
-  static async getCoopApplicationForCompany(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const studentId = parseInt(req.params.id, 10);
-      if (isNaN(studentId)) {
-        res.status(400).json({ message: 'Invalid student ID format.' });
-        return;
-      }
-
-      // ด่านความสัมพันธ์: บริษัทนี้ต้องมีใบความจำนงของนักศึกษาคนนี้อยู่จริง
-      // และต้องเป็นใบที่เดินมาถึงขั้นที่บริษัทเห็นได้แล้ว (COMPANY_VISIBLE_STATUSES)
-      // ⛔ fail closed — ไม่มีโปรไฟล์บริษัท = 403 ไม่ใช่ปล่อยผ่านแบบไม่กรอง (SEC-06)
-      const linked = await query(
-        `SELECT 1
-           FROM intent_forms i
-           JOIN companies c ON i.company_id = c.company_id
-          WHERE i.student_id = $1
-            AND c.created_by = $2
-            AND i.status = ANY($3::text[])
-          LIMIT 1`,
-        [studentId, req.user.userId, COMPANY_VISIBLE_STATUSES]
-      );
-      if ((linked.rowCount ?? 0) === 0) {
-        res.status(403).json({
-          message: 'ท่านเปิดดูใบสมัครได้เฉพาะนักศึกษาที่ยื่นความจำนงมาที่สถานประกอบการของท่าน',
-        });
-        return;
-      }
-
-      const result = await query(
-        `SELECT s.first_name, s.last_name, s.student_code, s.year_level, s.phone, s.alt_email,
-                s.first_name_en, s.last_name_en, s.gender, s.nationality,
-                s.mobile_phone, s.fax, s.current_address, s.profile_image,
-                s.emergency_contact_name, s.emergency_relationship, s.emergency_phone,
-                s.career_objective, s.family_info, s.education_history,
-                s.training_history, s.activity_history,
-                s.language_proficiency, s.skills_and_activities,
-                mj.major_name_th
-           FROM students s
-           JOIN master_major mj ON s.major_id = mj.major_id
-          WHERE s.student_id = $1`,
-        [studentId]
-      );
-      if ((result.rowCount ?? 0) === 0) {
-        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา' });
-        return;
-      }
-
-      const r = result.rows[0];
-      // ⛔ ประกอบทีละคีย์ ห้าม spread แถวดิบ — ฟิลด์ใหม่ที่ใครเพิ่มลง SELECT วันหลัง
-      //    จะได้ไม่ไหลไปหาบริษัทเอง (บทเรียนจากรอยรั่วของ `GET /intents/:id` รอบ 51)
-      res.status(200).json({
-        first_name: r.first_name,
-        last_name: r.last_name,
-        student_code: r.student_code,
-        major_name_th: r.major_name_th,
-        year_level: r.year_level,
-        first_name_en: r.first_name_en,
-        last_name_en: r.last_name_en,
-        gender: r.gender,
-        nationality: r.nationality,
-        phone: r.phone,
-        mobile_phone: r.mobile_phone,
-        fax: r.fax,
-        alt_email: r.alt_email,
-        current_address: r.current_address,
-        profile_image: r.profile_image,
-        emergency_contact_name: r.emergency_contact_name,
-        emergency_relationship: r.emergency_relationship,
-        emergency_phone: r.emergency_phone,
-        career_objective: r.career_objective,
-        family_info: r.family_info,
-        education_history: r.education_history,
-        training_history: r.training_history,
-        activity_history: r.activity_history,
-        language_proficiency: r.language_proficiency,
-        skills_and_activities: r.skills_and_activities,
-      });
-    } catch (error) {
-      sendUnexpectedError(
-        res,
-        error,
-        'Get Coop Application (company view) Error',
-        'เกิดข้อผิดพลาดขณะดึงใบสมัครงานของนักศึกษา'
       );
     }
   }

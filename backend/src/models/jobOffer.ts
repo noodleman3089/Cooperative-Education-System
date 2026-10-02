@@ -133,38 +133,6 @@ function sameItem(before: Record<string, unknown>, values: unknown[]): boolean {
 }
 
 export class JobOfferModel {
-  /** บริษัทของผู้ใช้คนนี้ — ไม่พบ = ไม่มีสิทธิ์ ไม่ใช่ "เห็นทุกบริษัท" (SEC-06) */
-  static async findCompanyIdByUser(userId: number): Promise<number | null> {
-    const res = await query(
-      `SELECT company_id FROM companies WHERE created_by = $1 ORDER BY company_id LIMIT 1`,
-      [userId]
-    );
-    return (res.rowCount ?? 0) > 0 ? (res.rows[0].company_id as number) : null;
-  }
-
-  /**
-   * ใบสำรวจของภาคเรียนที่กำลังถูกสำรวจอยู่
-   *
-   * "ภาคที่กำลังสำรวจ" ไม่ใช่ภาคที่ `is_active` — คู่มือบอกว่าคณะส่งแบบสำรวจ
-   * **ล่วงหน้าประมาณหนึ่งภาคการศึกษา** ใบที่บริษัทต้องตอบตอนนี้จึงเป็นใบของภาคหน้า
-   * เลือกจาก "ใบล่าสุดของบริษัทนี้ที่ยังไม่ถูกตรวจ" ก่อน แล้วค่อยตกไปที่ใบล่าสุดสุด
-   * ⛔ ห้ามเดาภาคเรียนเอง — ใบมีอยู่ก็ต่อเมื่อเจ้าหน้าที่ส่งไปถามจริง
-   */
-  static async findCurrentOffer(companyId: number): Promise<JobOfferRow | null> {
-    const res = await query(
-      `SELECT o.offer_id, o.company_id, o.semester_id, o.status,
-              o.due_date::text AS due_date, o.submitted_at, o.reviewed_at,
-              o.informant_name, o.informant_position, o.decline_reason,
-              o.reject_reason, o.copied_from_offer_id
-         FROM coop_job_offers o
-        WHERE o.company_id = $1
-        ORDER BY (o.status IN ('draft', 'submitted')) DESC, o.semester_id DESC, o.offer_id DESC
-        LIMIT 1`,
-      [companyId]
-    );
-    return (res.rowCount ?? 0) > 0 ? (res.rows[0] as JobOfferRow) : null;
-  }
-
   static async findById(offerId: number): Promise<JobOfferRow | null> {
     const res = await query(
       `SELECT offer_id, company_id, semester_id, status, due_date::text AS due_date,
@@ -222,43 +190,6 @@ export class JobOfferModel {
       pay_amount: r.pay_amount === null ? null : Number(r.pay_amount),
       can_delete: r.applied_count === 0,
     }));
-  }
-
-  /**
-   * ประวัติความร่วมมือ — ใช้บนการ์ดขวาล่างของหน้าแรกบริษัท
-   *
-   * ⛔ ทั้งสามตัวเลขใช้ subquery แยกกัน **ห้ามยุบเป็น LEFT JOIN หลายตัวแล้ว SUM**
-   *    ตำแหน่ง 2 แถว x คำร้อง 2 แถว = 4 แถวหลัง join → โควตา 3 กลายเป็น 6
-   *    (เจอจริงตอนทดสอบกับข้อมูล seed)
-   *
-   * ⛔ `evaluated_count` คือ "มีใบประเมิน สหกิจ 15 แล้วกี่คน" **ไม่ใช่ "ผ่านกี่คน"**
-   *    ระบบนี้ไม่รู้ว่าใครผ่าน — อาจารย์เป็นผู้ตัดเกรดโดยใช้คะแนนชุดนี้ประกอบเท่านั้น
-   *    ป้ายบนหน้าจอจึงต้องเขียนว่า "ประเมินครบ" ห้ามเขียนว่า "ผ่าน"
-   */
-  static async history(companyId: number) {
-    const res = await query(
-      `SELECT s.academic_year, s.semester,
-              (SELECT COALESCE(SUM(j.quota), 0)::int
-                 FROM job_posts j WHERE j.offer_id = o.offer_id) AS offered_quota,
-              (SELECT COUNT(*)::int
-                 FROM intent_forms i
-                WHERE i.company_id = o.company_id
-                  AND i.semester_id = o.semester_id
-                  AND i.status = 'accepted') AS accepted_count,
-              (SELECT COUNT(DISTINCT e.student_id)::int
-                 FROM final_evaluations e
-                 JOIN intent_forms i2 ON i2.student_id = e.student_id
-                  AND i2.company_id = o.company_id
-                  AND i2.semester_id = o.semester_id
-                WHERE e.form_code = 'sahatkit_15') AS evaluated_count
-         FROM coop_job_offers o
-         JOIN coop_semesters s ON s.semester_id = o.semester_id
-        WHERE o.company_id = $1 AND o.status IN ('submitted', 'reviewed')
-        ORDER BY s.semester_id DESC
-        LIMIT 8`,
-      [companyId]
-    );
-    return res.rows;
   }
 
   /**

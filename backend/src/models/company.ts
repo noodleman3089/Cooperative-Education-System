@@ -31,20 +31,6 @@ export class CompanyModel {
   }
 
   /**
-   * Find a company by its creator user ID.
-   */
-  static async findByCreatedBy(userId: number): Promise<Company | null> {
-    const res = await query(
-      `SELECT company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
-       FROM companies 
-       WHERE created_by = $1 LIMIT 1`,
-      [userId]
-    );
-    if ((res.rowCount ?? 0) === 0) return null;
-    return res.rows[0] as Company;
-  }
-
-  /**
    * Create a new company record (default is_verified is false).
    */
   static async create(companyData: {

@@ -92,7 +92,7 @@ CREATE INDEX IF NOT EXISTS idx_users_reset_token ON users(reset_token) WHERE res
 -- User Roles Table (Supports multiple roles per user, e.g. 'advisor' and 'dept_head')
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id INT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-    role_name VARCHAR(50) NOT NULL CHECK (role_name IN ('student', 'advisor', 'dean', 'staff', 'dept_head', 'company', 'mentor')),
+    role_name VARCHAR(50) NOT NULL CHECK (role_name IN ('student', 'advisor', 'dean', 'staff', 'dept_head', 'mentor')),
     PRIMARY KEY (user_id, role_name)
 );
 
@@ -325,7 +325,7 @@ CREATE TABLE IF NOT EXISTS coop_job_offers (
 --    ต้องล็อกอินเต็มเสมอ **ห้ามเปิดด้วย token เด็ดขาด**
 -- ⛔ ห้ามให้ระบบต่ออายุเองเงียบ ๆ — หมดอายุแล้วต้องกดขอลิงก์ใหม่ ซึ่งส่งไปที่อีเมล
 --    ในทะเบียนเท่านั้น (ห้ามให้พิมพ์อีเมลปลายทางเอง ไม่งั้นใครก็ดึงลิงก์ของบริษัทอื่นได้)
--- token เก็บเป็นค่าดิบแบบเดียวกับลิงก์เชิญใน utils/invite.ts โดยตั้งใจ — ให้ทั้งระบบ
+-- token เก็บเป็นค่าดิบแบบเดียวกับ users.reset_token โดยตั้งใจ — ให้ทั้งระบบ
 -- มีแบบแผนเดียว และ token นี้ไม่ได้ให้ session หรือสิทธิ์ใด ๆ นอกจากใบสำรวจใบเดียว
 CREATE TABLE IF NOT EXISTS job_offer_tokens (
     token_id SERIAL PRIMARY KEY,

@@ -18,10 +18,10 @@ router.get(
   IntentFormController.getStudentIntents
 );
 
-// Route: GET /api/intents (Advisor, Dept Head, Staff, Dean, Company list intents)
+// Route: GET /api/intents (Advisor, Dept Head, Staff, Dean list intents)
 router.get(
   '/',
-  authorizeRoles('advisor', 'dept_head', 'staff', 'dean', 'company'),
+  authorizeRoles('advisor', 'dept_head', 'staff', 'dean'),
   IntentFormController.getIntents
 );
 
@@ -32,10 +32,10 @@ router.get(
   IntentFormController.getPipelineSummary
 );
 
-// Route: GET /api/intents/:id (Student owner, Advisor, Dept Head, Staff, Dean, Company view detail)
+// Route: GET /api/intents/:id (Student owner, Advisor, Dept Head, Staff, Dean view detail)
 router.get(
   '/:id',
-  authorizeRoles('student', 'advisor', 'dept_head', 'staff', 'dean', 'company'),
+  authorizeRoles('student', 'advisor', 'dept_head', 'staff', 'dean'),
   IntentFormController.getIntentDetail
 );
 
