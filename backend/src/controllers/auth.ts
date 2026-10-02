@@ -15,6 +15,11 @@ import { clearAuthCookie, setAuthCookie } from '../utils/authCookie';
 import { sendUnexpectedError } from '../utils/httpError';
 import { resolveViews } from '../utils/facultyViews';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
+import { hasOnlyMentorRole } from '../utils/mentorLoginLink';
+
+/** SEC-15: พี่เลี้ยงไม่มีรหัสผ่าน — เข้าด้วยลิงก์ในอีเมลเท่านั้น */
+const MENTOR_NO_PASSWORD_MESSAGE =
+  'พี่เลี้ยงเข้าสู่ระบบด้วยลิงก์ที่ส่งทางอีเมล กรุณาไปที่หน้าเข้าสู่ระบบพี่เลี้ยงเพื่อขอลิงก์';
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 if (!JWT_SECRET) {
@@ -239,12 +244,19 @@ export class AuthController {
         return;
       }
 
+      // SEC-15: พี่เลี้ยงล้วนไม่มีรหัสผ่านที่ไหนเลย — ปฏิเสธก่อนเทียบรหัสผ่าน
+      // (แถวพี่เลี้ยงที่ยังมี hash ค้างอยู่ก็ต้องเข้าด้วยรหัสผ่านไม่ได้)
+      if (hasOnlyMentorRole(user.roles)) {
+        res.status(403).json({ message: MENTOR_NO_PASSWORD_MESSAGE });
+        return;
+      }
+
       // If user is SSO-only (no password hash saved yet)
       // No password yet. Students and personnel get one by signing in with the
-      // university Google account; companies and mentors have no such account
+      // university Google account; companies have no such account
       // and are onboarded by an invitation link instead.
       if (!user.password_hash) {
-        const isExternalPartner = user.roles.some((r: string) => ['company', 'mentor'].includes(r));
+        const isExternalPartner = user.roles.includes('company');
         res.status(400).json({
           message: isExternalPartner
             ? 'บัญชีนี้ยังไม่ได้ตั้งรหัสผ่าน กรุณากดลิงก์ "ตั้งรหัสผ่านและเข้าใช้งาน" ในอีเมลที่ระบบส่งให้ท่าน หรือกด "ลืมรหัสผ่าน" เพื่อขอลิงก์ใหม่'
@@ -321,6 +333,12 @@ export class AuthController {
         return;
       }
 
+      // SEC-15: พี่เลี้ยงไม่มีรหัสผ่าน ไม่ว่าจะตั้งครั้งแรกหรือเปลี่ยน
+      if (hasOnlyMentorRole(user.roles)) {
+        res.status(403).json({ message: MENTOR_NO_PASSWORD_MESSAGE });
+        return;
+      }
+
       // Setting the FIRST password (SSO accounts have password_hash = null) needs
       // no proof beyond the session. CHANGING an existing one does: otherwise a
       // stolen token is enough to lock the real owner out permanently.
@@ -363,7 +381,8 @@ export class AuthController {
       const user = await UserModel.findByEmail(cleanEmail);
 
       // Always return success to prevent email enumeration
-      if (!user || !user.is_active) {
+      // SEC-15: พี่เลี้ยงล้วนไม่มีรหัสผ่านให้รีเซ็ต — ตอบเหมือนอีเมลอื่น ไม่ส่งเมล ไม่เขียน token
+      if (!user || !user.is_active || hasOnlyMentorRole(user.roles)) {
         res.status(200).json({ message: 'หากอีเมลนี้มีอยู่ในระบบ เราจะส่งลิงก์รีเซ็ตรหัสผ่านให้ท่านทางอีเมล' });
         return;
       }
@@ -409,6 +428,12 @@ export class AuthController {
 
       const user = await UserModel.findByResetToken(token);
       if (!user) {
+        res.status(400).json({ message: 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง หรือหมดอายุแล้ว กรุณาขอรีเซ็ตใหม่อีกครั้ง' });
+        return;
+      }
+
+      // SEC-15: token ที่ค้างอยู่ของพี่เลี้ยงใช้ตั้งรหัสผ่านไม่ได้ — ไม่แก้อะไรเลย
+      if (hasOnlyMentorRole(user.roles)) {
         res.status(400).json({ message: 'ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้อง หรือหมดอายุแล้ว กรุณาขอรีเซ็ตใหม่อีกครั้ง' });
         return;
       }

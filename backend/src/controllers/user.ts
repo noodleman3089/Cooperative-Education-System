@@ -11,6 +11,7 @@ import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { sendUnexpectedError } from '../utils/httpError';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
+import { hasOnlyMentorRole } from '../utils/mentorLoginLink';
 
 /** บทบาทที่มีแถวใน `personnel` — ตรงกับ PERSONNEL_CLAIMABLE_ROLES ใน auth.ts */
 const PERSONNEL_ROLES = ['advisor', 'dean', 'staff', 'dept_head'];
@@ -79,6 +80,12 @@ export class UserController {
       const invalidRole = roleList.find((r) => !VALID_ROLES.includes(r));
       if (invalidRole !== undefined) {
         res.status(400).json({ message: `Invalid role: '${invalidRole}'.` });
+        return;
+      }
+
+      // SEC-15: บัญชีพี่เลี้ยงต้องมีแถว `mentors` ซึ่งมีแต่ขั้นรับแบบตอบรับเท่านั้นที่สร้าง — สร้างด้วยมือได้แค่บัญชีกำพร้า
+      if (roleList.includes('mentor')) {
+        res.status(400).json({ message: 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ' });
         return;
       }
 
@@ -196,6 +203,14 @@ export class UserController {
         return;
       }
 
+      // SEC-15: พี่เลี้ยงล้วนไม่มีรหัสผ่านและไม่ใช้ลิงก์ตั้งรหัสผ่าน — ใช้ลิงก์เข้าระบบของหน้าติดตามพี่เลี้ยงแทน
+      if (hasOnlyMentorRole(user.roles)) {
+        res.status(400).json({
+          message: 'พี่เลี้ยงเข้าระบบด้วยลิงก์ที่ส่งทางอีเมล ไม่ใช้ลิงก์ตั้งรหัสผ่าน กรุณากด "ส่งลิงก์เข้าระบบใหม่" ที่หน้าติดตามพี่เลี้ยง',
+        });
+        return;
+      }
+
       if (!user.is_active) {
         res.status(400).json({ message: 'บัญชีนี้ถูกระงับอยู่ กรุณาเปิดใช้งานบัญชีก่อนส่งลิงก์เชิญ' });
         return;
@@ -285,6 +300,12 @@ export class UserController {
       // Capture the prior state so the audit row shows what actually changed —
       // this endpoint can rewrite any account's email and role set.
       const before = await UserModel.findById(id);
+
+      // SEC-15: เติมบทบาท mentor ให้บัญชีที่ไม่ใช่พี่เลี้ยงไม่ได้ — พี่เลี้ยงมีทางเกิดทางเดียวคือขั้นรับแบบตอบรับ
+      if (before && roles.includes('mentor') && !before.roles.includes('mentor')) {
+        res.status(400).json({ message: 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ' });
+        return;
+      }
 
       const updatedUser = await UserModel.update(id, email, roles, is_active);
       if (!updatedUser) {

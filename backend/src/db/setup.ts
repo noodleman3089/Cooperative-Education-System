@@ -93,7 +93,7 @@ export async function setupDatabase(quiet = false) {
 
     // Step 3: Insert Default Testing Users with Hashed Passwords and Roles
     log('Seeding default test user accounts...');
-    const defaultUsers = [
+    const defaultUsers: { email: string; password: string | null; role: string }[] = [
       { email: 'student1@test.com', password: 'password123', role: 'student' },
       { email: 'student2@test.com', password: 'password123', role: 'student' },
       { email: 'advisor1@test.com', password: 'password123', role: 'advisor' },
@@ -102,12 +102,13 @@ export async function setupDatabase(quiet = false) {
       { email: 'company1@test.com', password: 'password123', role: 'company' },
       // พี่เลี้ยง = บัญชีของตัวเอง ไม่ใช่บัญชีเดียวกับบริษัท · แถว `mentors` ของมัน
       // ต้องผูกกับบริษัท ซึ่งมีแค่ในชุด seed ของ E2E (`e2e/helpers/test-seeder.ts`)
-      { email: 'mentor1@test.com', password: 'password123', role: 'mentor' },
+      // SEC-15: พี่เลี้ยงไม่มีรหัสผ่าน (password: null) — เข้าด้วยลิงก์ในอีเมลเท่านั้น
+      { email: 'mentor1@test.com', password: null, role: 'mentor' },
       { email: 'head1@test.com', password: 'password123', role: 'dept_head' }
     ];
 
     for (const u of defaultUsers) {
-      const passwordHash = await hashPassword(u.password);
+      const passwordHash = u.password ? await hashPassword(u.password) : null;
       
       // Insert or update user
       const userInsert = await client.query(
