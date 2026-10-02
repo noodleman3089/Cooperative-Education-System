@@ -114,8 +114,6 @@ export interface UserRow {
   email: string;
   is_active: boolean;
   roles: string[];
-  is_invited?: boolean;
-  is_password_set?: boolean;
 }
 
 /** สาขาวิชาใน master data */

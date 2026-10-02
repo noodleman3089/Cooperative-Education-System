@@ -8,7 +8,6 @@ import { AuthContext } from '../context/AuthContext';
 import LoginSelection from '../pages/LoginSelection';
 import LoginStudent from '../pages/LoginStudent';
 import LoginPersonnel from '../pages/LoginPersonnel';
-import LoginCompany from '../pages/LoginCompany';
 import LoginMentor from '../pages/LoginMentor';
 import ForgotPassword from '../pages/ForgotPassword';
 import ResetPassword from '../pages/ResetPassword';
@@ -25,7 +24,6 @@ const JobOffer02Token = lazy(() => import('../pages/CompanyLink/JobOffer02Token'
 const AcceptanceLink = lazy(() => import('../pages/CompanyLink/AcceptanceLink'));
 const MentorLinkLanding = lazy(() => import('../pages/Mentor/MentorLinkLanding'));
 const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
-const MentorEvaluation = lazy(() => import('../pages/Mentor/MentorEvaluation'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('../pages/Staff/FinalProgressDashboard'));
 
@@ -91,7 +89,6 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<LoginSelection />} />
       <Route path="/login/student" element={<LoginStudent />} />
       <Route path="/login/personnel" element={<LoginPersonnel />} />
-      <Route path="/login/company" element={<LoginCompany />} />
       <Route path="/login/mentor" element={<LoginMentor />} />
       <Route path="/m" element={<MentorLinkLanding />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
@@ -150,14 +147,6 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute requiredRoles={['student']}>
             <FinalReportSubmission />
-          </ProtectedRoute>
-        } 
-      />
-      <Route 
-        path="/company/mentor-evaluation" 
-        element={
-          <ProtectedRoute requiredRoles={['company', 'mentor']}>
-            <MentorEvaluation />
           </ProtectedRoute>
         } 
       />

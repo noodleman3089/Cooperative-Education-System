@@ -518,9 +518,6 @@ const JobOffer02Token: React.FC = () => {
                       `ขอลิงก์ใหม่ไปที่ ${registeredEmail}`
                     )}
                   </Button>
-                  <Button variant="secondary" onClick={() => navigate('/login/company')}>
-                    เข้าสู่ระบบด้วยบัญชีสถานประกอบการ
-                  </Button>
                 </div>
 
                 <p className="text-xs text-gray-400 dark:text-gray-500 mt-4 flex items-center gap-1.5">

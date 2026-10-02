@@ -112,7 +112,6 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
       dean: 'คณบดี',
       staff: 'เจ้าหน้าที่สหกิจ',
       dept_head: 'หัวหน้าสาขาวิชา',
-      company: 'สถานประกอบการ',
       mentor: 'พี่เลี้ยงฝึกงาน'
     };
     return labels[role] || role;

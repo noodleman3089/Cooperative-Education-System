@@ -176,12 +176,6 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
       </svg>
     ),
-    // 22. Form 07 (ตำแหน่งงานและพี่เลี้ยง)
-    form07: (
-      <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 3H8a2 2 0 00-2 2v14l6-3 6 3V5a2 2 0 00-2-2Z" />
-      </svg>
-    ),
     // 24. Mentor follow-up (ติดตามพี่เลี้ยง)
     mentor_followup: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -273,14 +267,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'users', label: 'บัญชี สิทธิ์ และข้อมูลหลัก', icon: icons.users, group: 'ตั้งค่าของคณะ' },
       { id: 'announcements', label: 'ข่าวประชาสัมพันธ์', icon: icons.announcements, group: 'ตั้งค่าของคณะ' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
-    ],
-    company: [
-      { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
-      { id: 'jobs', label: 'แบบเสนองาน (สหกิจ 02)', icon: icons.jobs, group: 'สิ่งที่มหาวิทยาลัยขอ' },
-      { id: 'form07', label: 'ตำแหน่งงานและพี่เลี้ยง (สหกิจ 07)', icon: icons.form07, group: 'สิ่งที่มหาวิทยาลัยขอ' },
-      { id: 'report_outlines', label: 'โครงร่างรายงานนักศึกษา', icon: icons.report_outline, group: 'งานของพี่เลี้ยง' },
-      { id: 'final_evaluation', label: 'แบบประเมินนักศึกษา', icon: icons.evaluation, group: 'งานของพี่เลี้ยง' },
-      { id: 'profile', label: 'ข้อมูลสถานประกอบการ', icon: icons.profile, group: 'บัญชีของท่าน' }
     ],
     mentor: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },

@@ -4,9 +4,7 @@ import { Lock, ArrowLeft } from 'lucide-react';
 import SetPasswordForm from '../components/auth/SetPasswordForm';
 
 /**
- * Password reset for accounts that already have one. First-time activation for
- * an external partner lives on /login/company instead, so the invitation link
- * and the everyday login share a single address.
+ * Password reset for accounts that already have one.
  */
 const ResetPassword: React.FC = () => {
   const [searchParams] = useSearchParams();

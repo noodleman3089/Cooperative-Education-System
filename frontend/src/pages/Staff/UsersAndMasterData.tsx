@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Plus, Send, UserPlus, Upload } from 'lucide-react';
+import { Plus, UserPlus, Upload } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Modal, { ModalBody } from '../../components/ui/Modal';
@@ -31,7 +31,7 @@ import type {
  *
  * SEC-01: บุคลากรตั้งต้นที่ไม่มีอีเมล claim ไม่ได้ หน้าจอต้องขึ้นป้ายว่าแถวนั้นยังผูกบัญชีไม่ได้
  * SEC-03: บทบาท mentor ห้ามชนกับบทบาทอื่น
- * ปุ่ม "ส่งลิงก์เชิญใหม่" แสดงเฉพาะบัญชีสถานประกอบการที่ยังไม่ได้ตั้งรหัสเท่านั้น
+ * ไม่มีบทบาท company แล้ว — บริษัทใช้ลิงก์สาธารณะ (/accept · /offer) ไม่มีบัญชี · พี่เลี้ยงเข้าด้วยลิงก์อีเมล
  */
 
 const ROLE_LABELS: Record<string, string> = {
@@ -40,7 +40,6 @@ const ROLE_LABELS: Record<string, string> = {
   dept_head: 'หัวหน้าสาขาวิชา',
   dean: 'คณบดี',
   staff: 'เจ้าหน้าที่',
-  company: 'สถานประกอบการ',
   mentor: 'พี่เลี้ยง',
 };
 
@@ -116,7 +115,6 @@ export const UsersAndMasterData: React.FC = () => {
   /** วันเกิดบุคลากร — ตัวเองตั้งได้ครั้งเดียว หลังจากนั้นแก้ที่นี่ (ใช้ปิดบัญชีอัตโนมัติตอนอายุ 60) */
   const [userBirthDate, setUserBirthDate] = useState('');
   const [isSubmittingUser, setIsSubmittingUser] = useState(false);
-  const [resendingInvite, setResendingInvite] = useState<number | null>(null);
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -207,22 +205,6 @@ export const UsersAndMasterData: React.FC = () => {
       loadMaster();
     }
   }, [activeTab, loadUsers, loadPreseedAndMajors, loadMaster]);
-
-  const handleResendInvite = async (userId: number, email: string) => {
-    setError(null);
-    setSuccess(null);
-    setResendingInvite(userId);
-
-    try {
-      const res = await api.post(`/users/${userId}/resend-invite`);
-      setSuccess(res.message || `ส่งลิงก์เชิญไปที่ ${email} เรียบร้อยแล้ว`);
-    } catch (err) {
-      console.error('Resend invite error:', err);
-      setError(getErrorMessage(err, 'ไม่สามารถส่งลิงก์เชิญได้'));
-    } finally {
-      setResendingInvite(null);
-    }
-  };
 
   const handleAddUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -616,10 +598,8 @@ export const UsersAndMasterData: React.FC = () => {
 
   const getLoginMethod = (u: UserRow) => {
     const roles = u.roles || [];
-    if (roles.includes('mentor') && !roles.includes('company')) return 'ลิงก์ทางอีเมล (ไม่มีรหัสผ่าน)';
-    if (!roles.includes('company')) return 'Google (มหาวิทยาลัย)';
-    if (u.is_invited && !u.is_password_set) return 'ลิงก์เชิญ · ยังไม่ได้ตั้งรหัส';
-    return 'ลิงก์เชิญ · ตั้งรหัสแล้ว';
+    if (roles.includes('mentor')) return 'ลิงก์ทางอีเมล (ไม่มีรหัสผ่าน)';
+    return 'Google (มหาวิทยาลัย)';
   };
 
   return (
@@ -722,15 +702,11 @@ export const UsersAndMasterData: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-xs">
                   {users.map((u) => {
-                    const isPendingInvite = (u.roles || []).includes('company') && u.is_invited && !u.is_password_set;
-
                     return (
                       <tr
                         key={u.user_id}
                         data-testid={`user-row-${u.user_id}`}
-                        className={`hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors ${
-                          isPendingInvite ? 'bg-[#FFFBEB] dark:bg-amber-950/20' : ''
-                        }`}
+                        className="hover:bg-gray-50/60 dark:hover:bg-gray-700/30 transition-colors"
                       >
                         <td className="p-3 sm:px-4 font-mono font-medium text-gray-900 dark:text-white">
                           {u.email}
@@ -748,22 +724,12 @@ export const UsersAndMasterData: React.FC = () => {
                           </div>
                         </td>
                         <td className="p-3 sm:px-4">
-                          {isPendingInvite ? (
-                            <span className="text-amber-800 dark:text-amber-300 font-semibold">
-                              ลิงก์เชิญ · ยังไม่ได้ตั้งรหัส
-                            </span>
-                          ) : (
-                            <span className="text-gray-600 dark:text-gray-300">
-                              {getLoginMethod(u)}
-                            </span>
-                          )}
+                          <span className="text-gray-600 dark:text-gray-300">
+                            {getLoginMethod(u)}
+                          </span>
                         </td>
                         <td className="p-3 sm:px-4">
-                          {isPendingInvite ? (
-                            <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#FFFBEB] text-[#B45309] border-[#FDE68A] dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
-                              รอเปิดใช้งาน
-                            </span>
-                          ) : u.is_active ? (
+                          {u.is_active ? (
                             <span className="pill px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-[#F0FDF4] text-[#15803D] border-[#BBF7D0] dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800">
                               ใช้งานอยู่
                             </span>
@@ -775,20 +741,6 @@ export const UsersAndMasterData: React.FC = () => {
                         </td>
                         <td className="p-3 sm:px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* ปุ่มส่งลิงก์เชิญใหม่ แสดงเฉพาะบัญชีสถานประกอบการที่ยังไม่ได้ตั้งรหัส (พี่เลี้ยงไม่มีรหัสผ่าน — ส่งลิงก์ซ้ำที่หน้าติดตามพี่เลี้ยง) */}
-                            {isPendingInvite && (
-                              <button
-                                type="button"
-                                data-testid={`user-resend-invite-${u.user_id}`}
-                                onClick={() => handleResendInvite(u.user_id, u.email)}
-                                disabled={resendingInvite === u.user_id}
-                                className="btn px-2.5 py-1 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-sm disabled:opacity-50"
-                              >
-                                <Send className="w-3 h-3" />
-                                {resendingInvite === u.user_id ? 'กำลังส่ง...' : 'ส่งลิงก์เชิญใหม่'}
-                              </button>
-                            )}
-
                             <button
                               type="button"
                               data-testid={`user-edit-${u.user_id}`}
@@ -809,7 +761,7 @@ export const UsersAndMasterData: React.FC = () => {
 
           <div className="p-4 sm:px-5 border-t border-gray-100 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 leading-relaxed bg-gray-50/30 dark:bg-gray-800/20 space-y-1">
             <p>
-              คนนอกเข้าระบบด้วย <strong className="font-bold text-gray-800 dark:text-gray-200">ลิงก์เชิญใช้ครั้งเดียว อายุ 48 ชม.</strong> ไม่ใช่รหัสผ่านที่ส่งทางเมล · ปุ่ม “ส่งลิงก์เชิญใหม่” ใช้ได้เฉพาะบัญชีสถานประกอบการ — นักศึกษาและบุคลากรใช้ Google จึงถูกปฏิเสธโดยตั้งใจ
+              นักศึกษาและบุคลากรเข้าระบบด้วย Google ของมหาวิทยาลัย · สถานประกอบการไม่มีบัญชี ใช้ลิงก์ในอีเมลตอบเอกสารเท่านั้น
             </p>
             <p>
               พี่เลี้ยงไม่มีรหัสผ่าน เข้าระบบด้วยลิงก์ทางอีเมลเท่านั้น · ส่งลิงก์ซ้ำได้ที่หน้า “ติดตามพี่เลี้ยง”

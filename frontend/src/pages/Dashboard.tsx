@@ -56,13 +56,9 @@ const MentorFollowup = lazy(() => import('./Staff/MentorFollowup'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
-const Form07Company = lazy(() => import('./Company/Form07Company'));
 const MentorHome = lazy(() => import('./Mentor/MentorHome'));
 const MentorCertify = lazy(() => import('./Mentor/MentorCertify'));
-const CompanyHome = lazy(() => import('./Company/CompanyHome'));
-const JobOffer02 = lazy(() => import('./Company/JobOffer02'));
 const ReportOutlineQueue = lazy(() => import('./Mentor/ReportOutlineQueue'));
-const CompanyProfile = lazy(() => import('./Company/CompanyProfile'));
 
 /**
  * The four student screens that belong to the co-op itself rather than to
@@ -463,14 +459,6 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <StaffHome />;
         
-      case 'company':
-        if (activeMenu === 'jobs') return <JobOffer02 />;
-        if (activeMenu === 'form07') return <Form07Company />;
-        if (activeMenu === 'report_outlines') return <ReportOutlineQueue />;
-        if (activeMenu === 'final_evaluation') return <MentorEvaluation />;
-        if (activeMenu === 'profile') return <CompanyProfile />;
-        return <CompanyHome onNavigate={(menu) => setActiveMenu(menu)} />;
-
       case 'mentor':
         if (activeMenu === 'certify') return <MentorCertify />;
         if (activeMenu === 'report_outlines') return <ReportOutlineQueue />;
