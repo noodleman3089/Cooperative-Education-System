@@ -3,8 +3,8 @@ import fs from 'fs';
 import path from 'path';
 import { IntentFormModel } from '../models/intent';
 import { CompanyAcceptPayload, StudentAcceptPayload } from '../types';
-import { notifyStudentStatusChange, sendMentorInviteEmail } from '../utils/email';
-import { createInviteLink } from '../utils/invite';
+import { notifyStudentStatusChange, sendMentorLoginLinkEmail } from '../utils/email';
+import { issueMentorLoginLink, revokeMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
@@ -303,6 +303,7 @@ export class AcceptanceController {
         }
 
         // 3. Activate mentor account if it's currently inactive
+        let mentorMail: { email: string; url: string; expiresAt: Date; tokenId: number } | null = null;
         if (intent.mentor_id) {
           // Lock the row first — PostgreSQL rejects FOR UPDATE alongside GROUP BY,
           // so the role aggregation is a separate read.
@@ -343,17 +344,30 @@ export class AcceptanceController {
             }
 
             if (!mentorUser.is_active) {
-              // Activate with no password: the mentor chooses their own through
-              // the invitation link, so none is ever mailed. The token is
-              // written on the same client, so a rollback discards it too.
+              // No password is ever set (SEC-15): the mentor enters through a
+              // one-time emailed login link. The token row is written on the
+              // same client, so a rollback discards it too; the email itself
+              // is sent only after COMMIT.
               await client.query(
                 `UPDATE users SET password_hash = NULL, is_active = TRUE WHERE user_id = $1`,
                 [intent.mentor_id]
               );
 
-              const inviteLink = await createInviteLink(intent.mentor_id, client);
-              await sendMentorInviteEmail(mentorUser.email, inviteLink);
-              console.log(`Activated mentor account ${mentorUser.email} and sent an invitation.`);
+              const issued = await issueMentorLoginLink(
+                { userId: intent.mentor_id, ttlMs: MENTOR_LINK_TTL_SYSTEM_MS, skipCooldown: true },
+                client
+              );
+              // SEC-03 above already guarantees eligibility — null/cooldown here is a bug, roll back
+              if (!issued || 'cooledDown' in issued) {
+                throw new Error('ออกลิงก์เข้าสู่ระบบให้พี่เลี้ยงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+              }
+              mentorMail = {
+                email: mentorUser.email,
+                url: issued.url,
+                expiresAt: issued.expiresAt,
+                tokenId: issued.tokenId,
+              };
+              console.log(`Activated mentor account ${mentorUser.email} and issued a login link.`);
             }
           }
         }
@@ -376,7 +390,29 @@ export class AcceptanceController {
         // Notify student of approval
         notifyStudentStatusChange(intentId, 'accepted').catch(console.error);
 
-        res.status(200).json({ success: true, message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว' });
+        // ส่งเมลหลัง COMMIT เท่านั้น — ลิงก์ในเมลต้องมีแถวอยู่จริงในฐานตอนพี่เลี้ยงกด
+        if (mentorMail) {
+          const sent = await sendMentorLoginLinkEmail(mentorMail.email, mentorMail.url, {
+            expiresAt: mentorMail.expiresAt,
+            kind: 'welcome',
+          });
+          if (!sent) {
+            // ลิงก์ที่ไม่เคยถึงมือพี่เลี้ยงต้องไม่ค้างในฐาน · บอกตามจริง ไม่กลืน
+            await revokeMentorLoginLink(mentorMail.tokenId);
+            res.status(200).json({
+              success: true,
+              mentor_email_sent: false,
+              message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว แต่ส่งอีเมลลิงก์เข้าสู่ระบบถึงพี่เลี้ยงไม่สำเร็จ พี่เลี้ยงขอลิงก์เองได้ที่หน้า /login/mentor',
+            });
+            return;
+          }
+        }
+
+        res.status(200).json({
+          success: true,
+          ...(mentorMail ? { mentor_email_sent: true } : {}),
+          message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว',
+        });
       } else {
         // Action is 'rejected' — ตีกลับ "แบบตอบรับ" ไม่ใช่ปฏิเสธที่ฝึก
         // ใบกลับไปรอแบบตอบรับ (ขั้นก่อนอัปโหลด) ไฟล์เดิมถูกล้าง นักศึกษาส่งใหม่ในใบเดิมได้
