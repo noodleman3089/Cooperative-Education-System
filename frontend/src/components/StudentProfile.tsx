@@ -10,7 +10,7 @@ import {
   WORK_REGION_OPTIONS,
   getRecommendedJobTypes,
 } from '../config/studentInterests';
-import { Lock, FileText, Upload, Eye, Download } from 'lucide-react';
+import { FileText, Upload, Eye, Download } from 'lucide-react';
 
 interface Major {
   major_id: number;
@@ -39,7 +39,6 @@ const StudentProfile: React.FC = () => {
   const [parentPhone, setParentPhone] = useState('');
   const [enrollmentYear, setEnrollmentYear] = useState<number | ''>('');
   const [cumulativeGpa, setCumulativeGpa] = useState<string>('');
-  const [claimedGpa, setClaimedGpa] = useState<string>('');
 
   // Career & Work Preferences
   const [skillsAndActivities, setSkillsAndActivities] = useState('');
@@ -132,8 +131,11 @@ const StudentProfile: React.FC = () => {
         setEnrollmentYear(
           prof.enrollment_year !== null && prof.enrollment_year !== undefined ? prof.enrollment_year : ''
         );
-        setCumulativeGpa(prof.cumulative_gpa ? Number(prof.cumulative_gpa).toFixed(2) : '');
-        setClaimedGpa(prof.claimed_gpa ? Number(prof.claimed_gpa).toFixed(2) : '');
+        setCumulativeGpa(
+          prof.cumulative_gpa !== null && prof.cumulative_gpa !== undefined
+            ? Number(prof.cumulative_gpa).toFixed(2)
+            : ''
+        );
 
         setSkillsAndActivities(prof.skills_and_activities || '');
         setPreferredRegion(prof.preferred_work_region || '');
@@ -241,10 +243,24 @@ const StudentProfile: React.FC = () => {
       return;
     }
 
+    // ตรวจช่วงเกรดตรงนี้ให้รู้ทันที · ด่านจริงอยู่ที่เซิร์ฟเวอร์
+    if (cumulativeGpa.trim() !== '') {
+      const gpaNum = Number(cumulativeGpa);
+      if (!Number.isFinite(gpaNum) || gpaNum < 0 || gpaNum > 4) {
+        setError('เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00');
+        alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
       const formData = new FormData();
+      if (selectedMajorId !== '') {
+        formData.append('major_id', String(selectedMajorId));
+      }
+      formData.append('cumulative_gpa', cumulativeGpa.trim());
       formData.append('first_name', firstName.trim());
       formData.append('last_name', lastName.trim());
       formData.append('nickname', nickname.trim());
@@ -300,6 +316,8 @@ const StudentProfile: React.FC = () => {
       await loadProfile();
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
+      // สาขาที่ขอเปลี่ยนอาจถูกปฏิเสธ (409) — ให้ช่องกลับไปตรงกับของจริงในระบบ
+      setSelectedMajorId(profile?.major_id || '');
     } finally {
       alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setIsSubmitting(false);
@@ -319,9 +337,6 @@ const StudentProfile: React.FC = () => {
   const avatarUrl =
     avatarPreviewUrl || (storedAvatar ? `${API_BASE_URL}/files/${storedAvatar}` : null);
 
-  const selectedMajorObj = majors.find((m) => m.major_id === selectedMajorId);
-  const displayMajorName = profile?.major_name_th || selectedMajorObj?.major_name_th || '—';
-  const displayFaculty = profile?.faculty_name_th || 'บริหารธุรกิจและเทคโนโลยีสารสนเทศ';
   const displayAdvisor =
     profile?.advisor_first_name
       ? `${profile.advisor_first_name} ${profile.advisor_last_name || ''}`.trim()
@@ -345,108 +360,102 @@ const StudentProfile: React.FC = () => {
 
       <form onSubmit={handleUpdate} className="space-y-6">
         {/* ========================================================================= */}
-        {/* CARD 1: ข้อมูลทะเบียน (Registry Info - Read-only SEC-05)                   */}
+        {/* CARD 1: ข้อมูลส่วนตัว — รหัส/ปีที่เข้า/ที่ปรึกษาอ่านอย่างเดียว · สาขากับเกรดแก้เองได้  */}
         {/* ========================================================================= */}
-        <div
-          data-testid="profile-registry-block"
-          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs space-y-5"
-        >
-          <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-3">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลทะเบียน</h3>
-            <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-              <Lock className="w-3.5 h-3.5 text-gray-500" />
-              แก้เองไม่ได้
-            </span>
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs space-y-5">
+          <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลส่วนตัว</h3>
           </div>
 
-          <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-            ข้อมูลกลุ่มนี้ถูกพิมพ์ลงหนังสือราชการที่คณบดีลงนาม จึงต้องมาจากทะเบียนของมหาวิทยาลัยเท่านั้น —{' '}
-            <strong className="text-gray-800 dark:text-gray-200">
-              ถ้าไม่ตรงให้แจ้งเจ้าหน้าที่งานสหกิจศึกษาแก้ให้
-            </strong>{' '}
-            ระบบไม่มีช่องให้นักศึกษาแก้เองโดยตั้งใจ
-          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                รหัสนักศึกษา
+              </label>
+              <input
+                type="text"
+                readOnly
+                data-testid="profile-student-code"
+                value={studentCode || '—'}
+                className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+              />
+            </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
             <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">รหัสนักศึกษา</div>
-              <div className="text-xs font-mono font-bold text-gray-900 dark:text-white mt-1">
-                {studentCode || '—'}
-              </div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                สาขาวิชา *
+              </label>
+              <select
+                data-testid="profile-major"
+                value={selectedMajorId}
+                onChange={(e) => setSelectedMajorId(e.target.value ? Number(e.target.value) : '')}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              >
+                {majors.map((m) => (
+                  <option key={m.major_id} value={m.major_id}>
+                    {m.major_name_th}
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+                เลือกผิดแก้ได้ตอนยังไม่มีใบแจ้งความจำนงที่ดำเนินการอยู่ · เปลี่ยนแล้วที่ปรึกษาจะถูกล้างให้หัวหน้าสาขาใหม่ตั้งใหม่
+              </p>
             </div>
+
             <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">คณะ</div>
-              <div className="text-xs font-bold text-gray-900 dark:text-white mt-1">
-                {displayFaculty}
-              </div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                เกรดเฉลี่ยสะสม (0.00 – 4.00)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                max="4"
+                inputMode="decimal"
+                data-testid="profile-gpa"
+                value={cumulativeGpa}
+                onChange={(e) => setCumulativeGpa(e.target.value)}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                placeholder="เช่น 3.25"
+              />
             </div>
+
             <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">สาขาวิชา</div>
-              <div className="text-xs font-bold text-gray-900 dark:text-white mt-1">
-                {displayMajorName}
-              </div>
-            </div>
-            <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 ปีการศึกษาที่เข้าศึกษา (Enrollment Year)
-              </div>
+              </label>
               <input
                 type="text"
                 readOnly
                 value={enrollmentYear !== '' ? String(enrollmentYear) : '—'}
-                className="text-xs font-bold text-gray-900 dark:text-white mt-1 bg-transparent border-0 p-0 focus:outline-none cursor-default"
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
               />
             </div>
+
             <div>
-              <div className="text-xs text-gray-500 dark:text-gray-400">อาจารย์ที่ปรึกษา</div>
-              <div className="text-xs font-bold text-gray-900 dark:text-white mt-1">
-                {displayAdvisor}
-              </div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                อาจารย์ที่ปรึกษา
+              </label>
+              <input
+                type="text"
+                readOnly
+                value={displayAdvisor}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+              />
             </div>
           </div>
 
-          {/* Dual GPA Comparison Boxes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 space-y-1">
-              <span className="text-xs text-gray-500 dark:text-gray-400 block">
-                เกรดเฉลี่ยสะสมจากทะเบียน
-              </span>
-              <span
-                data-testid="profile-gpa-registry"
-                className="text-2xl font-black text-gray-900 dark:text-white block"
-              >
-                {/* ⛔ เดิม fallback เป็น '3.21' — เกรดปลอมบนหน้าที่บอกว่า "ใช้พิมพ์ลงเอกสารราชการ" */}
-                {cumulativeGpa || '—'}
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400 block leading-relaxed">
-                ค่าที่เจ้าหน้าที่นำเข้าจากรายชื่อนักศึกษา — ใช้พิมพ์ลงเอกสารราชการ
-              </span>
-            </div>
-
-            <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/50 dark:bg-blue-950/20 space-y-1">
-              <span className="text-xs text-blue-900 dark:text-blue-300 font-semibold block">
-                เกรดที่คุณแจ้งไว้ตอนกรอกข้อมูลครั้งแรก
-              </span>
-              <span
-                data-testid="profile-gpa-claimed"
-                className="text-2xl font-black text-brand-blue dark:text-blue-400 block"
-              >
-                {claimedGpa || cumulativeGpa || '3.45'}
-              </span>
-              <span className="text-xs text-blue-800/80 dark:text-blue-400/80 block leading-relaxed">
-                ยังไม่ถูกใช้แทนเกรดทะเบียน จะคัดลอกเข้าทะเบียน
-                <strong className="text-blue-950 dark:text-blue-200"> เมื่อหัวหน้าสาขาอนุมัติเอกสารเท่านั้น</strong>
-              </span>
-            </div>
-          </div>
+          <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
+            รหัสนักศึกษาและปีที่เข้าศึกษาแก้เองไม่ได้ — ถ้าไม่ตรงให้แจ้งเจ้าหน้าที่งานสหกิจศึกษา
+          </p>
         </div>
 
         {/* ========================================================================= */}
-        {/* CARD 2: ข้อมูลที่คุณแก้เองได้ (Editable Fields)                              */}
+        {/* CARD 2: ข้อมูลติดต่อและรูป (Editable Fields)                                  */}
         {/* ========================================================================= */}
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs space-y-5">
           <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลที่คุณแก้เองได้</h3>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลติดต่อ</h3>
           </div>
 
           <div className="flex flex-col md:flex-row gap-6">

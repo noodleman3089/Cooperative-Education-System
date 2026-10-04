@@ -110,7 +110,7 @@ const OnboardingStudent: React.FC = () => {
     if (!enrollmentYear) next.enrollmentYear = 'กรุณาระบุปีการศึกษาที่เข้าศึกษา';
     if (!phone.trim()) next.phone = 'กรุณากรอกเบอร์โทรศัพท์ที่ติดต่อได้';
 
-    // เกรดที่นักศึกษาแจ้งเอง — ลง claimed_gpa ไม่ใช่เลขทะเบียน (SEC-05)
+    // เกรดที่นักศึกษากรอกเอง — ลง cumulative_gpa ตรงๆ (SEC-05 แก้ 2026-10-04)
     // ตรวจช่วงตรงนี้ด้วยเพื่อให้ผู้ใช้รู้ทันที แต่ด่านจริงอยู่ที่เซิร์ฟเวอร์
     const gpaNum = Number(gpa);
     if (!gpa.trim()) {
@@ -180,7 +180,7 @@ const OnboardingStudent: React.FC = () => {
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim(),
-        claimed_gpa: gpa.trim(),
+        cumulative_gpa: Number(gpa),
         alt_email: altEmail.trim() || null,
         preferred_work_region: region || null,
         interested_job_types: jobTypes.length > 0 ? jobTypes : null,
@@ -542,7 +542,7 @@ const OnboardingStudent: React.FC = () => {
         onConfirm={submitProfile}
         message={
           <ConfirmSummary
-            lead="ตรวจอีกครั้งก่อนบันทึก ค่าเหล่านี้ถูกพิมพ์ลงหนังสือที่คณบดีลงนาม"
+            lead="ตรวจอีกครั้งก่อนบันทึก รหัสและปีที่เข้าถูกพิมพ์ลงหนังสือที่คณบดีลงนาม"
             rows={[
               { label: 'รหัสนักศึกษา', value: studentCode.trim() },
               {
@@ -552,7 +552,7 @@ const OnboardingStudent: React.FC = () => {
               { label: 'ปีที่เข้าศึกษา', value: enrollmentYear },
               { label: 'ชื่อ-นามสกุล', value: `${firstName.trim()} ${lastName.trim()}`.trim() },
             ]}
-            lockNote="รหัส สาขา และปีที่เข้า แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่"
+            lockNote="รหัสและปีที่เข้า แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่ · สาขาแก้ได้ที่หน้าโปรไฟล์"
           />
         }
       />

@@ -10,6 +10,7 @@ import { query } from '../config/database';
 
 import { hashPassword } from '../utils/password';
 import { sendUnexpectedError } from '../utils/httpError';
+import { AuditAction, writeAudit } from '../utils/audit';
 import { StudentProfileSetupBody } from '../types';
 
 export class ProfileController {
@@ -150,8 +151,7 @@ export class ProfileController {
          * เข้าระบบแล้วไปกรอกชื่อตัวเองซ้ำอีกรอบในหน้าโปรไฟล์ ทั้งที่เพิ่งกรอกไปเมื่อครู่
          *
          * ⛔ **สี่ช่องนี้เท่านั้น** — เป็นข้อมูลติดต่อที่เจ้าตัวเป็นแหล่งความจริง
-         * ห้ามเปิดรับเพิ่มจากตรงนี้: `cumulative_gpa` ยังมาจากรายชื่อที่เจ้าหน้าที่นำเข้า
-         * เท่านั้น (`seededGpa`) และ **เลขบัตร/เชื้อชาติ/ศาสนาไม่อยู่ในขั้นนี้โดยตั้งใจ**
+         * ห้ามเปิดรับเพิ่มจากตรงนี้ (ยกเว้นเกรดด้านล่าง) และ **เลขบัตร/เชื้อชาติ/ศาสนาไม่อยู่ในขั้นนี้โดยตั้งใจ**
          * — สามอย่างนั้นขอตอนเริ่มยื่นเรื่องจริง เพราะ SEC-12 บังคับให้เข้ารหัสและลบใน
          * 90 วัน ระบบจึงต้องไม่ถือไว้ตั้งแต่วันแรกสำหรับคนที่สุดท้ายอาจไม่ได้ไปสหกิจ
          */
@@ -162,27 +162,20 @@ export class ProfileController {
         };
 
         /**
-         * เกรดที่นักศึกษาแจ้งเอง — ลง `students.claimed_gpa` **ไม่ใช่ `cumulative_gpa`**
-         *
-         * อาจารย์ที่ปรึกษาโปรเจคขอให้นักศึกษากรอกเกรดได้ตั้งแต่ต้น (2026-09-07) ซึ่งจำเป็นจริง
-         * เพราะที่เดิมสำหรับค่านี้คือ `coop_applications.claimed_gpa` ของ สหกิจ 01 ที่ถูกข้ามไปแล้ว
-         * — ไม่เหลือที่ให้แจ้งเกรดเลย
-         *
-         * ⛔ แต่ยังลง `cumulative_gpa` ตรงๆ ไม่ได้ (SEC-05): เลขทะเบียนถูกพิมพ์ลง
-         * **หนังสือราชการที่คณบดีเซ็น** ตัวเลขที่ยังไม่มีมนุษย์ยืนยันจึงกลายเป็นเอกสารเท็จได้
-         * การคัดลอกเข้าทะเบียนต้องผ่านการยืนยันของเจ้าหน้าที่เหมือนที่หัวหน้าสาขาเคยทำใน สหกิจ 01
+         * เกรดที่นักศึกษากรอกเอง — ลง `students.cumulative_gpa` ตรงๆ (เจ้าของเปลี่ยน SEC-05 2026-10-04)
+         * ชนะค่าจากรายชื่อที่เจ้าหน้าที่นำเข้า (`seededGpa`) ถ้ากรอกมา · แก้ทีหลังได้ที่หน้าโปรไฟล์
          *
          * ⛔ ตรวจ **ก่อน** สร้างแถว — เดิมตรวจหลัง `createStudent` เกรดผิดช่วงจึงได้ 400
          *    แต่แถว students ค้างอยู่โดยไม่มี role และส่งซ้ำไม่ได้อีก ("ตั้งค่าเรียบร้อยแล้ว")
          */
-        let claimedGpa: number | null = null;
-        if (body.claimed_gpa !== undefined && body.claimed_gpa !== null && body.claimed_gpa !== '') {
-          const parsed = Number(body.claimed_gpa);
+        let typedGpa: number | null = null;
+        if (body.cumulative_gpa !== undefined && body.cumulative_gpa !== null) {
+          const parsed = Number(body.cumulative_gpa);
           if (!Number.isFinite(parsed) || parsed < 0 || parsed > 4) {
             res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
             return;
           }
-          claimedGpa = Math.round(parsed * 100) / 100;
+          typedGpa = Math.round(parsed * 100) / 100;
         }
 
         // ด่านตรวจของสาขานักศึกษาผ่านครบแล้ว — จากนี้ไปคือการเขียน
@@ -196,7 +189,7 @@ export class ProfileController {
           student_code,
           major_id,
           province_id !== undefined && province_id !== null ? province_id : null,
-          seededGpa, // GPA is authoritative from the staff import, never self-reported
+          typedGpa ?? seededGpa,
           text(body.first_name, 255),
           text(body.last_name, 255),
           null, // nickname
@@ -221,10 +214,6 @@ export class ProfileController {
          * ปลอดภัยที่จะเขียนทับ เพราะแถวเพิ่งถูกสร้าง ทุกคอลัมน์ยังเป็น NULL อยู่
          * (`updateOptionalProfile` ไม่มี COALESCE — บนแถวที่มีข้อมูลแล้วมันล้างของเดิม)
          */
-        if (claimedGpa !== null) {
-          await StudentModel.updateClaimedGpa(userId, claimedGpa);
-        }
-
         const region = text(body.preferred_work_region, 255);
         const jobTypes = Array.isArray(body.interested_job_types)
           ? body.interested_job_types.filter((t): t is string => typeof t === 'string' && !!t.trim()).slice(0, 20)
@@ -327,6 +316,8 @@ export class ProfileController {
       const { userId } = req.user;
       const {
         province_id,
+        major_id,
+        cumulative_gpa,
         first_name,
         last_name,
         nickname,
@@ -340,12 +331,11 @@ export class ProfileController {
         parent_phone,
       } = req.body;
 
-      // SEC-05: student_code, major_id, cumulative_gpa and enrollment_year are
-      // registry data, not profile data. Letting students write them meant they
-      // could award themselves a GPA, move into another department to dodge the
-      // major-matching approval guards, or push enrollment_year forward to escape
-      // the graduation auto-deactivation. They are read from the existing record
-      // below and any values in the request body are ignored.
+      // SEC-05 (แก้ 2026-10-04 โดยเจ้าของ): student_code และ enrollment_year ยังเป็นของทะเบียน
+      // — enrollment_year ขับการปิดบัญชีตอนจบ จึงอ่านจากแถวเดิมเสมอ ค่าใน body ถูกเมิน
+      // `cumulative_gpa` นักศึกษาแก้เองได้แล้ว (ด่านสิทธิ์ถูกถอดตั้งแต่ SEC-02 เกรดไม่ได้ตัดสินสิทธิ์อะไร)
+      // `major_id` แก้เองได้ **เฉพาะตอนไม่มีใบแจ้งความจำนงที่ยังเดินอยู่** เพราะสาขากำหนดว่า
+      // หัวหน้าสาขาคนไหนเห็นคำร้อง (`resolveMajorScope`) ย้ายกลางทางแปลว่าเลือกผู้อนุมัติเองได้
       const parsedProvinceId = province_id !== undefined && province_id !== null && province_id !== '' ? parseInt(province_id, 10) : null;
       const parsedYearLevel = year_level !== undefined && year_level !== null && year_level !== '' ? parseInt(year_level, 10) : null;
 
@@ -366,15 +356,57 @@ export class ProfileController {
         return;
       }
 
-      // Registry fields are carried over untouched from the stored record.
+      // student_code และ enrollment_year ยกมาจากแถวเดิมโดยไม่แตะ
       const lockedStudentCode = existingProfile.student_code;
-      const lockedMajorId = existingProfile.major_id;
-      const lockedGpa = existingProfile.cumulative_gpa !== null && existingProfile.cumulative_gpa !== undefined
-        ? Number(existingProfile.cumulative_gpa)
-        : null;
       const lockedEnrollmentYear = existingProfile.enrollment_year ?? null;
 
-      // Validate province only — major is not user-supplied any more.
+      const hasValue = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== '';
+
+      // เกรด: ไม่ส่งมา/ว่าง = คงค่าเดิม (ล้างเป็น NULL ไม่ได้) · ตรวจช่วง 0.00–4.00 ที่นี่ที่เดียว
+      const previousGpa = existingProfile.cumulative_gpa !== null && existingProfile.cumulative_gpa !== undefined
+        ? Number(existingProfile.cumulative_gpa)
+        : null;
+      let nextGpa = previousGpa;
+      if (hasValue(cumulative_gpa)) {
+        const parsedGpa = Number(cumulative_gpa);
+        if (!Number.isFinite(parsedGpa) || parsedGpa < 0 || parsedGpa > 4) {
+          res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
+          return;
+        }
+        nextGpa = Math.round(parsedGpa * 100) / 100;
+      }
+
+      // สาขา: เปลี่ยนได้เมื่อไม่มีใบแจ้งความจำนงที่ยังเดินอยู่ (นิยามเดียวกับด่าน "ยื่นได้ครั้งละ 1 แห่ง")
+      const previousMajorId = existingProfile.major_id;
+      let nextMajorId = previousMajorId;
+      if (hasValue(major_id)) {
+        const parsedMajorId = Number(major_id);
+        if (!Number.isInteger(parsedMajorId)) {
+          res.status(400).json({ message: 'major_id ไม่ถูกต้อง' });
+          return;
+        }
+        if (parsedMajorId !== previousMajorId) {
+          if (!(await MasterModel.verifyMajorExists(parsedMajorId))) {
+            res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
+            return;
+          }
+          const live = await query(
+            `SELECT 1 FROM intent_forms
+              WHERE student_id = $1 AND status NOT IN ('rejected', 'company_rejected', 'superseded')
+              LIMIT 1`,
+            [userId]
+          );
+          if ((live.rowCount ?? 0) > 0) {
+            res.status(409).json({
+              message: 'เปลี่ยนสาขาไม่ได้ขณะที่ยังมีใบแจ้งความจำนงที่ดำเนินการอยู่ — แจ้งเจ้าหน้าที่สหกิจศึกษาให้แก้ให้',
+            });
+            return;
+          }
+          nextMajorId = parsedMajorId;
+        }
+      }
+
+      // Validate province only
       if (parsedProvinceId !== null) {
         const provinceExists = await MasterModel.verifyProvinceExists(parsedProvinceId);
         if (!provinceExists) {
@@ -399,9 +431,9 @@ export class ProfileController {
       const updated = await StudentModel.updateStudent(
         userId,
         lockedStudentCode,
-        lockedMajorId,
+        nextMajorId,
         parsedProvinceId,
-        lockedGpa,
+        nextGpa,
         resumeFile,
         cleanFirstName,
         cleanLastName,
@@ -416,6 +448,27 @@ export class ProfileController {
         lockedEnrollmentYear,
         cleanSection
       );
+
+      if (nextMajorId !== previousMajorId) {
+        // ที่ปรึกษา/อาจารย์นิเทศเดิมถูกตั้งโดยหัวหน้าสาขาเก่า — ไม่อยู่ในสาขาใหม่แล้ว ให้หัวหน้าสาขาใหม่ตั้งใหม่
+        await query('UPDATE students SET advisor_id = NULL, supervisor_id = NULL WHERE student_id = $1', [userId]);
+      }
+
+      if (nextMajorId !== previousMajorId || nextGpa !== previousGpa) {
+        writeAudit({
+          action: AuditAction.REGISTRY_CHANGED,
+          entityType: 'student',
+          entityId: userId,
+          subjectId: userId,
+          detail: {
+            changed_by: 'student',
+            major_id_before: previousMajorId,
+            major_id_after: nextMajorId,
+            gpa_before: previousGpa,
+            gpa_after: nextGpa,
+          },
+        }, req).catch(() => undefined);
+      }
 
       res.status(200).json({
         message: 'Student profile updated successfully.',

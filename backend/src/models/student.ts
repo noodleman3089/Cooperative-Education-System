@@ -68,17 +68,6 @@ export class StudentModel {
   }
 
   /**
-   * เกรดที่นักศึกษาแจ้งเอง
-   *
-   * ⛔ **เขียนได้เฉพาะ `claimed_gpa`** — เมธอดนี้จงใจไม่แตะ `cumulative_gpa` เลย
-   * เลขทะเบียนถูกพิมพ์ลงหนังสือราชการที่คณบดีเซ็น (SEC-05) การคัดลอกจากค่าที่แจ้ง
-   * เข้าทะเบียนต้องเป็นการกระทำของเจ้าหน้าที่ที่มี audit ไม่ใช่ผลข้างเคียงของการกรอกฟอร์ม
-   */
-  static async updateClaimedGpa(studentId: number, claimedGpa: number | null): Promise<void> {
-    await query('UPDATE students SET claimed_gpa = $2 WHERE student_id = $1', [studentId, claimedGpa]);
-  }
-
-  /**
    * เดือนปฏิทินที่ช่วงปฏิบัติงานคร่อม — คอลัมน์ "เดือนที่ 1..N" ของตาราง สหกิจ 07 หน้า 3
    *
    * คิดใน Postgres ทั้งหมดจากใบความจำนงที่ตอบรับแล้วใบล่าสุด · คืนตัวเลขล้วน

@@ -92,8 +92,6 @@ export interface StudentProfileSetupBody {
   birth_date?: Date | string | null;
   alt_email?: string | null;
   phone?: string | null;
-  /** เกรดที่นักศึกษาแจ้งเอง — ลง `students.claimed_gpa` ไม่ใช่ `cumulative_gpa` (SEC-05) */
-  claimed_gpa?: number | string | null;
   /** งานที่สนใจ — เก็บพร้อมกันตอนตั้งโปรไฟล์ เพราะ token ยังไม่มี role student */
   preferred_work_region?: string | null;
   interested_job_types?: unknown;

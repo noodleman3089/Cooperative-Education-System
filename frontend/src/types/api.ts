@@ -261,7 +261,6 @@ export interface StudentProfile {
   province_id: number | null;
   province_name_th?: string;
   cumulative_gpa?: number | null;
-  claimed_gpa?: number | null;
   section?: string | null;
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` (เช่น `avatars/avatar-user-2-…jpg`) ไม่ใช่ URL เต็ม */

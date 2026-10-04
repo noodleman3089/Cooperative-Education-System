@@ -173,7 +173,7 @@ export const validateProfileSetup = (req: Request, res: Response, next: NextFunc
         return;
       }
       if (cumulative_gpa < 0 || cumulative_gpa > 4.0) {
-        res.status(400).json({ message: 'cumulative_gpa must be between 0.00 and 4.00.' });
+        res.status(400).json({ message: 'เกรดเฉลี่ยสะสมต้องเป็นตัวเลขระหว่าง 0.00 ถึง 4.00' });
         return;
       }
     }
