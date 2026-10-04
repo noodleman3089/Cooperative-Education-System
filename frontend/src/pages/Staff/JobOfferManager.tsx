@@ -159,7 +159,7 @@ export const JobOfferManager: React.FC = () => {
           className={`py-3 px-1 font-bold text-sm border-b-2 transition-all ${
             activeTab === 'send'
               ? 'border-blue-600 text-blue-700 dark:text-blue-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
           }`}
         >
           ส่งแบบสำรวจ
@@ -171,7 +171,7 @@ export const JobOfferManager: React.FC = () => {
           className={`py-3 px-1 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
             activeTab === 'review'
               ? 'border-blue-600 text-blue-700 dark:text-blue-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
           }`}
         >
           ตรวจแบบเสนองาน
@@ -183,7 +183,7 @@ export const JobOfferManager: React.FC = () => {
           className={`py-3 px-1 font-bold text-sm border-b-2 transition-all ${
             activeTab === 'posts'
               ? 'border-blue-600 text-blue-700 dark:text-blue-400'
-              : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
           }`}
         >
           ตำแหน่งงานรายรายการ (เดิม)
@@ -244,7 +244,7 @@ export const JobOfferManager: React.FC = () => {
                         <span
                           className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${
                             job.status === 'published'
-                              ? 'bg-green-100 text-green-700 dark:bg-green-950/40 dark:text-green-400'
+                              ? 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400'
                               : job.status === 'pending_approval'
                               ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
                               : job.status === 'rejected'

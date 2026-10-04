@@ -111,7 +111,7 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
                 href={`${API_BASE_URL}/files/${outline.latest_file_path}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-blue text-brand-blue hover:bg-blue-50 dark:hover:bg-blue-950/30 font-bold transition-all"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-brand-blue text-brand-blue dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 font-bold transition-all"
               >
                 <ExternalLink className="h-4 w-4" />
                 คลิกเพื่อเปิดอ่านไฟล์ PDF โครงร่างรายงาน

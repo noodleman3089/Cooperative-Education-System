@@ -891,7 +891,7 @@ const StudentDashboard: React.FC = () => {
                         <span
                           className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
                             uploadingRequestForm
-                              ? 'border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-600'
+                              ? 'border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
                               : 'border-brand-blue bg-brand-blue text-white hover:bg-brand-navy'
                           }`}
                         >

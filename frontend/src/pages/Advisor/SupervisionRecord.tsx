@@ -362,7 +362,7 @@ const SupervisionRecord: React.FC = () => {
             aria-label={`หมายเหตุของ ${item.label}`}
             value={remarks[item.key] || ''}
             onChange={(e) => setRemarks((r) => ({ ...r, [item.key]: e.target.value }))}
-            className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:ring-1 focus:ring-brand-blue/30"
+            className="w-full px-2.5 py-1.5 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-brand-blue/30"
           />
         </div>
       </div>
@@ -396,7 +396,7 @@ const SupervisionRecord: React.FC = () => {
 
           <div className="divide-y divide-gray-100 dark:divide-gray-800">
             {students.length === 0 ? (
-              <div className="p-6 text-center text-xs text-gray-400 dark:text-gray-500">
+              <div className="p-6 text-center text-xs text-gray-500 dark:text-gray-400">
                 ไม่มีนักศึกษาที่คุณเป็นผู้นิเทศ
               </div>
             ) : (
@@ -770,7 +770,7 @@ const SupervisionRecord: React.FC = () => {
                     rows={3}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    className="w-full p-3 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none resize-none focus:ring-2 focus:ring-brand-blue/20"
+                    className="w-full p-3 text-xs rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 outline-none resize-none focus:ring-2 focus:ring-brand-blue/20"
                     placeholder="ระบุข้อมูลหรือข้อสังเกตเพิ่มเติมจากการนิเทศ..."
                   />
                 </div>

@@ -143,7 +143,7 @@ export const AnnouncementsManager: React.FC = () => {
                 value={annTitle}
                 onChange={(e) => setAnnTitle(e.target.value)}
                 placeholder="เช่น ประกาศผลการคัดเลือกสหกิจศึกษา ภาคเรียนที่ 1/2570"
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:border-blue-500"
               />
             </div>
 
@@ -158,7 +158,7 @@ export const AnnouncementsManager: React.FC = () => {
                 value={annContent}
                 onChange={(e) => setAnnContent(e.target.value)}
                 placeholder="กรอกรายละเอียดข่าว กำหนดการ สถานที่ หรือสิ่งที่นักศึกษาต้องเตรียมตัว..."
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 resize-y"
+                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:border-blue-500 resize-y"
               />
             </div>
 
@@ -172,7 +172,7 @@ export const AnnouncementsManager: React.FC = () => {
                 value={annImage}
                 onChange={(e) => setAnnImage(e.target.value)}
                 placeholder="https://example.com/image.jpg"
-                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+                className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:border-blue-500"
               />
               <span className="block text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-normal">
                 ใส่เป็น URL · ระบบไม่รับอัปโหลดไฟล์ที่หน้านี้
@@ -236,17 +236,17 @@ export const AnnouncementsManager: React.FC = () => {
             <span className="text-sm font-bold text-gray-900 dark:text-white">
               ข่าวที่เผยแพร่แล้ว · {announcements.length} เรื่อง
             </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
+            <span className="text-xs text-gray-600 dark:text-gray-400">
               ปักหมุดได้ไม่จำกัด แต่หน้าแรกนักศึกษาแสดง 3 เรื่องแรก
             </span>
           </div>
 
           {loadingAnnouncements ? (
-            <div className="p-8 text-center text-xs text-gray-400">
+            <div className="p-8 text-center text-xs text-gray-600 dark:text-gray-400">
               กำลังโหลดข่าวประชาสัมพันธ์...
             </div>
           ) : announcements.length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-xs text-gray-400">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-xs text-gray-500 dark:text-gray-400">
               ยังไม่มีข่าวประชาสัมพันธ์ในขณะนี้
             </div>
           ) : (

@@ -251,7 +251,7 @@ const FacultyMemos: React.FC<FacultyMemosProps> = ({ showMajorFilter = false }) 
         {/* Table Content */}
         {filteredMemos.length === 0 ? (
           <div className="p-12 text-center text-gray-500 dark:text-gray-400">
-            <FileText className="h-10 w-10 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+            <FileText className="h-10 w-10 mx-auto text-gray-300 dark:text-gray-500 mb-3" />
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
               ยังไม่มีนักศึกษายื่นบันทึกข้อความ
             </p>

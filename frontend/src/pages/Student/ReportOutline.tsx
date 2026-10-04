@@ -297,7 +297,7 @@ const ReportOutline: React.FC = () => {
                   ? 'bg-emerald-500 text-white'
                   : currentStatus === 'pending_mentor'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}
             >
               {isMentorApproved ? <CheckCircle2 className="w-4 h-4" /> : '1'}
@@ -309,7 +309,7 @@ const ReportOutline: React.FC = () => {
               <span className="text-gray-600 dark:text-gray-400 block font-medium">
                 {mentorFullName}
               </span>
-              <span className="text-gray-500 dark:text-gray-500 block">
+              <span className="text-gray-600 dark:text-gray-400 block">
                 {isMentorApproved
                   ? 'เห็นชอบแล้ว'
                   : currentStatus === 'pending_mentor'
@@ -336,7 +336,7 @@ const ReportOutline: React.FC = () => {
                   ? 'bg-emerald-500 text-white'
                   : currentStatus === 'pending_advisor'
                   ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}
             >
               {isAdvisorApproved ? <CheckCircle2 className="w-4 h-4" /> : '2'}
@@ -348,7 +348,7 @@ const ReportOutline: React.FC = () => {
               <span className="text-gray-600 dark:text-gray-400 block font-medium">
                 {advisorFullName}
               </span>
-              <span className="text-gray-500 dark:text-gray-500 block">
+              <span className="text-gray-600 dark:text-gray-400 block">
                 {isAdvisorApproved
                   ? 'ลงนามเห็นชอบแล้ว'
                   : currentStatus === 'pending_advisor'
@@ -370,7 +370,7 @@ const ReportOutline: React.FC = () => {
               className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
                 isAdvisorApproved
                   ? 'bg-emerald-500 text-white'
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                  : 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
               }`}
             >
               {isAdvisorApproved ? <CheckCircle2 className="w-4 h-4" /> : '3'}
@@ -413,7 +413,7 @@ const ReportOutline: React.FC = () => {
           {/* Report Title */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-              หัวข้อรายงาน <span className="text-rose-500">*</span>
+              หัวข้อรายงาน <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <span className="text-xs text-gray-500 dark:text-gray-400 block">
               ต้องหารือกับพี่เลี้ยงก่อนว่าหัวข้อนี้ทำได้จริงและไม่ติดข้อมูลลับของสถานประกอบการ
@@ -424,14 +424,14 @@ const ReportOutline: React.FC = () => {
               value={reportTitle}
               onChange={(e) => setReportTitle(e.target.value)}
               placeholder="เช่น การพัฒนาระบบรายงานยอดผลิตรายวันเพื่อลดเวลาการสรุปข้อมูลของฝ่ายวางแผน"
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
             />
           </div>
 
           {/* Outline Text */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-              โครงร่างเนื้อหาพอสังเขป <span className="text-rose-500">*</span>
+              โครงร่างเนื้อหาพอสังเขป <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <span className="text-xs text-gray-500 dark:text-gray-400 block">
               เขียนเป็นหัวข้อย่อยว่ารายงานจะมีบทอะไรบ้าง แต่ละบทเล่าเรื่องอะไร — ไม่ต้องยาว อาจารย์ดูว่าขอบเขตพอเหมาะไหม
@@ -446,7 +446,7 @@ const ReportOutline: React.FC = () => {
 บทที่ 3 เครื่องมือและวิธีดำเนินงาน — การออกแบบระบบและการพัฒนา
 บทที่ 4 ผลการดำเนินงานและการทดสอบระบบ
 บทที่ 5 สรุปผล ปัญหา อุปสรรค และข้อเสนอแนะ`}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition font-mono leading-relaxed"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition font-mono leading-relaxed"
             />
           </div>
 

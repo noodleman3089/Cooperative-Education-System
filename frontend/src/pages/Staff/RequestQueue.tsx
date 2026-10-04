@@ -602,7 +602,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="ค้นหาชื่อนักศึกษา, รหัสนักศึกษา หรือสถานประกอบการ..."
-              className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-brand-blue focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-brand-blue focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
             />
           </div>
 
@@ -944,7 +944,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       ) : (
-                        <span className="text-xs text-amber-600 dark:text-amber-400">ยังไม่มีไฟล์</span>
+                        <span className="text-xs text-amber-700 dark:text-amber-400">ยังไม่มีไฟล์</span>
                       )}
                     </div>
                     <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
@@ -1120,7 +1120,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
                       <div>
                         <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                          เลขที่หนังสือออก <span className="text-red-500">*</span>
+                          เลขที่หนังสือออก <span className="text-red-600 dark:text-red-400">*</span>
                         </label>
                         <Input
                           value={officerForm.document_no}
@@ -1156,7 +1156,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                           variant="secondary"
                           size="sm"
                           onClick={() => setRejectingRequest(true)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/40"
                         >
                           ตีกลับให้แก้ไข
                         </Button>
@@ -1411,7 +1411,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
                   <label htmlFor="dispatch-document-no" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
-                    เลขที่หนังสือส่งตัว <span className="text-red-500">*</span>
+                    เลขที่หนังสือส่งตัว <span className="text-red-600 dark:text-red-400">*</span>
                   </label>
                   <Input
                     id="dispatch-document-no"
@@ -1423,7 +1423,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                 </div>
                 <div>
                   <label htmlFor="dispatch-end-date" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
-                    วันสิ้นสุดการปฏิบัติงาน <span className="text-red-500">*</span>
+                    วันสิ้นสุดการปฏิบัติงาน <span className="text-red-600 dark:text-red-400">*</span>
                   </label>
                   <Input
                     id="dispatch-end-date"

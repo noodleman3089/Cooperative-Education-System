@@ -70,7 +70,7 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
             className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
               activeTab === 'sso'
                 ? 'bg-white text-brand-navy shadow-sm dark:bg-gray-700 dark:text-white'
-                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
             }`}
           >
             <GoogleIcon className="h-3.5 w-3.5" />
@@ -82,7 +82,7 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
             className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
               activeTab === 'pwd'
                 ? 'bg-white text-brand-navy shadow-sm dark:bg-gray-700 dark:text-white'
-                : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
+                : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
             }`}
           >
             <KeyRound className="h-3.5 w-3.5 text-amber-500" />
@@ -107,12 +107,12 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
               <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-bold">เฉพาะผู้ที่เคยตั้งรหัสผ่านในระบบนี้แล้วเท่านั้น</p>
-                <p className="text-amber-700/90 dark:text-amber-300/80 leading-relaxed">
+                <p className="text-amber-800 dark:text-amber-300/80 leading-relaxed">
                   หากเข้าใช้งานเป็นครั้งแรก <strong>จะยังไม่มีรหัสผ่านในระบบ</strong> กรุณาเลือก{' '}
                   <button
                     type="button"
                     onClick={() => setActiveTab('sso')}
-                    className="font-bold underline text-brand-navy dark:text-blue-300 hover:text-blue-700"
+                    className="font-bold underline text-brand-navy dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200"
                   >
                     เข้าด้วย Google
                   </button>{' '}

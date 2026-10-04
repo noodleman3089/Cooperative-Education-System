@@ -383,7 +383,7 @@ const CompanyDirectory: React.FC = () => {
             </span>
           );
         }
-        return <span className="text-xs text-gray-400">ยังไม่เคยใช้</span>;
+        return <span className="text-xs text-gray-500 dark:text-gray-400">ยังไม่เคยใช้</span>;
       },
     },
     {
@@ -516,7 +516,7 @@ const CompanyDirectory: React.FC = () => {
           <div>
             <span className="text-xs text-red-700 dark:text-red-400 font-semibold">ไม่มีอีเมลผู้ประสานงาน</span>
             <h3 className="text-2xl font-black text-red-700 dark:text-red-400">{noEmailCount}</h3>
-            <span className="text-xs text-red-600/80 dark:text-red-400/80">ส่งแบบสำรวจไม่ได้</span>
+            <span className="text-xs text-red-600 dark:text-red-400">ส่งแบบสำรวจไม่ได้</span>
           </div>
         </div>
       </div>
@@ -559,7 +559,7 @@ const CompanyDirectory: React.FC = () => {
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="ค้นหาชื่อไทย ชื่ออังกฤษ หรือจังหวัด..."
-              className="w-full pl-11 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
+              className="w-full pl-11 pr-4 py-2 text-sm rounded-xl border border-gray-200 bg-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue dark:bg-gray-800 dark:border-gray-700 dark:text-white"
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">

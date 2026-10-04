@@ -117,7 +117,7 @@ const SetPassword: React.FC = () => {
                     setErrors(prev => ({ ...prev, confirmPassword: '' }));
                   }
                 }}
-                className={`w-full pl-10 pr-10 py-2.5 text-sm rounded-lg border focus:outline-none focus:ring-1 bg-white dark:bg-gray-800 dark:text-white transition-all ${
+                className={`w-full pl-10 pr-10 py-2.5 text-sm rounded-lg border focus:outline-none focus:ring-1 bg-white dark:bg-gray-800 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 transition-all ${
                   errors.password
                   ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
                   : 'border-gray-200 focus:border-brand-blue focus:ring-brand-blue/20 dark:border-gray-700'
@@ -131,7 +131,7 @@ const SetPassword: React.FC = () => {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
             </div>
-            {errors.password && <p className="mt-1 text-xs text-red-500">{errors.password}</p>}
+            {errors.password && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.password}</p>}
           </div>
 
           <div>
@@ -150,14 +150,14 @@ const SetPassword: React.FC = () => {
                   setConfirmPassword(e.target.value);
                   if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
                 }}
-                className={`w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border focus:outline-none focus:ring-1 bg-white dark:bg-gray-800 dark:text-white transition-all ${
+                className={`w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border focus:outline-none focus:ring-1 bg-white dark:bg-gray-800 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 transition-all ${
                   errors.confirmPassword
                   ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
                   : 'border-gray-200 focus:border-brand-blue focus:ring-brand-blue/20 dark:border-gray-700'
                 }`}
               />
             </div>
-            {errors.confirmPassword && <p className="mt-1 text-xs text-red-500">{errors.confirmPassword}</p>}
+            {errors.confirmPassword && <p className="mt-1 text-xs text-red-600 dark:text-red-400">{errors.confirmPassword}</p>}
           </div>
 
           <button

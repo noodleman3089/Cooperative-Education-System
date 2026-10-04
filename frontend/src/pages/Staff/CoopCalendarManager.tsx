@@ -395,7 +395,7 @@ const CoopCalendarManager: React.FC = () => {
                         value={draft.note}
                         onChange={(e) => setDraft(activity.activity_key, { note: e.target.value })}
                         placeholder="หมายเหตุ (ถ้ามี) เช่น ส่งที่ห้องงานสหกิจศึกษา..."
-                        className="w-full max-w-sm text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full max-w-sm text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                   )}
@@ -403,15 +403,15 @@ const CoopCalendarManager: React.FC = () => {
 
                 {/* 2. ชนิดวันที่ (col-span-1) */}
                 <div className="lg:col-span-1 text-[13px] text-gray-600 dark:text-gray-300 font-medium">
-                  <span className="lg:hidden text-xs text-gray-400 font-bold mr-1">ชนิด: </span>
+                  <span className="lg:hidden text-xs text-gray-600 dark:text-gray-400 font-bold mr-1">ชนิด: </span>
                   {activity.derived ? 'ช่วง (สืบค่า)' : KIND_LABEL[activity.date_kind] || activity.date_kind}
                 </div>
 
                 {/* 3. วันเริ่ม (col-span-2) */}
                 <div className="lg:col-span-2">
-                  <span className="lg:hidden text-xs text-gray-400 font-bold mr-1">วันเริ่ม: </span>
+                  <span className="lg:hidden text-xs text-gray-600 dark:text-gray-400 font-bold mr-1">วันเริ่ม: </span>
                   {activity.date_kind === 'deadline' ? (
-                    <span className="text-[12px] text-gray-400 dark:text-gray-500">— ไม่ต้องกรอก</span>
+                    <span className="text-[12px] text-gray-600 dark:text-gray-400">— ไม่ต้องกรอก</span>
                   ) : activity.derived ? (
                     <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300">
                       {activity.start_date || 'คำนวณอัตโนมัติ'}
@@ -430,9 +430,9 @@ const CoopCalendarManager: React.FC = () => {
 
                 {/* 4. วันสิ้นสุด (col-span-2) */}
                 <div className="lg:col-span-2">
-                  <span className="lg:hidden text-xs text-gray-400 font-bold mr-1">วันสิ้นสุด: </span>
+                  <span className="lg:hidden text-xs text-gray-600 dark:text-gray-400 font-bold mr-1">วันสิ้นสุด: </span>
                   {activity.date_kind === 'single' ? (
-                    <span className="text-[12px] text-gray-400 dark:text-gray-500">= วันเริ่ม</span>
+                    <span className="text-[12px] text-gray-600 dark:text-gray-400">= วันเริ่ม</span>
                   ) : activity.derived ? (
                     <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300">
                       {activity.end_date || 'คำนวณอัตโนมัติ'}
@@ -455,13 +455,13 @@ const CoopCalendarManager: React.FC = () => {
 
                 {/* 5. ผ่อนผันถึง (col-span-1) */}
                 <div className="lg:col-span-1">
-                  <span className="lg:hidden text-xs text-gray-400 font-bold mr-1">ผ่อนผัน: </span>
+                  <span className="lg:hidden text-xs text-gray-600 dark:text-gray-400 font-bold mr-1">ผ่อนผัน: </span>
                   {activity.derived ? (
                     <span className="hint text-[11px] text-gray-500 dark:text-gray-400">
                       ผ่อนผันที่แถว “วันสิ้นสุด”
                     </span>
                   ) : !activity.allow_late ? (
-                    <span className="text-[12px] text-gray-400 dark:text-gray-500">—</span>
+                    <span className="text-[12px] text-gray-600 dark:text-gray-400">—</span>
                   ) : (
                     <input
                       type="date"
@@ -536,7 +536,7 @@ const CoopCalendarManager: React.FC = () => {
 
           <div className="space-y-2">
             {(data?.custom_events ?? []).length === 0 ? (
-              <div className="text-xs text-gray-400 py-3 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
+              <div className="text-xs text-gray-600 dark:text-gray-400 py-3 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
                 ยังไม่มีรายการอิสระของคณะในภาคการศึกษานี้
               </div>
             ) : (
@@ -566,7 +566,7 @@ const CoopCalendarManager: React.FC = () => {
                         isCustom: true,
                       })
                     }
-                    className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded-lg transition-colors"
+                    className="text-xs text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 p-1.5 rounded-lg transition-colors"
                     title="ลบรายการ"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -588,11 +588,11 @@ const CoopCalendarManager: React.FC = () => {
                 placeholder="ชื่อกำหนดการ เช่น ปฐมนิเทศนักศึกษาสหกิจศึกษา..."
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label htmlFor="custom-start" className="block text-[11px] text-gray-500 mb-0.5">
+                  <label htmlFor="custom-start" className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">
                     วันเริ่ม
                   </label>
                   <input
@@ -604,7 +604,7 @@ const CoopCalendarManager: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label htmlFor="custom-end" className="block text-[11px] text-gray-500 mb-0.5">
+                  <label htmlFor="custom-end" className="block text-[11px] text-gray-500 dark:text-gray-400 mb-0.5">
                     วันสิ้นสุด
                   </label>
                   <input

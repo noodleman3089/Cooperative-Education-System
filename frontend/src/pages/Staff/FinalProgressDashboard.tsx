@@ -292,7 +292,7 @@ export const FinalProgressDashboard: React.FC = () => {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="ค้นหาชื่อ รหัสนักศึกษา หรือสถานประกอบการ"
-            className="w-full pl-10 pr-4 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 focus:outline-none focus:border-blue-500"
+            className="w-full pl-10 pr-4 py-2 text-xs bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-blue-500"
           />
         </div>
 
@@ -349,7 +349,7 @@ export const FinalProgressDashboard: React.FC = () => {
           onClick={loadData}
           title="ดึงข้อมูลใหม่"
           aria-label="ดึงข้อมูลใหม่"
-          className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 hover:text-blue-600"
+          className="p-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400"
         >
           <RefreshCw className="w-3.5 h-3.5" />
         </button>
@@ -369,42 +369,42 @@ export const FinalProgressDashboard: React.FC = () => {
                   <th className="p-3 font-bold text-center">
                     ที่พัก
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 06</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 06</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     แผนงาน
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 07</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 07</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     รายสัปดาห์
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 09</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 09</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     รายเดือน
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 10</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 10</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     โครงร่าง
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 11</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 11</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     นิเทศ
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 13</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 13</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     เล่มรายงาน
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">สหกิจ 14</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 14</span>
                   </th>
                   <th className="p-3 font-bold text-center">
                     ใบประเมิน
                     <br />
-                    <span className="font-normal text-[11px] text-gray-400">15 / 16</span>
+                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">15 / 16</span>
                   </th>
                   <th className="p-3 font-bold text-right w-[110px]"></th>
                 </tr>
@@ -412,7 +412,7 @@ export const FinalProgressDashboard: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-700 dark:text-gray-300">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-gray-400">
+                    <td colSpan={11} className="p-8 text-center text-gray-500 dark:text-gray-400">
                       ไม่พบข้อมูลนักศึกษาตรงตามเงื่อนไขที่เลือก
                     </td>
                   </tr>
@@ -466,7 +466,7 @@ export const FinalProgressDashboard: React.FC = () => {
                               <Check className="w-3 h-3 stroke-[3]" />
                             </span>
                           ) : (
-                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-600 dark:text-gray-400">
                               –
                             </span>
                           )}
@@ -487,14 +487,14 @@ export const FinalProgressDashboard: React.FC = () => {
 
                         {/* 5. สหกิจ 09 รายสัปดาห์ */}
                         <td className="p-3 text-center font-bold">
-                          <span className={complete ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}>
+                          <span className={complete ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}>
                             {complete ? '16 / 16' : '6 / 6'}
                           </span>
                         </td>
 
                         {/* 6. สหกิจ 10 รายเดือน */}
                         <td className="p-3 text-center font-bold">
-                          <span className={complete ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-600 dark:text-emerald-400'}>
+                          <span className={complete ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700 dark:text-emerald-400'}>
                             {complete ? '4 / 4' : '1 / 1'}
                           </span>
                         </td>
@@ -506,7 +506,7 @@ export const FinalProgressDashboard: React.FC = () => {
                               <Check className="w-3 h-3 stroke-[3]" />
                             </span>
                           ) : (
-                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-600 dark:text-gray-400">
                               –
                             </span>
                           )}
@@ -515,11 +515,11 @@ export const FinalProgressDashboard: React.FC = () => {
                         {/* 8. สหกิจ 13 นิเทศ */}
                         <td className="p-3 text-center">
                           {p.supervisionCompleted ? (
-                            <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                            <span className="text-emerald-700 dark:text-emerald-400 font-bold">
                               2 ครั้ง
                             </span>
                           ) : (
-                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-600 dark:text-gray-400">
                               –
                             </span>
                           )}
@@ -532,7 +532,7 @@ export const FinalProgressDashboard: React.FC = () => {
                               <Check className="w-3 h-3 stroke-[3]" />
                             </span>
                           ) : (
-                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-400">
+                            <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-600 dark:text-gray-400">
                               –
                             </span>
                           )}
@@ -542,7 +542,7 @@ export const FinalProgressDashboard: React.FC = () => {
                         <td className="p-3 text-center font-bold">
                           {evalText === 'ครบทั้ง 2 ใบ' ? (
                             <div>
-                              <span className="text-emerald-600 dark:text-emerald-400 block">
+                              <span className="text-emerald-700 dark:text-emerald-400 block">
                                 ครบทั้ง 2 ใบ
                               </span>
                               <span className="font-normal text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">
@@ -551,7 +551,7 @@ export const FinalProgressDashboard: React.FC = () => {
                             </div>
                           ) : evalText === 'มีแค่ 15' ? (
                             <div>
-                              <span className="text-amber-600 dark:text-amber-400 block">
+                              <span className="text-amber-700 dark:text-amber-400 block">
                                 มีแค่ 15
                               </span>
                               <span className="font-normal text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">
@@ -559,7 +559,7 @@ export const FinalProgressDashboard: React.FC = () => {
                               </span>
                             </div>
                           ) : (
-                            <span className="text-gray-400">–</span>
+                            <span className="text-gray-500 dark:text-gray-400">–</span>
                           )}
                         </td>
 

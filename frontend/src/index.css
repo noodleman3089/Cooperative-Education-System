@@ -95,6 +95,22 @@ body {
   color: #F3F4F6;
 }
 
+/* Placeholder floor. Tailwind v4 preflight paints placeholders as currentColor
+   at 50%, which lands near 3.4:1 on white — under the 4.5:1 the text needs.
+   Set once here instead of on every hand-written input. It sits in the base
+   layer so a `placeholder:text-*` utility on a specific field still wins. */
+@layer base {
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-gray-500);
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: var(--color-gray-400);
+  }
+}
+
 /* Shimmer Loading Effect Utility */
 .shimmer-placeholder {
   background: linear-gradient(90deg, #F3F4F6 25%, #E5E7EB 50%, #F3F4F6 75%);

@@ -87,7 +87,7 @@ const ForgotPassword: React.FC = () => {
                   placeholder="กรอกอีเมลของท่าน"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue/20 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all"
+                  className="w-full pl-10 pr-4 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue/20 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 transition-all"
                 />
               </div>
             </div>

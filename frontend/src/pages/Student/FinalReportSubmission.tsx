@@ -415,7 +415,7 @@ const FinalReportSubmission: React.FC = () => {
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700'
                 : isMentorApproved
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
             }`}
           >
             {isAdvisorApproved ? <CheckCircle2 className="w-5 h-5" /> : '2'}
@@ -589,7 +589,7 @@ const FinalReportSubmission: React.FC = () => {
                 ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 border border-green-300 dark:border-green-700'
                 : isAdvisorApproved
                 ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
             }`}
           >
             {isConfirmed ? <CheckCircle2 className="w-5 h-5" /> : '3'}

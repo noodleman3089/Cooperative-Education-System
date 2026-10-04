@@ -78,7 +78,7 @@ const STATUS_CONFIG: Record<
     text: 'ไม่มีกำหนดวันตายตัว',
     icon: Circle,
     badgeCls: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400 border border-gray-200 dark:border-gray-700',
-    dotCls: 'bg-gray-300 dark:bg-gray-600 ring-4 ring-gray-100 dark:ring-gray-800 text-gray-500',
+    dotCls: 'bg-gray-300 dark:bg-gray-600 ring-4 ring-gray-100 dark:ring-gray-800 text-gray-500 dark:text-gray-200',
     cardBorder: 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800',
     title: 'ยังไม่ได้กำหนดวัน',
   },

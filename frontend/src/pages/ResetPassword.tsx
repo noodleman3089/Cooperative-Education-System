@@ -21,7 +21,7 @@ const ResetPassword: React.FC = () => {
           <button
             type="button"
             onClick={() => navigate('/forgot-password')}
-            className="text-sm text-brand-blue hover:text-brand-navy font-medium dark:text-blue-400"
+            className="text-sm text-brand-blue hover:text-brand-navy font-medium dark:text-blue-400 dark:hover:text-blue-300"
           >
             ขอลิงก์ใหม่ทางอีเมล
           </button>

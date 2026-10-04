@@ -155,7 +155,7 @@ export const AppointmentAudit: React.FC = () => {
             อาจารย์ร่างวันเวลา คุณตรวจแล้วสั่งส่งหนังสือนัดหมายไปยังสถานประกอบการ · บริษัทตอบกลับผ่านลิงก์ในอีเมลโดยไม่ต้องล็อกอิน
           </p>
         </div>
-        <span className="text-xs text-gray-500 dark:text-gray-400">
+        <span className="text-xs text-gray-600 dark:text-gray-400">
           ภาคเรียนที่ 1/2570 · สัปดาห์ที่ 6 จาก 16
         </span>
       </div>
@@ -263,7 +263,7 @@ export const AppointmentAudit: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-700 dark:text-gray-300">
                 {appointments.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-8 text-center text-gray-400">
+                    <td colSpan={6} className="p-8 text-center text-gray-500 dark:text-gray-400">
                       ไม่มีรายการนัดหมายในขณะนี้
                     </td>
                   </tr>
@@ -301,14 +301,14 @@ export const AppointmentAudit: React.FC = () => {
                           <span className="font-medium text-gray-800 dark:text-gray-200">
                             {a.advisor_name || 'อาจารย์ที่ปรึกษา'}
                           </span>
-                          <span className="text-[11px] text-gray-400 block mt-0.5">ครั้งที่ {a.visit_number ?? 1}</span>
+                          <span className="text-[11px] text-gray-500 dark:text-gray-400 block mt-0.5">ครั้งที่ {a.visit_number ?? 1}</span>
                         </td>
 
                         {/* วันเวลาที่เสนอ */}
                         <td className="p-3.5">
                           {isReschedule ? (
                             <div>
-                              <s className="text-gray-400">
+                              <s className="text-gray-500 dark:text-gray-400">
                                 {formatThaiDate(a.appointment_date)} · {a.mentor_time || a.student_time || '10:00'} น.
                               </s>
                               <span className="block text-[#B45309] dark:text-amber-400 font-semibold mt-0.5">
@@ -417,7 +417,7 @@ export const AppointmentAudit: React.FC = () => {
                               ส่งซ้ำ
                             </button>
                           ) : (
-                            <span className="text-[11px] text-gray-400">เสร็จสิ้น</span>
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400">เสร็จสิ้น</span>
                           )}
                         </td>
                       </tr>
@@ -434,7 +434,7 @@ export const AppointmentAudit: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start pt-2">
         <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-2.5 shadow-xs">
           <div className="flex items-center gap-2 font-bold text-sm text-gray-900 dark:text-white">
-            <Phone className="w-4 h-4 text-blue-600" />
+            <Phone className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span>“บันทึกว่านัดทางโทรศัพท์แล้ว” คืออะไร</span>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
@@ -444,7 +444,7 @@ export const AppointmentAudit: React.FC = () => {
 
         <div className="p-5 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-2.5 shadow-xs">
           <div className="flex items-center gap-2 font-bold text-sm text-gray-900 dark:text-white">
-            <FileText className="w-4 h-4 text-blue-600" />
+            <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400" />
             <span>บันทึกข้อความขออนุมัติเดินทางไปราชการ</span>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
@@ -515,25 +515,25 @@ export const AppointmentAudit: React.FC = () => {
             <div className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2 bg-gray-50 dark:bg-gray-700/50 p-3 rounded-xl">
                 <div>
-                  <span className="text-gray-400 block">นักศึกษา</span>
+                  <span className="text-gray-600 dark:text-gray-400 block">นักศึกษา</span>
                   <span className="font-bold text-gray-800 dark:text-gray-100">
                     {viewingDraft.first_name} {viewingDraft.last_name} ({viewingDraft.student_code})
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">สถานประกอบการ</span>
+                  <span className="text-gray-600 dark:text-gray-400 block">สถานประกอบการ</span>
                   <span className="font-bold text-gray-800 dark:text-gray-100">
                     {viewingDraft.company_name}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">วันนัดหมายที่เสนอ</span>
+                  <span className="text-gray-600 dark:text-gray-400 block">วันนัดหมายที่เสนอ</span>
                   <span className="font-bold text-gray-800 dark:text-gray-100">
                     {formatThaiDate(viewingDraft.appointment_date)}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-400 block">เวลา</span>
+                  <span className="text-gray-600 dark:text-gray-400 block">เวลา</span>
                   <span className="font-bold text-gray-800 dark:text-gray-100">
                     {viewingDraft.mentor_time || viewingDraft.student_time || '10:00'} น.
                   </span>

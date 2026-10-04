@@ -326,7 +326,7 @@ export const ImportScreening: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'bulk'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           อัปโหลดไฟล์
@@ -337,7 +337,7 @@ export const ImportScreening: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'manual'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           เพิ่มทีละคน
@@ -348,7 +348,7 @@ export const ImportScreening: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'registry'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           รายชื่อในทะเบียนกลาง ({registeredStudents.length})
@@ -405,17 +405,17 @@ export const ImportScreening: React.FC = () => {
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700 text-gray-700 dark:text-gray-200">
                     <tr>
                       <td className="p-2.5 font-mono text-blue-600 dark:text-blue-400">student_code</td>
-                      <td className="p-2.5 font-semibold text-emerald-600">ใช่</td>
+                      <td className="p-2.5 font-semibold text-emerald-700 dark:text-emerald-400">ใช่</td>
                       <td className="p-2.5">รหัสนักศึกษา (12-1 หลัก)</td>
                     </tr>
                     <tr>
                       <td className="p-2.5 font-mono text-blue-600 dark:text-blue-400">cumulative_gpa</td>
-                      <td className="p-2.5 text-gray-500">ไม่</td>
+                      <td className="p-2.5 text-gray-500 dark:text-gray-400">ไม่</td>
                       <td className="p-2.5">ตัวเลข เช่น 3.24</td>
                     </tr>
                     <tr>
                       <td className="p-2.5 font-mono text-blue-600 dark:text-blue-400">email</td>
-                      <td className="p-2.5 text-gray-500">ไม่</td>
+                      <td className="p-2.5 text-gray-500 dark:text-gray-400">ไม่</td>
                       <td className="p-2.5">อีเมลมหาวิทยาลัย</td>
                     </tr>
                   </tbody>
@@ -514,7 +514,7 @@ export const ImportScreening: React.FC = () => {
                   </button>
                 </div>
               ) : (
-                <span className="hint text-[12px] text-gray-400">
+                <span className="hint text-[12px] text-gray-500 dark:text-gray-400">
                   ลากไฟล์หรือเลือกไฟล์ด้านซ้ายเพื่อตรวจทานก่อนบันทึก
                 </span>
               )}
@@ -618,7 +618,7 @@ export const ImportScreening: React.FC = () => {
                 placeholder="เช่น 256410100101-2"
                 value={manualStudentCode}
                 onChange={(e) => setManualStudentCode(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <div>
@@ -631,7 +631,7 @@ export const ImportScreening: React.FC = () => {
                 placeholder="เช่น 3.25"
                 value={manualStudentGpa}
                 onChange={(e) => setManualStudentGpa(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <div>
@@ -644,7 +644,7 @@ export const ImportScreening: React.FC = () => {
                 placeholder="student@rmutto.ac.th"
                 value={manualStudentEmail}
                 onChange={(e) => setManualStudentEmail(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <button

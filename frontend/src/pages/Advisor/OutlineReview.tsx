@@ -513,7 +513,7 @@ const OutlineReview: React.FC = () => {
                       onChange={(e) => setOutlineComment(e.target.value)}
                       rows={4}
                       placeholder="ระบุคำแนะนำ ข้อเสนอแนะ หรือจุดที่ต้องปรับปรุงแก้ไข..."
-                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue resize-none transition-colors"
+                      className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 focus:border-brand-blue resize-none transition-colors"
                     />
                   </div>
 

@@ -475,11 +475,11 @@ const MentorEvaluation: React.FC = () => {
               </p>
             </div>
             <div className="text-right">
-              <span className="block text-xs uppercase opacity-80">คะแนนที่ให้แล้ว</span>
+              <span className="block text-xs uppercase text-white">คะแนนที่ให้แล้ว</span>
               <span className="text-3xl font-bold">
                 {total} / {meta.maxTotal}
               </span>
-              <span className="block text-xs opacity-80">
+              <span className="block text-xs text-white">
                 {unscored.length > 0 ? `ยังเหลืออีก ${unscored.length} ข้อ` : 'ให้คะแนนครบทุกข้อแล้ว'}
               </span>
             </div>

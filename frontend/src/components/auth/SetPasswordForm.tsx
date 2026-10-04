@@ -38,7 +38,7 @@ export const SetPasswordForm: React.FC<SetPasswordFormProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const inputClass =
-    'w-full pl-10 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue/20 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white transition-all';
+    'w-full pl-10 py-2.5 text-sm rounded-lg border border-gray-200 focus:outline-none focus:border-brand-blue focus:ring-1 focus:ring-brand-blue/20 bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 transition-all';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

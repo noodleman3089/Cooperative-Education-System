@@ -625,7 +625,7 @@ const MentorCertify: React.FC = () => {
             <Clock className="w-3.5 h-3.5" />
             รอท่านรับรอง {pendingLogsCount} ใบ
           </span>
-          <span className="text-2xs text-gray-400 dark:text-gray-500">
+          <span className="text-2xs text-gray-500 dark:text-gray-400">
             รับรองย้อนหลังได้เสมอ ไม่มีกำหนดปิด
           </span>
         </div>
@@ -711,7 +711,7 @@ const MentorCertify: React.FC = () => {
                     type="button"
                     data-testid="certify-select-all"
                     onClick={handleSelectAllPending}
-                    className="text-xs font-semibold text-brand-blue hover:underline cursor-pointer"
+                    className="text-xs font-semibold text-brand-blue dark:text-blue-400 hover:underline cursor-pointer"
                   >
                     {selectedBatchIds.length === logs.filter((l) => l.status === 'submitted').length
                       ? 'ยกเลิกเลือกทั้งหมด'
@@ -1089,7 +1089,7 @@ const MentorCertify: React.FC = () => {
                               return (
                                 <th key={m.index} className="py-3.5 px-3 text-center w-24">
                                   {col.label}
-                                  <span className="block text-2xs font-normal text-gray-400">
+                                  <span className="block text-2xs font-normal text-gray-600 dark:text-gray-400">
                                     ({col.shortLabel})
                                   </span>
                                 </th>
@@ -1104,7 +1104,7 @@ const MentorCertify: React.FC = () => {
                               data-testid={`plan-topic-${t.seq}`}
                               className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20"
                             >
-                              <td className="py-3.5 px-4 text-center font-bold text-gray-500 text-xs">
+                              <td className="py-3.5 px-4 text-center font-bold text-gray-600 dark:text-gray-400 text-xs">
                                 {t.seq}
                               </td>
                               <td className="py-3.5 px-4 font-semibold text-gray-900 dark:text-gray-100">
@@ -1123,7 +1123,7 @@ const MentorCertify: React.FC = () => {
                                         <Check className="w-4 h-4 stroke-[3]" />
                                       </span>
                                     ) : (
-                                      <span className="text-gray-300 dark:text-gray-600 font-bold">–</span>
+                                      <span className="text-gray-300 dark:text-gray-400 font-bold">–</span>
                                     )}
                                   </td>
                                 );
@@ -1369,7 +1369,7 @@ const MentorCertify: React.FC = () => {
                   placeholder="เช่น เนื้อหาบทที่ 3 อธิบายการทำงานครบถ้วนดี ให้ปรับปรุงคำผิดในบทสรุปเล็กน้อย หรือ ผ่านในส่วนของสถานประกอบการ"
                 />
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                  <span className="text-2xs text-gray-400 dark:text-gray-500">
+                  <span className="text-2xs text-gray-500 dark:text-gray-400">
                     การตรวจร่างของพี่เลี้ยงเป็นการตรวจความถูกต้องเชิงการปฏิบัติงานและข้อมูลความลับของสถานประกอบการ
                   </span>
                   <div className="flex items-center gap-3">

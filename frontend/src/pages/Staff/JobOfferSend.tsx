@@ -598,7 +598,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
                         <p className={`text-xs mt-0.5 leading-relaxed ${whyColor}`}>
                           {group.why}
                           {group.order === 5 && !hasItems && (
-                            <span className="block text-gray-400 dark:text-gray-500 mt-0.5 font-normal">
+                            <span className="block text-gray-600 dark:text-gray-400 mt-0.5 font-normal">
                               รอบนี้ไม่มี แต่หน้าจอต้องรองรับไว้ เพราะเป็นค่าที่ API ส่งมาได้จริง
                             </span>
                           )}
@@ -670,7 +670,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
                                 {displayName}
                               </span>
                               {isNullName && (
-                                <span className="text-gray-400 dark:text-gray-500 text-[11px] shrink-0">
+                                <span className="text-gray-600 dark:text-gray-400 text-[11px] shrink-0">
                                   (ไม่มีชื่อให้แสดง)
                                 </span>
                               )}
@@ -799,7 +799,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
           {/* Guidelines Notice */}
           <div className="flex-1 border-t lg:border-t-0 lg:border-l border-gray-100 dark:border-gray-800 pt-4 lg:pt-0 lg:pl-6 space-y-1">
             <span className="text-xs font-bold text-gray-900 dark:text-white flex items-center gap-1.5">
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
               ลิงก์ตอบแบบสำรวจมีอายุ 24 ชั่วโมง
             </span>
             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
@@ -820,7 +820,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
             placeholder="ค้นหาชื่อสถานประกอบการ หรือจังหวัด"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm"
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:ring-2 focus:ring-blue-500 focus:outline-none shadow-sm"
           />
         </div>
 
@@ -930,7 +930,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
               {loadingRecipients ? (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-gray-500 dark:text-gray-400 text-xs">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600" />
+                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-blue-600 dark:text-blue-400" />
                     กำลังโหลดรายชื่อสถานประกอบการ...
                   </td>
                 </tr>
@@ -948,7 +948,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
                   const isNoEmail = c.status === 'no_email';
 
                   let rowBg = 'hover:bg-gray-50/70 dark:hover:bg-gray-800/40';
-                  if (isSent) rowBg = 'bg-gray-50/60 dark:bg-gray-800/30 text-gray-500';
+                  if (isSent) rowBg = 'bg-gray-50/60 dark:bg-gray-800/30 text-gray-500 dark:text-gray-400';
                   if (isNoEmail) rowBg = 'bg-red-50/40 dark:bg-red-950/20';
 
                   return (
@@ -1003,7 +1003,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
                         ) : c.history && (c.history.semesters_offered ?? 0) > 0 ? (
                           <span>เคยเปิด {c.history.semesters_offered} ภาค</span>
                         ) : (
-                          <span className="text-gray-400 dark:text-gray-500">ยังไม่เคยรับ</span>
+                          <span className="text-gray-500 dark:text-gray-400">ยังไม่เคยรับ</span>
                         )}
                       </td>
 
@@ -1187,7 +1187,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
               ระหว่างรอผล — คำขอเดียวที่ทำหลายรอบฝั่งเซิร์ฟเวอร์ อาจใช้เวลาหลายสิบวินาที
             </span>
             <div className="flex items-center gap-3">
-              <Loader2 className="w-6 h-6 text-blue-600 animate-spin shrink-0" />
+              <Loader2 className="w-6 h-6 text-blue-600 dark:text-blue-400 animate-spin shrink-0" />
               <div>
                 <h4 className="text-base font-bold text-gray-900 dark:text-white">กำลังส่งแบบสำรวจ…</h4>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
@@ -1201,7 +1201,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
               <div className="h-full bg-blue-600 w-2/5 rounded-full absolute animate-[indeterminate_1.5s_infinite_ease-in-out]" />
             </div>
 
-            <p className="text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">
+            <p className="text-[11px] text-gray-600 dark:text-gray-400 leading-relaxed">
               ⛔ แถบนี้เป็นแค่ตัวบอกว่าระบบยังทำงานอยู่{' '}
               <strong className="text-gray-600 dark:text-gray-400">ไม่ใช่ความคืบหน้าจริงรายบริษัท</strong>{' '}
               — API ตอบครั้งเดียวตอนจบ อย่าตั้งชื่อหรือใส่ตัวเลขที่สัญญาเกินกว่าที่ข้อมูลรู้

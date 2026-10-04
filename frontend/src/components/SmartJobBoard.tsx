@@ -542,7 +542,7 @@ const SmartJobBoard: React.FC = () => {
 
                   {/* Title & Category */}
                   <div>
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white line-clamp-1 group-hover:text-brand-blue">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white line-clamp-1 group-hover:text-brand-blue dark:group-hover:text-blue-400">
                       {job.title}
                     </h3>
                     <span className="text-xs text-brand-blue dark:text-blue-400 font-medium block mt-0.5">
@@ -622,7 +622,7 @@ const SmartJobBoard: React.FC = () => {
         </div>
       ) : (
         <div className="text-center py-14 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 text-gray-500 dark:text-gray-400 text-sm space-y-2">
-          <Search className="w-8 h-8 text-gray-300 dark:text-gray-600 mx-auto" />
+          <Search className="w-8 h-8 text-gray-300 dark:text-gray-500 mx-auto" />
           <p className="font-semibold text-gray-700 dark:text-gray-300">ไม่พบข้อมูลตำแหน่งงานที่สอดคล้องกับการค้นหา</p>
           <p className="text-xs text-gray-400">ลองเปลี่ยนคำค้นหา หรือเลือกตัวกรองจังหวัดและสายงานอื่น</p>
         </div>
@@ -700,7 +700,7 @@ const SmartJobBoard: React.FC = () => {
                       <span className="text-[11px] font-semibold text-gray-500 dark:text-gray-400 block uppercase">
                         โควตาคงเหลือ
                       </span>
-                      <span className={`text-xs font-bold block mt-0.5 ${isClosed ? 'text-red-600' : 'text-green-600 dark:text-green-400'}`}>
+                      <span className={`text-xs font-bold block mt-0.5 ${isClosed ? 'text-red-600' : 'text-green-700 dark:text-green-400'}`}>
                         {isClosed ? 'เต็มแล้ว' : `เหลือ ${remaining} จาก ${selectedJobForDetail.quota} คน`}
                       </span>
                     </div>

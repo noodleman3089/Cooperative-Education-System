@@ -653,7 +653,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-house-no"
               value={accommodation.house_no}
               onChange={(e) => setAccommodation({ ...accommodation, house_no: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น 88/12"
             />
           </div>
@@ -667,7 +667,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-building"
               value={accommodation.building}
               onChange={(e) => setAccommodation({ ...accommodation, building: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น หอพัก เจริญทรัพย์คอร์ท"
             />
           </div>
@@ -681,7 +681,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-room-no"
               value={accommodation.room_no}
               onChange={(e) => setAccommodation({ ...accommodation, room_no: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น 304"
             />
           </div>
@@ -695,7 +695,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-soi"
               value={accommodation.soi}
               onChange={(e) => setAccommodation({ ...accommodation, soi: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น สุขุมวิท 14"
             />
           </div>
@@ -709,7 +709,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-road"
               value={accommodation.road}
               onChange={(e) => setAccommodation({ ...accommodation, road: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น สุขุมวิท"
             />
           </div>
@@ -722,7 +722,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-province"
               value={accommodation.province}
               onChange={(e) => pickProvince(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
             >
               <option value="">-- เลือกจังหวัด --</option>
               {thaiAddress.map((p) => (
@@ -742,7 +742,7 @@ const AccommodationWorkPlan: React.FC = () => {
               disabled={!accommodation.province}
               value={accommodation.district}
               onChange={(e) => pickDistrict(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue disabled:opacity-50"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue disabled:opacity-50"
             >
               <option value="">-- เลือกอำเภอ/เขต --</option>
               {availableDistricts.map((d) => (
@@ -762,7 +762,7 @@ const AccommodationWorkPlan: React.FC = () => {
               disabled={!accommodation.district}
               value={accommodation.subdistrict}
               onChange={(e) => pickSubdistrict(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue disabled:opacity-50"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue disabled:opacity-50"
             >
               <option value="">-- เลือกตำบล/แขวง --</option>
               {availableSubdistricts.map((s) => (
@@ -782,7 +782,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-postal-code"
               value={accommodation.postal_code}
               onChange={(e) => setAccommodation({ ...accommodation, postal_code: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="เช่น 20110"
             />
           </div>
@@ -796,7 +796,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-phone"
               value={accommodation.phone}
               onChange={(e) => setAccommodation({ ...accommodation, phone: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="ไม่มีก็เว้นว่างได้"
             />
           </div>
@@ -810,7 +810,7 @@ const AccommodationWorkPlan: React.FC = () => {
               data-testid="acc-mobile"
               value={accommodation.mobile_phone}
               onChange={(e) => setAccommodation({ ...accommodation, mobile_phone: e.target.value })}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="08X-XXX-XXXX"
             />
           </div>
@@ -980,7 +980,7 @@ const AccommodationWorkPlan: React.FC = () => {
                         return (
                           <th key={m.index} className="py-3 px-2.5 text-center w-20">
                             {col.label}
-                            <span className="block text-2xs font-normal text-gray-400">({col.shortLabel})</span>
+                            <span className="block text-2xs font-normal text-gray-600 dark:text-gray-400">({col.shortLabel})</span>
                           </th>
                         );
                       })}
@@ -990,7 +990,7 @@ const AccommodationWorkPlan: React.FC = () => {
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                     {topics.map((t, idx) => (
                       <tr key={idx} data-testid={`plan-topic-row-${idx}`} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20">
-                        <td className="py-2.5 px-4 text-center font-bold text-gray-500 text-xs">{idx + 1}</td>
+                        <td className="py-2.5 px-4 text-center font-bold text-gray-600 dark:text-gray-400 text-xs">{idx + 1}</td>
                         <td className="py-2.5 px-4">
                           <input
                             type="text"
@@ -998,7 +998,7 @@ const AccommodationWorkPlan: React.FC = () => {
                             value={t.topic}
                             onChange={(e) => updateTopicText(idx, e.target.value)}
                             placeholder="เช่น ออกแบบและพัฒนาหน้าจอรายงานยอดผลิตรายวัน"
-                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
                           />
                         </td>
                         {planMonths.map((m) => {
@@ -1036,7 +1036,7 @@ const AccommodationWorkPlan: React.FC = () => {
                     ))}
                     {topics.length === 0 && (
                       <tr>
-                        <td colSpan={planMonths.length + 3} className="py-8 text-center text-xs text-gray-400 dark:text-gray-500">
+                        <td colSpan={planMonths.length + 3} className="py-8 text-center text-xs text-gray-500 dark:text-gray-400">
                           ยังไม่มีหัวข้องาน — กด &quot;เพิ่มหัวข้องาน&quot; ด้านล่างเพื่อเริ่มกรอก
                         </td>
                       </tr>
@@ -1079,7 +1079,7 @@ const AccommodationWorkPlan: React.FC = () => {
                         value={w.tasks || ''}
                         onChange={(e) => updateWeeklyTask(w.week_number, e.target.value)}
                         placeholder="ระบุหัวข้องานรายสัปดาห์ (ไม่บังคับ)"
-                        className="sm:col-span-9 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                        className="sm:col-span-9 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
                       />
                     </div>
                   ))}

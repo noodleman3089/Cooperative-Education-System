@@ -220,7 +220,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
           </p>
         </div>
         {todayStr && (
-          <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
+          <span className="text-xs text-gray-600 dark:text-gray-400 shrink-0">
             วันนี้ {todayStr}
           </span>
         )}
@@ -266,7 +266,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   className={`text-3xl font-extrabold leading-none ${
                     (tiles.outline?.count ?? 0) > 0
                       ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : 'text-gray-500 dark:text-gray-400'
                   }`}
                 >
                   {tiles.outline?.count ?? 0}
@@ -305,7 +305,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   className={`text-3xl font-extrabold leading-none ${
                     (tiles.report?.count ?? 0) > 0
                       ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : 'text-gray-500 dark:text-gray-400'
                   }`}
                 >
                   {tiles.report?.count ?? 0}
@@ -344,7 +344,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   className={`text-3xl font-extrabold leading-none ${
                     (tiles.confirmation?.count ?? 0) > 0
                       ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : 'text-gray-500 dark:text-gray-400'
                   }`}
                 >
                   {tiles.confirmation?.count ?? 0}
@@ -385,7 +385,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   className={`text-3xl font-extrabold leading-none ${
                     (tiles.reschedule?.count ?? 0) > 0
                       ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : 'text-gray-500 dark:text-gray-400'
                   }`}
                 >
                   {tiles.reschedule?.count ?? 0}
@@ -424,7 +424,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   className={`text-3xl font-extrabold leading-none ${
                     (tiles.unrecorded_visit?.count ?? 0) > 0
                       ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-400 dark:text-gray-500'
+                      : 'text-gray-500 dark:text-gray-400'
                   }`}
                 >
                   {tiles.unrecorded_visit?.count ?? 0}
@@ -457,7 +457,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   {tiles.no_appointment?.count ?? 0}
                 </span>
               </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+              <span className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">
                 ข้อมูลประกอบ ไม่ใช่งานค้าง · เปิดดูที่นัดหมายนิเทศ
               </span>
             </button>

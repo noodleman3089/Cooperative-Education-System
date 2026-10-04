@@ -364,7 +364,7 @@ const SupervisionTracking: React.FC = () => {
             </span>
           ))
         ) : (
-          <span className="text-xs text-gray-400 dark:text-gray-500">ยังไม่มีข้อมูลจังหวัดของสถานประกอบการ</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">ยังไม่มีข้อมูลจังหวัดของสถานประกอบการ</span>
         )}
       </div>
 
@@ -429,7 +429,7 @@ const SupervisionTracking: React.FC = () => {
                       {student.mentor_name ? (
                         <span>พี่เลี้ยง: {student.mentor_name} {student.mentor_phone ? `· ${student.mentor_phone}` : ''}</span>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">ยังไม่ระบุพี่เลี้ยง</span>
+                        <span className="text-gray-500 dark:text-gray-400">ยังไม่ระบุพี่เลี้ยง</span>
                       )}
                     </div>
                     <div>
@@ -449,7 +449,7 @@ const SupervisionTracking: React.FC = () => {
                           )}
                         </span>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">ยังไม่ได้ปักหมุดที่พัก</span>
+                        <span className="text-gray-500 dark:text-gray-400">ยังไม่ได้ปักหมุดที่พัก</span>
                       )}
                     </div>
                     <div>
@@ -459,7 +459,7 @@ const SupervisionTracking: React.FC = () => {
                           {student.emergency_phone ? ` · ${student.emergency_phone}` : ''}
                         </span>
                       ) : (
-                        <span className="text-gray-400 dark:text-gray-500">ยังไม่มีผู้ติดต่อฉุกเฉิน</span>
+                        <span className="text-gray-500 dark:text-gray-400">ยังไม่มีผู้ติดต่อฉุกเฉิน</span>
                       )}
                     </div>
                   </div>
@@ -495,7 +495,7 @@ const SupervisionTracking: React.FC = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div className="p-3 border border-gray-200 dark:border-gray-700 rounded-xl">
                               <span className="text-xs font-bold text-gray-500 block">ที่คุณเสนอ</span>
-                              <span className="text-xs text-gray-400 dark:text-gray-500 line-through block mt-0.5">
+                              <span className="text-xs text-gray-500 dark:text-gray-400 line-through block mt-0.5">
                                 {formatThaiDate(visit1.appointment_date)} · พบพี่เลี้ยง {visit1.mentor_time || '-'}
                               </span>
                             </div>
@@ -576,7 +576,7 @@ const SupervisionTracking: React.FC = () => {
                           )}
                         </div>
 
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
                           บันทึก สหกิจ 13 ได้ตั้งแต่วันนัด · ไม่บังคับให้มีนัดในระบบก่อน
                         </span>
                       </div>
@@ -628,7 +628,7 @@ const SupervisionTracking: React.FC = () => {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <div className="p-3 border border-gray-200 dark:border-gray-700 rounded-xl">
                               <span className="text-xs font-bold text-gray-500 block">ที่คุณเสนอ</span>
-                              <span className="text-xs text-gray-400 dark:text-gray-500 line-through block mt-0.5">
+                              <span className="text-xs text-gray-500 dark:text-gray-400 line-through block mt-0.5">
                                 {formatThaiDate(visit2.appointment_date)} · พบพี่เลี้ยง {visit2.mentor_time || '-'}
                               </span>
                             </div>
@@ -709,7 +709,7 @@ const SupervisionTracking: React.FC = () => {
                           )}
                         </div>
 
-                        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                        <span className="text-[11px] text-gray-500 dark:text-gray-400">
                           บันทึก สหกิจ 13 ได้ตั้งแต่วันนัด · ไม่บังคับให้มีนัดในระบบก่อน
                         </span>
                       </div>
@@ -734,7 +734,7 @@ const SupervisionTracking: React.FC = () => {
                           </>
                         ) : (
                           <>
-                            <span className="text-xs text-gray-400 dark:text-gray-500">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
                               นัดครั้งที่ 2 ได้เมื่อครั้งที่ 1 ได้รับการยืนยันแล้ว
                             </span>
                             <div>
@@ -869,7 +869,7 @@ const SupervisionTracking: React.FC = () => {
                                 {p.tasks}
                               </span>
                             </div>
-                            <span className="text-[11px] text-gray-400 self-start whitespace-nowrap">
+                            <span className="text-[11px] text-gray-500 dark:text-gray-400 self-start whitespace-nowrap">
                               {p.start_date && p.end_date
                                 ? `${new Date(p.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} - ${new Date(p.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}`
                                 : ''}
@@ -936,7 +936,7 @@ const SupervisionTracking: React.FC = () => {
         {/* Travel Candidates Table / List */}
         <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden divide-y divide-gray-100 dark:divide-gray-800">
           {travelCandidates.length === 0 ? (
-            <div className="p-4 text-center text-xs text-gray-400 dark:text-gray-500">
+            <div className="p-4 text-center text-xs text-gray-500 dark:text-gray-400">
               ยังไม่มีนัดครั้งที่ {travelVisit} ที่ยืนยันแล้ว
             </div>
           ) : (
@@ -949,7 +949,7 @@ const SupervisionTracking: React.FC = () => {
                   key={app.appointment_id}
                   className={`flex items-center gap-3 p-3 text-xs transition-colors ${
                     !isConfirmed
-                      ? 'bg-gray-50/60 dark:bg-gray-800/40 text-gray-400 dark:text-gray-500'
+                      ? 'bg-gray-50/60 dark:bg-gray-800/40 text-gray-600 dark:text-gray-400'
                       : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/60 text-gray-900 dark:text-white'
                   }`}
                 >
@@ -969,7 +969,7 @@ const SupervisionTracking: React.FC = () => {
                       {formatThaiDate(app.appointment_date)}
                     </span>
                   ) : (
-                    <span className="text-gray-400 dark:text-gray-500 shrink-0">
+                    <span className="text-gray-600 dark:text-gray-400 shrink-0">
                       ยังไม่ได้ยืนยันวันนัด
                     </span>
                   )}
@@ -995,7 +995,7 @@ const SupervisionTracking: React.FC = () => {
             พิมพ์บันทึกข้อความ ({selectedTravelIds.length} คน)
           </button>
         </div>
-        <span className="text-[11px] text-gray-400 dark:text-gray-500">
+        <span className="text-[11px] text-gray-500 dark:text-gray-400">
           เลขที่หนังสือ ลายเซ็น และความเห็นคณบดีเว้นว่างให้กรอกนอกระบบ · ไม่มีสถานะ “รออนุมัติ” ในระบบ
         </span>
       </div>

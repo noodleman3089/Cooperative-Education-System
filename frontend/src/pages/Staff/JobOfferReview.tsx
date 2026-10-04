@@ -463,7 +463,7 @@ export const JobOfferReview: React.FC = () => {
               onClick={() => setStatusFilter('declined')}
               className={`px-2 py-0.5 rounded-full font-semibold transition-colors ${
                 statusFilter === 'declined'
-                  ? 'bg-amber-600 text-white'
+                  ? 'bg-amber-700 text-white'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
@@ -473,7 +473,7 @@ export const JobOfferReview: React.FC = () => {
               onClick={() => setStatusFilter('reviewed')}
               className={`px-2 py-0.5 rounded-full font-semibold transition-colors ${
                 statusFilter === 'reviewed'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-700 text-white'
                   : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
               }`}
             >
@@ -1142,7 +1142,7 @@ export const JobOfferReview: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  เหตุผลที่ไม่เปิดรับตำแหน่งนี้ <span className="text-red-500">*</span>
+                  เหตุผลที่ไม่เปิดรับตำแหน่งนี้ <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <Textarea
                   rows={3}

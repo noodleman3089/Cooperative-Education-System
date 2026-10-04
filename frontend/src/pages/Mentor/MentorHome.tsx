@@ -272,7 +272,7 @@ const MentorHome: React.FC = () => {
                       <div className="text-sm sm:text-base font-bold text-gray-900 dark:text-white flex flex-wrap items-center gap-1.5">
                         <span>{item.label}</span>
                         <span className="text-gray-400 dark:text-gray-500">·</span>
-                        <span className="text-brand-blue font-semibold">{item.student_name}</span>
+                        <span className="text-brand-blue dark:text-blue-400 font-semibold">{item.student_name}</span>
                       </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                         {item.kind === 'work_plan' &&
@@ -383,7 +383,7 @@ const MentorHome: React.FC = () => {
                           const isWaiting = wNum > certifiedCount && wNum <= submittedCount;
                           const isNow = wNum === weekCurrent;
 
-                          let boxClass = 'bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-600 border-gray-200 dark:border-gray-700';
+                          let boxClass = 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700';
                           if (isCertified) {
                             boxClass = 'bg-green-50 text-green-700 dark:bg-green-950/40 dark:text-green-400 border-green-300 dark:border-green-800 font-bold';
                           } else if (isWaiting) {

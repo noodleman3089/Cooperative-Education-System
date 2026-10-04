@@ -197,7 +197,7 @@ const EvaluationResult: React.FC = () => {
                 ยังไม่ได้ส่งแบบประเมิน สหกิจ 15 และ สหกิจ 16
               </p>
             </div>
-            <p className="text-xs text-amber-700/90 dark:text-amber-400 leading-relaxed">
+            <p className="text-xs text-amber-800 dark:text-amber-400 leading-relaxed">
               ถ้าเลยกำหนดไปมากแล้ว ติดต่อเจ้าหน้าที่งานสหกิจศึกษาประจำคณะให้ช่วยตามได้ —{' '}
               <strong>อย่าไปกดดันพี่เลี้ยงเอง เพราะแบบประเมินต้องส่งเป็นความลับ</strong>
             </p>
@@ -260,7 +260,7 @@ const EvaluationResult: React.FC = () => {
             <p className="text-xs text-gray-500 dark:text-gray-400">
               18 หัวข้อ {data?.mentor_name ? `· ประเมินโดย คุณ${data.mentor_name}` : ''}
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {s15?.submitted_at
                 ? `ส่งเข้าระบบ ${formatThaiDate(s15.submitted_at)}`
                 : lockedReason
@@ -294,7 +294,7 @@ const EvaluationResult: React.FC = () => {
             <p className="text-xs text-gray-500 dark:text-gray-400">
               14 หัวข้อ {data?.mentor_name ? `· ประเมินโดย คุณ${data.mentor_name}` : ''}
             </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               {s16?.submitted_at
                 ? `ส่งเข้าระบบ ${formatThaiDate(s16.submitted_at)}`
                 : lockedReason
@@ -356,7 +356,7 @@ const EvaluationResult: React.FC = () => {
                           data-testid={`eval-item-${it.key}`}
                           className="grid grid-cols-[28px_1fr_90px_42px] gap-2.5 items-center py-1.5 border-b border-gray-50 dark:border-gray-800 last:border-0 text-xs"
                         >
-                          <span className="font-semibold text-gray-400 dark:text-gray-500">
+                          <span className="font-semibold text-gray-500 dark:text-gray-400">
                             {it.no}
                           </span>
                           <span className="text-gray-700 dark:text-gray-300 truncate" title={it.label}>
@@ -458,7 +458,7 @@ const EvaluationResult: React.FC = () => {
                   data-testid={`eval-item-${it.key}`}
                   className="grid grid-cols-[28px_1fr_90px_42px] gap-2.5 items-center py-2 border-b border-gray-50 dark:border-gray-800 text-xs"
                 >
-                  <span className="font-semibold text-gray-400 dark:text-gray-500">
+                  <span className="font-semibold text-gray-500 dark:text-gray-400">
                     {it.no}
                   </span>
                   <span className="text-gray-700 dark:text-gray-300 truncate" title={it.label}>

@@ -585,7 +585,7 @@ const WeeklyLog: React.FC = () => {
             const isWaiting = log?.status === 'submitted' && !log.mentor_certified_at;
             const isSelected = selectedWeek === wNum;
 
-            let badgeClass = 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-400 dark:text-gray-500';
+            let badgeClass = 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400';
             if (isCertified) {
               badgeClass = 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300';
             } else if (isWaiting) {
@@ -755,7 +755,7 @@ const WeeklyLog: React.FC = () => {
                   >
                     <div className="flex sm:flex-col gap-1.5 sm:gap-0">
                       <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{day.weekday}</span>
-                      <span className="text-xs text-gray-400 dark:text-gray-500">{day.label}</span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">{day.label}</span>
                     </div>
                     <input
                       type="text"
@@ -764,15 +764,15 @@ const WeeklyLog: React.FC = () => {
                       disabled={day.isFuture}
                       onChange={(e) => updateDailyField(day.logDate, e.target.value)}
                       placeholder={day.isFuture ? 'ยังไม่ถึงวัน' : 'วันนี้ทำอะไรบ้าง — เขียนสั้นๆ พอให้พี่เลี้ยงตามได้'}
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition disabled:bg-gray-50 dark:disabled:bg-gray-900"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition disabled:bg-gray-50 dark:disabled:bg-gray-900"
                     />
                     <span
                       className={`justify-self-start px-3 py-1 rounded-full text-xs font-bold border ${
                         day.isFuture
-                          ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500'
+                          ? 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
                           : day.workDetail.trim()
                           ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
-                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-400 dark:text-gray-500'
+                          : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
                       }`}
                     >
                       {day.isFuture ? 'ยังไม่ถึง' : day.workDetail.trim() ? 'กรอกแล้ว' : 'ยังว่าง'}
@@ -934,7 +934,7 @@ const WeeklyLog: React.FC = () => {
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      ไฟล์บันทึกประจำสัปดาห์ที่ {selectedWeek} <span className="text-rose-500">*</span>
+                      ไฟล์บันทึกประจำสัปดาห์ที่ {selectedWeek} <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-6 bg-gray-50/50 dark:bg-gray-900/20 text-center space-y-2 relative">
                       <input
@@ -991,7 +991,7 @@ const WeeklyLog: React.FC = () => {
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      สรุปสั้นๆ ว่าสัปดาห์นี้ทำอะไร <span className="text-rose-500">*</span>
+                      สรุปสั้นๆ ว่าสัปดาห์นี้ทำอะไร <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <span className="text-xs text-gray-500 dark:text-gray-400 block">
                       1–2 บรรทัดพอ — ระบบอ่านไฟล์แนบไม่ได้ ถ้าไม่มีบรรทัดนี้อาจารย์นิเทศกับเจ้าหน้าที่จะเห็นแค่ชื่อไฟล์
@@ -1002,7 +1002,7 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.summary}
                       onChange={(e) => updateWeeklyField('summary', e.target.value)}
                       placeholder="สรุปงานสำคัญและผลลัพธ์ในสัปดาห์นี้..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
                 </div>
@@ -1011,7 +1011,7 @@ const WeeklyLog: React.FC = () => {
                 <div className="space-y-5">
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      1 · งานที่ได้รับมอบหมาย <span className="text-rose-500">*</span>
+                      1 · งานที่ได้รับมอบหมาย <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <span className="text-xs text-gray-500 dark:text-gray-400 block">
                       สัปดาห์นี้พี่เลี้ยงมอบหมายงานอะไรมาบ้าง
@@ -1022,13 +1022,13 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.assigned_work}
                       onChange={(e) => updateWeeklyField('assigned_work', e.target.value)}
                       placeholder="เช่น พัฒนาหน้าจอรายงานยอดผลิตรายวันให้ฝ่ายวางแผน..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      2 · วิธีการและขั้นตอนการปฏิบัติงาน <span className="text-rose-500">*</span>
+                      2 · วิธีการและขั้นตอนการปฏิบัติงาน <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <span className="text-xs text-gray-500 dark:text-gray-400 block">
                       ทำอย่างไร เริ่มจากอะไรไปจบที่อะไร
@@ -1039,13 +1039,13 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.methods}
                       onChange={(e) => updateWeeklyField('methods', e.target.value)}
                       placeholder="เช่น เก็บความต้องการจากฝ่ายวางแผน 1 รอบ แล้วเขียนคิวรีดึงยอด..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      3 · เครื่องมือและอุปกรณ์ที่ใช้ <span className="text-rose-500">*</span>
+                      3 · เครื่องมือและอุปกรณ์ที่ใช้ <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <textarea
                       data-testid="weekly-tools"
@@ -1053,13 +1053,13 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.tools_used}
                       onChange={(e) => updateWeeklyField('tools_used', e.target.value)}
                       placeholder="เช่น React, PostgreSQL, Git, เครื่องมือทดสอบในแผนก..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      4 · ผลการปฏิบัติงาน <span className="text-rose-500">*</span>
+                      4 · ผลการปฏิบัติงาน <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <textarea
                       data-testid="weekly-achievements"
@@ -1067,7 +1067,7 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.achievements}
                       onChange={(e) => updateWeeklyField('achievements', e.target.value)}
                       placeholder="เช่น หน้าจอใช้งานได้จริง ลดเวลาทำสรุปยอดลงประมาณวันละ 30 นาที..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
 
@@ -1084,7 +1084,7 @@ const WeeklyLog: React.FC = () => {
                       value={currentWeeklyValues.problems}
                       onChange={(e) => updateWeeklyField('problems', e.target.value)}
                       placeholder="เช่น ข้อมูลบางกะหาย ต้องรอฝ่ายไอทีเปิดสิทธิ์ให้..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
                 </div>
@@ -1214,7 +1214,7 @@ const WeeklyLog: React.FC = () => {
                 <div className="space-y-5">
                   <div className="space-y-2">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      ไฟล์บันทึกประจำเดือน {monthsList[selectedMonthIndex]?.label} <span className="text-rose-500">*</span>
+                      ไฟล์บันทึกประจำเดือน {monthsList[selectedMonthIndex]?.label} <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-2xl p-6 bg-gray-50/50 dark:bg-gray-900/20 text-center space-y-2 relative">
                       <input
@@ -1271,7 +1271,7 @@ const WeeklyLog: React.FC = () => {
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      สรุปสั้นๆ ว่าเดือนนี้ทำอะไร <span className="text-rose-500">*</span>
+                      สรุปสั้นๆ ว่าเดือนนี้ทำอะไร <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <textarea
                       data-testid="monthly-summary"
@@ -1279,7 +1279,7 @@ const WeeklyLog: React.FC = () => {
                       value={currentMonthlyValues.summary}
                       onChange={(e) => updateMonthlyField('summary', e.target.value)}
                       placeholder="สรุปภาพรวมงานในเดือนนี้ 1-2 บรรทัด..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
                 </div>
@@ -1288,7 +1288,7 @@ const WeeklyLog: React.FC = () => {
                 <div className="space-y-5">
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      1 · สรุปผลการปฏิบัติงานในเดือนนี้ <span className="text-rose-500">*</span>
+                      1 · สรุปผลการปฏิบัติงานในเดือนนี้ <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <span className="text-xs text-gray-500 dark:text-gray-400 block">
                       งานหลักที่ทำไปทั้งเดือน และผลที่เกิดขึ้นจริง
@@ -1299,13 +1299,13 @@ const WeeklyLog: React.FC = () => {
                       value={currentMonthlyValues.work_summary}
                       onChange={(e) => updateMonthlyField('work_summary', e.target.value)}
                       placeholder="เช่น เดือนนี้รับผิดชอบงานพัฒนาหน้าจอรายงานยอดผลิตจนใช้งานได้จริง..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-sm font-semibold text-gray-900 dark:text-white">
-                      2 · ประสิทธิภาพและประสิทธิผลของงานที่ปฏิบัติ <span className="text-rose-500">*</span>
+                      2 · ประสิทธิภาพและประสิทธิผลของงานที่ปฏิบัติ <span className="text-red-600 dark:text-red-400">*</span>
                     </label>
                     <span className="text-xs text-gray-500 dark:text-gray-400 block">
                       งานที่ทำช่วยหน่วยงานได้จริงแค่ไหน วัดจากอะไร
@@ -1316,7 +1316,7 @@ const WeeklyLog: React.FC = () => {
                       value={currentMonthlyValues.effectiveness}
                       onChange={(e) => updateMonthlyField('effectiveness', e.target.value)}
                       placeholder="เช่น ฝ่ายวางแผนเลิกทำสรุปยอดด้วยมือ ลดเวลาลงประมาณวันละ 30 นาที..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none focus:border-blue-500 transition"
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition"
                     />
                   </div>
                 </div>

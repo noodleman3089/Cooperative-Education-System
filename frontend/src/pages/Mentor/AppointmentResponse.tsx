@@ -160,7 +160,7 @@ const AppointmentResponse: React.FC = () => {
         <div className="bg-brand-blue p-6 text-center text-white">
           <Calendar className="w-10 h-10 mx-auto mb-3 opacity-90" />
           <h1 className="text-xl font-bold">ตอบรับการนัดหมายนิเทศนักศึกษา</h1>
-          <p className="text-sm opacity-80 mt-1">มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก</p>
+          <p className="text-sm text-white mt-1">มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก</p>
         </div>
 
         <div className="p-8">

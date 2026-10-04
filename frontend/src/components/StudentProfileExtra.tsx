@@ -151,7 +151,7 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
                 <button
                   type="button"
                   onClick={() => handleRemoveLanguage(index)}
-                  className="text-red-500 hover:text-red-700 px-2 flex items-center justify-center text-sm font-bold"
+                  className="text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 px-2 flex items-center justify-center text-sm font-bold"
                 >
                   ลบ
                 </button>
@@ -162,7 +162,7 @@ const StudentProfileExtra: React.FC<StudentProfileExtraProps> = ({ profile, onPr
           <button
             type="button"
             onClick={handleAddLanguage}
-            className="text-xs font-bold text-brand-blue hover:text-blue-700 flex items-center gap-1 dark:text-blue-400"
+            className="text-xs font-bold text-brand-blue hover:text-blue-700 flex items-center gap-1 dark:text-blue-400 dark:hover:text-blue-300"
           >
             + เพิ่มทักษะภาษา
           </button>

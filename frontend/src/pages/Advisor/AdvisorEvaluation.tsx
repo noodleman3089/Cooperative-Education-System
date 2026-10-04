@@ -218,7 +218,7 @@ const AdvisorEvaluation: React.FC = () => {
 
       {students.length === 0 ? (
         <div className="card p-10 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl text-center space-y-2">
-          <span className="inline-block text-xs font-bold text-purple-700 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-lg px-2.5 py-1">
+          <span className="inline-block text-xs font-bold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-lg px-2.5 py-1">
             ยังไม่มีนักศึกษาในที่ปรึกษา
           </span>
           <h3 className="font-bold text-base text-gray-900 dark:text-white">
@@ -261,11 +261,11 @@ const AdvisorEvaluation: React.FC = () => {
                           <span className="font-bold text-gray-900 dark:text-white block text-[15px]">
                             {std.studentName}
                           </span>
-                          <span className="text-xs text-gray-500 dark:text-gray-400 block mt-0.5">
+                          <span className="text-xs text-gray-600 dark:text-gray-400 block mt-0.5">
                             {std.studentCode}
                           </span>
                           {std.companyName && (
-                            <span className="text-xs text-gray-400 dark:text-gray-500 block mt-0.5 truncate max-w-xs">
+                            <span className="text-xs text-gray-600 dark:text-gray-400 block mt-0.5 truncate max-w-xs">
                               {std.companyName}
                             </span>
                           )}
@@ -404,7 +404,7 @@ const AdvisorEvaluation: React.FC = () => {
                       เปิดเล่มรายงาน (PDF)
                     </a>
                   ) : (
-                    <span className="text-xs text-gray-400 dark:text-gray-500 shrink-0">
+                    <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
                       ยังไม่มีไฟล์รายงาน
                     </span>
                   )}
@@ -444,7 +444,7 @@ const AdvisorEvaluation: React.FC = () => {
                     onChange={(e) => setRejectionComment(e.target.value)}
                     disabled={selectedStudent.finalReportStatus !== 'submitted'}
                     placeholder="ระบุข้อเสนอแนะ หรือสิ่งที่นักศึกษาต้องนำกลับไปปรับปรุงแก้ไข..."
-                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-gray-100 dark:disabled:bg-gray-800/40 disabled:text-gray-500"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white resize-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-blue disabled:bg-gray-100 dark:disabled:bg-gray-800/40 disabled:text-gray-500"
                   />
                 </label>
 
@@ -565,7 +565,7 @@ const AdvisorEvaluation: React.FC = () => {
                           สหกิจ 15: {selectedStudent.sahatkit15Score}/100
                         </span>
                       ) : (
-                        <span className="text-xs text-amber-600 dark:text-amber-400 block mt-1">
+                        <span className="text-xs text-amber-700 dark:text-amber-400 block mt-1">
                           ยังไม่ส่งผลประเมิน
                         </span>
                       )}
@@ -580,7 +580,7 @@ const AdvisorEvaluation: React.FC = () => {
                           สหกิจ 16: {selectedStudent.sahatkit16Score}/70
                         </span>
                       ) : (
-                        <span className="text-xs text-amber-600 dark:text-amber-400 block mt-1">
+                        <span className="text-xs text-amber-700 dark:text-amber-400 block mt-1">
                           ยังไม่ส่งผลประเมิน
                         </span>
                       )}

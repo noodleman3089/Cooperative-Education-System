@@ -337,7 +337,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   ref={autocompleteInputRef}
                   type="text"
                   placeholder="พิมพ์ชื่อบริษัท ห้างร้าน หรือค้นหาพิกัดบนแผนที่..."
-                  className="w-full pl-10 pr-3.5 py-2 text-sm rounded-xl border border-blue-200 dark:border-blue-800/80 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
+                  className="w-full pl-10 pr-3.5 py-2 text-sm rounded-xl border border-blue-200 dark:border-blue-800/80 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all"
                 />
               </div>
               {placeCheckMessage && (
@@ -361,7 +361,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="sm:col-span-2">
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  ชื่อสถานประกอบการ (ภาษาไทย) <span className="text-red-500">*</span>
+                  ชื่อสถานประกอบการ (ภาษาไทย) <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -371,7 +371,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_name_th: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
@@ -386,7 +386,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_name_en: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
             </div>
@@ -409,7 +409,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="sm:col-span-2">
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  ที่อยู่ (เลขที่, อาคาร, ซอย, ถนน) <span className="text-red-500">*</span>
+                  ที่อยู่ (เลขที่, อาคาร, ซอย, ถนน) <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -419,13 +419,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_address: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  จังหวัด <span className="text-red-500">*</span>
+                  จังหวัด <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <select
                   required
@@ -446,7 +446,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
 
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  อำเภอ / เขต <span className="text-red-500">*</span>
+                  อำเภอ / เขต <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -456,13 +456,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_district: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  รหัสไปรษณีย์ <span className="text-red-500">*</span>
+                  รหัสไปรษณีย์ <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -473,13 +473,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_postal_code: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  เบอร์โทรศัพท์สำนักงาน <span className="text-red-500">*</span>
+                  เบอร์โทรศัพท์สำนักงาน <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -489,7 +489,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, company_phone: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
             </div>
@@ -507,7 +507,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  ชื่อ-นามสกุล ผู้ประสานงาน <span className="text-red-500">*</span>
+                  ชื่อ-นามสกุล ผู้ประสานงาน <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -516,13 +516,13 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, contact_person: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
 
               <div>
                 <label className="block text-[13px] font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  ตำแหน่ง <span className="text-red-500">*</span>
+                  ตำแหน่ง <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <input
                   type="text"
@@ -531,7 +531,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                   onChange={(e) =>
                     setSelfFoundForm({ ...selfFoundForm, contact_position: e.target.value })
                   }
-                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-400"
+                  className="w-full px-3.5 py-2.5 text-sm text-gray-900 dark:text-white bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-600/10 transition-all placeholder:text-gray-500 dark:placeholder:text-gray-400"
                 />
               </div>
             </div>
@@ -568,7 +568,7 @@ const SelfFoundJobModal: React.FC<SelfFoundJobModalProps> = ({
                 htmlFor="self-found-late-reason"
                 className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mt-2"
               >
-                เหตุผลที่ยื่นล่าช้า <span className="text-red-500">*</span>
+                เหตุผลที่ยื่นล่าช้า <span className="text-red-600 dark:text-red-400">*</span>
               </label>
               <textarea
                 id="self-found-late-reason"

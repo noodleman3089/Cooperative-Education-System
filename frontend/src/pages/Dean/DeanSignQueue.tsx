@@ -422,7 +422,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
           {/* Table Content */}
           {visibleDocs.length === 0 ? (
             <div className="text-center py-16 px-6">
-              <FileText className="h-10 w-10 mx-auto text-gray-300 dark:text-gray-600 mb-3" />
+              <FileText className="h-10 w-10 mx-auto text-gray-300 dark:text-gray-500 mb-3" />
               <p className="text-base font-bold text-gray-800 dark:text-gray-200">
                 {docView === 'pending' ? 'ไม่มีหนังสือรอลงนาม' : 'ยังไม่มีเอกสารที่ท่านลงนามไปแล้ว'}
               </p>

@@ -626,7 +626,7 @@ export const UsersAndMasterData: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'accounts'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           บัญชีผู้ใช้
@@ -638,7 +638,7 @@ export const UsersAndMasterData: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'preseed'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           บุคลากรตั้งต้น
@@ -650,7 +650,7 @@ export const UsersAndMasterData: React.FC = () => {
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'master'
               ? 'border-blue-600 text-blue-900 dark:text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
+              : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
           คณะและสาขาวิชา
@@ -665,7 +665,7 @@ export const UsersAndMasterData: React.FC = () => {
               <span className="text-[16px] font-bold text-gray-900 dark:text-white block">
                 แท็บ “บัญชีผู้ใช้”
               </span>
-              <span className="hint text-xs text-gray-500 dark:text-gray-400">
+              <span className="hint text-xs text-gray-600 dark:text-gray-400">
                 จัดการสิทธิ์และติดตามสถานะการเปิดใช้งานบัญชีทั้งหมด {users.length} บัญชี
               </span>
             </div>
@@ -825,7 +825,7 @@ export const UsersAndMasterData: React.FC = () => {
                     value={preseedEmployeeCode}
                     onChange={(e) => setPreseedEmployeeCode(e.target.value)}
                     placeholder="เช่น EMP001"
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                   />
                 </div>
                 <div>
@@ -898,7 +898,7 @@ export const UsersAndMasterData: React.FC = () => {
                     value={preseedEmail}
                     onChange={(e) => setPreseedEmail(e.target.value)}
                     placeholder="advisor@rmutto.ac.th"
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                     required
                   />
                 </div>
@@ -913,7 +913,7 @@ export const UsersAndMasterData: React.FC = () => {
               </form>
             ) : (
               <div className="border-2 border-dashed rounded-xl p-6 text-center space-y-2">
-                <Upload className="w-6 h-6 text-blue-600 mx-auto" />
+                <Upload className="w-6 h-6 text-blue-600 dark:text-blue-400 mx-auto" />
                 {/*
                   ⛔ ตัวอ่านฝั่งเซิร์ฟเวอร์อ่าน **ตามตำแหน่งคอลัมน์** ไม่ได้อ่านจากชื่อหัวตาราง
                      (`controllers/personnelImport.ts` — `line.split(',')` แล้วหยิบ parts[0..5])
@@ -963,7 +963,7 @@ export const UsersAndMasterData: React.FC = () => {
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-800 dark:text-gray-200">
                     {preseededPersonnel.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-4 text-center text-gray-400">
+                        <td colSpan={7} className="p-4 text-center text-gray-500 dark:text-gray-400">
                           ยังไม่มีข้อมูลบุคลากรตั้งต้น
                         </td>
                       </tr>
@@ -981,7 +981,7 @@ export const UsersAndMasterData: React.FC = () => {
                             </td>
                             <td className="p-3">{p.major_name_th || '—'}</td>
                             <td className="p-3 font-mono">
-                              {p.email || <span className="text-red-600 font-semibold">— ไม่มีอีเมล</span>}
+                              {p.email || <span className="text-red-600 dark:text-red-400 font-semibold">— ไม่มีอีเมล</span>}
                             </td>
                             <td className="p-3">
                               {p.is_claimed ? (
@@ -1002,7 +1002,7 @@ export const UsersAndMasterData: React.FC = () => {
                               {/* ⛔ แถวที่ผูกบัญชีแล้วลบไม่ได้ (เซิร์ฟเวอร์ตอบ 400)
                                   จึงไม่แสดงปุ่มเลย ห้ามแสดงปุ่มที่กดแล้วได้ error */}
                               {p.is_claimed ? (
-                                <span className="text-[11px] text-gray-400">—</span>
+                                <span className="text-[11px] text-gray-500 dark:text-gray-400">—</span>
                               ) : (
                                 <button
                                   type="button"
@@ -1031,7 +1031,7 @@ export const UsersAndMasterData: React.FC = () => {
         <div className="space-y-4">
           <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
             ก่อนหน้านี้แก้รายชื่อสาขาได้ทางเดียวคือเข้าไปแก้ในฐานข้อมูลตรง ๆ · การเพิ่ม/แก้/ลบ คณะและสาขาอยู่บนหน้าจอนี้แล้ว
-            <span className="block mt-0.5 text-gray-500 dark:text-gray-400">
+            <span className="block mt-0.5 text-gray-600 dark:text-gray-400">
               ⛔ การย้ายนักศึกษารายคนไปสาขาอื่น <strong className="font-bold">ไม่ได้ทำที่นี่</strong> — ทำที่หน้า “รายชื่อนักศึกษา &amp; เกรด”
             </span>
           </p>
@@ -1462,7 +1462,7 @@ export const UsersAndMasterData: React.FC = () => {
                   value={facultyDeleteTyped}
                   onChange={(e) => setFacultyDeleteTyped(e.target.value)}
                   placeholder={pendingDeleteFaculty.faculty_name_th}
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-xl bg-white text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-xl bg-white text-gray-900 placeholder:text-gray-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:placeholder:text-gray-300"
                 />
               </div>
               <div className="flex justify-end gap-2 pt-1">
@@ -1545,7 +1545,7 @@ export const UsersAndMasterData: React.FC = () => {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="name@rmutto.ac.th หรือ อีเมลบริษัท"
-                  className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                   required
                 />
               </div>

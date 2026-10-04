@@ -27,6 +27,7 @@ export type FieldSize = 'sm' | 'md';
 const BASE =
   'w-full rounded-xl border bg-white text-gray-900 transition-colors ' +
   'focus:outline-none dark:bg-gray-800 dark:text-white ' +
+  'placeholder:text-gray-500 dark:placeholder:text-gray-400 ' +
   'disabled:cursor-not-allowed disabled:bg-gray-50 dark:disabled:bg-gray-900';
 
 const SIZES: Record<FieldSize, string> = {

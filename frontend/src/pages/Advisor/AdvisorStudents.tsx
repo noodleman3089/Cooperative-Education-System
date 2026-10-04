@@ -324,7 +324,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 placeholder="ค้นหาชื่อ รหัส หรือสถานประกอบการ"
-                className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full pl-10 pr-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
             </div>
           </div>
@@ -398,7 +398,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                               )}
                             </>
                           ) : (
-                            <span className="text-gray-400 text-xs">ยังไม่ได้ยื่นใบความจำนง</span>
+                            <span className="text-gray-500 dark:text-gray-400 text-xs">ยังไม่ได้ยื่นใบความจำนง</span>
                           )}
                         </td>
 
@@ -441,7 +441,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                               นิเทศ
                             </span>
                           ) : (
-                            <span className="text-gray-400 font-bold">–</span>
+                            <span className="text-gray-500 dark:text-gray-400 font-bold">–</span>
                           )}
                         </td>
                       </tr>
@@ -775,7 +775,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                             {workPlan.topics.map((t) => (
                               <tr key={t.seq} data-testid={`plan-topic-${t.seq}`} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                                <td className="py-2.5 px-3 text-center font-bold text-gray-400">{t.seq}</td>
+                                <td className="py-2.5 px-3 text-center font-bold text-gray-600 dark:text-gray-400">{t.seq}</td>
                                 <td className="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">{t.topic}</td>
                                 {workPlan.months?.map((m) => {
                                   const isMarked = t.months.includes(m.index);
@@ -786,7 +786,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                                           <Check className="w-3.5 h-3.5 stroke-[3]" />
                                         </span>
                                       ) : (
-                                        <span className="text-gray-300 dark:text-gray-600 font-bold">–</span>
+                                        <span className="text-gray-300 dark:text-gray-400 font-bold">–</span>
                                       )}
                                     </td>
                                   );
