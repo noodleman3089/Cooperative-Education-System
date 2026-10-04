@@ -222,29 +222,20 @@ test.describe('Security hardening regressions', () => {
     expect(res.headers()['content-type'] || '').not.toContain('pdf');
   });
 
-  // SEC-05 — students could write their own GPA, major, student_code and
-  // enrollment year through PUT /api/profile/student.
-  test('SEC-05: registry fields sent by a student are ignored', async ({ request }) => {
-    const client = await pool.connect();
-    let otherMajor: number;
-    try {
+  // SEC-05 (แก้ 2026-10-04) — รหัสนักศึกษากับปีที่เข้ายังเป็นของทะเบียน: นักศึกษาส่งมาผ่าน
+  // PUT /api/profile/student แล้วต้องถูกเมิน · เกรดกับสาขาแก้เองได้แล้ว (คุมที่ student/profile-gpa-major)
+  test('SEC-05: student_code and enrollment_year sent by a student are ignored', async ({ request }) => {
+    await withDb(async (db) => {
       // 2568 ไม่ใช่ 2565 โดยตั้งใจ — 2565 + 4 = 2569 = academic_year ที่ seed ไว้
       // แปลว่า "จบแล้ว" และ scheduler ของ dev server อาจปิดบัญชี student2
       // กลางเทสต์ ทำให้คำขอถัดไปตอบ 403 (ดูหมายเหตุใน staff/registry-fields.spec.ts)
-      await client.query('UPDATE students SET cumulative_gpa = 2.10, enrollment_year = 2568 WHERE student_id = 2');
-      otherMajor = (await client.query(
-        'SELECT major_id FROM master_major WHERE major_id <> (SELECT major_id FROM students WHERE student_id = 2) LIMIT 1'
-      )).rows[0].major_id;
-    } finally {
-      client.release();
-    }
+      await db.query('UPDATE students SET enrollment_year = 2568 WHERE student_id = 2');
+    });
 
     await apiLoginAs(request, 'student2');
     const res = await request.put(`${API_URL}/profile/student`, {
       multipart: {
         student_code: '999999999999-9',
-        major_id: String(otherMajor),
-        cumulative_gpa: '4.00',
         enrollment_year: '2572',
         nickname: 'ชื่อเล่นใหม่',
       },
@@ -253,11 +244,9 @@ test.describe('Security hardening regressions', () => {
 
     await withDb(async (db) => {
       const row = (await db.query(
-        'SELECT student_code, major_id, cumulative_gpa, enrollment_year, nickname FROM students WHERE student_id = 2'
+        'SELECT student_code, enrollment_year, nickname FROM students WHERE student_id = 2'
       )).rows[0];
       expect(row.student_code).toBe('640101001');
-      expect(row.major_id).not.toBe(otherMajor);
-      expect(Number(row.cumulative_gpa)).toBe(2.1);
       expect(row.enrollment_year).toBe(2568);
       // the legitimately editable field still went through
       expect(row.nickname).toBe('ชื่อเล่นใหม่');

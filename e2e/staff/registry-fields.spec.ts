@@ -54,7 +54,6 @@ test.describe('Student Enrollment Year & Personnel Birth Date E2E Tests', () => 
       multipart: {
         student_code: '999999999999-9',
         enrollment_year: '2572',
-        cumulative_gpa: '4.00',
         first_name: 'สมชาย',
       },
     });
@@ -62,11 +61,10 @@ test.describe('Student Enrollment Year & Personnel Birth Date E2E Tests', () => 
 
     await withDb(async (db) => {
       const res = await db.query(
-        'SELECT student_code, enrollment_year, cumulative_gpa FROM students WHERE student_id = 2'
+        'SELECT student_code, enrollment_year FROM students WHERE student_id = 2'
       );
       expect(res.rows[0].enrollment_year).toBe(2568);
       expect(res.rows[0].student_code).toBe('640101001');
-      expect(Number(res.rows[0].cumulative_gpa)).toBe(3.75);
     });
 
     // 5. Staff can correct it through the registry endpoint

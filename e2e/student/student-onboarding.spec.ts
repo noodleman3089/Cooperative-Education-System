@@ -15,7 +15,7 @@ import { withDb } from '../helpers/db';
  *
  * ไฟล์นี้คุมสี่อย่าง เรียงจากที่พังแล้วเจ็บที่สุด:
  *   1. ⛔ เส้นแบ่งชั้นที่ 1/ชั้นที่ 2 — หน้าจอต้องไม่มีช่องอ่อนไหว และ API ต้องไม่รับ
- *   2. ⛔ SEC-05 — เกรดที่นักศึกษาแจ้งลง `claimed_gpa` ห้ามแตะ `cumulative_gpa` ที่เป็นเลขทะเบียน
+ *   2. เกรดที่นักศึกษากรอกลง `cumulative_gpa` ตรงๆ และถูกตรวจช่วง 0–4 ที่เซิร์ฟเวอร์ (SEC-05 แก้ 2026-10-04)
  *   3. ข้อมูลติดต่อที่ชั้นที่ 1 เก็บ ต้องลงฐานจริง (ก่อนหน้านี้ controller ส่ง null ทิ้งหมด)
  *   4. เดินไปขั้นที่ 2 แล้วย้อนกลับ ค่าที่กรอกต้องไม่หาย (ขั้นที่ 1 ถูก unmount)
  */
@@ -116,7 +116,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     await expect(page.getByText('ยังไม่ต้องกรอกตอนนี้', { exact: false })).toBeVisible();
   });
 
-  test('O2: ⛔ SEC-05 — เกรดที่นักศึกษาแจ้งลง claimed_gpa ห้ามแตะเลขทะเบียน', async ({ page }) => {
+  test('O2: เกรดที่นักศึกษากรอกตอนตั้งค่าครั้งแรกลง cumulative_gpa ตรงๆ (SEC-05 แก้ 2026-10-04)', async ({ page }) => {
     await seedTestData();
     const userId = await arriveAsFirstTimeStudent(page);
 
@@ -124,7 +124,6 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
       (await db.query('SELECT major_id FROM master_major LIMIT 1')).rows[0].major_id
     );
 
-    // ยิงตรงที่ API ส่งทั้งเกรดที่แจ้ง **และ** เลขทะเบียนปลอมมาพร้อมกัน
     const res = await page.request.post(`${API_URL}/profile/setup`, {
       data: {
         type: 'student',
@@ -133,8 +132,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
         enrollment_year: 2567,
         first_name: 'ธนกฤต',
         last_name: 'ศรีสุวรรณ',
-        claimed_gpa: 3.25,
-        cumulative_gpa: 4.0, // ← ต้องถูกเมิน
+        cumulative_gpa: 3.25,
         password: 'Passw0rd1',
       },
     });
@@ -142,15 +140,9 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
 
     await withDb(async db => {
       const row = (await db.query(
-        'SELECT claimed_gpa, cumulative_gpa FROM students WHERE student_id = $1', [userId]
+        'SELECT cumulative_gpa FROM students WHERE student_id = $1', [userId]
       )).rows[0];
-
-      // ค่าที่แจ้งเก็บได้ — อาจารย์ที่ปรึกษาโปรเจคขอให้นักศึกษากรอกเกรดตั้งแต่ต้น
-      expect(Number(row.claimed_gpa)).toBe(3.25);
-
-      // แต่เลขทะเบียนยังต้องว่าง เพราะมันคือเลขที่ถูกพิมพ์ลงหนังสือที่คณบดีเซ็น
-      // ถ้าวันไหนบรรทัดนี้แดง แปลว่ามีคนต่อสายให้ผู้ใช้เขียนทะเบียนได้เอง
-      expect(row.cumulative_gpa).toBeNull();
+      expect(Number(row.cumulative_gpa)).toBe(3.25);
     });
   });
 
@@ -168,7 +160,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
         student_code: NEW_STUDENT_CODE,
         major_id: majorId,
         enrollment_year: 2567,
-        claimed_gpa: 4.5,
+        cumulative_gpa: 4.5,
         password: 'Passw0rd1',
       },
     });
@@ -202,14 +194,14 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     expect(await readState()).toEqual(before);
 
     const badGpa = await page.request.post(`${API_URL}/profile/setup`, {
-      data: { type: 'student', student_code: NEW_STUDENT_CODE, major_id: majorId, enrollment_year: 2567, claimed_gpa: 4.5, password: 'NewPassw0rd' },
+      data: { type: 'student', student_code: NEW_STUDENT_CODE, major_id: majorId, enrollment_year: 2567, cumulative_gpa: 4.5, password: 'NewPassw0rd' },
     });
     expect(badGpa.status(), await badGpa.text()).toBe(400);
     expect(await readState()).toEqual(before);
 
     // ไม่มีอะไรค้าง → แก้ค่าแล้วส่งใหม่ต้องผ่าน (เดิมได้ "ตั้งค่าเรียบร้อยแล้ว" เพราะแถวค้าง)
     const fixed = await page.request.post(`${API_URL}/profile/setup`, {
-      data: { type: 'student', student_code: NEW_STUDENT_CODE, major_id: majorId, enrollment_year: 2567, claimed_gpa: 3.5, password: 'NewPassw0rd' },
+      data: { type: 'student', student_code: NEW_STUDENT_CODE, major_id: majorId, enrollment_year: 2567, cumulative_gpa: 3.5, password: 'NewPassw0rd' },
     });
     expect(fixed.status(), await fixed.text()).toBe(201);
     const after = await readState();
@@ -274,7 +266,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
 
     await withDb(async db => {
       const row = (await db.query(
-        `SELECT first_name, last_name, phone, alt_email, claimed_gpa, interested_job_types
+        `SELECT first_name, last_name, phone, alt_email, cumulative_gpa, interested_job_types
          FROM students WHERE student_id = $1`,
         [userId]
       )).rows[0];
@@ -285,7 +277,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
       expect(row.last_name).toBe('ศรีสุวรรณ');
       expect(row.phone).toBe('081-234-5678');
       expect(row.alt_email).toBe('thanakrit.s@example.com');
-      expect(Number(row.claimed_gpa)).toBe(3.25);
+      expect(Number(row.cumulative_gpa)).toBe(3.25);
       expect(row.interested_job_types).toContain('งานไอทีและโปรแกรมมิ่ง (IT/Programming)');
     });
   });
