@@ -255,6 +255,26 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect((await anon.get(`${PUB}?token=${token}`)).status()).toBe(200);
   });
 
+  test('L2b: เส้นสาธารณะห้ามแคช — 404 · 410 · 200 ตอบ Cache-Control: no-store (410 เคยถูกเบราว์เซอร์แคชแล้วผู้ใช้เปิดลิงก์ใหม่ยังเห็น "ใช้ไม่ได้แล้ว")', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { token } = await readyLink(request);
+
+    const unknown = await anon.get(`${PUB}?token=${crypto.randomUUID()}`);
+    expect(unknown.status()).toBe(404);
+    expect(unknown.headers()['cache-control']).toBe('no-store');
+
+    const ok = await anon.get(`${PUB}?token=${token}`);
+    expect(ok.status()).toBe(200);
+    expect(ok.headers()['cache-control']).toBe('no-store');
+
+    await dbExec('UPDATE acceptance_link_tokens SET used_at = NOW() WHERE token = $1', [token]);
+    const used = await anon.get(`${PUB}?token=${token}`);
+    expect(used.status()).toBe(410);
+    expect(used.headers()['cache-control']).toBe('no-store');
+  });
+
   test('L3: GET payload มีเฉพาะคีย์ใน allow-list · ไม่มีเกรด/เลขบัตร/ที่อยู่/เบอร์ · ไฟล์เปิดได้', async ({ request }) => {
     test.setTimeout(180_000);
     const { token } = await readyLink(request);

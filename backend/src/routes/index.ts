@@ -45,6 +45,12 @@ router.use('/companies', companyRoutes);
 router.use('/jobs', jobRoutes);
 // แบบเสนองานสหกิจ (สหกิจ 02) — คนละเรื่องกับ /jobs ซึ่งเป็นรายการตำแหน่งที่นักศึกษาเห็น
 router.use('/job-offers', jobOfferRoutes);
+// เส้นสาธารณะทั้งหมดห้ามถูกแคช — 410 เคยถูกเบราว์เซอร์แคชไว้ ผู้ใช้กลับมาเปิดลิงก์ใหม่ยังเห็น "ใช้ไม่ได้แล้ว"
+//   (token ใช้ครั้งเดียว/หมดอายุ สถานะเปลี่ยนได้ตลอด)
+router.use('/public', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 // ⛔ เส้นสาธารณะที่ไม่ต้องล็อกอิน (ชุดที่ 1 จาก 2) — เปิดได้แค่แบบเสนองาน (สหกิจ 02)
 //    ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย · เหตุผลเต็มอยู่ใน routes/publicJobOffer.ts
 router.use('/public/job-offer', publicJobOfferRoutes);

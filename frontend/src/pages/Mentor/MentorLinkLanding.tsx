@@ -160,7 +160,7 @@ const MentorLinkLanding: React.FC = () => {
             loading={resending}
             loadingLabel="กำลังส่งลิงก์..."
           >
-            {resendMessage ? 'ส่งอีกครั้ง' : 'ส่งลิงก์ใหม่ไปที่อีเมลนี้'}
+            {resendMessage ? 'ส่งอีกครั้ง' : 'ส่งลิงก์ใหม่ไปที่อีเมลที่ลงทะเบียนไว้'}
           </Button>
           <Link
             to="/login/mentor"

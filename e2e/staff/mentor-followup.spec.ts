@@ -22,6 +22,7 @@ import { dbExec, dbRow, dbRows, dbValue, grantRoleBypassingMentorTrigger } from 
  *   F8 การเตือนทุกชนิดนับรวมกัน
  *   F9 นักศึกษาเห็นแค่จำนวนครั้ง (API + การ์ดบนหน้าแรก) · F10 หน้าจอเจ้าหน้าที่ · F11 หน้าจอแก้อีเมล/ส่งลิงก์
  *   F12 หน้าจออาจารย์/หัวหน้าสาขา เห็นแถวแต่ไม่มีปุ่มที่กดแล้ว 403
+ *   F13 พี่เลี้ยงที่บัญชียังไม่เปิดใช้ — ปุ่มเตือน/ส่งลิงก์ปิดพร้อมคำอธิบาย
  *
  * การส่งเมลไม่ออกเน็ต (`MAIL_DRY_RUN=true` ใน playwright.config.ts) · ข้อมูลทั้งหมดเป็นของปลอม
  */
@@ -1015,5 +1016,28 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
       await expect(page.locator('[data-testid^="mf-edit-email-"]')).toHaveCount(0);
       await expect(page.locator('[data-testid^="mf-sendlink-"]')).toHaveCount(0);
     }
+  });
+
+  test('F13: พี่เลี้ยงที่บัญชียังไม่เปิดใช้ — มีป้ายบอก ปุ่มเตือนและปุ่มส่งลิงก์ปิดพร้อมคำอธิบาย (ไม่ใช่กดแล้วเจอ 403 "ถูกระงับ") · คนที่เปิดใช้แล้วกดได้', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await addMentor1Work(fx);
+    await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor1]);
+    const hint = 'บัญชียังไม่เปิดใช้ — รอเจ้าหน้าที่กดรับแบบตอบรับของสถานประกอบการ';
+
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'mentor_followup');
+
+    // mentor1 มีงานค้าง ปุ่มเตือนจึงเคยกดได้ — ตอนนี้ต้องปิดเพราะบัญชียังไม่เปิดใช้
+    await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('บัญชียังไม่เปิดใช้');
+    await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toBeDisabled();
+    await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toHaveAttribute('title', hint);
+    await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toBeDisabled();
+    await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toHaveAttribute('title', hint);
+
+    // ตัวควบคุม: พี่เลี้ยงที่เปิดใช้แล้ว ไม่มีป้าย และปุ่มส่งลิงก์กดได้
+    await expect(page.getByTestId(`mf-inactive-${fx.mentor2}`)).toHaveCount(0);
+    await expect(page.getByTestId(`mf-sendlink-${fx.mentor2}`)).toBeEnabled();
   });
 });

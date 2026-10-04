@@ -323,7 +323,7 @@ const MentorHome: React.FC = () => {
           <h2 className="text-xl font-bold text-gray-900 dark:text-white">
             นักศึกษาที่ท่านดูแล
           </h2>
-          <span className="text-xs text-gray-500 dark:text-gray-400">
+          <span className="text-xs text-gray-600 dark:text-gray-400">
             เห็นเฉพาะนักศึกษาที่ผูกกับท่านในระบบเท่านั้น ({students.length} คน)
           </span>
         </div>
@@ -353,7 +353,7 @@ const MentorHome: React.FC = () => {
                     {/* Top Row: Student info & week badge */}
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-900/30 text-brand-blue flex items-center justify-center font-bold text-sm shrink-0 border border-blue-100 dark:border-blue-800">
+                        <div className="w-11 h-11 rounded-full bg-blue-50 dark:bg-blue-900/30 text-brand-blue dark:text-blue-300 flex items-center justify-center font-bold text-sm shrink-0 border border-blue-100 dark:border-blue-800">
                           {st.full_name ? st.full_name.substring(0, 2) : 'นศ'}
                         </div>
                         <div>

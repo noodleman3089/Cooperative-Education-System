@@ -79,6 +79,9 @@ const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> =
 
 type Filter = 'all' | 'pending' | 'never_login' | 'silent';
 
+// เซิร์ฟเวอร์ปฏิเสธเตือน/ส่งลิงก์ให้บัญชีที่ยังไม่เปิดใช้ (403 SEC-16) — ปิดปุ่มไว้ก่อนแทนที่จะให้กดแล้วเจอ "ถูกระงับ"
+const INACTIVE_MENTOR_HINT = 'บัญชียังไม่เปิดใช้ — รอเจ้าหน้าที่กดรับแบบตอบรับของสถานประกอบการ';
+
 const hasWork = (m: MentorFollowupRow) => m.pending_total > 0 || m.eval_missing_students > 0;
 
 const MentorFollowup: React.FC = () => {
@@ -385,7 +388,11 @@ const MentorFollowup: React.FC = () => {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-bold text-gray-900 dark:text-white">{m.name}</span>
                           {!m.is_active && (
-                            <span className="rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+                            <span
+                              data-testid={`mf-inactive-${m.mentor_id}`}
+                              title={INACTIVE_MENTOR_HINT}
+                              className="rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                            >
                               บัญชียังไม่เปิดใช้
                             </span>
                           )}
@@ -498,11 +505,13 @@ const MentorFollowup: React.FC = () => {
                         size="sm"
                         data-testid={`mf-remind-${m.mentor_id}`}
                         icon={<BellRing className="h-4 w-4" />}
-                        disabled={!work}
+                        disabled={!work || !m.is_active}
                         title={
-                          work
-                            ? undefined
-                            : 'ไม่มีงานค้างให้เตือน — พี่เลี้ยงตรวจงานและประเมินครบแล้ว'
+                          !m.is_active
+                            ? INACTIVE_MENTOR_HINT
+                            : work
+                              ? undefined
+                              : 'ไม่มีงานค้างให้เตือน — พี่เลี้ยงตรวจงานและประเมินครบแล้ว'
                         }
                         onClick={() => setRemindTarget(m)}
                         className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"
@@ -515,6 +524,8 @@ const MentorFollowup: React.FC = () => {
                           variant="secondary"
                           data-testid={`mf-sendlink-${m.mentor_id}`}
                           icon={<Mail className="h-4 w-4" />}
+                          disabled={!m.is_active}
+                          title={m.is_active ? undefined : INACTIVE_MENTOR_HINT}
                           onClick={() => setLinkTarget(m)}
                           className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"
                         >
