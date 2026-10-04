@@ -190,17 +190,25 @@ test.describe('SEC-15: พี่เลี้ยงไม่มีรหัสผ
     expect(await rolesOf(MENTOR1)).toEqual(['mentor']);
   });
 
-  test('N8: migration 041 — ล้าง hash/reset_token เฉพาะพี่เลี้ยงล้วน · นักศึกษา เจ้าหน้าที่ และ mentor+advisor ไม่ถูกแตะ', async () => {
+  test('N8: migration 041 — ล้าง hash/reset_token เฉพาะพี่เลี้ยงล้วน · นักศึกษา เจ้าหน้าที่ไม่ถูกแตะ · บัญชี mentor+advisor สร้างไม่ได้เลย (043)', async () => {
+    // เดิมเทสต์นี้สร้างบัญชี mentor+advisor แล้วยืนยันว่า 041 ไม่แตะ hash ของมัน — ตั้งแต่ migration 043 ฐานปฏิเสธบัญชีแบบนี้
+    // ตั้งแต่ INSERT (ทั้งสองลำดับ) จึงไม่มีบัญชีแบบนั้นให้ 041 ต้องแตะอีก · ด่าน "ไม่ล้างรหัสผ่านบัญชีที่มีบทบาทอื่น" ยังอยู่ใน SQL ของ 041
     const dual = 'mentor-advisor-n8@test.com';
-    await dbExec(`INSERT INTO users (email) VALUES ($1)`, [dual]);
-    await dbExec(
-      `INSERT INTO user_roles (user_id, role_name)
-       SELECT user_id, r FROM users, unnest(ARRAY['mentor', 'advisor']) r WHERE email = $1`,
-      [dual]
-    );
+    const dualRev = 'advisor-mentor-n8@test.com';
+    await dbExec(`INSERT INTO users (email) VALUES ($1), ($2)`, [dual, dualRev]);
+    await dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'mentor' FROM users WHERE email = $1`, [dual]);
+    await expect(
+      dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'advisor' FROM users WHERE email = $1`, [dual])
+    ).rejects.toThrow(/mentor_role_exclusive/);
+    await dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'advisor' FROM users WHERE email = $1`, [dualRev]);
+    await expect(
+      dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'mentor' FROM users WHERE email = $1`, [dualRev])
+    ).rejects.toThrow(/mentor_role_exclusive/);
+    expect(await rolesOf(dual)).toEqual(['mentor']);
+    expect(await rolesOf(dualRev)).toEqual(['advisor']);
 
     // ทุกบัญชีมี hash + reset_token ค้าง
-    for (const email of [MENTOR1, 'student1@test.com', 'staff1@test.com', dual]) {
+    for (const email of [MENTOR1, 'student1@test.com', 'staff1@test.com', dualRev]) {
       await giveHash(email);
       await dbExec(
         `UPDATE users SET reset_token = 'n8-' || user_id, reset_token_expires = NOW() + INTERVAL '1 hour'
@@ -213,13 +221,13 @@ test.describe('SEC-15: พี่เลี้ยงไม่มีรหัสผ
     await dbExec(fs.readFileSync(MIGRATION, 'utf8'));
 
     expect(await userRow(MENTOR1)).toMatchObject({ has_hash: false, has_reset: false });
-    for (const email of ['student1@test.com', 'staff1@test.com', dual]) {
+    for (const email of ['student1@test.com', 'staff1@test.com', dualRev]) {
       expect(await userRow(email), email).toMatchObject({ has_hash: true, has_reset: true });
     }
 
     // รันซ้ำได้ปลอดภัย
     await dbExec(fs.readFileSync(MIGRATION, 'utf8'));
     expect(await userRow(MENTOR1)).toMatchObject({ has_hash: false, has_reset: false });
-    expect(await userRow(dual)).toMatchObject({ has_hash: true, has_reset: true });
+    expect(await userRow(dualRev)).toMatchObject({ has_hash: true, has_reset: true });
   });
 });

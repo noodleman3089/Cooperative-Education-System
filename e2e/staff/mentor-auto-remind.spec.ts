@@ -6,7 +6,7 @@ import { API_URL } from '../helpers/env';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 import { placementCard } from '../helpers/intent';
-import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
+import { dbExec, dbRow, dbRows, dbValue, grantRoleBypassingMentorTrigger } from '../helpers/db';
 
 /**
  * เตือนพี่เลี้ยงอัตโนมัติ (เฟส 3 · `utils/mentorAutoRemind.ts`) — ระบบเตือนพี่เลี้ยงเองเมื่องานค้างเกิน 5 วัน
@@ -439,7 +439,12 @@ test.describe('เตือนพี่เลี้ยงอัตโนมั�
     await addWeeklyLog(sD, 6);
 
     await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor1]); // ถูกระงับ
-    await dbExec(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'advisor')`, [fx.mentor2]); // ไม่ใช่พี่เลี้ยงล้วน (SEC-03)
+    // ไม่ใช่พี่เลี้ยงล้วน (SEC-03) — ปัจจุบันฐานไม่ยอมให้บัญชี mentor+advisor เกิดขึ้น (migration 043) ต้องเห็นมันปฏิเสธก่อน
+    await expect(
+      dbExec(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'advisor')`, [fx.mentor2])
+    ).rejects.toThrow(/mentor_role_exclusive/);
+    // แล้วจำลองข้อมูลเก่าด้วยการข้าม trigger ชั่วคราว — พิสูจน์ว่าด่านในแอปของตัวเตือนอัตโนมัติยังกันได้เองเป็นชั้นสอง
+    await grantRoleBypassingMentorTrigger(fx.mentor2, 'advisor');
 
     const none = await runAuto();
     expect(none).toMatchObject({ eligible: 0, reminded: 0, failed: 0, silent: 0 });

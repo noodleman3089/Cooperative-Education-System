@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
+import { withDb, dbRow, dbRows, dbValue, dbExec, grantRoleBypassingMentorTrigger } from '../helpers/db';
 import { apiLoginAs } from '../helpers/auth';
 import { walkToSigned } from '../helpers/intent';
 
@@ -181,9 +181,11 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
 
     // บัญชีพี่เลี้ยงที่ถูกเพิ่มบทบาทอื่นทีหลัง = ไม่ใช่พี่เลี้ยงล้วนแล้ว → ใช้ลิงก์ที่ออกไปก่อนหน้าไม่ได้
     const mentorToken = await insertToken(MENTOR1);
-    await dbExec(
-      "INSERT INTO user_roles (user_id, role_name) VALUES ((SELECT user_id FROM users WHERE email = $1), 'advisor')",
-      [MENTOR1]
+    // ฐานไม่ยอมให้บัญชีแบบนี้เกิดอีกแล้ว (migration 043) — จำลองข้อมูลเก่าด้วยการข้าม trigger ชั่วคราว
+    // เพื่อพิสูจน์ว่าด่านในแอปยังกันได้เองเป็นชั้นสอง
+    await grantRoleBypassingMentorTrigger(
+      (await dbValue<number>('SELECT user_id FROM users WHERE email = $1', [MENTOR1]))!,
+      'advisor'
     );
     expect((await consume(mentorToken)).status()).toBe(403);
     expect((await tokenRow(mentorToken))!.used_at).toBeNull();

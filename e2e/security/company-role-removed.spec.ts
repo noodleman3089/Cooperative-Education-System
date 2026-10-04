@@ -90,7 +90,10 @@ test.describe('บทบาท company ถูกลบออกแล้ว', ()
     const constraint = 'user_roles_role_name_check';
 
     // จำลองฐานเก่าก่อน 042 — ถอด CHECK ออกชั่วคราวเพื่อให้ยัดแถว 'company' ได้
+    // และปิด trigger "mentor เป็นบทบาทเดียว" (043) ชั่วคราวด้วย: ข้อมูลเก่าที่ mentor+company อยู่ด้วยกันคือสิ่งที่
+    // ฐานปัจจุบันไม่ยอมให้เกิดแล้ว แต่ 042 ต้องรับมือกับมันได้ เพราะฐานจริงที่ยังไม่ migrate มีแถวแบบนี้อยู่
     await dbExec(`ALTER TABLE user_roles DROP CONSTRAINT ${constraint}`);
+    await dbExec('ALTER TABLE user_roles DISABLE TRIGGER trg_mentor_role_exclusive');
     try {
       await dbExec('INSERT INTO users (email) VALUES ($1), ($2)', [only, dual]);
       await dbExec(
@@ -125,8 +128,9 @@ test.describe('บทบาท company ถูกลบออกแล้ว', ()
           [constraint]
         )
       ).not.toContain('company');
+      // ใช้บัญชี `only` (ไม่มีบทบาทเหลือ) — บัญชี `dual` ถือ mentor อยู่ trigger 043 จะปฏิเสธก่อนถึง CHECK
       await expect(
-        dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'company' FROM users WHERE email = $1`, [dual])
+        dbExec(`INSERT INTO user_roles (user_id, role_name) SELECT user_id, 'company' FROM users WHERE email = $1`, [only])
       ).rejects.toThrow(new RegExp(constraint));
 
       // รันซ้ำได้ปลอดภัย
@@ -134,6 +138,7 @@ test.describe('บทบาท company ถูกลบออกแล้ว', ()
       expect(await rolesOf(dual)).toEqual(['mentor']);
       expect(await dbValue<boolean>('SELECT is_active FROM users WHERE email = $1', [only])).toBe(false);
     } finally {
+      await dbExec('ALTER TABLE user_roles ENABLE TRIGGER trg_mentor_role_exclusive');
       await dbExec('DELETE FROM users WHERE email IN ($1, $2)', [only, dual]);
       // ถ้าเทสต์ล้มก่อนรัน migration — คืน CHECK ให้ฐานไม่ค้างอยู่ในสภาพไม่มีด่าน
       const exists = await dbRow(

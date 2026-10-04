@@ -42,6 +42,24 @@ export async function dbExec(sql: string, params?: any[]): Promise<number> {
 }
 
 /**
+ * ใส่บทบาทให้บัญชีโดย **ข้าม** trigger "mentor เป็นบทบาทเดียว" (migration 043) — จำลองข้อมูลเก่าที่ฐานปัจจุบันไม่ยอมให้เกิดอีกแล้ว
+ *
+ * ใช้กับเทสต์ SEC-03 ที่ต้องการพิสูจน์ว่า **ด่านในแอป** (`hasOnlyMentorRole` · `hasForeignRole`) ยังกันบัญชี mentor+บทบาทอื่น
+ * ได้เองแม้ด่านที่ฐานจะพลาด (defense in depth) · ปิด trigger เฉพาะตอน INSERT แล้วเปิดคืนทันที (finally) — ไม่เปิดค้างข้ามเทสต์
+ * ⛔ ห้ามใช้ในเทสต์ที่ควรพิสูจน์ว่าฐานปฏิเสธ — อันนั้นใช้ `dbExec` ตรง ๆ แล้ว expect rejects (ดู `mentor-role-exclusive.spec.ts`)
+ */
+export async function grantRoleBypassingMentorTrigger(userId: number, roleName: string): Promise<void> {
+  await withDb(async (db) => {
+    await db.query('ALTER TABLE user_roles DISABLE TRIGGER trg_mentor_role_exclusive');
+    try {
+      await db.query('INSERT INTO user_roles (user_id, role_name) VALUES ($1, $2)', [userId, roleName]);
+    } finally {
+      await db.query('ALTER TABLE user_roles ENABLE TRIGGER trg_mentor_role_exclusive');
+    }
+  });
+}
+
+/**
  * user_id ของพี่เลี้ยงที่ seed ไว้ (`mentor1@test.com` — role mentor อย่างเดียว
  * มีแถว `mentors` ผูกกับบริษัท seed แล้วโดย `seedTestData`)
  * ใช้เป็น `intent_forms.mentor_id` ของเคสที่ต้องมีพี่เลี้ยง

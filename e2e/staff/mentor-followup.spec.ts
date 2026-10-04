@@ -7,7 +7,7 @@ import { apiLoginAs, loginAs, DEFAULT_PASSWORD } from '../helpers/auth';
 import type { AccountKey } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 import { placementCard } from '../helpers/intent';
-import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
+import { dbExec, dbRow, dbRows, dbValue, grantRoleBypassingMentorTrigger } from '../helpers/db';
 
 /**
  * ติดตามพี่เลี้ยง (คณะตามพี่เลี้ยง Phase 2) — เจ้าหน้าที่ · หัวหน้าสาขา · อาจารย์ เห็นว่าพี่เลี้ยงคนไหนมีงานค้าง
@@ -591,7 +591,9 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
 
     // ⛔ SEC-03: บัญชีที่มีแถว mentors และมีนักศึกษาผูกอยู่ แต่ถูกเพิ่มบทบาทอื่น = ไม่ใช่พี่เลี้ยงล้วนแล้ว
     //    ผ่านด่านขอบเขตได้ (มีนักศึกษา) จึงต้องไปตกที่ด่านนี้ — ไม่งั้นลิงก์เข้าระบบจะออกให้บัญชีที่มีสิทธิ์อื่น
-    await dbExec(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'advisor')`, [fx.mentor1]);
+    //    (ฐานไม่ยอมให้บัญชีแบบนี้เกิดอีกแล้ว — migration 043 · จึงจำลองข้อมูลเก่าด้วยการข้าม trigger ชั่วคราว
+    //     เพื่อพิสูจน์ว่าด่านในแอปยังกันได้เองเป็นชั้นสอง)
+    await grantRoleBypassingMentorTrigger(fx.mentor1, 'advisor');
     const notPure = await remind(request, fx.mentor1);
     expect(notPure.status(), await notPure.text()).toBe(403);
 
@@ -619,7 +621,7 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     // ไม่ใช่พี่เลี้ยงล้วน → 403 ไม่ออกลิงก์ (บัญชีเจ้าหน้าที่/อาจารย์ · พี่เลี้ยงที่มีบทบาทอื่นเพิ่ม · พี่เลี้ยงที่ถูกระงับ)
     expect((await sendLink(request, fx.staff1)).status()).toBe(403);
     expect((await sendLink(request, fx.advisor1)).status()).toBe(403);
-    await dbExec(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'advisor')`, [fx.mentor2]);
+    await grantRoleBypassingMentorTrigger(fx.mentor2, 'advisor'); // จำลองข้อมูลเก่า — ฐานปฏิเสธบัญชีแบบนี้แล้ว (043)
     expect((await sendLink(request, fx.mentor2)).status()).toBe(403);
     await dbExec(`DELETE FROM user_roles WHERE user_id = $1 AND role_name = 'advisor'`, [fx.mentor2]);
     await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor2]);
@@ -695,7 +697,7 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
       expect(await emailOf(id), `${name} อีเมลต้องไม่เปลี่ยน`).toBe(before[name]);
     }
     // พี่เลี้ยงที่ถูกเพิ่มบทบาทอื่น = ไม่ใช่พี่เลี้ยงล้วนแล้ว
-    await dbExec(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'advisor')`, [fx.mentor2]);
+    await grantRoleBypassingMentorTrigger(fx.mentor2, 'advisor'); // จำลองข้อมูลเก่า — ฐานปฏิเสธบัญชีแบบนี้แล้ว (043)
     expect((await putEmail(request, fx.mentor2, 'takeover-mentor2@example.com')).status()).toBe(403);
     expect(await emailOf(fx.mentor2)).toBe('mentor2-fu@test.com');
     await dbExec(`DELETE FROM user_roles WHERE user_id = $1 AND role_name = 'advisor'`, [fx.mentor2]);
