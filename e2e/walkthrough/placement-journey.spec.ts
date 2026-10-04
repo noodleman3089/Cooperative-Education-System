@@ -5,7 +5,7 @@ import { API_URL, APP_URL } from '../helpers/env';
 import { loginAs } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
 import { placementCard, coverLetterDocId } from '../helpers/intent';
-import { dbValue } from '../helpers/db';
+import { dbValue, dbExec } from '../helpers/db';
 import { createWalk } from '../helpers/walkthrough';
 
 /**
@@ -49,6 +49,15 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
         route.fulfill({ status: 200, contentType: 'application/javascript', body: '' })
       );
       await seedTestData();
+      // ชุด E2E baseline ไม่ให้ staff1 มีโปรไฟล์โดยตั้งใจ (เทสต์ onboarding บุคลากร/SEC-06 พึ่งข้อนี้)
+      // แต่ภาพ walkthrough ต้องเหมือนเจ้าหน้าที่จริง: แถบบนโชว์ชื่อ และไม่มี 404 จาก /profile/me
+      // SQL เดียวกับ seedDevDemoData() ใน backend/src/db/setup.ts
+      await dbExec(
+        `INSERT INTO personnel (personnel_id, major_id, status, first_name, last_name)
+         SELECT user_id, (SELECT major_id FROM master_major LIMIT 1), 'approved', 'สมใจ', 'เจ้าหน้าที่ดี'
+           FROM users WHERE email = 'staff1@test.com'
+         ON CONFLICT (personnel_id) DO NOTHING`
+      );
 
       // ───────── นักศึกษา: ยื่นแบบแจ้งความจำนง ─────────
       await page.request.post(`${API_URL}/auth/logout`);

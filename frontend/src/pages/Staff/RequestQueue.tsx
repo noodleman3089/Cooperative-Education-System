@@ -993,9 +993,16 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                       </div>
                       <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
                         <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">เริ่มปฏิบัติงาน</dt>
-                        <dd className="font-semibold text-gray-800 dark:text-gray-200 text-right">
-                          {requestDetail?.start_date ? formatThaiDate(requestDetail.start_date) : '-'}
-                        </dd>
+                        {requestDetail?.start_date ? (
+                          <dd className="font-semibold text-gray-800 dark:text-gray-200 text-right">
+                            {formatThaiDate(requestDetail.start_date)}
+                          </dd>
+                        ) : (
+                          // start_date ถูกเซ็ตตอนสถานประกอบการตอบรับเท่านั้น — ก่อนนั้นยังไม่มีค่าเป็นเรื่องปกติ
+                          <dd className="text-xs font-normal text-gray-600 dark:text-gray-400 text-right">
+                            ยังไม่ระบุ — ได้จากแบบตอบรับของสถานประกอบการ
+                          </dd>
+                        )}
                       </div>
                       <div className="flex justify-between py-1">
                         <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">เกรดเฉลี่ยสะสม</dt>

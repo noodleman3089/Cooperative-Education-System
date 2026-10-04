@@ -547,6 +547,34 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       .toBe(String(tokenId));
   });
 
+  test('L6b: การ์ด "ที่ฝึกงานของคุณ" — ก่อนตอบรับแสดงชื่อประกาศงาน · หลังบริษัทกรอกตำแหน่งแสดงตำแหน่งที่บริษัทกรอก', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { formId, token } = await readyLink(request);
+    // ใบสมัครผ่านประกาศงาน → job_title = ชื่อประกาศ · ต้องต่างจากตำแหน่งที่บริษัทจะกรอก ('Software Tester')
+    await dbExec('UPDATE intent_forms SET job_id = (SELECT job_id FROM job_posts ORDER BY job_id LIMIT 1) WHERE form_id = $1', [
+      formId,
+    ]);
+    const postTitle = await dbValue<string>(
+      'SELECT j.title FROM intent_forms i JOIN job_posts j ON j.job_id = i.job_id WHERE i.form_id = $1',
+      [formId]
+    );
+    expect(postTitle).toBeTruthy();
+    expect(postTitle).not.toBe('Software Tester');
+
+    await loginAs(page, 'student2');
+    await expect(page.getByTestId('intent-job-title')).toHaveText(`ตำแหน่ง ${postTitle}`);
+
+    const res = await postAccept(token, await acceptFields());
+    expect(res.status(), await res.text()).toBe(200);
+
+    await page.reload();
+    await expect(page.getByTestId('intent-job-title')).toHaveText('ตำแหน่ง Software Tester');
+    await expect(page.getByTestId('intent-job-title')).not.toContainText(postTitle!);
+  });
+
   test('L7a: เจ้าหน้าที่กดรับ = companies ได้ข้อมูล 07 · pending ถูกล้าง · พี่เลี้ยงเปิดใช้', async ({ request }) => {
     test.setTimeout(180_000);
     const { formId, token } = await readyLink(request);

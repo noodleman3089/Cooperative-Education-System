@@ -1266,9 +1266,10 @@ const StudentDashboard: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {activeIntent.company_name_th}
                 </span>
-                {activeIntent.job_title && (
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    ตำแหน่ง {activeIntent.job_title}
+                {/* หลังบริษัทตอบรับ job_position คือ "งานที่ได้ทำจริง" — ใช้แทนชื่อประกาศงานที่สมัคร */}
+                {(activeIntent.job_position || activeIntent.job_title) && (
+                  <span data-testid="intent-job-title" className="text-xs text-gray-600 dark:text-gray-400">
+                    ตำแหน่ง {activeIntent.job_position || activeIntent.job_title}
                   </span>
                 )}
                 {/* ข้อมูลที่เดิมอยู่บนการ์ดสถานะตอน "ได้ที่ฝึกงานแล้ว" — ขึ้นเมื่อมีเท่านั้น */}

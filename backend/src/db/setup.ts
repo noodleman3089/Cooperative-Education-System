@@ -272,6 +272,21 @@ export async function seedDevDemoData() {
   console.log(`Seed เดโม: mentor1@test.com ผูกกับ ${companyName}`);
 
   const majorRes = await pool.query('SELECT major_id FROM master_major LIMIT 1');
+
+  // โปรไฟล์ staff1 — baseline ไม่ให้โดยตั้งใจ (เทสต์ onboarding บุคลากร/SEC-06 พึ่งว่า staff ไม่มีโปรไฟล์)
+  // ไม่มีแถว personnel = GET /profile/me ตอบ 404 แถบบนเลยโชว์อีเมลแทนชื่อ
+  // major_id เป็น NOT NULL ในตาราง แต่ staff เป็นระดับคณะ (INSTITUTION_WIDE_ROLES) ไม่ถูกกรองด้วยค่านี้
+  if ((majorRes.rowCount ?? 0) > 0) {
+    await pool.query(
+      `INSERT INTO personnel (personnel_id, major_id, status, first_name, last_name)
+       SELECT user_id, $1, 'approved', 'สมใจ', 'เจ้าหน้าที่ดี'
+         FROM users WHERE email = 'staff1@test.com'
+       ON CONFLICT (personnel_id) DO NOTHING`,
+      [majorRes.rows[0].major_id]
+    );
+    console.log('Seed เดโม: โปรไฟล์ staff1@test.com');
+  }
+
   const provinceRes = await pool.query('SELECT province_id FROM master_province LIMIT 1');
   if ((majorRes.rowCount ?? 0) > 0 && (provinceRes.rowCount ?? 0) > 0) {
     // advisor_id / supervisor_id ปล่อย NULL โดยตั้งใจ

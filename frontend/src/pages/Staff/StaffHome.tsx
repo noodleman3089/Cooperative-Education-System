@@ -193,6 +193,19 @@ export const StaffHome: React.FC = () => {
   const { season, season_detail: detail, tiles, timeline, calendar_warnings: warnings } = home;
   const copy = seasonCopy(season, detail, tiles);
 
+  // `activity_key` เป็น null = ประโยคเต็มจากเซิร์ฟเวอร์ (ยังไม่เปิดภาคเรียน) แสดงทีละบรรทัด
+  // มีค่า = เป็น "ชื่อกิจกรรม" เปล่า ๆ ต้องต่อท้ายเองว่ายังไม่ได้ตั้งช่วงเวลา และผลคืออะไร
+  // ตั้งแต่ 2 กิจกรรมขึ้นไปรวมเป็นบรรทัดเดียว ไม่ให้ประโยคท้ายซ้ำทุกบรรทัด
+  const unsetLabels = warnings.filter((w) => w.activity_key !== null).map((w) => w.label);
+  const warningLines = [
+    ...warnings.filter((w) => w.activity_key === null).map((w) => w.label),
+    ...(unsetLabels.length === 1
+      ? [`${unsetLabels[0]} ยังไม่ได้ตั้งช่วงเวลา — ระบบจึงยังไม่ล็อกใครในขั้นนั้น`]
+      : unsetLabels.length > 1
+        ? [`ยังไม่ได้ตั้งช่วงเวลา: ${unsetLabels.join(' · ')} — ระบบจึงยังไม่ล็อกใครในขั้นเหล่านี้`]
+        : []),
+  ];
+
   return (
     <div className="space-y-4 page-enter">
       {/* ── หัวเรื่อง ── */}
@@ -275,19 +288,9 @@ export const StaffHome: React.FC = () => {
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <ul className="space-y-1 min-w-0">
-              {warnings.map((w, i) => (
-                <li
-                  key={w.activity_key ?? `warn-${i}`}
-                  className="text-xs leading-relaxed text-amber-900 dark:text-amber-200"
-                >
-                  {/*
-                    `activity_key` เป็น null = ประโยคเต็มจากเซิร์ฟเวอร์ (กรณียังไม่เปิดภาคเรียน)
-                    มีค่า = เป็น "ชื่อกิจกรรม" เปล่า ๆ ต้องต่อท้ายเองว่ายังไม่ได้ตั้งช่วงเวลา
-                    และผลของมันคืออะไร — ชื่อกิจกรรมลอย ๆ ไม่ได้บอกว่าผู้ใช้ต้องทำอะไร
-                  */}
-                  {w.activity_key === null
-                    ? w.label
-                    : `${w.label} ยังไม่ได้ตั้งช่วงเวลา — ระบบจึงยังไม่ล็อกใครในขั้นนั้น`}
+              {warningLines.map((line) => (
+                <li key={line} className="text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+                  {line}
                 </li>
               ))}
             </ul>

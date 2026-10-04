@@ -366,6 +366,8 @@ export interface IntentForm {
   company_id: number;
   semester_id: number;
   job_id?: number | null;
+  /** งานที่ได้ทำจริง — บริษัทกรอกตอนตอบรับ (ต่างจาก `job_title` ซึ่งคือชื่อประกาศงานที่สมัคร) */
+  job_position?: string | null;
   status: string;
   mentor_id?: number | null;
   start_date?: string | null;

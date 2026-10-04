@@ -78,6 +78,57 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
     expect(text).not.toContain('ระบบไม่พร้อม');
   });
 
+  test('แถบเตือนปฏิทิน — หลายกิจกรรมที่ยังไม่ตั้งรวมเป็นบรรทัดเดียว · กิจกรรมเดียวใช้ข้อความเดิม', async ({
+    page,
+  }) => {
+    await seedTestData();
+    await clearCalendar();
+    await loginAs(page, 'staff1');
+
+    const warning = page.getByTestId('staff-home-calendar-warning');
+    await expect(warning).toBeVisible();
+
+    // ปฏิทินว่าง = กิจกรรมที่ล็อกจริงและกรอกเองได้ 5 อัน → บรรทัดรวมเดียว ไม่ใช่ li ซ้ำ 5 บรรทัด
+    await expect(warning.locator('li')).toHaveCount(1);
+    const merged = (await warning.locator('li').innerText()).replace(/\s+/g, ' ');
+    expect(merged).toContain('ยังไม่ได้ตั้งช่วงเวลา:');
+    expect(merged).toContain('ระบบจึงยังไม่ล็อกใครในขั้นเหล่านี้');
+    // ประโยคท้ายต้องขึ้นครั้งเดียว ไม่ใช่ซ้ำตามจำนวนกิจกรรม
+    expect(merged.split('ระบบจึงยังไม่ล็อก').length - 1).toBe(1);
+    for (const label of [
+      'แบบคำร้องขอหนังสือขอความอนุเคราะห์',
+      'แบบตอบรับ',
+      'ข้อมูลที่พัก',
+      'โครงร่างรายงาน',
+      'รายงานการปฏิบัติงานฉบับสมบูรณ์',
+    ]) {
+      expect(merged, `บรรทัดรวมต้องระบุกิจกรรม ${label}`).toContain(label);
+    }
+
+    // ตั้งวันปิดให้ 4 จาก 5 → เหลือ ส่งรายงานฉบับสมบูรณ์ อันเดียว → ข้อความเดิม
+    const semesterId = await dbValue<number>(
+      'SELECT semester_id FROM coop_semesters WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1'
+    );
+    for (const [key, kind] of [
+      ['intent_submission', 'range'],
+      ['acceptance_form', 'deadline'],
+      ['accommodation_plan', 'range'],
+      ['report_outline', 'range'],
+    ] as const) {
+      await dbExec(
+        `INSERT INTO coop_calendar_events (semester_id, activity_key, date_kind, start_date, end_date)
+         VALUES ($1, $2, $3::varchar, CASE WHEN $3::varchar = 'deadline' THEN NULL ELSE CURRENT_DATE END, CURRENT_DATE + 30)`,
+        [semesterId, key, kind]
+      );
+    }
+    await page.reload();
+    await expect(warning).toBeVisible();
+    await expect(warning.locator('li')).toHaveCount(1);
+    const single = (await warning.locator('li').innerText()).replace(/\s+/g, ' ');
+    expect(single).toContain('รายงานการปฏิบัติงานฉบับสมบูรณ์ ยังไม่ได้ตั้งช่วงเวลา — ระบบจึงยังไม่ล็อกใครในขั้นนั้น');
+    expect(single).not.toContain('ยังไม่ได้ตั้งช่วงเวลา:');
+  });
+
   test('กองงานเป็นตัวกรอง — กดแล้วเปิดคิวนั้น · กองของคณบดีกดไม่ได้', async ({ page }) => {
     await seedTestData();
     await loginAs(page, 'staff1');
