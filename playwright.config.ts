@@ -15,6 +15,8 @@ process.env.MAIL_DRY_RUN = 'true';
 
 export default defineConfig({
   testDir: './e2e',
+  // walkthrough (เดินโฟลว์ถ่ายภาพ) ไม่ใช่เทสต์ — รันแยกด้วย playwright.walkthrough.config.ts
+  testIgnore: '**/walkthrough/**',
   /* Maximum time one test can run for. */
   timeout: 90 * 1000,
   expect: {
