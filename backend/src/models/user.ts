@@ -1,4 +1,4 @@
-import { query } from '../config/database';
+import pool, { query } from '../config/database';
 import { User } from '../types';
 
 export const VALID_ROLES = ['student', 'advisor', 'dean', 'staff', 'dept_head', 'mentor'];
@@ -159,19 +159,38 @@ export class UserModel {
       }
     }
 
-    const res = await query(
-      'UPDATE users SET email = $1, is_active = $2 WHERE user_id = $3 RETURNING user_id, email, is_active',
-      [email, isActive, userId]
-    );
-    if ((res.rowCount ?? 0) === 0) return null;
-
-    // Reset and add new roles list
-    await this.clearRoles(userId);
-    for (const role of roles) {
-      const trimmedRole = role.trim();
-      if (trimmedRole) {
-        await this.addRole(userId, trimmedRole);
+    // ทรานแซกชันเดียว: ลบบทบาทเดิมก่อนแล้วค่อยใส่ชุดใหม่ — trigger ของ user_roles (migration 043: mentor ต้องเป็น
+    // บทบาทเดียว) ตัดสินจากแถวที่มีอยู่ ลำดับนี้จึงไม่ทำให้มันสะดุดผิดจังหวะ · และถ้า trigger ปฏิเสธชุดใหม่
+    // ต้อง rollback ทั้งก้อน ไม่ปล่อยให้บัญชีเหลือบทบาทครึ่งเดียว (เดิมเป็น query แยกกัน ล้มกลางทางแล้วบทบาทหาย)
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const res = await client.query(
+        'UPDATE users SET email = $1, is_active = $2 WHERE user_id = $3 RETURNING user_id, email, is_active',
+        [email, isActive, userId]
+      );
+      if ((res.rowCount ?? 0) === 0) {
+        await client.query('ROLLBACK');
+        return null;
       }
+
+      // Reset and add new roles list
+      await client.query('DELETE FROM user_roles WHERE user_id = $1', [userId]);
+      for (const role of roles) {
+        const trimmedRole = role.trim();
+        if (trimmedRole) {
+          await client.query(
+            'INSERT INTO user_roles (user_id, role_name) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+            [userId, trimmedRole]
+          );
+        }
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
     }
 
     return {

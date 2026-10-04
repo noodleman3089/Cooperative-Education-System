@@ -1,5 +1,18 @@
 import { Response } from 'express';
 
+/** ข้อความ 400 เมื่อคำขอจะทำให้บัญชีมี mentor ร่วมกับบทบาทอื่น (ด่านหน้าใน controller และด่านหลังจาก trigger ใช้ข้อความเดียวกัน) */
+export const MENTOR_ROLE_EXCLUSIVE_MESSAGE =
+  'พี่เลี้ยงเป็นได้บทบาทเดียว — ไม่สามารถเพิ่มบทบาทอื่นให้บัญชีพี่เลี้ยง หรือเพิ่มบทบาทพี่เลี้ยงให้บัญชีอื่นได้';
+
+/**
+ * error จาก trigger `enforce_mentor_role_exclusive` (migration 043) — ERRCODE 23514 และข้อความขึ้นต้น
+ * `mentor_role_exclusive:` ทั้งสองอย่างต้องตรง กันไปเหมา check_violation ตัวอื่นเป็นเรื่องพี่เลี้ยง
+ */
+export function isMentorRoleExclusiveError(error: unknown): boolean {
+  const e = error as { code?: unknown; message?: unknown } | undefined;
+  return e?.code === '23514' && typeof e.message === 'string' && e.message.startsWith('mentor_role_exclusive:');
+}
+
 /**
  * แปลง error ที่ *เกิดจากคำขอ* ให้เป็น 4xx แทนที่จะเหมาเป็น 500
  *
@@ -20,6 +33,13 @@ export function sendUnexpectedError(
   fallbackMessage = 'เกิดข้อผิดพลาดภายในเซิร์ฟเวอร์'
 ): void {
   const pgCode = (error as { code?: string } | undefined)?.code;
+
+  // ด่านหลังสุดของบทบาทพี่เลี้ยง (trigger ใน migration 043) — ด่านหน้าในแต่ละ controller ควรตอบไปก่อนแล้ว
+  // ถ้าหลุดมาถึงตรงนี้ (เช่นสองคำขอชนกัน) ก็ยังเป็นคำขอที่ผิด ไม่ใช่ความล้มเหลวของระบบ
+  if (isMentorRoleExclusiveError(error)) {
+    res.status(400).json({ message: MENTOR_ROLE_EXCLUSIVE_MESSAGE });
+    return;
+  }
 
   // 22001 = value too long for type · 22P02 = invalid text representation
   if (pgCode === '22001' || pgCode === '22P02') {

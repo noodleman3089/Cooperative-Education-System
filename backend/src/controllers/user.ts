@@ -7,7 +7,7 @@ import { query } from '../config/database';
 import { hashPassword } from '../utils/password';
 import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { sendUnexpectedError } from '../utils/httpError';
+import { MENTOR_ROLE_EXCLUSIVE_MESSAGE, sendUnexpectedError } from '../utils/httpError';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
 
 /** บทบาทที่มีแถวใน `personnel` — ตรงกับ PERSONNEL_CLAIMABLE_ROLES ใน auth.ts */
@@ -82,7 +82,12 @@ export class UserController {
 
       // SEC-15: บัญชีพี่เลี้ยงต้องมีแถว `mentors` ซึ่งมีแต่ขั้นรับแบบตอบรับเท่านั้นที่สร้าง — สร้างด้วยมือได้แค่บัญชีกำพร้า
       if (roleList.includes('mentor')) {
-        res.status(400).json({ message: 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ' });
+        // mentor ร่วมกับบทบาทอื่น = ผิดกติกา "พี่เลี้ยงเป็นได้บทบาทเดียว" (trigger ฐานข้อมูล · migration 043) ก่อนจะถึงข้อความนี้
+        res.status(400).json({
+          message: roleList.some((r) => r !== 'mentor')
+            ? MENTOR_ROLE_EXCLUSIVE_MESSAGE
+            : 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ',
+        });
         return;
       }
 
@@ -210,9 +215,27 @@ export class UserController {
       // this endpoint can rewrite any account's email and role set.
       const before = await UserModel.findById(id);
 
+      // พี่เลี้ยงเป็นได้บทบาทเดียว (trigger ฐานข้อมูล · migration 043) — ตอบ 400 ไทยก่อนถึงฐาน ไม่ปล่อยให้เป็น 500
+      //   · ชุดบทบาทใหม่มี mentor ปนบทบาทอื่น
+      //   · บัญชีเดิมเป็นพี่เลี้ยง แต่ชุดใหม่มีบทบาทอื่น (ทั้งเพิ่มและเปลี่ยนไปเป็นบทบาทอื่น)
+      const wantedRoles = roles.map((r: unknown) => (typeof r === 'string' ? r.trim() : '')).filter(Boolean);
+      const wantsOtherRole = wantedRoles.some((r: string) => r !== 'mentor');
+      if (
+        (wantedRoles.includes('mentor') && wantsOtherRole) ||
+        (before?.roles.includes('mentor') && wantsOtherRole)
+      ) {
+        res.status(400).json({ message: MENTOR_ROLE_EXCLUSIVE_MESSAGE });
+        return;
+      }
+
       // SEC-15: เติมบทบาท mentor ให้บัญชีที่ไม่ใช่พี่เลี้ยงไม่ได้ — พี่เลี้ยงมีทางเกิดทางเดียวคือขั้นรับแบบตอบรับ
       if (before && roles.includes('mentor') && !before.roles.includes('mentor')) {
-        res.status(400).json({ message: 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ' });
+        // บัญชีที่ถือบทบาทอื่นอยู่ (แล้วเปลี่ยนเป็น mentor ล้วน) = ผิดกติกาเป็นพี่เลี้ยงได้บทบาทเดียวเหมือนกัน
+        res.status(400).json({
+          message: before.roles.length > 0
+            ? MENTOR_ROLE_EXCLUSIVE_MESSAGE
+            : 'พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ ไม่ต้องเพิ่มด้วยมือ',
+        });
         return;
       }
 

@@ -49,6 +49,8 @@ DROP TABLE IF EXISTS students CASCADE;
 DROP TABLE IF EXISTS personnel CASCADE;
 DROP TABLE IF EXISTS personnel_preseed_list CASCADE;
 DROP TABLE IF EXISTS user_roles CASCADE;
+-- trigger ของ user_roles หายไปพร้อมตาราง แต่ฟังก์ชันของมันไม่หาย — ต้อง DROP แยก (หลัง DROP TABLE เพราะ trigger ยังอ้างฟังก์ชันอยู่)
+DROP FUNCTION IF EXISTS enforce_mentor_role_exclusive();
 DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS master_major CASCADE;
 DROP TABLE IF EXISTS master_faculty CASCADE;
@@ -95,6 +97,46 @@ CREATE TABLE IF NOT EXISTS user_roles (
     role_name VARCHAR(50) NOT NULL CHECK (role_name IN ('student', 'advisor', 'dean', 'staff', 'dept_head', 'mentor')),
     PRIMARY KEY (user_id, role_name)
 );
+
+-- บทบาทพี่เลี้ยง (mentor) ต้องเป็นบทบาทเดียวของบัญชี — บังคับที่ฐานข้อมูล (SEC-03 / SEC-15 · migration 043)
+-- ล็อกแถว users ก่อนอ่านบทบาทอื่น เพื่อให้สองการเพิ่มบทบาทพร้อมกันของบัญชีเดียวกันเรียงคิวกัน (NO KEY UPDATE
+-- ไม่ชนกับ FOR KEY SHARE ของ foreign key จึงไม่ deadlock) · ตอน UPDATE ไม่นับแถวที่กำลังแก้เอง
+-- ERRCODE 23514 + ข้อความขึ้นต้น `mentor_role_exclusive:` คือสัญญากับแอป (utils/httpError.ts จับแล้วตอบ 400)
+CREATE OR REPLACE FUNCTION enforce_mentor_role_exclusive() RETURNS trigger AS $$
+BEGIN
+  -- serialize ต่อบัญชี — ต้องทำก่อนอ่านบทบาทอื่นของบัญชีนี้
+  PERFORM 1 FROM users WHERE user_id = NEW.user_id FOR NO KEY UPDATE;
+
+  IF NEW.role_name = 'mentor' THEN
+    IF EXISTS (
+      SELECT 1 FROM user_roles r
+       WHERE r.user_id = NEW.user_id
+         AND r.role_name <> 'mentor'
+         AND NOT (TG_OP = 'UPDATE' AND r.user_id = OLD.user_id AND r.role_name = OLD.role_name)
+    ) THEN
+      RAISE EXCEPTION 'mentor_role_exclusive: บทบาทพี่เลี้ยง (mentor) ต้องเป็นบทบาทเดียวของบัญชี ไม่สามารถอยู่ร่วมกับบทบาทอื่นได้'
+        USING ERRCODE = '23514';
+    END IF;
+  ELSE
+    IF EXISTS (
+      SELECT 1 FROM user_roles r
+       WHERE r.user_id = NEW.user_id
+         AND r.role_name = 'mentor'
+         AND NOT (TG_OP = 'UPDATE' AND r.user_id = OLD.user_id AND r.role_name = OLD.role_name)
+    ) THEN
+      RAISE EXCEPTION 'mentor_role_exclusive: บทบาทพี่เลี้ยง (mentor) ต้องเป็นบทบาทเดียวของบัญชี ไม่สามารถอยู่ร่วมกับบทบาทอื่นได้'
+        USING ERRCODE = '23514';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_mentor_role_exclusive ON user_roles;
+CREATE TRIGGER trg_mentor_role_exclusive
+  BEFORE INSERT OR UPDATE ON user_roles
+  FOR EACH ROW EXECUTE FUNCTION enforce_mentor_role_exclusive();
 
 -- 3. Profile Tables
 -- Additional views can be added below
