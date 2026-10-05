@@ -79,6 +79,17 @@ export class WeeklyLogController {
         }
       }
 
+      // หน้าจอนักศึกษาไม่ได้ส่งช่วงวันที่มา — ถ้าเก็บ NULL พี่เลี้ยงจะเห็น "ช่วง – – –" บนใบที่ต้องรับรอง
+      // คิดจากวันเริ่มปฏิบัติงานใน SQL ล้วน (ไม่ผ่าน Date ของ Node กันวันเลื่อน) · จันทร์–ศุกร์ = +4
+      // ตรงกับป้ายสัปดาห์ที่นักศึกษาเห็นใน WeeklyLog.tsx
+      const weekStartSql = `(SELECT start_date + ($2::int - 1) * 7 FROM intent_forms WHERE form_id = $1)`;
+      const weekDates = await query(
+        `SELECT ${weekStartSql} AS week_start, ${weekStartSql} + 4 AS week_end`,
+        [intent.form_id, weekNum]
+      );
+      const weekStart = start_date || weekDates.rows[0].week_start || null;
+      const weekEnd = end_date || weekDates.rows[0].week_end || null;
+
       // Check existing weekly log
       const existingRes = await query(
         `SELECT weekly_log_id, mentor_certified_at, mentor_certified_by
@@ -120,8 +131,8 @@ export class WeeklyLogController {
             achievements || null,
             problems || null,
             status,
-            start_date || null,
-            end_date || null,
+            weekStart,
+            weekEnd,
             filePath,
             summary || null,
             logId,
@@ -158,8 +169,8 @@ export class WeeklyLogController {
             achievements || null,
             problems || null,
             status,
-            start_date || null,
-            end_date || null,
+            weekStart,
+            weekEnd,
             filePath,
             summary || null,
           ]

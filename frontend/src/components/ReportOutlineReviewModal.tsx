@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
+import ConfirmDialog from './ui/ConfirmDialog';
 import AlertBanner from './ui/AlertBanner';
 import { Textarea } from './ui/Input';
 import { API_BASE_URL } from '../services/api';
@@ -65,6 +66,9 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
   submitting,
   readOnly = false,
 }) => {
+  // พี่เลี้ยงส่งต่อแล้วดึงกลับเองไม่ได้ — ต้องยืนยันก่อน (hook ต้องอยู่ก่อน early return)
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
+
   if (!outline) return null;
 
   const isMentor = reviewer === 'mentor';
@@ -172,7 +176,7 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
               size="sm"
               loading={submitting}
               loadingLabel="กำลังส่งข้อมูล..."
-              onClick={() => onDecision('approve')}
+              onClick={() => (isMentor ? setConfirmingApprove(true) : onDecision('approve'))}
             >
               {isMentor ? 'อนุมัติและส่งต่ออาจารย์ที่ปรึกษา' : 'อนุมัติโครงร่างรายงาน'}
             </Button>
@@ -183,6 +187,32 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
           </Button>
         )}
       </ModalFooter>
+
+      <ConfirmDialog
+        open={confirmingApprove}
+        title="ยืนยันเห็นชอบโครงร่างรายงาน"
+        message={
+          <div className="flex flex-col gap-1.5">
+            <p>
+              เห็นชอบโครงร่างรายงาน (สหกิจ 11) ของ{' '}
+              <strong>
+                {studentLabel} ({outline.student_code})
+              </strong>{' '}
+              และส่งต่อให้อาจารย์ที่ปรึกษา
+            </p>
+            <p>ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้</p>
+          </div>
+        }
+        confirmLabel="ยืนยันส่งต่อ"
+        cancelLabel="กลับไปอ่าน"
+        confirmTestId="outline-mentor-approve-confirm"
+        busy={submitting}
+        onConfirm={() => {
+          setConfirmingApprove(false);
+          onDecision('approve');
+        }}
+        onCancel={() => setConfirmingApprove(false)}
+      />
     </Modal>
   );
 };

@@ -6,6 +6,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
+import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -146,6 +147,8 @@ const MentorCertify: React.FC = () => {
   const [selectedBatchIds, setSelectedBatchIds] = useState<Array<{ kind: string; id: number }>>([]);
   const [isBatchCertifying, setIsBatchCertifying] = useState<boolean>(false);
   const [isCertifyingSingle, setIsCertifyingSingle] = useState<boolean>(false);
+  // รับรอง/ลงนามแล้วพี่เลี้ยงยกเลิกเองไม่ได้ — ทุกทางต้องผ่านกล่องยืนยันที่บอกว่ากำลังทำกับใคร ใบไหน
+  const [pendingConfirm, setPendingConfirm] = useState<'single' | 'batch' | 'plan' | null>(null);
 
   // Return modal state
   const [isReturnModalOpen, setIsReturnModalOpen] = useState<boolean>(false);
@@ -733,7 +736,7 @@ const MentorCertify: React.FC = () => {
                     variant="primary"
                     data-testid="certify-batch"
                     disabled={isBatchCertifying}
-                    onClick={handleExecuteBatchCertify}
+                    onClick={() => setPendingConfirm('batch')}
                     className="text-xs shadow-xs"
                   >
                     {isBatchCertifying ? 'กำลังรับรอง...' : 'รับรองที่เลือกทั้งหมด'}
@@ -993,7 +996,7 @@ const MentorCertify: React.FC = () => {
                         variant="primary"
                         data-testid="certify-approve"
                         disabled={isCertifyingSingle || isReturning}
-                        onClick={handleCertifySingle}
+                        onClick={() => setPendingConfirm('single')}
                         className="shadow-sm"
                       >
                         {isCertifyingSingle ? 'กำลังบันทึก...' : 'รับรองบันทึกนี้'}
@@ -1249,7 +1252,7 @@ const MentorCertify: React.FC = () => {
                         variant="primary"
                         data-testid="plan-approve"
                         disabled={isPlanApproving || isPlanRejecting}
-                        onClick={handleApproveWorkPlan}
+                        onClick={() => setPendingConfirm('plan')}
                         className="shadow-sm"
                       >
                         {isPlanApproving ? 'กำลังลงนาม...' : 'ลงนามรับรองแผนนี้'}
@@ -1505,6 +1508,42 @@ const MentorCertify: React.FC = () => {
           </ModalFooter>
         </Modal>
       )}
+
+      {/* ยืนยันก่อนรับรอง/ลงนาม — ทำแล้วพี่เลี้ยงยกเลิกเองไม่ได้ */}
+      <ConfirmDialog
+        open={pendingConfirm !== null}
+        title={pendingConfirm === 'plan' ? 'ยืนยันลงนามรับรองแผนปฏิบัติงาน' : 'ยืนยันการรับรองบันทึก'}
+        message={
+          <div className="flex flex-col gap-1.5">
+            <p>
+              {pendingConfirm === 'plan' && 'ลงนามรับรองแผนปฏิบัติงาน (สหกิจ 07) ของ '}
+              {pendingConfirm === 'single' && (
+                <>
+                  รับรอง <strong>{currentLog?.week_or_month_label}</strong> ของ{' '}
+                </>
+              )}
+              {pendingConfirm === 'batch' && (
+                <>
+                  รับรองบันทึกที่เลือกไว้ <strong>{selectedBatchIds.length} ใบ</strong> ของ{' '}
+                </>
+              )}
+              <strong>{selectedStudent?.full_name}</strong>
+            </p>
+            <p>ยืนยันแล้วท่านจะยกเลิกเองไม่ได้ กรุณาตรวจว่าอ่านเนื้อหาครบแล้ว</p>
+          </div>
+        }
+        confirmLabel={pendingConfirm === 'plan' ? 'ยืนยันลงนาม' : 'ยืนยันรับรอง'}
+        cancelLabel="กลับไปอ่าน"
+        confirmTestId="certify-confirm"
+        busy={isCertifyingSingle || isBatchCertifying || isPlanApproving}
+        onConfirm={async () => {
+          if (pendingConfirm === 'single') await handleCertifySingle();
+          if (pendingConfirm === 'batch') await handleExecuteBatchCertify();
+          if (pendingConfirm === 'plan') await handleApproveWorkPlan();
+          setPendingConfirm(null);
+        }}
+        onCancel={() => setPendingConfirm(null)}
+      />
     </div>
   );
 };

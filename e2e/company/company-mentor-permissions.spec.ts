@@ -254,6 +254,7 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
 
     await page.getByRole('button', { name: 'ตรวจอนุมัติ' }).click();
     await page.getByRole('button', { name: 'อนุมัติและส่งต่ออาจารย์ที่ปรึกษา' }).click();
+    await page.getByTestId('outline-mentor-approve-confirm').click();
 
     await expect(page.getByText('อนุมัติโครงร่างรายงาน (สหกิจ 11) และส่งต่อให้อาจารย์ที่ปรึกษาพิจารณาเรียบร้อยแล้ว')).toBeVisible();
   });

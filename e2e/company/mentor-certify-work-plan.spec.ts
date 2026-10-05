@@ -129,6 +129,15 @@ test.describe('พี่เลี้ยงรับรองแผนปฏิ�
     await expect(page.getByTestId('plan-matrix').getByText('มี.ค.')).toHaveCount(0);
 
     await page.getByTestId('plan-approve').click();
+    // ⛔ ลงนามแล้วพี่เลี้ยงยกเลิกเองไม่ได้ — กดปุ่มอย่างเดียวต้องยังไม่ลงนาม ต้องผ่านกล่องยืนยันก่อน
+    await expect(page.locator('[role="dialog"]')).toContainText('ลงนามรับรองแผนปฏิบัติงาน (สหกิจ 07) ของ');
+    expect(
+      await dbValue<string>(
+        `SELECT status FROM work_plan_approvals WHERE student_id = $1 AND approver_role = 'mentor'`,
+        [studentId]
+      )
+    ).toBe('pending');
+    await page.getByTestId('certify-confirm').click();
     await expect(page.getByText('ลงนามรับรองแผนปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว')).toBeVisible();
 
     const status = await dbValue<string>(
@@ -188,5 +197,38 @@ test.describe('พี่เลี้ยงรับรองแผนปฏิ�
     await expect(page.getByText('นักศึกษายังไม่ได้ส่งแผนปฏิบัติงาน')).toBeVisible();
     await expect(page.getByTestId('plan-approve')).toHaveCount(0);
     await expect(page.getByTestId('plan-matrix')).toHaveCount(0);
+  });
+
+  // web-preflight 2026-10-05 · P-006 — รับรองแล้วพี่เลี้ยงยกเลิกเองไม่ได้ เดิมกดครั้งเดียวรับรองทันที
+  test('รับรองบันทึกสัปดาห์ต้องผ่านกล่องยืนยันที่บอกชื่อใบ — ยังไม่ยืนยัน = ยังไม่รับรอง', async ({ page }) => {
+    const { studentId } = await attachMentorTo('student2@test.com', 90);
+    const logId = (await dbValue<number>(
+      `INSERT INTO weekly_logs (student_id, week_number, assigned_work, methods, tools_used, achievements,
+                                status, submitted_at)
+       VALUES ($1, 1, 'ทดสอบระบบเบิกจ่าย', 'เขียนชุดทดสอบ', 'Playwright', 'ครอบคลุมเส้นหลัก', 'submitted', NOW())
+       RETURNING weekly_log_id`,
+      [studentId]
+    ))!;
+    const certifiedAt = () =>
+      dbValue<string | null>('SELECT mentor_certified_at FROM weekly_logs WHERE weekly_log_id = $1', [logId]);
+
+    await loginAs(page, 'mentor1');
+    await openMentorCertify(page);
+    await page.getByTestId(`certify-list-item-weekly_log-${logId}`).click();
+
+    await page.getByTestId('certify-approve').click();
+    const dialog = page.locator('[role="dialog"]');
+    await expect(dialog).toContainText('บันทึกประจำสัปดาห์ที่ 1 (สหกิจ 09)');
+    await expect(dialog).toContainText('ยืนยันแล้วท่านจะยกเลิกเองไม่ได้');
+    expect(await certifiedAt()).toBeNull();
+
+    await dialog.getByRole('button', { name: 'กลับไปอ่าน' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect(await certifiedAt()).toBeNull();
+
+    await page.getByTestId('certify-approve').click();
+    await page.getByTestId('certify-confirm').click();
+    await expect(page.getByText('รับรองบันทึกประจำสัปดาห์ที่ 1 (สหกิจ 09)เรียบร้อยแล้ว')).toBeVisible();
+    expect(await certifiedAt()).not.toBeNull();
   });
 });

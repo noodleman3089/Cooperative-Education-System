@@ -99,6 +99,19 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
 
     // สัปดาห์ที่ 1 ต้องขึ้นสถานะ "รอพี่เลี้ยงรับรอง" ในชิปความคืบหน้า
     await expect(page.getByTestId('worklog-week-1')).toContainText('รอ');
+
+    // ⛔ ใบที่ส่งจากหน้าเว็บต้องมีช่วงวันที่ — หน้าจอไม่ได้ส่งมา เซิร์ฟเวอร์ต้องคิดจากวันเริ่มปฏิบัติงานเอง
+    //    เคยเก็บ NULL แล้วพี่เลี้ยงเห็น "ช่วง – – –" บนใบที่ต้องรับรอง (seed ใส่วันที่ให้ จึงไม่เคยเห็นอาการ)
+    await withDb(async (db) => {
+      const res = await db.query(
+        `SELECT w.start_date = i.start_date AS starts_on_placement_start,
+                w.end_date = i.start_date + 4 AS ends_on_friday
+           FROM weekly_logs w
+           JOIN intent_forms i ON i.student_id = w.student_id AND i.status = 'accepted'
+          WHERE w.week_number = 1`
+      );
+      expect(res.rows).toEqual([{ starts_on_placement_start: true, ends_on_friday: true }]);
+    });
   });
 
   // ⛔ เดิมชื่อ "Advisor drafts Appointment -> Staff sends -> Mentor Reschedules -> Advisor accepts"
@@ -170,6 +183,9 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
     // Fill comment and approve
     await page.locator('textarea').fill('เนื้อหาโครงร่างสมบูรณ์ พี่เลี้ยงเห็นชอบตามนี้');
     await page.click('button:has-text("อนุมัติและส่งต่ออาจารย์ที่ปรึกษา")');
+    // ส่งต่อแล้วดึงกลับเองไม่ได้ — ต้องผ่านกล่องยืนยันที่บอกชื่อนักศึกษาก่อน
+    await expect(page.getByText('ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้')).toBeVisible();
+    await page.getByTestId('outline-mentor-approve-confirm').click();
 
     // Verify success banner and status change to "พี่เลี้ยงอนุมัติแล้ว (รอ อ.ที่ปรึกษา)"
     await expect(page.locator('text="พี่เลี้ยงอนุมัติแล้ว (รอ อ.ที่ปรึกษา)"')).toBeVisible();

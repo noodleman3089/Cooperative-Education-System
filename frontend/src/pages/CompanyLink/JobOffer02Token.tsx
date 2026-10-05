@@ -132,6 +132,8 @@ const JobOffer02Token: React.FC = () => {
   const [status, setStatus] = useState<'active' | 'expired' | 'submitted' | 'missing' | 'error'>(initialStatus);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successBanner, setSuccessBanner] = useState<string | null>(null);
+  // เหตุผลจากเซิร์ฟเวอร์ตอน 410 — "ถูกใช้ไปแล้ว" กับ "หมดอายุ" เป็นคนละเรื่อง หน้าจอต้องบอกให้ตรง
+  const [goneReason, setGoneReason] = useState<string | null>(null);
 
   // Resend state
   const [resendLoading, setResendLoading] = useState<boolean>(false);
@@ -159,6 +161,10 @@ const JobOffer02Token: React.FC = () => {
   const [declineReason, setDeclineReason] = useState<string>('');
   const [isDeclineSubmitting, setIsDeclineSubmitting] = useState<boolean>(false);
   const [confirmSameOpen, setConfirmSameOpen] = useState<boolean>(false);
+  // ลิงก์ใช้ได้ครั้งเดียว — ส่งแล้วแก้เองไม่ได้ จึงต้องให้ตรวจยอดก่อนส่งจริง
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState<boolean>(false);
+  // เก็บตำแหน่งที่กำลังจะลบ (ไม่ใช่แค่ index) เพื่อให้กล่องยืนยันบอกชื่อได้
+  const [pendingDelete, setPendingDelete] = useState<{ index: number; title: string } | null>(null);
 
   // Initial Load with token validation
   useEffect(() => {
@@ -244,6 +250,7 @@ const JobOffer02Token: React.FC = () => {
         const anyErr = err as { response?: { status?: number; data?: { message?: string } } };
         if (anyErr?.response?.status === 410) {
           setStatus('expired');
+          setGoneReason(anyErr.response.data?.message || null);
           setErrorMessage(anyErr.response.data?.message || 'ลิงก์นี้หมดอายุหรือถูกใช้งานไปแล้ว');
         } else {
           setStatus('error');
@@ -355,20 +362,26 @@ const JobOffer02Token: React.FC = () => {
     }
   };
 
-  // Submit Offer
-  const executeSubmit = async () => {
+  // ตรวจก่อนเปิดกล่องยืนยัน — ไม่ให้ยืนยันของที่เซิร์ฟเวอร์จะตีกลับอยู่แล้ว
+  const validateOffer = (): boolean => {
     if (items.length === 0) {
       setErrorMessage('กรุณาเพิ่มตำแหน่งงานที่ต้องการเสนออย่างน้อย 1 รายการ');
-      return;
+      return false;
     }
 
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       if (!it.title.trim() || !it.quota) {
         setErrorMessage(`กรุณากรอกชื่อตำแหน่งและจำนวนอัตราในรายการที่ ${i + 1} ให้ครบถ้วน`);
-        return;
+        return false;
       }
     }
+    return true;
+  };
+
+  // Submit Offer
+  const executeSubmit = async () => {
+    if (!validateOffer()) return;
 
     try {
       setSubmitting(true);
@@ -495,7 +508,14 @@ const JobOffer02Token: React.FC = () => {
                 <AlertTriangle className="w-6 h-6" />
               </div>
               <div className="flex-1">
-                <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">ลิงก์นี้หมดอายุแล้ว</h2>
+                <h2 className="text-2xl font-black text-gray-900 dark:text-white mb-2">
+                  {goneReason ? 'ลิงก์นี้ใช้ต่อไม่ได้แล้ว' : 'ลิงก์นี้หมดอายุแล้ว'}
+                </h2>
+                {goneReason && (
+                  <p data-testid="token-gone-reason" className="text-sm font-semibold text-gray-800 dark:text-gray-100 leading-relaxed mb-2">
+                    {goneReason}
+                  </p>
+                )}
                 <p className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed mb-6">
                   ลิงก์ตอบแบบสำรวจมีอายุ 24 ชั่วโมงและใช้ได้ครั้งเดียว เพื่อไม่ให้ลิงก์ที่ถูกส่งต่อในอีเมลกลายเป็นทางเข้าถาวร
                   · หากท่านต้องการตอบแบบสำรวจ สามารถกดขอลิงก์ใหม่ ระบบจะส่งไปที่อีเมลผู้ประสานงานในทะเบียนเท่านั้น
@@ -669,7 +689,7 @@ const JobOffer02Token: React.FC = () => {
               </p>
             </div>
             <Button
-              variant="primary"
+              variant="secondary"
               className="w-full mt-auto"
               onClick={() => setConfirmSameOpen(true)}
             >
@@ -789,7 +809,12 @@ const JobOffer02Token: React.FC = () => {
                       icon={<Trash2 className="w-3.5 h-3.5" />}
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDeleteItem(index);
+                        // แถวเปล่าที่เพิ่งกดเพิ่มลบได้ทันที · แถวที่มีข้อมูลต้องยืนยัน เพราะลบแล้วกู้ไม่ได้
+                        if (items.length > 1 && (item.title.trim() || item.job_id)) {
+                          setPendingDelete({ index, title: item.title.trim() });
+                        } else {
+                          handleDeleteItem(index);
+                        }
                       }}
                     >
                       ลบ
@@ -1028,7 +1053,9 @@ const JobOffer02Token: React.FC = () => {
                 data-testid="token-submit"
                 icon={<Send className="w-4 h-4" />}
                 disabled={submitting}
-                onClick={executeSubmit}
+                onClick={() => {
+                  if (validateOffer()) setConfirmSubmitOpen(true);
+                }}
                 className="px-6 py-2.5 shadow-sm font-bold"
               >
                 {submitting ? 'กำลังส่งคำตอบ...' : 'ส่งคำตอบแบบเสนองาน'}
@@ -1088,6 +1115,55 @@ const JobOffer02Token: React.FC = () => {
         cancelLabel="กลับไปตรวจสอบ"
         onConfirm={handleAcceptSamePrevious}
         onCancel={() => setConfirmSameOpen(false)}
+      />
+
+      {/* ยืนยันก่อนส่งคำตอบจากฟอร์ม — แสดงยอดจริงที่กำลังจะส่ง */}
+      <ConfirmDialog
+        open={confirmSubmitOpen}
+        title="ยืนยันส่งคำตอบแบบเสนองาน"
+        message={
+          <div className="flex flex-col gap-1.5">
+            <p>
+              <strong>{company.name_th}</strong> เสนอ <strong>{items.length} ตำแหน่ง</strong> รวม{' '}
+              <strong>{totalQuota} อัตรา</strong> ใน {semesterLabel}
+            </p>
+            <p>
+              ผู้ให้ข้อมูล: {informantName.trim() || 'ยังไม่ได้ระบุ'}
+              {informantPosition.trim() ? ` (${informantPosition.trim()})` : ''}
+            </p>
+            <p>ส่งแล้วลิงก์นี้จะใช้ต่อไม่ได้ ถ้าต้องการแก้คำตอบต้องขอลิงก์ใหม่</p>
+          </div>
+        }
+        confirmLabel="ยืนยันส่ง"
+        cancelLabel="กลับไปแก้"
+        confirmTestId="token-submit-confirm"
+        busy={submitting}
+        onConfirm={async () => {
+          await executeSubmit();
+          setConfirmSubmitOpen(false);
+        }}
+        onCancel={() => setConfirmSubmitOpen(false)}
+      />
+
+      {/* ยืนยันก่อนลบตำแหน่งที่มีข้อมูล */}
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="ลบตำแหน่งนี้ออกจากแบบเสนองาน"
+        message={
+          <p>
+            ลบ <strong>{pendingDelete?.title || '(ยังไม่ได้ระบุชื่อตำแหน่ง)'}</strong> ออกจากรายการที่จะส่ง
+            ข้อมูลที่กรอกไว้ในตำแหน่งนี้จะหายไป
+          </p>
+        }
+        confirmLabel="ลบตำแหน่งนี้"
+        cancelLabel="ไม่ลบ"
+        confirmTestId="offer-item-delete-confirm"
+        destructive
+        onConfirm={() => {
+          if (pendingDelete) handleDeleteItem(pendingDelete.index);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
       />
     </div>
   );
