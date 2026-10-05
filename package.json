@@ -7,6 +7,7 @@
     "dev:frontend": "npm.cmd --prefix frontend run dev",
     "db:setup": "npm.cmd --prefix backend run db:setup",
     "db:migrate": "npm.cmd --prefix backend run db:migrate",
+    "db:seed-demo": "npm.cmd --prefix backend run db:seed-demo",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:walkthrough": "playwright test -c playwright.walkthrough.config.ts"
