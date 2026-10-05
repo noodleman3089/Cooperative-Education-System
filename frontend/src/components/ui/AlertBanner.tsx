@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info } from 'lucide-react';
 
@@ -35,6 +35,12 @@ interface AlertBannerProps {
   message?: ReactNode;
   /** Layout only — margins the surrounding page needs. Appearance lives here. */
   className?: string;
+  /**
+   * เลื่อนแถบเข้ามาในจอเมื่อข้อความเปลี่ยน — ใช้กับแถบผลของฟอร์มยาวที่ปุ่มส่งอยู่ท้ายหน้า
+   * หน้าใน dashboard เลื่อนใน <main> ไม่ใช่ window จึงใช้ window.scrollTo ไม่ได้
+   * ⛔ ใช้กับ message ที่เป็นข้อความเท่านั้น — JSX เป็น object ใหม่ทุก render จะเลื่อนซ้ำไม่หยุด
+   */
+  scrollOnShow?: boolean;
 }
 
 /**
@@ -43,13 +49,27 @@ interface AlertBannerProps {
  * with a border or a ring or neither, some with an icon. Restyling feedback
  * meant finding all fifty of them, so in practice it never happened evenly.
  */
-export const AlertBanner: React.FC<AlertBannerProps> = ({ variant, message, className = '' }) => {
+export const AlertBanner: React.FC<AlertBannerProps> = ({
+  variant,
+  message,
+  className = '',
+  scrollOnShow = false,
+}) => {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollOnShow && message) {
+      ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [scrollOnShow, message]);
+
   if (!message) return null;
 
   const { Icon, box, icon } = VARIANTS[variant];
 
   return (
     <div
+      ref={ref}
       role={variant === 'error' ? 'alert' : 'status'}
       className={`flex items-start gap-3 rounded-xl border p-4 text-sm ${box} ${className}`.trim()}
     >

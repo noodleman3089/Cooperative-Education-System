@@ -1069,7 +1069,7 @@ export const JobOfferSend: React.FC<JobOfferSendProps> = ({ onNavigateTab }) => 
             <button
               type="button"
               onClick={() => setFilterChip('all')}
-              className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+              className="-my-3 py-3 text-blue-600 dark:text-blue-400 hover:underline font-semibold"
             >
               แสดงทั้งหมด
             </button>

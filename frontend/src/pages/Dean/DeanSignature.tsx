@@ -299,13 +299,18 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
                       aria-label={`ใช้หมึกสี${c.label}`}
                       aria-pressed={brushColor === c.value}
                       title={c.label}
-                      className={`h-5 w-5 rounded-full border-2 transition-all cursor-pointer ${
-                        brushColor === c.value
-                          ? 'border-blue-600 dark:border-blue-400 ring-2 ring-blue-600 dark:ring-blue-400 scale-110'
-                          : 'border-transparent'
-                      }`}
-                      style={{ backgroundColor: c.value }}
-                    />
+                      className="-m-2 flex h-9 w-9 items-center justify-center rounded-full cursor-pointer"
+                    >
+                      {/* วงสียังเท่าเดิม 20px — ปุ่มที่ครอบขยายเป้าแตะเป็น 36px */}
+                      <span
+                        className={`h-5 w-5 rounded-full border-2 transition-all ${
+                          brushColor === c.value
+                            ? 'border-blue-600 dark:border-blue-400 ring-2 ring-blue-600 dark:ring-blue-400 scale-110'
+                            : 'border-transparent'
+                        }`}
+                        style={{ backgroundColor: c.value }}
+                      />
+                    </button>
                   ))}
                 </div>
               </div>

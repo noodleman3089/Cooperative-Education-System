@@ -285,7 +285,6 @@ const CoopJobApplication: React.FC = () => {
       setSuccess(res.message || 'บันทึกเรียบร้อยแล้ว');
       setConsent(false);
       await load();
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลได้'));
     } finally {
@@ -307,8 +306,8 @@ const CoopJobApplication: React.FC = () => {
         </p>
       </div>
 
-      <AlertBanner variant="error" message={error} />
-      <AlertBanner variant="success" message={success} />
+      <AlertBanner variant="error" message={error} scrollOnShow />
+      <AlertBanner variant="success" message={success} scrollOnShow />
 
       {/* ── ตัวตน ───────────────────────────────────────────────────────── */}
       <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">

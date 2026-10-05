@@ -513,7 +513,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
               <button
                 type="button"
                 onClick={() => navigate(currentTileMeta.viewAllUrl)}
-                className="text-xs font-bold text-brand-blue dark:text-blue-400 hover:underline flex items-center cursor-pointer"
+                className="-my-3 py-3 text-xs font-bold text-brand-blue dark:text-blue-400 hover:underline flex items-center cursor-pointer"
               >
                 ดูทั้งหมด <ChevronRight className="w-3.5 h-3.5 ml-0.5" />
               </button>

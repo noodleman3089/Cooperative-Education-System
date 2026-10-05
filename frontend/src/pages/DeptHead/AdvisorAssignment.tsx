@@ -298,14 +298,17 @@ const AdvisorAssignment: React.FC = () => {
             <table className="w-full border-collapse text-left text-xs">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-800 dark:text-gray-300">
-                  <th className="p-3.5 w-10 text-center">
-                    <input
-                      type="checkbox"
-                      aria-label="เลือกนักศึกษาทั้งหมดที่แสดงอยู่"
-                      onChange={(e) => handleSelectAll(e, filteredStudents)}
-                      checked={filteredStudents.length > 0 && selectedVisibleIds.length === filteredStudents.length}
-                      className="h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-blue-400"
-                    />
+                  <th className="w-10 text-center">
+                    {/* label ครอบเพื่อให้เป้าแตะเป็น 44px — ช่อง 16px เปล่าแตะพลาดบนมือถือ */}
+                    <label className="flex cursor-pointer items-center justify-center p-3.5">
+                      <input
+                        type="checkbox"
+                        aria-label="เลือกนักศึกษาทั้งหมดที่แสดงอยู่"
+                        onChange={(e) => handleSelectAll(e, filteredStudents)}
+                        checked={filteredStudents.length > 0 && selectedVisibleIds.length === filteredStudents.length}
+                        className="h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-blue-400"
+                      />
+                    </label>
                   </th>
                   <th className="p-3.5 font-bold">นักศึกษา</th>
                   <th className="p-3.5 font-bold">สถานประกอบการ</th>
@@ -340,13 +343,16 @@ const AdvisorAssignment: React.FC = () => {
                           : 'hover:bg-gray-50/60 dark:hover:bg-gray-800/40'
                       }
                     >
-                      <td className="p-3.5 text-center">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => handleSelectStudent(student.student_id, e.target.checked)}
-                          className="h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-blue-400"
-                        />
+                      <td className="text-center">
+                        <label className="flex cursor-pointer items-center justify-center p-3.5">
+                          <input
+                            type="checkbox"
+                            aria-label={`เลือก ${studentDisplayName(student)}`}
+                            checked={isSelected}
+                            onChange={(e) => handleSelectStudent(student.student_id, e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:text-blue-400"
+                          />
+                        </label>
                       </td>
                       <td className="p-3.5">
                         <span className="name font-bold text-gray-900 text-sm block dark:text-white">

@@ -173,11 +173,13 @@ const StudentProfile: React.FC = () => {
 
     if (!selected.type.startsWith('image/')) {
       setError('รูปโปรไฟล์ต้องเป็นไฟล์รูปภาพ (.jpg, .jpeg, .png) เท่านั้น');
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
     if (selected.size > 2 * 1024 * 1024) {
       setError('ขนาดรูปถ่ายต้องไม่เกิน 2 MB');
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
 
@@ -192,8 +194,10 @@ const StudentProfile: React.FC = () => {
       const res = await api.post('/profile/student/avatar', formData);
       setStoredAvatar(res.profile_image || null);
       setSuccess('อัปโหลดรูปโปรไฟล์เรียบร้อยแล้ว');
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถอัปโหลดรูปโปรไฟล์ได้'));
+      alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } finally {
       setAvatarPreviewUrl(null);
       URL.revokeObjectURL(preview);
@@ -783,7 +787,7 @@ const StudentProfile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowAllJobTypes((prev) => !prev)}
-                  className="mt-1.5 text-xs text-brand-blue dark:text-blue-400 font-semibold hover:underline cursor-pointer inline-flex items-center gap-1"
+                  className="-mt-1.5 -mb-3 py-3 text-xs text-brand-blue dark:text-blue-400 font-semibold hover:underline cursor-pointer inline-flex items-center gap-1"
                 >
                   {showAllJobTypes
                     ? '▲ ยุบแสดงเฉพาะสายงานแนะนำ'

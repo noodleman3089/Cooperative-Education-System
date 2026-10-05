@@ -235,7 +235,7 @@ export const StaffHome: React.FC = () => {
           <button
             type="button"
             onClick={() => go({ menu: 'calendar' })}
-            className="text-xs font-semibold text-blue-700 hover:underline dark:text-blue-400"
+            className="-my-3 py-3 text-xs font-semibold text-blue-700 hover:underline dark:text-blue-400"
           >
             แก้ช่วงเวลา
           </button>

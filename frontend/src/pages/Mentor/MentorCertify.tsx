@@ -635,6 +635,7 @@ const MentorCertify: React.FC = () => {
         <AlertBanner
           message={error}
           variant="error"
+          scrollOnShow
         />
       )}
 
@@ -642,6 +643,7 @@ const MentorCertify: React.FC = () => {
         <AlertBanner
           message={success}
           variant="success"
+          scrollOnShow
         />
       )}
 
@@ -711,7 +713,7 @@ const MentorCertify: React.FC = () => {
                     type="button"
                     data-testid="certify-select-all"
                     onClick={handleSelectAllPending}
-                    className="text-xs font-semibold text-brand-blue dark:text-blue-400 hover:underline cursor-pointer"
+                    className="-my-3 py-3 text-xs font-semibold text-brand-blue dark:text-blue-400 hover:underline cursor-pointer"
                   >
                     {selectedBatchIds.length === logs.filter((l) => l.status === 'submitted').length
                       ? 'ยกเลิกเลือกทั้งหมด'
@@ -770,15 +772,18 @@ const MentorCertify: React.FC = () => {
                       >
                         {/* Checkbox for batch */}
                         {isPending ? (
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              e.stopPropagation();
-                              handleToggleBatchItem(log);
-                            }}
-                            className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
-                          />
+                          // label ครอบ + padding หักด้วย margin ลบ = เป้าแตะ 40x44 โดยเลย์เอาต์เท่าเดิม
+                          <label className="-m-3 flex shrink-0 cursor-pointer p-3">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                handleToggleBatchItem(log);
+                              }}
+                              className="mt-1 h-4 w-4 rounded border-gray-300 text-brand-blue focus:ring-brand-blue"
+                            />
+                          </label>
                         ) : (
                           <span className="mt-1 h-4 w-4 flex items-center justify-center shrink-0">
                             {isApproved ? (

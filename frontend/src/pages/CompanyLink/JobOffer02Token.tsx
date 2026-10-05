@@ -621,8 +621,8 @@ const JobOffer02Token: React.FC = () => {
 
       {/* Main Content Area */}
       <main className="max-w-[1120px] w-full mx-auto px-4 sm:px-6 py-6 flex flex-col gap-5">
-        <AlertBanner message={errorMessage} variant="error" />
-        <AlertBanner message={successBanner} variant="success" />
+        <AlertBanner message={errorMessage} variant="error" scrollOnShow />
+        <AlertBanner message={successBanner} variant="success" scrollOnShow />
 
         {/* 2. สถานะลิงก์ (Expiration Notice Card) */}
         <div className="border border-amber-200 dark:border-amber-800/60 bg-amber-50 dark:bg-amber-950/30 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 shadow-xs">

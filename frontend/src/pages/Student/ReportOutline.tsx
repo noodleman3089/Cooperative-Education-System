@@ -389,8 +389,8 @@ const ReportOutline: React.FC = () => {
 
       {/* 3. Main Form Card */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
-        <AlertBanner variant="error" message={error} />
-        <AlertBanner variant="success" message={success} />
+        <AlertBanner variant="error" message={error} scrollOnShow />
+        <AlertBanner variant="success" message={success} scrollOnShow />
 
         {/* Calendar Gate */}
         <CalendarGate activityKey="report_outline" actionLabel="ส่งโครงร่างรายงาน" className="mb-2" />

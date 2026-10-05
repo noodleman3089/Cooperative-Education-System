@@ -422,9 +422,7 @@ const AccommodationWorkPlan: React.FC = () => {
         .map(([label]) => label);
 
       if (missing.length > 0) {
-        setError(`กรุณากรอกข้อมูลที่พักให้ครบก่อนส่ง: ${missing.join(' · ')}`);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
+        setError(`กรุณากรอกข้อมูลที่พักให้ครบก่อนส่ง: ${missing.join(' · ')}`);        return;
       }
 
       // ⛔ ผู้ติดต่อฉุกเฉินเป็นช่องบังคับของใบ สหกิจ 06 — อาจารย์นิเทศใช้ตอนเกิดเหตุ
@@ -433,17 +431,13 @@ const AccommodationWorkPlan: React.FC = () => {
       if (!emergencyContact.name?.trim() || !emergencyContact.phone?.trim()) {
         setError(
           'ใบ สหกิจ 06 ต้องมีผู้ติดต่อกรณีฉุกเฉิน — กรอกชื่อและเบอร์โทรที่หน้า "ใบสมัครงานสหกิจ" (สหกิจ 03) ก่อน แล้วกลับมาส่งอีกครั้ง'
-        );
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
+        );        return;
       }
 
       // ต้องมีอย่างน้อย 1 หัวข้องานที่กรอกชื่อไว้และติ๊กอย่างน้อย 1 เดือน
       const filledTopics = topics.filter((t) => t.topic.trim() && t.months.length > 0);
       if (filledTopics.length === 0) {
-        setError('กรุณากรอกหัวข้องานอย่างน้อย 1 รายการ พร้อมติ๊กเดือนที่ทำ ก่อนส่งให้พี่เลี้ยง');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-        return;
+        setError('กรุณากรอกหัวข้องานอย่างน้อย 1 รายการ พร้อมติ๊กเดือนที่ทำ ก่อนส่งให้พี่เลี้ยง');        return;
       }
 
       if (!confirmed) {
@@ -481,13 +475,9 @@ const AccommodationWorkPlan: React.FC = () => {
       } catch {
         /* ignore */
       }
-      setRestoredDraft(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-      await loadData();
+      setRestoredDraft(false);      await loadData();
     } catch (err) {
-      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง'));
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    } finally {
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง'));    } finally {
       setIsSubmitting(false);
       setConfirmSubmitOpen(false);
     }
@@ -536,8 +526,8 @@ const AccommodationWorkPlan: React.FC = () => {
         </div>
       </div>
 
-      <AlertBanner variant="error" message={error} />
-      <AlertBanner variant="success" message={successMsg} />
+      <AlertBanner variant="error" message={error} scrollOnShow />
+      <AlertBanner variant="success" message={successMsg} scrollOnShow />
 
       {restoredDraft && (
         <AlertBanner
@@ -1026,8 +1016,9 @@ const AccommodationWorkPlan: React.FC = () => {
                             type="button"
                             data-testid={`plan-remove-topic-${idx}`}
                             onClick={() => removeTopicRow(idx)}
-                            className="text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                            className="-mx-2 -my-2.5 inline-flex h-11 w-11 items-center justify-center text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
                             title="ลบหัวข้องานนี้"
+                            aria-label="ลบหัวข้องานนี้"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

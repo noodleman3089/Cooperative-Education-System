@@ -505,6 +505,16 @@ const WeeklyLog: React.FC = () => {
   const submittedCount = weeklyLogs.filter((l) => l.status === 'submitted').length;
 
 
+  // โหลดพัง ≠ ยังไม่ถึงขั้นตอน — ต้องเช็คก่อน EmptyState ข้างล่าง ไม่งั้นนักศึกษาที่ตอบรับแล้ว
+  // จะเห็นข้อความว่า "ยังไม่สามารถบันทึกได้" ทั้งที่เป็นแค่เซิร์ฟเวอร์ล่มชั่วคราว
+  if (!loading && error && !intent) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
   // Render Empty State if no accepted intent
   if (!loading && (!intent || !intent.start_date)) {
     return (
@@ -667,8 +677,8 @@ const WeeklyLog: React.FC = () => {
 
         {/* Content Area */}
         <div className="p-6 md:p-8 space-y-6">
-          <AlertBanner variant="error" message={error} />
-          <AlertBanner variant="success" message={success} />
+          <AlertBanner variant="error" message={error} scrollOnShow />
+          <AlertBanner variant="success" message={success} scrollOnShow />
 
           {/* Calendar Gate Alert banner */}
           <CalendarGate activityKey="weekly_log" actionLabel="ส่งบันทึกการปฏิบัติงาน" className="mb-2" />

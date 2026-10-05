@@ -352,7 +352,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => onNavigate?.('signature')}
-                className="text-xs font-bold text-blue-700 dark:text-blue-400 underline hover:text-blue-900 dark:hover:text-blue-300 cursor-pointer"
+                className="-my-3 py-3 text-xs font-bold text-blue-700 dark:text-blue-400 underline hover:text-blue-900 dark:hover:text-blue-300 cursor-pointer"
               >
                 ตั้งค่าลายมือชื่อ
               </button>
@@ -361,7 +361,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               <button
                 type="button"
                 onClick={() => onNavigate?.('profile')}
-                className="text-xs font-bold text-blue-700 dark:text-blue-400 underline hover:text-blue-900 dark:hover:text-blue-300 cursor-pointer"
+                className="-my-3 py-3 text-xs font-bold text-blue-700 dark:text-blue-400 underline hover:text-blue-900 dark:hover:text-blue-300 cursor-pointer"
               >
                 กรอกชื่อในโปรไฟล์
               </button>

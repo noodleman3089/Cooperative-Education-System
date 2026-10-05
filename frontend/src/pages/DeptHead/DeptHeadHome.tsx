@@ -354,7 +354,7 @@ const DeptHeadHome: React.FC = () => {
             <button
               type="button"
               onClick={() => setSearchParams({ menu: 'assignment', filter: 'incomplete' })}
-              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold text-xs border-none bg-transparent cursor-pointer p-0"
+              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-semibold text-xs border-none bg-transparent cursor-pointer px-0 py-3 -my-3"
             >
               ไปหน้าจัดสรร →
             </button>

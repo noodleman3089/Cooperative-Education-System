@@ -258,7 +258,6 @@ const SupervisionRecord: React.FC = () => {
       });
       setSuccess(res.message || `บันทึกการนิเทศครั้งที่ ${visitNumber} เรียบร้อยแล้ว`);
       await loadStudentRecords(studentId, visitNumber);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกการนิเทศได้'));
     } finally {
@@ -381,8 +380,8 @@ const SupervisionRecord: React.FC = () => {
         </p>
       </div>
 
-      <AlertBanner variant="error" message={error} />
-      <AlertBanner variant="success" message={success} />
+      <AlertBanner variant="error" message={error} scrollOnShow />
+      <AlertBanner variant="success" message={success} scrollOnShow />
 
       {/* Main 2-Column Layout */}
       <div className="flex flex-col lg:flex-row gap-5 items-start">

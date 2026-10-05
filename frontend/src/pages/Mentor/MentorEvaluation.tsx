@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
@@ -220,6 +220,12 @@ const MentorEvaluation: React.FC = () => {
   const handleScoreChange = (key: string, val: number | '') =>
     setScores((prev) => ({ ...prev, [key]: val }));
 
+  // แถบ error อยู่หัวหน้า แต่ปุ่มส่งอยู่ท้ายฟอร์ม — เลื่อนกลับขึ้นไปหาเอง
+  // ไม่ใช้ scrollOnShow ของ AlertBanner เพราะกรณี "ยังให้คะแนนไม่ครบ" ต้องเลื่อนไปข้อที่ขาดแทน
+  const pageRef = useRef<HTMLDivElement>(null);
+  const scrollToBanner = () =>
+    pageRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent) return;
@@ -239,12 +245,14 @@ const MentorEvaluation: React.FC = () => {
     if (activeForm === 'sahatkit_15' && !wouldHire) {
       setError('กรุณาตอบคำถามว่าจะรับนักศึกษาเข้าทำงานหรือไม่');
       setSuccess(null);
+      scrollToBanner();
       return;
     }
 
     if (activeForm === 'sahatkit_16' && (!reportTitleTh.trim() || !reportTitleEn.trim())) {
       setError('กรุณากรอกหัวข้อรายงานทั้งภาษาไทยและภาษาอังกฤษ');
       setSuccess(null);
+      scrollToBanner();
       return;
     }
 
@@ -286,6 +294,7 @@ const MentorEvaluation: React.FC = () => {
     } catch (err) {
       setConfirmingSubmit(false);
       setError(getErrorMessage(err, 'ล้มเหลวในการส่งแบบประเมิน'));
+      scrollToBanner();
     } finally {
       setSubmitting(false);
     }
@@ -346,7 +355,7 @@ const MentorEvaluation: React.FC = () => {
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div ref={pageRef} className="mx-auto max-w-5xl space-y-6">
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
 
