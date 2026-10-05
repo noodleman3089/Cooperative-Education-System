@@ -57,7 +57,7 @@ test.describe('คำแนะนำขั้นตอนเริ่มต้�
 
   /**
    * ⛔ เดิมมี 3 ขั้น — ขั้นกลาง "สมัครเข้าโครงการ (สหกิจ 01)" ถูกตัดทั้งชุด 2026-09-14
-   *    (ไม่อยู่ในขอบเขต) · guide เหลือ 2 ขั้น: กรอกประวัติ → เลือกตำแหน่งงานและยื่นความจำนง
+   *    (ไม่อยู่ในขอบเขต) · guide เหลือ 2 ขั้น: กรอกประวัติ → ยื่นคำร้องขอหนังสือ
    */
   test('W1: นักศึกษาที่ยังไม่กรอกประวัติเห็น guide พร้อมขั้นตอนครบ 2 ขั้น', async ({ page }) => {
     await seedTestData();
@@ -66,14 +66,14 @@ test.describe('คำแนะนำขั้นตอนเริ่มต้�
     await expect(page.getByText(GUIDE_BADGE)).toBeVisible();
     await expect(page.getByRole('heading', { name: 'กรอกประวัตินักศึกษาให้ครบถ้วน' })).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: 'เลือกสถานประกอบการและยื่นแบบแจ้งความจำนง' })
+      page.getByRole('heading', { name: 'ยื่นคำร้องขอหนังสือขอความอนุเคราะห์' })
     ).toBeVisible();
     // ขั้น สหกิจ 01 ต้องไม่กลับมา
     await expect(page.getByText('สหกิจ 01')).toHaveCount(0);
 
     // ปุ่มพาไปหน้าที่ถูกต้องครบทั้งสอง
     await expect(page.getByRole('button', { name: 'ไปหน้าข้อมูลส่วนตัว' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'ดูตำแหน่งงานและยื่นคำร้อง' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'ไปยื่นคำร้อง' })).toBeVisible();
   });
 
   test('W2: นักศึกษาที่กรอกประวัติแล้วไม่เห็น guide เลย', async ({ page }) => {

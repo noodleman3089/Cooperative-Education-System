@@ -36,7 +36,7 @@ export async function seedTestData() {
     const studentId = studentRes.rows[0].user_id;
     const advisorId = advisorRes.rows[0].user_id;
     const staffId = staffRes.rows[0].user_id;
-    // บริษัทไม่มีบัญชีแล้ว — เจ้าหน้าที่เป็นผู้บันทึกบริษัท/ประกาศงานของ seed (companies.created_by · job_posts.created_by)
+    // บริษัทไม่มีบัญชีแล้ว — เจ้าหน้าที่เป็นผู้บันทึกบริษัทของ seed (companies.created_by)
     const companyUserId = staffId;
 
     // 4. advisor1 เป็นทั้งอาจารย์ที่ปรึกษาและอาจารย์นิเทศของ student2 (กรณีที่พบบ่อยที่สุด)
@@ -48,9 +48,8 @@ export async function seedTestData() {
       [advisorId, studentId]
     );
 
-    // 5. Delete existing companies and job posts to avoid constraint conflicts or duplicates
+    // 5. Delete existing companies to avoid constraint conflicts or duplicates
     await client.query('DELETE FROM intent_forms');
-    await client.query('DELETE FROM job_posts');
     // mentors.company_id เป็น FK RESTRICT — ต้องลบพี่เลี้ยงก่อนบริษัท
     await client.query('DELETE FROM mentors');
     await client.query('DELETE FROM companies');
@@ -83,40 +82,6 @@ export async function seedTestData() {
        SELECT user_id, $1, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888'
          FROM users WHERE email = 'mentor1@test.com'`,
       [companyId]
-    );
-
-    // 7. Insert Test Job Post (Full-Stack Developer)
-    //
-    // ⛔ ต้องมี semester_id — ตั้งแต่ 2026-09-09 `getAvailableJobs` กรองด้วยภาคเรียน
-    //    และไม่ยอมให้แถวที่เป็น NULL ผ่านอีกแล้ว · แถวที่ไม่มีภาคเรียนจะหายจากกระดาน
-    //    เงียบ ๆ ทำให้เทสต์ที่ต้องกดสมัครงานตกยกชุดโดยไม่มีข้อความบอกว่าเพราะอะไร
-    await client.query(
-      `INSERT INTO job_posts (
-        company_id, title, description, created_by, quota, applied_count, expire_date, status, semester_id
-      ) VALUES ($1, $2, $3, $4, 3, 0, $5, 'published',
-                (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1))`,
-      [
-        companyId,
-        'Full-Stack Developer (Seagate)',
-        'พัฒนาเว็บแอปพลิเคชันด้วย React และ Node.js ดูแลระบบจัดเก็บข้อมูล Seagate Storage System',
-        companyUserId,
-        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year from now
-      ]
-    );
-
-    // 8. Insert a second Job Post with quota = 1 for quota-full testing
-    await client.query(
-      `INSERT INTO job_posts (
-        company_id, title, description, created_by, quota, applied_count, expire_date, status, semester_id
-      ) VALUES ($1, $2, $3, $4, 1, 0, $5, 'published',
-                (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1))`,
-      [
-        companyId,
-        'QA Engineer (Seagate) - Limited Quota',
-        'ตำแหน่งวิศวกรทดสอบคุณภาพซอฟต์แวร์ จำกัดรับ 1 คนเท่านั้น',
-        companyUserId,
-        new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
-      ]
     );
 
     // 9. Create advisor2 from a DIFFERENT major (IT01) for Major Mismatch Guard testing

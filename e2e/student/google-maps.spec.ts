@@ -39,75 +39,56 @@ test.describe('Google Maps Integration & Fallback Tests', () => {
     });
   });
 
-  test('Test 1: Smart Job Board Map Loading Failure Gracefully Handled', async ({ page }) => {
-    // Log in as student
+  test('Test 1: โหลด Google Maps ไม่ได้ หน้ายื่นคำร้องยังใช้ได้ และยังค้นจากทำเนียบของคณะได้', async ({ page }) => {
     await loginAs(page, 'student2');
-    
-    // Navigate to Smart Job Board
     await goToMenu(page, 'jobs');
-    
-    // Ensure the page loaded successfully despite API block
-    // (หัวหน้าเปลี่ยนจาก h2 "บอร์ดหาตำแหน่งงานสหกิจศึกษา" ตอนรีเมค `7a105bf`)
-    await expect(page.getByRole('heading', { name: 'หาที่ฝึกงานสหกิจศึกษา' })).toBeVisible();
 
-    // Toggle the map
-    await page.getByRole('button', { name: 'แผนที่สถานประกอบการ' }).click();
+    // หน้าต้องขึ้นครบทั้งที่สคริปต์แผนที่ถูกบล็อก
+    await expect(page.getByRole('heading', { name: 'ยื่นคำร้องขอหนังสือขอความอนุเคราะห์' })).toBeVisible();
 
-    // Verify that the fallback error message is shown correctly
-    await expect(page.getByText('ไม่สามารถโหลดแผนที่ได้')).toBeVisible();
-    await expect(page.getByText('กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ตหรือการตั้งค่า Google Maps API Key')).toBeVisible();
+    // ป้ายต้องไม่สัญญาสิ่งที่ใช้ไม่ได้ — ไม่มีคำว่า Google Maps เมื่อโหลดแผนที่ไม่ขึ้น
+    const searchLabel = page.locator('label[for="request-company-search"]');
+    await expect(searchLabel).toHaveText('ค้นหาจากทำเนียบของคณะ');
 
-    // Verify that job listings are still visible and accessible
-    await expect(page.locator('text=บริษัท ซีเกท เทคโนโลยี').first()).toBeVisible();
+    // ทำเนียบเป็นข้อมูลของระบบเอง ไม่พึ่ง Google — ต้องค้นเจอและเลือกได้
+    await page.getByTestId('request-company-search').fill('ซีเกท');
+    const match = page.getByTestId('request-directory-matches').getByRole('button').first();
+    await expect(match).toContainText('บริษัท ซีเกท เทคโนโลยี');
+    await match.click();
+    await expect(page.getByTestId('request-company-locked')).toBeVisible();
+    // เลือกจากทำเนียบแล้ว ข้อมูลเป็นของทำเนียบ — ช่องต้องแก้ไม่ได้
+    await expect(page.getByTestId('request-company-name')).toBeDisabled();
+    await expect(page.getByTestId('request-company-name')).toHaveValue(/ซีเกท/);
   });
 
-  test('Test 2: Self-Found Job Modal Manual Fallback', async ({ page }) => {
-    // Log in as student
+  test('Test 2: โหลด Google Maps ไม่ได้ ยังพิมพ์สถานประกอบการเองแล้วยื่นได้', async ({ page }) => {
     await loginAs(page, 'student2');
-    
-    // Navigate to Smart Job Board
     await goToMenu(page, 'jobs');
-    await expect(page.getByRole('heading', { name: 'หาที่ฝึกงานสหกิจศึกษา' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'ยื่นคำร้องขอหนังสือขอความอนุเคราะห์' })).toBeVisible();
 
-    // Open the Self-Found Job Modal (ป้ายปุ่ม/หัวโมดัลเปลี่ยนตอนรีเมค `7a105bf`)
-    await page.getByRole('button', { name: 'ระบุที่ฝึกงานด้วยตนเอง' }).click();
-    const dialog = page.getByRole('dialog').filter({ hasText: 'ระบุสถานที่ฝึกงานด้วยตนเอง' });
-    await expect(dialog).toBeVisible();
+    await page.getByTestId('request-company-name').fill('บริษัท ทดสอบจำกัด (E2E Test)');
+    await page.getByTestId('request-address').fill('123/45 ถนนทดสอบ');
+    await page.getByTestId('request-district').fill('เขตจตุจักร');
+    await page.getByTestId('request-province').selectOption({ label: 'กรุงเทพมหานคร' });
+    await page.getByTestId('request-postal').fill('10900');
+    await page.getByTestId('request-phone').fill('021112222');
+    // ผู้รับหนังสือเป็นช่องบังคับ (ถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์)
+    await page.getByTestId('request-contact-person').fill('นางสาวทดสอบ ระบบ');
+    await page.getByTestId('request-contact-position').fill('HR Manager');
 
-    // Verify that the Google Maps Autocomplete wrapper is HIDDEN
-    // Since mapsLoaded state is false (due to script block), the blue container shouldn't render
-    await expect(dialog.getByText('ค้นหาและดึงที่อยู่สถานประกอบการอัตโนมัติด้วย Google Maps')).toBeHidden();
-
-    // Verify manual entry fields are still available and interactable
-    const nameInput = dialog.getByPlaceholder('เช่น บริษัท เอสซีจี แพคเกจจิ้ง จำกัด (มหาชน)');
-    await expect(nameInput).toBeVisible();
-
-    // Fill out the manual form
-    await nameInput.fill('บริษัท ทดสอบจำกัด (E2E Test)');
-    await dialog.getByPlaceholder('เช่น 1 ถ.ปูนซิเมนต์ไทย แขวงบางซื่อ').fill('123/45 ถนนทดสอบ');
-    await dialog.locator('select').first().selectOption({ label: 'กรุงเทพมหานคร' });
-    await dialog.getByPlaceholder('เช่น บางซื่อ หรือ ศรีราชา').fill('เขตจตุจักร');
-    await dialog.getByPlaceholder('เช่น 10800').fill('10900');
-    await dialog.getByPlaceholder('เช่น 02-586-3333').fill('021112222');
-    // ผู้ประสานงานเป็นช่องบังคับ (คณะใช้ติดต่อกลับตอนออกหนังสือขอความอนุเคราะห์)
-    await dialog.getByPlaceholder('เช่น คุณสมหญิง วงศ์สวัสดิ์').fill('นางสาวทดสอบ ระบบ');
-    await dialog.getByPlaceholder('เช่น ผู้จัดการฝ่ายทรัพยากรบุคคล').fill('HR Manager');
-
-    // Submit the form
-    await dialog.getByRole('button', { name: 'บันทึกและเลือกสถานที่นี้' }).click();
+    await page.getByTestId('request-submit').click();
     // ส่งแล้วแก้เองไม่ได้ — ต้องผ่านกล่องยืนยัน (2026-09-22)
-    await page.getByTestId('self-found-confirm').click();
+    await page.getByTestId('request-confirm').click();
 
-    // Wait for success message toast or banner
-    await expect(page.getByText('ลงทะเบียนและยื่นความจำนงไปยัง บริษัท ทดสอบจำกัด (E2E Test) เรียบร้อยแล้ว', { exact: false })).toBeVisible();
-    
-    // Check database to ensure it was created as is_self_found
+    await expect(page.getByText('ยื่นคำร้องถึง บริษัท ทดสอบจำกัด (E2E Test) เรียบร้อยแล้ว', { exact: false })).toBeVisible();
+
     const checkDbResult = await pool.query(
-      `SELECT * FROM intent_forms i JOIN companies c ON i.company_id = c.company_id WHERE c.name_th = $1`,
+      `SELECT i.status, c.is_verified, c.google_place_id FROM intent_forms i JOIN companies c ON i.company_id = c.company_id WHERE c.name_th = $1`,
       ['บริษัท ทดสอบจำกัด (E2E Test)']
     );
     expect(checkDbResult.rows.length).toBe(1);
-    expect(checkDbResult.rows[0].job_id).toBe(null);
     expect(checkDbResult.rows[0].status).toBe('pending_advisor');
+    expect(checkDbResult.rows[0].is_verified).toBe(false);
+    expect(checkDbResult.rows[0].google_place_id).toBeNull();
   });
 });

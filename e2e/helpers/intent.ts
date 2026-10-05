@@ -7,17 +7,20 @@ import { apiLoginAs, type AccountKey } from './auth';
 import { dbValue } from './db';
 
 /**
- * นักศึกษากดสมัครตำแหน่งแรกที่ยังเปิดอยู่บนกระดานงาน แล้วกดยืนยันในกล่อง
- * "ยืนยันเลือกสถานประกอบการ"
+ * นักศึกษายื่นคำร้องขอหนังสือ (เอกสารหมายเลข 1) ถึงบริษัท **ที่อยู่ในทำเนียบของคณะ**
+ * ผ่านหน้า "ยื่นคำร้องขอหนังสือ": พิมพ์ชื่อ → เลือกจากรายการทำเนียบ → ยื่น → ยืนยัน
  *
- * ตั้งแต่รีเมคหน้าหาที่ฝึกงาน (`7a105bf`) ปุ่มสมัครไม่ยื่นทันที — เปิด `ConfirmDialog`
- * ที่บอกชื่อบริษัทและตำแหน่งก่อน · ข้อความสำเร็จยังต้อง assert ในเทสต์เอง
- * ⚠️ ใช้ไม่ได้กับช่วงผ่อนผัน (ส่งช้า) — ช่วงนั้นเปิดกล่องให้กรอกเหตุผลแทน
+ * ต้องอยู่ที่เมนู `jobs` ก่อนเรียก · ค่าเริ่มต้นคือบริษัทของ seed (รับรองแล้ว)
+ * · ข้อความสำเร็จยังต้อง assert ในเทสต์เอง
+ * ⚠️ ใช้ไม่ได้กับช่วงผ่อนผัน (ส่งช้า) — ช่วงนั้นฟอร์มบังคับกรอกเหตุผลก่อนยื่น
+ * (มาแทน `applyToFirstOpenJob` — บอร์ดประกาศงานถูกตัด 2026-10-05)
  */
-export async function applyToFirstOpenJob(page: Page): Promise<void> {
-  await page.locator('[data-testid="apply-job"]:enabled').first().click();
-  const dialog = page.getByRole('dialog').filter({ hasText: 'ยืนยันเลือกสถานประกอบการ' });
-  await dialog.getByRole('button', { name: 'เลือกที่นี่' }).click();
+export async function submitRequestToDirectoryCompany(page: Page, search = 'ซีเกท'): Promise<void> {
+  await page.getByTestId('request-company-search').fill(search);
+  await page.getByTestId('request-directory-matches').getByRole('button').first().click();
+  await expect(page.getByTestId('request-company-locked')).toBeVisible();
+  await page.getByTestId('request-submit').click();
+  await page.getByTestId('request-confirm').click();
 }
 
 /**

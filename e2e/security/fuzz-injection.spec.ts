@@ -129,7 +129,6 @@ test.describe('Fuzz & injection', () => {
     const idRoutes = (id: string) => [
       `${API_URL}/intents/${id}`,
       `${API_URL}/students/${id}`,
-      `${API_URL}/jobs/${id}`,
       // ⛔ `?is_eligible=` ถูกลบพร้อมคอลัมน์ 2026-09-14 — ใช้ major_id ซึ่งยังเป็นตัวกรองจริง
       `${API_URL}/students?major_id=${id}`,
     ];

@@ -18,8 +18,6 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       const companyRes = await client.query("SELECT company_id FROM companies LIMIT 1");
       const companyId = companyRes.rows[0].company_id;
 
-      const jobRes = await client.query("SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1", [companyId]);
-      const jobId = jobRes.rows[0].job_id;
 
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
@@ -28,9 +26,9 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
-         VALUES ($1, $2, $3, $4, 'accepted', $5, $6)`,
-        [studentId, companyId, semesterId, jobId, mentorId, new Date().toISOString()]
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date)
+         VALUES ($1, $2, $3, 'accepted', $4, $5)`,
+        [studentId, companyId, semesterId, mentorId, new Date().toISOString()]
       );
 
       await client.query('COMMIT');

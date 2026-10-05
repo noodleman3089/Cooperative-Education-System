@@ -36,8 +36,6 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
       const companyRes = await client.query("SELECT company_id FROM companies LIMIT 1");
       const companyId = companyRes.rows[0].company_id;
 
-      const jobRes = await client.query("SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1", [companyId]);
-      const jobId = jobRes.rows[0].job_id;
 
       const semesterRes = await client.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
       const semesterId = semesterRes.rows[0].semester_id;
@@ -48,9 +46,9 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
       await client.query(
         // end_date ต้องมี — หน้าแผนงานคำนวณเดือน (สหกิจ 07 หน้า 3) และจำนวนสัปดาห์จากช่วงวันจริง
         // ใบที่ตอบรับจริงผ่านสถานประกอบการมีทั้งสองวันเสมอ · 16 สัปดาห์ = 112 วัน
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date, end_date)
-         VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE, CURRENT_DATE + 111)`,
-        [studentId, companyId, semesterId, jobId, mentorId]
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date, end_date)
+         VALUES ($1, $2, $3, 'accepted', $4, CURRENT_DATE, CURRENT_DATE + 111)`,
+        [studentId, companyId, semesterId, mentorId]
       );
 
       await client.query('COMMIT');

@@ -69,21 +69,26 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await walk.step(page, 'นักศึกษา', 'ล็อกอินแล้ว — หน้าแรกนักศึกษา ยังไม่มีใบความจำนง');
 
       await goToMenu(page, 'jobs');
-      await expect(page.getByText('Full-Stack Developer (Seagate)')).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'เปิดเมนูหาที่ฝึกงาน — กระดานตำแหน่งงาน');
+      await expect(page.getByRole('heading', { name: 'ยื่นคำร้องขอหนังสือขอความอนุเคราะห์' })).toBeVisible();
+      await walk.step(page, 'นักศึกษา', 'เปิดเมนูยื่นคำร้องขอหนังสือ — ฟอร์มเอกสารหมายเลข 1 พร้อมตัวอย่างกระดาษ');
 
-      await page.locator('[data-testid="apply-job"]:enabled').first().click();
-      const applyDialog = page.getByRole('dialog').filter({ hasText: 'ยืนยันเลือกสถานประกอบการ' });
+      await page.getByTestId('request-company-search').fill('ซีเกท');
+      await page.getByTestId('request-directory-matches').getByRole('button').first().click();
+      await expect(page.getByTestId('request-company-locked')).toBeVisible();
+      await walk.step(page, 'นักศึกษา', 'ค้นแล้วเลือกสถานประกอบการจากทำเนียบ — ระบบเติมข้อมูลและตัวอย่างกระดาษให้');
+
+      await page.getByTestId('request-submit').click();
+      const applyDialog = page.getByRole('dialog').filter({ hasText: 'ยืนยันยื่นคำร้อง' });
       await expect(applyDialog).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'กดสมัครตำแหน่งแรก — กล่องยืนยันเลือกสถานประกอบการ');
+      await walk.step(page, 'นักศึกษา', 'กดยื่นคำร้อง — กล่องยืนยันบอกชื่อและที่อยู่ที่จะถูกพิมพ์ลงหนังสือ');
 
-      await applyDialog.getByRole('button', { name: 'เลือกที่นี่' }).click();
-      await expect(page.getByText('ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'กดยืนยัน — ระบบแจ้งว่าส่งใบสมัครแล้ว');
+      await page.getByTestId('request-confirm').click();
+      await expect(page.getByText('ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
+      await walk.step(page, 'นักศึกษา', 'กดยืนยัน — ระบบแจ้งว่ายื่นคำร้องแล้ว');
 
       await goToMenu(page, 'dashboard');
       await expect(page.getByTestId('print-request-form')).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'กลับหน้าแรก — การ์ดสถานะและแบบคำร้อง (เอกสารหมายเลข 1) ให้พิมพ์ไปลงนาม');
+      await walk.step(page, 'นักศึกษา', 'กลับหน้าแรก — การ์ดสถานะและแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบกรอกให้แล้ว ให้พิมพ์ไปลงนาม');
 
       await page.getByTestId('upload-request-form').setInputFiles(PDF);
       await expect(page.getByTestId('request-form-uploaded')).toBeVisible();

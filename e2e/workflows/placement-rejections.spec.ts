@@ -6,7 +6,7 @@ import { API_URL } from '../helpers/env';
 import { withDb, dbValue } from '../helpers/db';
 import { loginAs } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
-import { applyToFirstOpenJob, placementCard } from '../helpers/intent';
+import { submitRequestToDirectoryCompany, placementCard } from '../helpers/intent';
 
 test.describe('Rejection & Negative Workflow E2E Tests', () => {
 
@@ -37,10 +37,9 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     // 1. นักศึกษายื่นใบความจำนง
     await loginAs(page, 'student2');
     await goToMenu(page, 'jobs');
-    await expect(page.locator('text=Full-Stack Developer (Seagate)')).toBeVisible();
-    await applyToFirstOpenJob(page);
+    await submitRequestToDirectoryCompany(page);
     await expect(
-      page.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')
+      page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')
     ).toBeVisible();
 
     const formId = await dbValue<number>(
@@ -114,11 +113,11 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     console.log('Step: Student verifies ability to re-apply...');
     await loginAs(page, 'student2');
 
-    // Navigate to job board
+    // กลับไปหน้ายื่นคำร้อง — ฟอร์มต้องกลับมาให้ยื่นใหม่ได้
     await goToMenu(page, 'jobs');
 
-    // Apply button should be available
-    const reApplyBtn = page.locator('[data-testid="apply-job"]:enabled').first();
+    // ปุ่มยื่นต้องอยู่บนจอและกดได้
+    const reApplyBtn = page.getByTestId('request-submit');
     await expect(reApplyBtn).toBeVisible({
       message: 'BUG: Student cannot re-apply after company rejection — 1-active-app rule should be lifted when status is company_rejected.'
     });
@@ -204,7 +203,7 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     // 4. Verify student can re-apply
     await page.goto('/dashboard');
     await goToMenu(page, 'jobs');
-    const reApplyBtn = page.locator('[data-testid="apply-job"]:enabled').first();
+    const reApplyBtn = page.getByTestId('request-submit');
     await expect(reApplyBtn).toBeVisible({
       message: 'BUG: Student cannot re-apply after reporting interview failure.'
     });

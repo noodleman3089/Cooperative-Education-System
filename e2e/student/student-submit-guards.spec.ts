@@ -18,12 +18,11 @@ async function acceptedStudent2(): Promise<{ studentId: number; companyId: numbe
   return withDb(async (db) => {
     const studentId = (await db.query(`SELECT user_id FROM users WHERE email = 'student2@test.com'`)).rows[0].user_id;
     const companyId = (await db.query('SELECT company_id FROM companies ORDER BY company_id LIMIT 1')).rows[0].company_id;
-    const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, start_date)
-       VALUES ($1, $2, $3, $4, 'accepted', CURRENT_DATE)`,
-      [studentId, companyId, semester.rows[0].semester_id, job.rows[0]?.job_id ?? null]
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, start_date)
+       VALUES ($1, $2, $3, 'accepted', CURRENT_DATE)`,
+      [studentId, companyId, semester.rows[0].semester_id]
     );
     return { studentId, companyId };
   });

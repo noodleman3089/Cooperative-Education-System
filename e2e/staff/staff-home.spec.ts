@@ -151,15 +151,14 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     ]) {
       expect(body, `คีย์ ${key} หายไป`).toHaveProperty(key);
     }
-    // กองงานต้องมีครบ 6 กองเสมอ — ⛔ ห้ามซ่อนกองที่ว่าง (สเปกข้อ 4.3)
-    for (const kind of ['request', 'acceptance', 'dispatch', 'offer', 'appointment', 'dean']) {
+    // กองงานต้องมีครบ 5 กองเสมอ — ⛔ ห้ามซ่อนกองที่ว่าง (สเปกข้อ 4.3)
+    for (const kind of ['request', 'acceptance', 'dispatch', 'appointment', 'dean']) {
       expect(body.tiles, `กอง ${kind} หายไป`).toHaveProperty(kind);
       expect(typeof body.tiles[kind].count).toBe('number');
       expect(typeof body.tiles[kind].overdue).toBe('number');
     }
-    // แถบเวลา 5 ช่วง เรียงตามกระบวนการ
+    // แถบเวลา 4 ช่วง เรียงตามกระบวนการ
     expect(body.timeline.map((t: any) => t.key)).toEqual([
-      'survey',
       'intent_submission',
       'acceptance_form',
       'coop_start',
@@ -220,27 +219,15 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     expect(body.tiles.acceptance.overdue).toBe(1);
   });
 
-  test('ยังไม่ถึงช่วงคำร้องและภาคหน้ายังไม่ได้ส่งสำรวจ = ฤดูกาลสำรวจ', async ({ request }) => {
+  test('ยังไม่ถึงช่วงคำร้อง = ช่วงว่าง — ไม่มีฤดูกาลสำรวจแล้ว (สายสหกิจ 02 ถูกตัด 2026-10-05)', async ({ request }) => {
     await clearCalendar();
     await setWindow('intent_submission', 'range', await dayOffset(20), await dayOffset(40));
 
-    // ต้องมี "ภาคถัดไป" อยู่จริง ไม่งั้นยังส่งสำรวจไม่ได้และต้องไม่ขึ้นการ์ดนี้
-    const active = await activeSemesterId();
-    await dbExec(
-      `INSERT INTO coop_semesters (academic_year, semester, is_active)
-       SELECT academic_year + 1, semester, FALSE FROM coop_semesters WHERE semester_id = $1`,
-      [active]
-    );
-
     await apiLoginAs(request, 'staff1');
     const body = await home(request);
-    expect(body.season).toBe('survey');
-    // มีบริษัทในทำเนียบที่ยังไม่ได้รับใบของภาคหน้า
-    expect(body.season_detail.headline_count).toBeGreaterThan(0);
-    expect(body.season_detail.secondary_count).toBe(0);
-    // เส้นตายของช่วงสำรวจคือวันที่เริ่มรับคำร้อง
-    expect(body.season_detail.deadline).toBe(await dayOffset(20));
-    expect(body.season_detail.days_left).toBe(20);
+    expect(body.season).toBe('idle');
+    expect(body.timeline.map((t: any) => t.key)).not.toContain('survey');
+    expect(body.tiles).not.toHaveProperty('offer');
   });
 
   test('กองงานนับจากของจริง และอายุคิวที่ไม่รู้ต้องไม่ถูกนับเป็นเลยกำหนด', async ({ request }) => {
@@ -269,39 +256,6 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     expect(body.tiles.appointment.count).toBe(0);
     expect(body.tiles.dean.count).toBe(0);
     expect(body.tiles.dean.note).toBeNull();
-  });
-
-  test('กองแบบเสนองานบอกจำนวนตำแหน่งข้างใน และเลยกำหนดจากวันส่งกลับ', async ({ request }) => {
-    const semesterId = await activeSemesterId();
-    const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
-    const staffId = await dbValue<number>("SELECT user_id FROM users WHERE email = 'staff1@test.com'");
-
-    const offerId = await withDb(async (db) => {
-      const res = await db.query(
-        `INSERT INTO coop_job_offers (company_id, semester_id, status, due_date, submitted_at)
-         VALUES ($1, $2, 'submitted', (NOW() AT TIME ZONE 'Asia/Bangkok')::date - 3, NOW())
-         RETURNING offer_id`,
-        [companyId, semesterId]
-      );
-      return res.rows[0].offer_id as number;
-    });
-    for (const title of ['ตำแหน่งหนึ่ง', 'ตำแหน่งสอง']) {
-      await dbExec(
-        `INSERT INTO job_posts (company_id, offer_id, semester_id, created_by, applied_count,
-                                expire_date, status, title, description, quota)
-         VALUES ($1, $2, $3, $4, 0, (NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'pending_approval',
-                 $5, 'ลักษณะงาน', 2)`,
-        [companyId, offerId, semesterId, staffId, title]
-      );
-    }
-
-    await apiLoginAs(request, 'staff1');
-    const body = await home(request);
-    expect(body.tiles.offer.count).toBe(1);
-    expect(body.tiles.offer.overdue).toBe(1);
-    expect(body.tiles.offer.note).toContain('2 ตำแหน่ง');
-    // ใบที่เลยวันส่งกลับนับเข้าฤดูกาล overdue ด้วย (สเปกข้อ 4.2 ลำดับ 1)
-    expect(body.season).toBe('overdue');
   });
 
   test('ไม่มีภาคเรียนที่เปิดใช้งาน = ช่วงว่าง พร้อมบอกว่าต้องไปตั้งที่ไหน', async ({ request }) => {

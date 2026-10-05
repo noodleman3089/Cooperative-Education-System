@@ -28,7 +28,7 @@ async function clearCalendar(): Promise<void> {
   await dbExec('DELETE FROM coop_calendar_events WHERE semester_id = $1', [semesterId]);
 }
 
-const TILE_KINDS = ['request', 'acceptance', 'dispatch', 'offer', 'appointment', 'dean'] as const;
+const TILE_KINDS = ['request', 'acceptance', 'dispatch', 'appointment', 'dean'] as const;
 
 test.describe('E0 · หน้าแรกของเจ้าหน้าที่', () => {
   test('ฤดูกาลและตัวเลขทุกกองมาจาก /api/staff/home — หน้าจอไม่คิดเองสักตัว', async ({ page }) => {
@@ -43,7 +43,7 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
 
     await expect(card).toHaveAttribute('data-season', home.season);
 
-    // ⛔ ครบ 6 กองเสมอ รวมกองที่นับได้ 0 — ไม่มีการซ่อน
+    // ⛔ ครบ 5 กองเสมอ รวมกองที่นับได้ 0 — ไม่มีการซ่อน
     for (const kind of TILE_KINDS) {
       await expect(page.getByTestId(`staff-home-tile-${kind}`)).toBeVisible();
       await expect(page.getByTestId(`staff-home-tile-${kind}-count`)).toHaveText(

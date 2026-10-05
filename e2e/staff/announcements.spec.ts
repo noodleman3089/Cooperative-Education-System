@@ -7,7 +7,7 @@ import { goToMenu } from '../helpers/nav';
 import { API_URL } from '../helpers/env';
 import { dbValue } from '../helpers/db';
 
-test.describe('Phase 3 & 4: Smart Job Approval & PR Announcement Workflow', () => {
+test.describe('ข่าวประชาสัมพันธ์ (PR Announcement)', () => {
 
   test.beforeEach(async ({ page }) => {
     // Intercept Google Maps API calls
@@ -71,52 +71,6 @@ test.describe('Phase 3 & 4: Smart Job Approval & PR Announcement Workflow', () =
     // Close modal
     await page.click('button:has-text("ปิดหน้าต่าง")');
   });
-
-  test('Staff reviews and approves pending job posts from companies', async ({ page }) => {
-    // 1. Seed fresh test data and inject pending job post into DB
-    await seedTestData();
-    const client = await pool.connect();
-    let jobId: number;
-    try {
-      const companyRes = await client.query("SELECT company_id FROM companies LIMIT 1");
-      const companyId = companyRes.rows[0].company_id;
-      const staffRes = await client.query("SELECT user_id FROM users WHERE email = 'staff1@test.com'");
-      const staffId = staffRes.rows[0].user_id;
-
-      const newJob = await client.query(`
-        INSERT INTO job_posts (company_id, title, description, created_by, quota, expire_date, status)
-        VALUES ($1, 'นักพัฒนา React Native (สหกิจ)', 'พัฒนาแอปพลิเคชันมือถือสำหรับองค์กร', $2, 3, NOW() + INTERVAL '30 days', 'pending_approval')
-        RETURNING job_id
-      `, [companyId, staffId]);
-      jobId = newJob.rows[0].job_id;
-    } finally {
-      client.release();
-    }
-
-    // 2. Staff logs in
-    await loginAs(page, 'staff1');
-
-    // 3. Navigate to Job Posts Approval Queue
-    // หน้ารีเมครวม “ส่ง · ตรวจ · รายตำแหน่ง” ไว้เมนูเดียว (ข้อตัดสิน 14.2)
-    // คิวอนุมัติรายตำแหน่งแบบเดิมอยู่แท็บที่สาม
-    await goToMenu(page, 'jobs');
-    await page.getByTestId('jobs-tab-posts').click();
-    await expect(page.getByText('คิวตรวจสอบอนุมัติโพสต์รับสมัครงานของบริษัท')).toBeVisible();
-
-    // 4. Verify pending job appears and click approve. Publishing puts the post
-    //    in front of every student at once, so it now goes through a dialog —
-    //    the button alone no longer publishes anything.
-    await expect(page.locator('text="นักพัฒนา React Native (สหกิจ)"')).toBeVisible();
-    await page.click('button:has-text("อนุมัติเผยแพร่")');
-    await expect(page.locator('[role="dialog"]')).toContainText('นักศึกษาทุกคนจะเห็น');
-    await page.click('[role="dialog"] button:has-text("อนุมัติเผยแพร่")');
-
-    // 5. Verify published status
-    await expect(page.locator('text="อนุมัติเผยแพร่ตำแหน่งงานเรียบร้อยแล้ว"')).toBeVisible();
-    // The queue lists every job now, so several already carry this badge.
-    await expect(page.locator('span:has-text("เผยแพร่แล้ว")').first()).toBeVisible();
-  });
-
 });
 
 /**

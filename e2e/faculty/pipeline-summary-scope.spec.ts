@@ -27,10 +27,10 @@ test.describe('pipeline-summary กรองตามสาขา (SEC-06)', () 
     expect(advisor2Major).not.toBe(studentMajor);
 
     await dbExec(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status)
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
        VALUES ($1, (SELECT company_id FROM companies LIMIT 1),
                (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1),
-               (SELECT job_id FROM job_posts LIMIT 1), 'rejected')`,
+               'rejected')`,
       [studentId]
     );
     const total = await dbValue<number>("SELECT COUNT(*)::int FROM intent_forms WHERE status = 'rejected'");

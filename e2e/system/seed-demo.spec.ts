@@ -26,10 +26,6 @@ async function demoCounts() {
       (SELECT COUNT(*) FROM intent_forms WHERE status = 'accepted')::int             AS accepted,
       (SELECT COUNT(*) FROM intent_forms WHERE status = 'approved_by_dept_head')::int AS awaiting_company,
       (SELECT COUNT(*) FROM official_documents WHERE status = 'signed')::int         AS signed_letters,
-      (SELECT COUNT(*) FROM coop_job_offers)::int                                    AS offers,
-      (SELECT COUNT(*) FROM job_posts WHERE offer_id IS NOT NULL)::int               AS offer_items,
-      (SELECT COUNT(*) FROM job_post_majors)::int                                    AS item_majors,
-      (SELECT COUNT(*) FROM job_offer_tokens)::int                                   AS offer_tokens,
       (SELECT COUNT(*) FROM acceptance_link_tokens)::int                             AS accept_tokens,
       (SELECT COUNT(*) FROM weekly_logs)::int                                        AS weekly,
       (SELECT COUNT(*) FROM weekly_logs WHERE mentor_certified_at IS NOT NULL)::int  AS weekly_certified,
@@ -58,9 +54,6 @@ test.describe('seedDemo — ข้อมูลเดโมสำหรับเ�
     expect(c.accepted, 'S3 นักศึกษาที่ฝึกอยู่กับ mentor1').toBe(2);
     expect(c.awaiting_company, 'S2 รอบริษัทตอบทางลิงก์').toBe(2);
     expect(c.signed_letters, 'S2 หนังสือที่คณบดีลงนามแล้ว').toBe(2);
-    expect(c.offers, 'S1 ใบเก่า (ตรวจแล้ว) + ใบร่างภาคถัดไป').toBe(2);
-    expect(c.offer_items, 'S1 ตำแหน่ง 2 รายการ × 2 ใบ').toBe(4);
-    expect(c.offer_tokens, 'S1 ลิงก์ใช้ได้ 1 + หมดอายุ 1').toBe(2);
     expect(c.accept_tokens, 'S2 ลิงก์ตอบรับ 1 ใบต่อคน').toBe(2);
     expect(c.weekly, 'S5 รายสัปดาห์ student2 6 ใบ + student1 9 ใบ').toBe(15);
     expect(c.weekly_certified, 'S5 รับรองแล้ว').toBe(9);
@@ -91,10 +84,6 @@ test.describe('seedDemo — ข้อมูลเดโมสำหรับเ�
     expect(body.students).toHaveLength(2);
 
     // ── ลิงก์สาธารณะที่สคริปต์พิมพ์ออกมา ──
-    const live = await request.get(`${API_URL}/public/job-offer?token=${tokenOf(result.offerLiveUrl)}`);
-    expect(live.status(), 'ลิงก์ /offer ที่ใช้ได้ต้องเปิดได้').toBe(200);
-    const dead = await request.get(`${API_URL}/public/job-offer?token=${tokenOf(result.offerExpiredUrl)}`);
-    expect(dead.status(), 'ลิงก์ /offer ที่หมดอายุต้องถูกปฏิเสธ').toBe(410);
     expect(result.acceptUrls).toHaveLength(2);
     for (const url of result.acceptUrls) {
       const res = await request.get(`${API_URL}/public/acceptance?token=${tokenOf(url)}`);

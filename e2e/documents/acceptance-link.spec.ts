@@ -7,7 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { walkToSigned } from '../helpers/intent';
+import { walkToSigned, placementCard } from '../helpers/intent';
 
 /**
  * ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2 + สหกิจ 07) — เจ้าของตัดสิน 2026-09-29:
@@ -547,32 +547,25 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       .toBe(String(tokenId));
   });
 
-  test('L6b: การ์ด "ที่ฝึกงานของคุณ" — ก่อนตอบรับแสดงชื่อประกาศงาน · หลังบริษัทกรอกตำแหน่งแสดงตำแหน่งที่บริษัทกรอก', async ({
+  test('L6b: การ์ด "ที่ฝึกงานของคุณ" — ก่อนตอบรับยังไม่มีตำแหน่ง · หลังบริษัทกรอกแสดงตำแหน่งที่บริษัทกรอก', async ({
     page,
     request,
   }) => {
     test.setTimeout(180_000);
     const { formId, token } = await readyLink(request);
-    // ใบสมัครผ่านประกาศงาน → job_title = ชื่อประกาศ · ต้องต่างจากตำแหน่งที่บริษัทจะกรอก ('Software Tester')
-    await dbExec('UPDATE intent_forms SET job_id = (SELECT job_id FROM job_posts ORDER BY job_id LIMIT 1) WHERE form_id = $1', [
-      formId,
-    ]);
-    const postTitle = await dbValue<string>(
-      'SELECT j.title FROM intent_forms i JOIN job_posts j ON j.job_id = i.job_id WHERE i.form_id = $1',
-      [formId]
-    );
-    expect(postTitle).toBeTruthy();
-    expect(postTitle).not.toBe('Software Tester');
+    // ตำแหน่งงานมีที่มาเดียวคือสหกิจ 07 ที่บริษัทกรอกตอนตอบรับ (ประกาศงานถูกตัด 2026-10-05)
+    // — ก่อนตอบรับต้องไม่มีบรรทัดตำแหน่ง ไม่ใช่ขึ้น "ตำแหน่ง null"
+    expect(await dbValue<string | null>('SELECT job_position FROM intent_forms WHERE form_id = $1', [formId])).toBeNull();
 
     await loginAs(page, 'student2');
-    await expect(page.getByTestId('intent-job-title')).toHaveText(`ตำแหน่ง ${postTitle}`);
+    await expect(placementCard(page)).toBeVisible();
+    await expect(page.getByTestId('intent-job-title')).toHaveCount(0);
 
     const res = await postAccept(token, await acceptFields());
     expect(res.status(), await res.text()).toBe(200);
 
     await page.reload();
     await expect(page.getByTestId('intent-job-title')).toHaveText('ตำแหน่ง Software Tester');
-    await expect(page.getByTestId('intent-job-title')).not.toContainText(postTitle!);
   });
 
   test('L7a: เจ้าหน้าที่กดรับ = companies ได้ข้อมูล 07 · pending ถูกล้าง · พี่เลี้ยงเปิดใช้', async ({ request }) => {

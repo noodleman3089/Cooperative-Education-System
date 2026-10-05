@@ -15,7 +15,7 @@ import { dbExec, dbRow, dbValue } from '../helpers/db';
  *       แต่เส้นเขียนทุกเส้นต้องเป็นของ `staff` เท่านั้น — ไฟล์ route ไม่มีด่านระดับไฟล์
  *       ให้พึ่ง ลืมแปะด่านทีละเส้นเมื่อไหร่คือเปิดโล่ง ไม่ใช่ 401
  *    2. **ลบคณะพาสาขาใต้คณะหายไปด้วย** (`ON DELETE CASCADE`) ต้องกันเองก่อนถึงฐาน
- *    3. `personnel` และ `job_post_majors` ก็อ้าง `major_id` เหมือนกัน — เช็คแต่
+ *    3. `personnel` ก็อ้าง `major_id` เหมือนกัน — เช็คแต่
  *       `students` แล้วปล่อยผ่าน = ผู้ใช้ได้ 500 จาก FK error แทนที่จะรู้ว่าติดอะไร
  */
 
@@ -188,7 +188,6 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
       `SELECT m.major_id FROM master_major m
         WHERE NOT EXISTS (SELECT 1 FROM students s WHERE s.major_id = m.major_id)
           AND NOT EXISTS (SELECT 1 FROM personnel p WHERE p.major_id = m.major_id)
-          AND NOT EXISTS (SELECT 1 FROM job_post_majors j WHERE j.major_id = m.major_id)
         LIMIT 1`
     );
     const ok = await request.delete(`${API_URL}/master-data/majors/${free}`);

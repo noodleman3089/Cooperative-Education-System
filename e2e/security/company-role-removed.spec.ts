@@ -9,7 +9,7 @@ import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
 /**
  * บทบาท `company` ถูกลบออกจากระบบ (2026-10-02, migration 042)
  *
- * บริษัทไม่มีบัญชี — ตอบทางลิงก์สาธารณะใช้ครั้งเดียว (`/accept` · `/offer`) เท่านั้น
+ * บริษัทไม่มีบัญชี — ตอบทางลิงก์สาธารณะใช้ครั้งเดียว (`/accept`) เท่านั้น
  * ไฟล์นี้คุมว่า "ประตูที่ปิดไปแล้วต้องไม่เปิดกลับมา":
  *   R1 สร้างบัญชี role company ผ่าน API ไม่ได้ · R2 ฐานไม่รับแถว role 'company' (CHECK)
  *   R3 ผลของ migration 042 กับข้อมูลเก่า · R4 route เดิมตอบ 404
@@ -161,8 +161,6 @@ test.describe('บทบาท company ถูกลบออกแล้ว', ()
       ['POST', `${API_URL}/users/${mentorId}/resend-invite`, 'ส่งลิงก์เชิญซ้ำ'],
       ['GET', `${API_URL}/students/${sid}/coop-application/company-view`, 'มุมมองใบสมัครของบริษัท'],
       ['PATCH', `${API_URL}/acceptances/company/1/status`, 'บริษัทตอบรับด้วยบัญชี'],
-      ['GET', `${API_URL}/job-offers/current`, 'แบบเสนองานของบริษัท (ปัจจุบัน)'],
-      ['GET', `${API_URL}/job-offers/history`, 'แบบเสนองานของบริษัท (ประวัติ)'],
     ];
     for (const [method, url, label] of gone) {
       const res = await request.fetch(url, { method, data: method === 'GET' ? undefined : {} });
@@ -190,29 +188,14 @@ test.describe('บทบาท company ถูกลบออกแล้ว', ()
     await expect(page.getByTestId('nav-company_profile')).toHaveCount(0);
   });
 
-  test('R6: ลิงก์สาธารณะของบริษัทยังทำงาน — token ที่ไม่รู้จัก = 404 · token จริง = 200 · ไม่ต้องล็อกอิน', async () => {
+  test('R6: ลิงก์สาธารณะของบริษัทยังทำงาน — token ที่ไม่รู้จัก = 404 (ไม่ใช่ 401) · ไม่ต้องล็อกอิน', async () => {
     const anon = await playwrightRequest.newContext();
     try {
       // ไม่รู้จัก token → 404 (ไม่ใช่ 401 ที่แปลว่าไปติดด่านล็อกอิน หรือ 500)
       const unknown = '00000000-0000-4000-8000-000000000000';
       expect((await anon.get(`${API_URL}/public/acceptance?token=${unknown}`)).status()).toBe(404);
-      expect((await anon.get(`${API_URL}/public/job-offer?token=${unknown}`)).status()).toBe(404);
-
-      // token จริงของแบบเสนองาน (สหกิจ 02) → เปิดได้โดยไม่มี cookie — พิสูจน์ว่า 404 ข้างบนมาจาก token ไม่ใช่ route หาย
-      const semesterId = await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
-      const companyId = await dbValue<number>('SELECT company_id FROM companies LIMIT 1');
-      const offerId = await dbValue<number>(
-        `INSERT INTO coop_job_offers (company_id, semester_id, due_date, status)
-         VALUES ($1, $2, CURRENT_DATE + 30, 'draft') RETURNING offer_id`,
-        [companyId, semesterId]
-      );
-      const token = 'r6-company-removed-token';
-      await dbExec(
-        `INSERT INTO job_offer_tokens (token, offer_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '24 hours')`,
-        [token, offerId]
-      );
-      const open = await anon.get(`${API_URL}/public/job-offer?token=${token}`);
-      expect(open.status(), await open.text()).toBe(200);
+      // token จริงเปิดได้โดยไม่มี cookie ถูกคุมอยู่ที่ documents/acceptance-link (L1) — ที่นี่คุมแค่ว่า
+      // 404 ข้างบนมาจาก "ไม่รู้จัก token" ไม่ใช่ไปติดด่านล็อกอิน (401)
     } finally {
       await anon.dispose();
     }

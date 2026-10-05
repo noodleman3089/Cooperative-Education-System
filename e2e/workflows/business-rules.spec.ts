@@ -20,67 +20,6 @@ test.describe('Business Rules & Guards E2E Tests', () => {
     });
   });
 
-  test('Test B1: Job Quota Full Prevents Additional Applications', async ({ page }) => {
-    // ==========================================
-    // Business Rule: When applied_count >= quota, the job post should reject new applications.
-    // Model: IntentFormModel.createWithTransaction() checks quota with pessimistic FOR UPDATE lock.
-    // Error: 'Job post quota has already been filled.'
-    // ==========================================
-
-    // 1. Seed DB and fill the quota-limited job manually
-    await seedTestData();
-
-    const client = await pool.connect();
-    let quotaJobId: number;
-    try {
-      // Find the quota-limited job post (quota = 1)
-      const jobRes = await client.query(
-        "SELECT job_id FROM job_posts WHERE title = 'QA Engineer (Seagate) - Limited Quota'"
-      );
-      expect(jobRes.rowCount, 'Quota-limited job post not found in seeded data').toBeGreaterThan(0);
-      quotaJobId = jobRes.rows[0].job_id;
-
-      // Set applied_count = quota (1) to simulate full
-      await client.query(
-        'UPDATE job_posts SET applied_count = quota WHERE job_id = $1',
-        [quotaJobId]
-      );
-    } finally {
-      client.release();
-    }
-
-    // 2. Student logs in and tries to apply to the full-quota job via API
-    await loginAs(page, 'student2');
-
-    // Get company and semester IDs
-    const dbClient = await pool.connect();
-    let companyId: number;
-    let semesterId: number;
-    try {
-      const companyRes = await dbClient.query("SELECT company_id FROM companies LIMIT 1");
-      const semesterRes = await dbClient.query("SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1");
-      companyId = companyRes.rows[0].company_id;
-      semesterId = semesterRes.rows[0].semester_id;
-    } finally {
-      dbClient.release();
-    }
-
-    // 3. Attempt to submit intent to the full-quota job via API
-    const apiRes = await page.request.post(`${API_URL}/intents`, {
-      data: {
-        company_id: companyId,
-        semester_id: semesterId,
-        job_id: quotaJobId,
-        is_self_found: false
-      }
-    });
-
-    // 4. Verify quota block - should return 400 error
-    expect(apiRes.status()).toBe(400);
-    const body = await apiRes.json();
-    expect(body.message).toContain('quota');
-  });
-
   test('Test B2: Advisor Major Mismatch Guard Blocks Cross-Major Approval', async ({ page }) => {
     // ==========================================
     // Business Rule: Advisor can only approve/reject students in the SAME major.

@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { API_URL } from '../helpers/env';
 import { withDb, dbValue, ensureLegacyTemplate } from '../helpers/db';
-import { approveIntentThroughOfficer, applyToFirstOpenJob, placementCard } from '../helpers/intent';
+import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard } from '../helpers/intent';
 import { loginAs, attemptLogin } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
 
@@ -30,13 +30,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // 2. Student logs in and submits intent form
     await loginAs(page, 'student2');
 
-    // Go to Smart Job Board and apply
+    // ไปหน้ายื่นคำร้องขอหนังสือ (เมนู jobs) แล้วยื่นถึงบริษัทในทำเนียบ
     await goToMenu(page, 'jobs');
-    await expect(page.locator('text=Full-Stack Developer (Seagate)')).toBeVisible();
-    await applyToFirstOpenJob(page);
+    await submitRequestToDirectoryCompany(page);
 
     // Verify application success
-    await expect(page.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
+    await expect(page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
 
     // 3. Simulate Back button
     await page.goBack();
@@ -48,10 +47,10 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     expect(new URL(page.url()).searchParams.get('menu')).toBeNull();
 
     // 4. ตัวคงสภาพที่เทสต์นี้คุมจริงคือ **กลับมาแล้วต้องสมัครซ้ำไม่ได้** ไม่ใช่ว่าอยู่หน้าไหน
-    //    กลับเข้ากระดานงานอีกครั้ง ปุ่มสมัครต้องปิดทั้งหมดพร้อมบอกเหตุผล
+    //    กลับเข้าหน้ายื่นคำร้องอีกครั้ง ฟอร์มต้องไม่อยู่บนจอแล้ว พร้อมบอกเหตุผล
     await goToMenu(page, 'jobs');
-    await expect(page.locator('text=คุณมีใบความจำนงที่ดำเนินการอยู่แล้ว')).toBeVisible();
-    await expect(page.locator('[data-testid="apply-job"]:enabled')).toHaveCount(0);
+    await expect(page.locator('text=คุณมีคำร้องที่ดำเนินการอยู่แล้ว')).toBeVisible();
+    await expect(page.getByTestId('request-submit')).toHaveCount(0);
 
     // 5. The other half: the server refuses a second one regardless of what the
     //    client offers. This used to be driven by clicking the button, which no
@@ -63,7 +62,6 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       data: {
         company_id: 1,
         semester_id: activeSemester.semester_id,
-        job_id: 1
       }
     });
     expect(duplicate.ok()).toBeFalsy();
@@ -82,8 +80,8 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
 
     // Student applies to Seagate job
     await goToMenu(studentPage, 'jobs');
-    await applyToFirstOpenJob(studentPage);
-    await expect(studentPage.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
+    await submitRequestToDirectoryCompany(studentPage);
+    await expect(studentPage.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
 
     // 3. Create isolated advisor session
     const advisorContext = await browser.newContext();
@@ -159,12 +157,11 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await loginAs(page, 'student2');
     await goToMenu(page, 'jobs');
     
-    await expect(page.locator('[data-testid="apply-job"]:enabled').first()).toBeVisible();
-    await applyToFirstOpenJob(page);
+    await submitRequestToDirectoryCompany(page);
 
     // Wait for the success toast message
     await expect(
-      page.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')
+      page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')
     ).toBeVisible();
 
     // 3. นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว เพื่อให้มีของรอเจ้าหน้าที่ตรวจ
@@ -367,8 +364,8 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // 1. นักศึกษายื่นใบความจำนงแล้วอัปโหลดกระดาษที่ลงนามกลับ → เข้าคิวเจ้าหน้าที่
     await loginAs(page, 'student2');
     await goToMenu(page, 'jobs');
-    await applyToFirstOpenJob(page);
-    await expect(page.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
+    await submitRequestToDirectoryCompany(page);
+    await expect(page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
 
     const formId = await dbValue<number>(
       `SELECT form_id FROM intent_forms

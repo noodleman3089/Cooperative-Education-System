@@ -25,12 +25,11 @@ async function acceptedStudent2(): Promise<Ctx> {
         WHERE u.email = 'student2@test.com'`
     )).rows[0];
     const company = (await db.query('SELECT company_id FROM companies ORDER BY company_id LIMIT 1')).rows[0];
-    const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [company.company_id]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, start_date, acceptance_due_date)
-       VALUES ($1, $2, $3, $4, 'accepted', CURRENT_DATE, CURRENT_DATE + 21)`,
-      [s.student_id, company.company_id, semester.rows[0].semester_id, job.rows[0]?.job_id ?? null]
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, start_date, acceptance_due_date)
+       VALUES ($1, $2, $3, 'accepted', CURRENT_DATE, CURRENT_DATE + 21)`,
+      [s.student_id, company.company_id, semester.rows[0].semester_id]
     );
     // เฟส 1 ต้องจบครบจริง — ขั้น 1.4 อ่านจากหนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
     await db.query(

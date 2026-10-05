@@ -24,7 +24,7 @@ test.describe('Cooperative Education System Logic & Security Audits', () => {
 
     // body ไม่ครบโดยตั้งใจ — คำขอจะตกด่านข้อมูล แต่ต้องไม่ใช่ด่านคุณสมบัติ
     const submitRes = await request.post(`${API_URL}/intents`, {
-      data: { company_id: 1, job_id: 1 }
+      data: { company_id: 1 }
     });
     expect(submitRes.status()).not.toBe(403);
     expect(JSON.stringify(await submitRes.json())).not.toContain('คุณสมบัติ');

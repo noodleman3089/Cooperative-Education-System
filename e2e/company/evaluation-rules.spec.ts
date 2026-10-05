@@ -72,20 +72,15 @@ const linkMentorToStudent = async (): Promise<number> =>
       await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")
     ).rows[0].user_id;
     const company = (await db.query('SELECT company_id FROM companies LIMIT 1')).rows[0];
-    const jobId = (
-      await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [
-        company.company_id,
-      ])
-    ).rows[0].job_id;
     const semesterId = (
       await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')
     ).rows[0].semester_id;
 
     const mentorId = await mentor1Id();
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date)
-       VALUES ($1, $2, $3, $4, 'accepted', $5, NOW())`,
-      [studentId, company.company_id, semesterId, jobId, mentorId]
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date)
+       VALUES ($1, $2, $3, 'accepted', $4, NOW())`,
+      [studentId, company.company_id, semesterId, mentorId]
     );
 
     return studentId as number;

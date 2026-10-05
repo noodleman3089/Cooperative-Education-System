@@ -32,14 +32,13 @@ async function attachMentorTo(
     const companyId = company.rows[0].company_id as number;
     const mentorId = await mentor1Id();
 
-    const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
     // ⛔ ต้องมีทั้ง start_date และ end_date — placementMonths() ใช้ทั้งคู่คำนวณคอลัมน์เดือน
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id, start_date, end_date)
-       VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE, CURRENT_DATE + $6::int)`,
-      [studentId, companyId, semester.rows[0].semester_id, job.rows[0].job_id, mentorId, durationDays]
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date, end_date)
+       VALUES ($1, $2, $3, 'accepted', $4, CURRENT_DATE, CURRENT_DATE + $5::int)`,
+      [studentId, companyId, semester.rows[0].semester_id, mentorId, durationDays]
     );
 
     return { mentorId, companyId, studentId };

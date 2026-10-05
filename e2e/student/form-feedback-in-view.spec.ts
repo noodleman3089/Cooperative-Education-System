@@ -23,14 +23,13 @@ async function acceptPlacementFor(studentEmail: string): Promise<void> {
     const student = await db.query('SELECT user_id FROM users WHERE email = $1', [studentEmail]);
     const company = await db.query('SELECT company_id FROM companies LIMIT 1');
     const companyId = company.rows[0].company_id as number;
-    const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id,
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id,
                                   start_date, end_date)
-       VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE - 6, CURRENT_DATE + 60)`,
-      [student.rows[0].user_id, companyId, semester.rows[0].semester_id, job.rows[0].job_id, await mentor1Id()]
+       VALUES ($1, $2, $3, 'accepted', $4, CURRENT_DATE - 6, CURRENT_DATE + 60)`,
+      [student.rows[0].user_id, companyId, semester.rows[0].semester_id, await mentor1Id()]
     );
   });
 }

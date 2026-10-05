@@ -24,16 +24,15 @@ async function attachMentorTo(
     const companyId = company.rows[0].company_id as number;
     const mentorId = await mentor1Id();
 
-    const job = await db.query('SELECT job_id FROM job_posts WHERE company_id = $1 LIMIT 1', [companyId]);
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
 
     // ⛔ start_date ต้องไม่ใหม่เกินไป ไม่งั้นวันของ "สัปดาห์ที่ 1" ตกไปอยู่ในอนาคต
     //    ทั้งหมด ซึ่งหน้าจอปิดช่องกรอกไว้โดยตั้งใจ (ยังไม่ถึงวัน)
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id,
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id,
                                   start_date, end_date, daily_log_required)
-       VALUES ($1, $2, $3, $4, 'accepted', $5, CURRENT_DATE - $6::int, CURRENT_DATE + 60, $7)`,
-      [studentId, companyId, semester.rows[0].semester_id, job.rows[0].job_id, mentorId, startDaysAgo, dailyLogRequired]
+       VALUES ($1, $2, $3, 'accepted', $4, CURRENT_DATE - $5::int, CURRENT_DATE + 60, $6)`,
+      [studentId, companyId, semester.rows[0].semester_id, mentorId, startDaysAgo, dailyLogRequired]
     );
 
     return { mentorId, companyId, studentId };

@@ -5,7 +5,7 @@ import path from 'path';
 import { API_URL } from '../helpers/env';
 import { loginAs } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
-import { approveIntentThroughOfficer, applyToFirstOpenJob, placementCard } from '../helpers/intent';
+import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard } from '../helpers/intent';
 import { dbValue } from '../helpers/db';
 
 test.describe('Cooperative Education System Workflow E2E Tests', () => {
@@ -33,16 +33,15 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     // แถบตัวตน (ชื่อ·รหัส) ถูกเอาออกจากหน้าแรกนักศึกษาใน `9309a27` — ใช้การ์ดที่ฝึกงานเป็นหลักฐานว่าเข้าหน้าแรกจริง
     await expect(placementCard(page)).toBeVisible();
 
-    // Go to Smart Job Board tab
+    // ไปหน้ายื่นคำร้องขอหนังสือ (เมนู jobs)
     await goToMenu(page, 'jobs');
 
     // Find the Seagate job post and apply
-    await expect(page.locator('text=Full-Stack Developer (Seagate)')).toBeVisible();
-    await expect(page.locator('[data-testid="apply-job"]:enabled').first()).toBeVisible();
-    await applyToFirstOpenJob(page);
+    await expect(page.getByRole('heading', { name: 'ยื่นคำร้องขอหนังสือขอความอนุเคราะห์' })).toBeVisible();
+    await submitRequestToDirectoryCompany(page);
 
     // Verify submission success toast/banner
-    await expect(page.locator('text=ส่งใบสมัครไปยัง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
+    await expect(page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')).toBeVisible();
 
     // Logout student
     await logout(page);
