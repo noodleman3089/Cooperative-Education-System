@@ -397,33 +397,6 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
             signer_position: 'ผู้จัดการฝ่ายบุคคล',
             signed_date: today,
             start_date: '2026-11-02',
-            mentor_name: 'สุรเดช ใจดี',
-            mentor_email: mentorEmail,
-            mentor_phone: '0812223333',
-            mentor_position: 'Supervisor',
-            mentor_department: 'QA',
-            job_position: 'Software Tester',
-            job_description: 'ทดสอบระบบและเขียนรายงานผลการทดสอบ',
-            company_form07: JSON.stringify({
-              house_no: '99/9',
-              road: 'ถนนทดสอบ',
-              subdistrict: 'ทุ่งสุขลา',
-              district: 'ศรีราชา',
-              province: 'ชลบุรี',
-              postal_code: '20230',
-              phone: '038111222',
-              fax: '038111223',
-              email: 'hr-m7@example.com',
-              manager_name: 'คุณผู้จัดการ ทดสอบ',
-              manager_position: 'ผู้จัดการทั่วไป',
-              manager_department: 'บริหาร',
-              manager_phone: '0811112222',
-              manager_email: 'manager-m7@example.com',
-              contact_mode: 'delegate',
-              contact_person: 'คุณประสาน ทดสอบ',
-              contact_position: 'เจ้าหน้าที่ประสานงาน',
-              contact_phone: '0822223333',
-            }),
           },
         }
       );
@@ -431,6 +404,13 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
     } finally {
       await company.dispose();
     }
+
+    // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง (ตัดสหกิจ 07 ฝั่งบริษัท 2026-10-05) — นักศึกษาระบุเอง
+    await apiLoginAs(request, 'student2');
+    const mentorSet = await request.post(`${API_URL}/intents/${formId}/mentor`, {
+      data: { name: 'สุรเดช ใจดี', email: mentorEmail, phone: '0812223333', position: 'Supervisor', department: 'QA' },
+    });
+    expect(mentorSet.status(), await mentorSet.text()).toBe(200);
 
     // ก่อนเจ้าหน้าที่กดรับ: บัญชียังปิด และยังไม่มีลิงก์เข้าระบบใดๆ
     const mentorBefore = await dbRow<{ is_active: boolean }>('SELECT is_active FROM users WHERE email = $1', [

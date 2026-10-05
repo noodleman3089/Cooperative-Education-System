@@ -28,7 +28,8 @@ const DEFAULT_MESSAGES: AcceptanceInputMessages = {
 
 export interface AcceptanceInputRaw {
   hasFile: boolean;
-  mentor: { name?: string; email?: string; phone?: string };
+  /** ไม่ส่ง = ไม่ตรวจพี่เลี้ยง (ทางลิงก์ของบริษัท — นักศึกษาระบุพี่เลี้ยงเองทีหลังที่ `POST /intents/:id/mentor`) */
+  mentor?: { name?: string; email?: string; phone?: string };
   start_date?: string;
   /** ค่าดิบของช่องผู้ลงนามจาก body */
   signer: Record<string, unknown>;
@@ -47,11 +48,14 @@ export async function validateAcceptanceInput(
 
   if (!input.hasFile) return fail(400, messages.noFile);
 
-  const { name, email, phone } = input.mentor;
-  if (!name || !email || !phone || !input.start_date) return fail(400, messages.requiredFields);
+  if (input.mentor) {
+    const { name, email, phone } = input.mentor;
+    if (!name || !email || !phone || !input.start_date) return fail(400, messages.requiredFields);
 
-  // Basic email validation
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(400, messages.badEmail);
+    // Basic email validation
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(400, messages.badEmail);
+  }
+  if (!input.start_date) return fail(400, messages.requiredFields);
 
   // Date validation
   if (isNaN(Date.parse(input.start_date))) return fail(400, messages.badStartDate);

@@ -26,7 +26,6 @@ interface StudentInfo {
   student_code: string;
   full_name: string;
   major_name_th: string;
-  job_position: string | null;
   start_date: string;
   end_date: string;
   week_total: number;

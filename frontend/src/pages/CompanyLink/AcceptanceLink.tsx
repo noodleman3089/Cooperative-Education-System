@@ -29,52 +29,15 @@ interface StudentCard {
   email: string;
 }
 
-type ContactMode = 'manager' | 'delegate';
-
-/** ฟิลด์สหกิจ 07 ส่วนบริษัท/ผู้จัดการ/ผู้ประสานงาน — ทั้งหมดนี้ (ยกเว้นชื่อ) คือ company_form07 */
-interface CompanyForm07 {
-  house_no: string;
-  road: string;
-  soi: string;
-  subdistrict: string;
-  district: string;
-  province: string;
-  postal_code: string;
-  phone: string;
-  fax: string;
-  email: string;
-  manager_name: string;
-  manager_position: string;
-  manager_department: string;
-  manager_phone: string;
-  manager_fax: string;
-  manager_email: string;
-  contact_mode: ContactMode;
-  contact_person: string;
-  contact_position: string;
-  contact_department: string;
-  contact_phone: string;
-  contact_fax: string;
-}
-
 type Phase = 'loading' | 'form' | 'sent' | 'gone' | 'notfound' | 'loaderror';
 type Decision = '' | 'accept' | 'decline';
 
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
-const EMPTY_FORM07: CompanyForm07 = {
-  house_no: '', road: '', soi: '', subdistrict: '', district: '', province: '', postal_code: '',
-  phone: '', fax: '', email: '',
-  manager_name: '', manager_position: '', manager_department: '', manager_phone: '', manager_fax: '', manager_email: '',
-  contact_mode: 'manager', contact_person: '', contact_position: '', contact_department: '', contact_phone: '', contact_fax: '',
-};
-
 const asText = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
 const formatThaiDateTime = (d: Date): string =>
   new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(d);
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const Field: React.FC<{ id: string; label: string; required?: boolean; className?: string; children: React.ReactNode }> = ({
   id, label, required, className = '', children,
@@ -86,12 +49,6 @@ const Field: React.FC<{ id: string; label: string; required?: boolean; className
     </label>
     {children}
   </div>
-);
-
-const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <h3 className="border-b border-gray-200 pb-2 text-sm font-bold text-brand-navy dark:border-gray-700 dark:text-blue-300">
-    {children}
-  </h3>
 );
 
 const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
@@ -124,11 +81,8 @@ const AcceptanceLink: React.FC = () => {
   const [student, setStudent] = useState<StudentCard | null>(null);
   const [hasResume, setHasResume] = useState(false);
   const [companyNameTh, setCompanyNameTh] = useState('');
-  const [companyNameEn, setCompanyNameEn] = useState('');
   const [expiresText, setExpiresText] = useState('');
-  const [form07, setForm07] = useState<CompanyForm07>(EMPTY_FORM07);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [decision, setDecision] = useState<Decision>('');
   const [declineReason, setDeclineReason] = useState('');
   const [signerName, setSignerName] = useState('');
@@ -136,24 +90,13 @@ const AcceptanceLink: React.FC = () => {
   const [signedDate, setSignedDate] = useState('');
   const [startDate, setStartDate] = useState('');
   const [evidence, setEvidence] = useState<File | null>(null);
-  const [mentorName, setMentorName] = useState('');
-  const [mentorPosition, setMentorPosition] = useState('');
-  const [mentorDepartment, setMentorDepartment] = useState('');
-  const [mentorPhone, setMentorPhone] = useState('');
-  const [mentorFax, setMentorFax] = useState('');
-  const [mentorEmail, setMentorEmail] = useState('');
-  const [jobPosition, setJobPosition] = useState('');
-  const [jobDescription, setJobDescription] = useState('');
 
   const [docTab, setDocTab] = useState<'cover' | 'form' | 'student'>('cover');
   const [error, setError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [sentInfo, setSentInfo] = useState<{ decision: Decision; mentor: string; at: string; message: string } | null>(null);
+  const [sentInfo, setSentInfo] = useState<{ decision: Decision; at: string; message: string } | null>(null);
   const errorRef = useRef<HTMLDivElement | null>(null);
-
-  const setF = <K extends keyof CompanyForm07>(key: K, value: CompanyForm07[K]) =>
-    setForm07((prev) => ({ ...prev, [key]: value }));
 
   useEffect(() => {
     if (!token) return;
@@ -174,16 +117,6 @@ const AcceptanceLink: React.FC = () => {
         setHasResume(Boolean(data.has_resume));
         const c = data.company ?? {};
         setCompanyNameTh(asText(c.name_th));
-        setCompanyNameEn(asText(c.name_en));
-        setForm07((prev) => {
-          const next = { ...prev };
-          (Object.keys(EMPTY_FORM07) as (keyof CompanyForm07)[]).forEach((k) => {
-            if (k === 'contact_mode') return;
-            next[k] = asText(c[k]) as never;
-          });
-          next.contact_mode = c.contact_mode === 'delegate' ? 'delegate' : 'manager';
-          return next;
-        });
         if (data.token_expires_at) {
           const exp = new Date(data.token_expires_at);
           if (!Number.isNaN(exp.getTime())) {
@@ -219,7 +152,7 @@ const AcceptanceLink: React.FC = () => {
 
   const fail = useCallback((msg: string) => setError(msg), []);
 
-  const validateStep1 = (): string | null => {
+  const validate = (): string | null => {
     if (decision === '') return 'กรุณาเลือกว่าจะรับหรือไม่รับนักศึกษาคนนี้';
     if (decision === 'decline') return declineReason.trim() ? null : 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษา';
     if (!signerName.trim()) return 'กรุณากรอกชื่อผู้ลงนาม';
@@ -231,35 +164,8 @@ const AcceptanceLink: React.FC = () => {
     return null;
   };
 
-  const validateStep2 = (): string | null => {
-    if (!form07.manager_name.trim()) return 'กรุณากรอกชื่อผู้จัดการ';
-    if (form07.contact_mode === 'delegate' && !form07.contact_person.trim()) {
-      return 'กรุณากรอกชื่อผู้ประสานงาน หรือเลือก "ผู้จัดการเป็นผู้ประสานงานเอง"';
-    }
-    if (!mentorName.trim()) return 'กรุณากรอกชื่อพนักงานที่ปรึกษา (พี่เลี้ยง)';
-    if (!mentorPosition.trim()) return 'กรุณากรอกตำแหน่งพนักงานที่ปรึกษา';
-    if (!mentorPhone.trim()) return 'กรุณากรอกโทรศัพท์พนักงานที่ปรึกษา';
-    if (!EMAIL_RE.test(mentorEmail.trim())) return 'กรุณากรอกอีเมลพนักงานที่ปรึกษาให้ถูกต้อง (ระบบจะส่งลิงก์เปิดบัญชีไปที่นี่)';
-    if (!jobPosition.trim()) return 'กรุณากรอกตำแหน่งงานที่มอบหมาย';
-    if (!jobDescription.trim()) return 'กรุณากรอกลักษณะงานที่มอบหมาย';
-    return null;
-  };
-
-  const goNext = () => {
-    const problem = step === 1 ? validateStep1() : validateStep2();
-    if (problem) return fail(problem);
-    setError(null);
-    setStep(step === 1 ? 2 : 3);
-  };
-
-  const goBack = () => {
-    setError(null);
-    setStep(step === 3 ? 2 : 1);
-  };
-
-  /** decline = ตรวจขั้น 1 แล้วเปิดกล่องยืนยัน · accept = มาถึงขั้น 3 แล้ว (ตรวจครบไปแล้วทีละขั้น) */
   const openConfirm = () => {
-    const problem = validateStep1() ?? (decision === 'accept' ? validateStep2() : null);
+    const problem = validate();
     if (problem) return fail(problem);
     setError(null);
     setConfirmOpen(true);
@@ -271,7 +177,7 @@ const AcceptanceLink: React.FC = () => {
     try {
       if (decision === 'decline') {
         const res = await api.post(`/public/acceptance/decline?${q}`, { reason: declineReason.trim() });
-        setSentInfo({ decision, mentor: '', at: formatThaiDateTime(new Date()), message: asText(res?.message) });
+        setSentInfo({ decision, at: formatThaiDateTime(new Date()), message: asText(res?.message) });
       } else {
         const fd = new FormData();
         if (evidence) fd.append('evidence', evidence);
@@ -279,19 +185,9 @@ const AcceptanceLink: React.FC = () => {
         fd.append('signer_position', signerPosition.trim());
         fd.append('signed_date', signedDate);
         fd.append('start_date', startDate);
-        fd.append('mentor_name', mentorName.trim());
-        fd.append('mentor_email', mentorEmail.trim());
-        fd.append('mentor_phone', mentorPhone.trim());
-        fd.append('mentor_position', mentorPosition.trim());
-        fd.append('mentor_department', mentorDepartment.trim());
-        fd.append('mentor_fax', mentorFax.trim());
-        fd.append('job_position', jobPosition.trim());
-        fd.append('job_description', jobDescription.trim());
-        fd.append('company_form07', JSON.stringify(form07));
         const res = await api.post(`/public/acceptance/accept?${q}`, fd);
         setSentInfo({
           decision,
-          mentor: asText(res?.mentor_name) || mentorName.trim(),
           at: formatThaiDateTime(new Date()),
           message: asText(res?.message),
         });
@@ -387,13 +283,12 @@ const AcceptanceLink: React.FC = () => {
           </h1>
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
             {accepted
-              ? 'เจ้าหน้าที่งานสหกิจศึกษาจะตรวจเอกสาร แล้วแจ้งนักศึกษาต่อ พี่เลี้ยงจะได้รับอีเมลเปิดบัญชีหลังตรวจเสร็จ'
+              ? 'เจ้าหน้าที่งานสหกิจศึกษาจะตรวจเอกสาร แล้วแจ้งนักศึกษาต่อ'
               : 'ระบบได้แจ้งนักศึกษาแล้วว่าสถานประกอบการไม่รับในครั้งนี้'}
           </p>
           <div className="w-full space-y-1.5 rounded-2xl border border-gray-200 bg-white p-4 text-left text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white">
             <div><span className="text-gray-600 dark:text-gray-400">นักศึกษา</span> · {student?.full_name}</div>
             <div><span className="text-gray-600 dark:text-gray-400">ผลการพิจารณา</span> · {accepted ? 'รับ' : 'ไม่รับ'}</div>
-            {accepted && <div><span className="text-gray-600 dark:text-gray-400">พี่เลี้ยง</span> · {sentInfo.mentor}</div>}
             <div><span className="text-gray-600 dark:text-gray-400">ส่งเมื่อ</span> · {sentInfo.at}</div>
           </div>
           <p className="text-xs text-gray-600 dark:text-gray-400">
@@ -403,15 +298,6 @@ const AcceptanceLink: React.FC = () => {
       </ResultShell>
     );
   }
-
-  const stepPills: { n: 1 | 2 | 3; label: string }[] =
-    decision === 'decline'
-      ? [{ n: 1, label: '1 ตอบรับ' }]
-      : [
-          { n: 1, label: '1 ตอบรับ' },
-          { n: 2, label: '2 สหกิจ 07' },
-          { n: 3, label: '3 ตรวจและส่ง' },
-        ];
 
   const tabBtn = (id: typeof docTab, label: string) => (
     <button
@@ -438,47 +324,6 @@ const AcceptanceLink: React.FC = () => {
         { label: 'อีเมลมหาวิทยาลัย', value: student.email },
       ]
     : [];
-
-  const summaryGroups = [
-    {
-      title: 'การตอบรับ',
-      rows: [
-        { label: 'นักศึกษา', value: student?.full_name ?? '' },
-        { label: 'ผู้ลงนาม', value: `${signerName.trim()} (${signerPosition.trim()})` },
-        { label: 'วันที่ลงนาม', value: signedDate ? formatThaiDate(signedDate) : '' },
-        { label: 'วันเริ่มปฏิบัติงาน', value: startDate ? formatThaiDate(startDate) : '' },
-        { label: 'ไฟล์เอกสาร 2', value: evidence?.name ?? '' },
-      ],
-    },
-    {
-      title: 'สถานประกอบการ · ผู้จัดการ',
-      rows: [
-        { label: 'สถานประกอบการ', value: companyNameTh },
-        { label: 'โทรศัพท์', value: form07.phone },
-        { label: 'ผู้จัดการ', value: form07.manager_name },
-        {
-          label: 'ผู้ประสานงาน',
-          value: form07.contact_mode === 'manager' ? 'ผู้จัดการเป็นผู้ประสานงานเอง' : form07.contact_person,
-        },
-      ],
-    },
-    {
-      title: 'พนักงานที่ปรึกษา (พี่เลี้ยง) · ระบบจะส่งลิงก์เปิดบัญชีไปที่อีเมลนี้',
-      rows: [
-        { label: 'ชื่อ', value: mentorName.trim() },
-        { label: 'ตำแหน่ง', value: mentorPosition.trim() },
-        { label: 'โทรศัพท์', value: mentorPhone.trim() },
-        { label: 'อีเมล', value: mentorEmail.trim() },
-      ],
-    },
-    {
-      title: 'งานที่มอบหมาย',
-      rows: [
-        { label: 'ตำแหน่งงาน', value: jobPosition.trim() },
-        { label: 'ลักษณะงาน', value: jobDescription.trim() },
-      ],
-    },
-  ];
 
   const docLinks = (
     <div className="flex flex-col gap-2 text-sm">
@@ -575,29 +420,10 @@ const AcceptanceLink: React.FC = () => {
             <div className="text-xs text-gray-600 dark:text-gray-400 sm:hidden">ลิงก์ใช้ได้ถึง {expiresText}</div>
           )}
 
-          <ol className="flex flex-wrap items-center gap-2 text-xs">
-            {stepPills.map((p, i) => (
-              <React.Fragment key={p.n}>
-                {i > 0 && <span className="text-gray-400 dark:text-gray-500" aria-hidden="true">—</span>}
-                <li
-                  aria-current={step === p.n ? 'step' : undefined}
-                  className={`rounded-full px-3 py-1 font-semibold ${
-                    step === p.n
-                      ? 'bg-brand-blue text-white'
-                      : 'border border-gray-300 bg-white text-gray-700 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'
-                  }`}
-                >
-                  {p.label}
-                </li>
-              </React.Fragment>
-            ))}
-          </ol>
-
           <div ref={errorRef} data-testid="al-error" className={error ? '' : 'hidden'}>
             <AlertBanner variant="error" message={error} />
           </div>
 
-          {step === 1 && (
             <Card className="flex flex-col gap-4">
               <h2 className="text-base font-semibold">
                 รับ {student?.full_name} เข้าปฏิบัติสหกิจศึกษาที่ {companyNameTh || 'สถานประกอบการ'} หรือไม่
@@ -685,137 +511,9 @@ const AcceptanceLink: React.FC = () => {
                 </Field>
               )}
             </Card>
-          )}
 
-          {step === 2 && (
-            <Card className="flex flex-col gap-5">
-              <div className="flex flex-col gap-3">
-                <SectionTitle>สถานประกอบการ</SectionTitle>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field id="al-name-th" label="ชื่อภาษาไทย">
-                    <Input id="al-name-th" value={companyNameTh} readOnly disabled />
-                  </Field>
-                  <Field id="al-name-en" label="ชื่อภาษาอังกฤษ">
-                    <Input id="al-name-en" value={companyNameEn} readOnly disabled />
-                  </Field>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <Field id="al-house-no" label="เลขที่"><Input id="al-house-no" value={form07.house_no} onChange={(e) => setF('house_no', e.target.value)} /></Field>
-                  <Field id="al-road" label="ถนน"><Input id="al-road" value={form07.road} onChange={(e) => setF('road', e.target.value)} /></Field>
-                  <Field id="al-soi" label="ซอย"><Input id="al-soi" value={form07.soi} onChange={(e) => setF('soi', e.target.value)} /></Field>
-                  <Field id="al-subdistrict" label="ตำบล/แขวง"><Input id="al-subdistrict" value={form07.subdistrict} onChange={(e) => setF('subdistrict', e.target.value)} /></Field>
-                  <Field id="al-district" label="อำเภอ/เขต"><Input id="al-district" value={form07.district} onChange={(e) => setF('district', e.target.value)} /></Field>
-                  <Field id="al-province" label="จังหวัด"><Input id="al-province" value={form07.province} onChange={(e) => setF('province', e.target.value)} /></Field>
-                  <Field id="al-postal" label="รหัสไปรษณีย์"><Input id="al-postal" inputMode="numeric" value={form07.postal_code} onChange={(e) => setF('postal_code', e.target.value)} /></Field>
-                  <Field id="al-company-phone" label="โทรศัพท์"><Input id="al-company-phone" type="tel" data-testid="al-company-phone" value={form07.phone} onChange={(e) => setF('phone', e.target.value)} /></Field>
-                  <Field id="al-company-fax" label="โทรสาร"><Input id="al-company-fax" type="tel" value={form07.fax} onChange={(e) => setF('fax', e.target.value)} /></Field>
-                </div>
-                <Field id="al-company-email" label="อีเมลสถานประกอบการ">
-                  <Input id="al-company-email" type="email" value={form07.email} onChange={(e) => setF('email', e.target.value)} />
-                </Field>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <SectionTitle>ผู้จัดการ / ผู้ประสานงาน</SectionTitle>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field id="al-manager-name" label="ชื่อผู้จัดการ" required>
-                    <Input id="al-manager-name" data-testid="al-manager-name" value={form07.manager_name} onChange={(e) => setF('manager_name', e.target.value)} />
-                  </Field>
-                  <Field id="al-manager-position" label="ตำแหน่ง"><Input id="al-manager-position" value={form07.manager_position} onChange={(e) => setF('manager_position', e.target.value)} /></Field>
-                  <Field id="al-manager-department" label="แผนก"><Input id="al-manager-department" value={form07.manager_department} onChange={(e) => setF('manager_department', e.target.value)} /></Field>
-                  <Field id="al-manager-phone" label="โทรศัพท์"><Input id="al-manager-phone" type="tel" value={form07.manager_phone} onChange={(e) => setF('manager_phone', e.target.value)} /></Field>
-                  <Field id="al-manager-fax" label="โทรสาร"><Input id="al-manager-fax" type="tel" value={form07.manager_fax} onChange={(e) => setF('manager_fax', e.target.value)} /></Field>
-                  <Field id="al-manager-email" label="อีเมล"><Input id="al-manager-email" type="email" value={form07.manager_email} onChange={(e) => setF('manager_email', e.target.value)} /></Field>
-                </div>
-                <fieldset className="flex flex-col gap-2">
-                  <legend className="mb-1 text-xs font-semibold text-gray-700 dark:text-gray-300">ผู้ประสานงานกับมหาวิทยาลัย</legend>
-                  {([
-                    { v: 'manager', label: 'ผู้จัดการเป็นผู้ประสานงานเอง' },
-                    { v: 'delegate', label: 'มอบหมายผู้ประสานงานอีกคน' },
-                  ] as const).map((o) => (
-                    <label key={o.v} className="flex cursor-pointer items-center gap-2 text-sm text-gray-900 dark:text-gray-100">
-                      <input
-                        type="radio"
-                        name="al-contact-mode"
-                        checked={form07.contact_mode === o.v}
-                        onChange={() => setF('contact_mode', o.v)}
-                        className="h-4 w-4 accent-brand-blue"
-                      />
-                      {o.label}
-                    </label>
-                  ))}
-                </fieldset>
-                {form07.contact_mode === 'delegate' && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <Field id="al-contact-person" label="ชื่อผู้ประสานงาน" required><Input id="al-contact-person" value={form07.contact_person} onChange={(e) => setF('contact_person', e.target.value)} /></Field>
-                    <Field id="al-contact-position" label="ตำแหน่ง"><Input id="al-contact-position" value={form07.contact_position} onChange={(e) => setF('contact_position', e.target.value)} /></Field>
-                    <Field id="al-contact-department" label="แผนก"><Input id="al-contact-department" value={form07.contact_department} onChange={(e) => setF('contact_department', e.target.value)} /></Field>
-                    <Field id="al-contact-phone" label="โทรศัพท์"><Input id="al-contact-phone" type="tel" value={form07.contact_phone} onChange={(e) => setF('contact_phone', e.target.value)} /></Field>
-                    <Field id="al-contact-fax" label="โทรสาร"><Input id="al-contact-fax" type="tel" value={form07.contact_fax} onChange={(e) => setF('contact_fax', e.target.value)} /></Field>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <SectionTitle>พนักงานที่ปรึกษา (พี่เลี้ยง)</SectionTitle>
-                <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                  หลังเจ้าหน้าที่ตรวจเอกสาร ระบบจะส่งลิงก์เปิดบัญชีพี่เลี้ยงไปที่อีเมลนี้
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field id="al-mentor-name" label="ชื่อ-นามสกุล" required>
-                    <Input id="al-mentor-name" data-testid="al-mentor-name" value={mentorName} onChange={(e) => setMentorName(e.target.value)} />
-                  </Field>
-                  <Field id="al-mentor-position" label="ตำแหน่ง" required>
-                    <Input id="al-mentor-position" data-testid="al-mentor-position" value={mentorPosition} onChange={(e) => setMentorPosition(e.target.value)} />
-                  </Field>
-                  <Field id="al-mentor-department" label="แผนก"><Input id="al-mentor-department" value={mentorDepartment} onChange={(e) => setMentorDepartment(e.target.value)} /></Field>
-                  <Field id="al-mentor-phone" label="โทรศัพท์" required>
-                    <Input id="al-mentor-phone" type="tel" data-testid="al-mentor-phone" value={mentorPhone} onChange={(e) => setMentorPhone(e.target.value)} />
-                  </Field>
-                  <Field id="al-mentor-fax" label="โทรสาร"><Input id="al-mentor-fax" type="tel" value={mentorFax} onChange={(e) => setMentorFax(e.target.value)} /></Field>
-                  <Field id="al-mentor-email" label="อีเมล" required>
-                    <Input id="al-mentor-email" type="email" data-testid="al-mentor-email" value={mentorEmail} onChange={(e) => setMentorEmail(e.target.value)} />
-                  </Field>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <SectionTitle>งานที่มอบหมาย</SectionTitle>
-                <Field id="al-job-position" label="ตำแหน่งงาน (Job Position)" required>
-                  <Input id="al-job-position" data-testid="al-job-position" value={jobPosition} onChange={(e) => setJobPosition(e.target.value)} />
-                </Field>
-                <Field id="al-job-description" label="ลักษณะงาน (Job Description)" required>
-                  <Textarea id="al-job-description" rows={4} data-testid="al-job-description" value={jobDescription} onChange={(e) => setJobDescription(e.target.value)} />
-                </Field>
-              </div>
-            </Card>
-          )}
-
-          {step === 3 && (
-            <Card className="flex flex-col gap-3">
-              <h2 className="text-base font-semibold">ตรวจข้อมูลก่อนส่ง</h2>
-              <ConfirmSummary
-                groups={summaryGroups}
-                lockNote="ส่งแล้วแก้เองไม่ได้ และลิงก์นี้ใช้ได้ครั้งเดียว หากต้องแก้ไขให้ติดต่อนักศึกษาหรืองานสหกิจศึกษา"
-              />
-            </Card>
-          )}
-
-          <div className="mt-auto flex items-center justify-between gap-3 pt-2">
-            <div>
-              {step > 1 && (
-                <Button variant="secondary" data-testid="al-back" onClick={goBack} disabled={submitting}>
-                  ย้อนกลับ
-                </Button>
-              )}
-            </div>
-            {step === 1 && decision === 'accept' && (
-              <Button data-testid="al-next" onClick={goNext}>ถัดไป: สหกิจ 07</Button>
-            )}
-            {step === 2 && (
-              <Button data-testid="al-next" onClick={goNext}>ถัดไป: ตรวจและส่ง</Button>
-            )}
-            {((step === 1 && decision === 'decline') || step === 3) && (
+          <div className="mt-auto flex items-center justify-end gap-3 pt-2">
+            {decision !== '' && (
               <Button data-testid="al-submit" onClick={openConfirm}>
                 {decision === 'decline' ? 'ส่งคำตอบไม่รับ' : 'ตรวจแล้ว ส่งคำตอบ'}
               </Button>
@@ -851,9 +549,10 @@ const AcceptanceLink: React.FC = () => {
               rows={[
                 { label: 'นักศึกษา', value: student?.full_name ?? '' },
                 { label: 'ผลการพิจารณา', value: 'รับ' },
+                { label: 'ผู้ลงนาม', value: `${signerName.trim()} (${signerPosition.trim()})` },
+                { label: 'วันที่ลงนาม', value: signedDate ? formatThaiDate(signedDate) : '' },
                 { label: 'วันเริ่มปฏิบัติงาน', value: startDate ? formatThaiDate(startDate) : '' },
-                { label: 'พี่เลี้ยง', value: mentorName.trim() },
-                { label: 'อีเมลพี่เลี้ยง', value: mentorEmail.trim() },
+                { label: 'ไฟล์เอกสาร 2', value: evidence?.name ?? '' },
               ]}
               lockNote="ส่งแล้วแก้เองไม่ได้ และลิงก์นี้จะใช้ต่อไม่ได้"
             />

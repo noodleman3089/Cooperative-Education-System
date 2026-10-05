@@ -49,7 +49,8 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
       if (intent.reject_reason) return 'returned';
       return intent.company_mail_sent_at ? 'wait-company' : 'send';
     case 'pending_officer_approval':
-      return 'wait-confirm';
+      // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง — เจ้าหน้าที่กดรับไม่ได้จนกว่านักศึกษาจะระบุ
+      return intent.mentor?.name ? 'wait-confirm' : 'add-mentor';
     case 'company_rejected':
       return 'company-rejected';
     case 'rejected':
@@ -102,6 +103,11 @@ const StudentDashboard: React.FC = () => {
   // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ + ระบบส่งลิงก์เชิญถึงอีเมลพี่เลี้ยง — ตรวจก่อนส่ง
   const [confirmingProof, setConfirmingProof] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
+  // ระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ (`POST /intents/:id/mentor`)
+  const [mentorSet, setMentorSet] = useState({ name: '', email: '', phone: '', position: '', department: '' });
+  const [mentorSetOpen, setMentorSetOpen] = useState(false);
+  const [mentorSetBusy, setMentorSetBusy] = useState(false);
+  const [mentorSetError, setMentorSetError] = useState<string | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
   // ไฟล์แบบคำร้องที่เลือกแล้วแต่ยังไม่ส่ง — มีค่า = กล่องยืนยันเปิดอยู่
   const [pendingRequestForm, setPendingRequestForm] = useState<{ file: File; formId: number } | null>(null);
@@ -1198,6 +1204,101 @@ const StudentDashboard: React.FC = () => {
     </div>
   );
 
+  // ฟอร์มระบุพี่เลี้ยง — บริษัทตอบรับทางลิงก์ไม่ได้ระบุพี่เลี้ยงมา (ตัดสหกิจ 07 ฝั่งบริษัท 2026-10-05)
+  // ส่งได้จนกว่าเจ้าหน้าที่จะกดรับ · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่กดรับเท่านั้น จึงไม่มีอีเมลออกจากการกดตรงนี้
+  const mentorFieldKeys = ['name', 'email', 'phone', 'position', 'department'] as const;
+  const submitMentorSet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeIntent) return;
+    setMentorSetBusy(true);
+    setMentorSetError(null);
+    try {
+      await api.post(`/intents/${activeIntent.form_id}/mentor`, {
+        name: mentorSet.name.trim(),
+        email: mentorSet.email.trim(),
+        phone: mentorSet.phone.trim(),
+        position: mentorSet.position.trim(),
+        department: mentorSet.department.trim(),
+      });
+      setMentorSetOpen(false);
+      await loadDashboardData(true);
+    } catch (err) {
+      setMentorSetError(getErrorMessage(err, 'บันทึกข้อมูลพี่เลี้ยงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+    } finally {
+      setMentorSetBusy(false);
+    }
+  };
+  const mentorFieldLabels: Record<(typeof mentorFieldKeys)[number], string> = {
+    name: 'ชื่อ-นามสกุล พี่เลี้ยง *',
+    email: 'อีเมล พี่เลี้ยง *',
+    phone: 'เบอร์โทรศัพท์ พี่เลี้ยง *',
+    position: 'ตำแหน่ง (ไม่บังคับ)',
+    department: 'ฝ่าย / แผนก (ไม่บังคับ)',
+  };
+  const mentorFormEl =
+    statusState === 'add-mentor' || (statusState === 'wait-confirm' && mentorSetOpen) ? (
+      <form
+        data-testid="mentor-form"
+        onSubmit={submitMentorSet}
+        className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700"
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {mentorFieldKeys.map((key) => (
+            <div key={key}>
+              <label htmlFor={`mentor-set-${key}`} className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
+                {mentorFieldLabels[key]}
+              </label>
+              <Input
+                id={`mentor-set-${key}`}
+                data-testid={`mentor-${key}`}
+                type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'}
+                required={key === 'name' || key === 'email' || key === 'phone'}
+                disabled={mentorSetBusy}
+                value={mentorSet[key]}
+                onChange={(e) => setMentorSet((prev) => ({ ...prev, [key]: e.target.value }))}
+                size="sm"
+              />
+            </div>
+          ))}
+        </div>
+        <AlertBanner variant="error" message={mentorSetError} />
+        <div className="flex gap-2">
+          <Button type="submit" size="sm" data-testid="mentor-submit" disabled={mentorSetBusy}>
+            {mentorSetBusy ? 'กำลังบันทึก...' : 'บันทึกข้อมูลพี่เลี้ยง'}
+          </Button>
+          {statusState === 'wait-confirm' && (
+            <Button variant="secondary" size="sm" disabled={mentorSetBusy} onClick={() => setMentorSetOpen(false)}>
+              ยกเลิก
+            </Button>
+          )}
+        </div>
+      </form>
+    ) : null;
+  // wait-confirm: แก้พี่เลี้ยงได้จนกว่าเจ้าหน้าที่จะกดรับ — เฉพาะใบที่บริษัทตอบทางลิงก์ (ทางนักศึกษาอัปโหลดเอง พี่เลี้ยงมากับแบบตอบรับแล้ว)
+  const mentorEditToggleEl =
+    statusState === 'wait-confirm' && statusIntent?.acceptance_source === 'link' && !mentorSetOpen ? (
+      <div>
+        <Button
+          variant="secondary"
+          size="sm"
+          data-testid="mentor-edit"
+          onClick={() => {
+            setMentorSet({
+              name: intentMentor?.name ?? '',
+              email: intentMentor?.email ?? '',
+              phone: intentMentor?.phone ?? '',
+              position: intentMentor?.position ?? '',
+              department: intentMentor?.department ?? '',
+            });
+            setMentorSetError(null);
+            setMentorSetOpen(true);
+          }}
+        >
+          แก้ข้อมูลพี่เลี้ยง
+        </Button>
+      </div>
+    ) : null;
+
   return (
     <div className="space-y-6 page-enter">
       {/* PR Announcements Banner */}
@@ -1238,6 +1339,8 @@ const StudentDashboard: React.FC = () => {
                     ? renderMailBox(activeIntent, 'wait')
                     : null
           }
+          mentorForm={mentorFormEl}
+          mentorEditToggle={mentorEditToggleEl}
           proofForm={proofFormEl}
           proofOpen={proofOpen}
           onOpenProof={() => setProofOpen((open) => !open)}
@@ -1279,12 +1382,6 @@ const StudentDashboard: React.FC = () => {
                 <span className="text-sm font-semibold text-gray-900 dark:text-white">
                   {activeIntent.company_name_th}
                 </span>
-                {/* หลังบริษัทตอบรับ job_position คือ "งานที่ได้ทำจริง" — ใช้แทนชื่อประกาศงานที่สมัคร */}
-                {activeIntent.job_position && (
-                  <span data-testid="intent-job-title" className="text-xs text-gray-600 dark:text-gray-400">
-                    ตำแหน่ง {activeIntent.job_position}
-                  </span>
-                )}
                 {/* ข้อมูลที่เดิมอยู่บนการ์ดสถานะตอน "ได้ที่ฝึกงานแล้ว" — ขึ้นเมื่อมีเท่านั้น */}
                 {intentMentor?.name && (
                   <span data-testid="intent-mentor" className="text-xs text-gray-600 dark:text-gray-400">

@@ -9,10 +9,9 @@ import { validateAcceptanceInput } from '../utils/acceptanceInput';
 import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
 import { notifyStudentStatusChange } from '../utils/email';
 import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
-import { FORM07_WRITABLE_FIELDS } from '../utils/companyFields';
 
 /**
- * ตอบรับ/ไม่รับนักศึกษาจากลิงก์ในอีเมล (เอกสารหมายเลข 2 + สหกิจ 07) — **ไม่ต้องเข้าสู่ระบบ**
+ * ตอบรับ/ไม่รับนักศึกษาจากลิงก์ในอีเมล (เอกสารหมายเลข 2) — **ไม่ต้องเข้าสู่ระบบ**
  * บริษัทไม่มีบัญชี (เจ้าของตัดสิน 2026-09-29) · ลิงก์ออกโดย `IntentFormController.sendCoverLetterToCompany`
  *
  * กติกาที่ผิดไม่ได้ในไฟล์นี้:
@@ -23,8 +22,9 @@ import { FORM07_WRITABLE_FIELDS } from '../utils/companyFields';
  *   ⛔ token ใช้ได้ครั้งเดียว — burn ด้วย UPDATE เดียวที่มีเงื่อนไขในทรานแซกชันเดียวกับคำตอบ
  *      (0 แถว = มีคำขออื่นชนะก่อน = 410) · ตอบไม่สำเร็จ = rollback = token ยังใช้ได้
  *   ⛔ "ไม่รับ" มีผลทันที ไม่ผ่านเจ้าหน้าที่ · "รับ" ไปคิวเจ้าหน้าที่ (`pending_officer_approval`)
- *   ⛔ ข้อมูลบริษัท (สหกิจ 07) **ไม่เขียนทับ companies** — พักที่ `intent_forms.company_form07_pending`
- *      แล้วเขียนตอนเจ้าหน้าที่กดรับ (ลิงก์ไปถึงอีเมลที่นักศึกษาพิมพ์ ใครถือลิงก์ก็ไม่ควรแก้ทะเบียนได้ทันที)
+ *   ⛔ **ไม่มีสหกิจ 07 บนลิงก์แล้ว (เจ้าของสั่งตัด 2026-10-05)** — ลิงก์ไม่รับข้อมูลบริษัท/ตำแหน่งงาน/พี่เลี้ยง
+ *      และ **ไม่เขียน `companies` เลย** (ลิงก์ไปถึงอีเมลที่นักศึกษาพิมพ์ ใครถือลิงก์ก็ไม่ควรแก้ทะเบียนได้)
+ *      · พี่เลี้ยงนักศึกษาระบุเองทีหลัง `POST /intents/:id/mentor` แล้วเจ้าหน้าที่ตรวจก่อนกดรับ
  *   ⛔ ทุกการกระทำลง `audit_log` พร้อม `token_id` (ห้ามเก็บ token) เพราะไม่มีผู้ใช้ที่ล็อกอินให้ตามย้อน
  */
 
@@ -146,11 +146,7 @@ export class PublicAcceptanceController {
         [gate.student_id, gate.semester_id]
       );
       const companyRes = await query(
-        `SELECT name_th, name_en, house_no, road, soi, subdistrict, district, province, postal_code,
-                phone, fax, email,
-                manager_name, manager_position, manager_department, manager_phone, manager_fax, manager_email,
-                contact_mode, contact_person, contact_position, contact_department, contact_phone, contact_fax
-           FROM companies WHERE company_id = $1`,
+        `SELECT name_th, name_en FROM companies WHERE company_id = $1`,
         [gate.company_id]
       );
       if ((studentRes.rowCount ?? 0) === 0 || (companyRes.rowCount ?? 0) === 0) {
@@ -176,28 +172,6 @@ export class PublicAcceptanceController {
         company: {
           name_th: c.name_th,
           name_en: c.name_en,
-          house_no: c.house_no,
-          road: c.road,
-          soi: c.soi,
-          subdistrict: c.subdistrict,
-          district: c.district,
-          province: c.province,
-          postal_code: c.postal_code,
-          phone: c.phone,
-          fax: c.fax,
-          email: c.email,
-          manager_name: c.manager_name,
-          manager_position: c.manager_position,
-          manager_department: c.manager_department,
-          manager_phone: c.manager_phone,
-          manager_fax: c.manager_fax,
-          manager_email: c.manager_email,
-          contact_mode: c.contact_mode,
-          contact_person: c.contact_person,
-          contact_position: c.contact_position,
-          contact_department: c.contact_department,
-          contact_phone: c.contact_phone,
-          contact_fax: c.contact_fax,
         },
         token_expires_at: new Date(gate.expires_at).toISOString(),
       });
@@ -378,43 +352,18 @@ export class PublicAcceptanceController {
       }
 
       // ด่านตรวจร่วมกับทางนักศึกษาอัปโหลดเอง (utils/acceptanceInput.ts) — ไม่มีสำเนาตรรกะที่นี่
-      const mentor = {
-        name: str(body.mentor_name),
-        email: str(body.mentor_email),
-        phone: str(body.mentor_phone),
-        position: str(body.mentor_position),
-        department: str(body.mentor_department),
-        fax: str(body.mentor_fax),
-      };
+      // ⛔ ไม่ส่ง `mentor` = ไม่ถามพี่เลี้ยงบนลิงก์ (ตัด สหกิจ 07 ฝั่งบริษัท 2026-10-05) · นักศึกษาระบุทีหลัง
       const input = await validateAcceptanceInput(
         gate.form_id,
-        { hasFile: !!file, mentor, start_date: startDate, signer: body },
+        { hasFile: !!file, start_date: startDate, signer: body },
         {
           noFile: 'กรุณาแนบไฟล์แบบตอบรับ (เอกสารหมายเลข ๒) ที่ลงนามและประทับตราแล้ว',
-          requiredFields: 'กรุณากรอกชื่อ อีเมล และเบอร์โทรของพนักงานที่ปรึกษา (พี่เลี้ยง) และวันเริ่มปฏิบัติงาน',
-          badEmail: 'รูปแบบอีเมลของพนักงานที่ปรึกษาไม่ถูกต้อง',
+          requiredFields: 'กรุณาระบุวันเริ่มปฏิบัติงาน',
+          badEmail: '',
           badStartDate: 'รูปแบบวันเริ่มปฏิบัติงานไม่ถูกต้อง',
         }
       );
       if (!input.ok) return reject(input.status, { message: input.message });
-
-      const jobPosition = str(body.job_position);
-      const jobDescription = str(body.job_description);
-      if (!jobPosition || !jobDescription) {
-        return reject(400, { message: 'กรุณากรอกตำแหน่งงานและลักษณะงานที่มอบหมายให้นักศึกษา (สหกิจ 07)' });
-      }
-      if (jobPosition.length > 255 || jobDescription.length > 4000) {
-        return reject(400, { message: 'ตำแหน่งงานหรือลักษณะงานยาวเกินกำหนด' });
-      }
-      if (
-        mentor.name.length > 255 || mentor.position.length > 255 || mentor.department.length > 255 ||
-        mentor.email.length > 254 || mentor.phone.length > 50 || mentor.fax.length > 50
-      ) {
-        return reject(400, { message: 'ข้อมูลพนักงานที่ปรึกษายาวเกินกำหนด' });
-      }
-
-      const form07 = sanitizeForm07(body.company_form07);
-      if (!form07.ok) return reject(400, { message: form07.message });
 
       client = await pool.connect();
       await client.query('BEGIN');
@@ -432,21 +381,10 @@ export class PublicAcceptanceController {
       await IntentFormModel.acceptWithClient(client, {
         intentId: gate.form_id,
         source: 'link',
-        mentorData: {
-          name: mentor.name,
-          email: mentor.email,
-          phone: mentor.phone,
-          position: mentor.position || undefined,
-          department: mentor.department || undefined,
-          fax: mentor.fax || undefined,
-        },
         startDate,
         evidencePath: `acceptance_evidence/${file!.filename}`,
         submittedLate: input.submittedLate,
         signer: input.signer,
-        jobPosition,
-        jobDescription,
-        form07Pending: form07.value,
       });
 
       await writeAudit(
@@ -467,7 +405,6 @@ export class PublicAcceptanceController {
 
       res.status(200).json({
         message: 'ส่งแบบตอบรับเรียบร้อยแล้ว ขอบคุณที่ให้ความอนุเคราะห์ เจ้าหน้าที่คณะจะตรวจสอบและแจ้งนักศึกษาต่อไป',
-        mentor_name: mentor.name,
       });
     } catch (error) {
       if (client) await client.query('ROLLBACK').catch(console.error);
@@ -495,49 +432,4 @@ async function burnToken(client: PoolClient, tokenId: number): Promise<boolean> 
     [tokenId]
   );
   return (burned.rowCount ?? 0) > 0;
-}
-
-/** ความยาวสูงสุดของคอลัมน์ `companies` ที่ต่างจาก 255 — เกินแล้วจะไปล้มตอนเจ้าหน้าที่กดรับ ไม่ใช่ตอนบริษัทกรอก */
-const FORM07_MAX_LENGTH: Record<string, number> = {
-  phone: 20, postal_code: 10, contact_mode: 10,
-  province: 100, district: 100, subdistrict: 100,
-  house_no: 50, fax: 50,
-  manager_phone: 50, manager_fax: 50, contact_phone: 50, contact_fax: 50,
-};
-
-/**
- * ข้อมูลบริษัทส่วน สหกิจ 07 ที่จะพักไว้ — เก็บเฉพาะคีย์ใน `FORM07_WRITABLE_FIELDS` (whitelist เดียวกับ
- * `updateCompanyFields`) ที่เป็นสตริงไม่ว่าง · **ตัดช่องว่างทิ้งแทนที่จะเขียนทับเป็น NULL** เพราะหลายคอลัมน์
- * (phone · province · district · postal_code) เป็น NOT NULL — ค่าเสียที่ปล่อยผ่านตรงนี้จะไปล้มตอนเจ้าหน้าที่กดรับ
- */
-function sanitizeForm07(raw: unknown): { ok: true; value: Record<string, string> | null } | { ok: false; message: string } {
-  if (raw === undefined || raw === null || raw === '') return { ok: true, value: null };
-
-  let parsed: unknown = raw;
-  if (typeof raw === 'string') {
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return { ok: false, message: 'ข้อมูลสถานประกอบการ (สหกิจ 07) ไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วกรอกอีกครั้ง' };
-    }
-  }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-    return { ok: false, message: 'ข้อมูลสถานประกอบการ (สหกิจ 07) ไม่ถูกต้อง กรุณาโหลดหน้าใหม่แล้วกรอกอีกครั้ง' };
-  }
-
-  const input = parsed as Record<string, unknown>;
-  const value: Record<string, string> = {};
-  for (const field of FORM07_WRITABLE_FIELDS) {
-    const v = input[field];
-    if (typeof v !== 'string' || !v.trim()) continue;
-    const trimmed = v.trim();
-    if (trimmed.length > (FORM07_MAX_LENGTH[field] ?? 255)) {
-      return { ok: false, message: `ข้อมูลสถานประกอบการ (สหกิจ 07) ช่อง ${field} ยาวเกินกำหนด` };
-    }
-    if (field === 'contact_mode' && trimmed !== 'manager' && trimmed !== 'delegate') {
-      return { ok: false, message: 'ข้อมูลสถานประกอบการ (สหกิจ 07) ไม่ถูกต้อง: ผู้ติดต่อต้องเป็นผู้จัดการหรือผู้ประสานงาน' };
-    }
-    value[field] = trimmed;
-  }
-  return { ok: true, value: Object.keys(value).length > 0 ? value : null };
 }

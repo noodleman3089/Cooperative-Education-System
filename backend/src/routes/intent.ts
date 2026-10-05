@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { MentorController } from '../controllers/mentor';
+import { AcceptanceController } from '../controllers/acceptance';
 import { requireStudentProfile } from '../middlewares/validation';
 import { uploadRequestForm, validateUploadedFile } from '../middlewares/multer';
 import { requireCalendarWindow } from '../middlewares/calendarGate';
@@ -115,6 +116,11 @@ router.post(
   authorizeRoles('student'),
   IntentFormController.sendCoverLetterToCompany
 );
+
+// Route: POST /api/intents/:id/mentor
+// นักศึกษาระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ (ลิงก์ไม่ถามพี่เลี้ยงแล้ว) — เฉพาะใบรอเจ้าหน้าที่ยืนยัน
+// ⛔ ไม่ผูกปฏิทินกิจกรรม: เป็นแค่ข้อมูลประกอบการตอบรับที่ยื่นไปแล้ว · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่กดรับเท่านั้น
+router.post('/:id/mentor', authorizeRoles('student'), AcceptanceController.setMentor);
 
 // Route: PATCH /api/intents/:id/daily-log-required (พี่เลี้ยงเปิด/ปิดการบันทึกรายวัน สหกิจ 08)
 // ⛔ role `mentor` เท่านั้น — นักศึกษาปิดเองไม่ได้ เพราะเป็นการยกเลิกภาระงานของตัวเอง

@@ -43,6 +43,8 @@ export const AuditAction = {
   // บริษัทตอบผ่านลิงก์ในอีเมล (ไม่มีบัญชี) — บรรทัดนี้คือสิ่งเดียวที่ตามย้อนได้ว่าคำตอบมาจากลิงก์ใบไหน (เก็บ token_id ไม่เก็บ token)
   INTENT_ACCEPTED_VIA_LINK: 'intent.accepted_via_link',
   INTENT_DECLINED_VIA_LINK: 'intent.declined_via_link',
+  // นักศึกษาระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ (ยังไม่เปิดบัญชี — เปิดตอนเจ้าหน้าที่กดรับ)
+  INTENT_MENTOR_SET: 'intent.mentor_set',
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',

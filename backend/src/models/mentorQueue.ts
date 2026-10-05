@@ -146,7 +146,7 @@ export class MentorQueueModel {
     const res = await query(
       `SELECT i.form_id AS intent_form_id, s.student_id, s.student_code,
               btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS full_name,
-              mj.major_name_th, i.job_position,
+              mj.major_name_th,
               i.start_date, i.end_date, i.daily_log_required, i.uses_company_log_form,
               (i.end_date - 14) AS draft_due_date,
               -- จำนวนสัปดาห์คำนวณจากวันจริงเสมอ ⛔ ห้ามฮาร์ดโค้ด 16

@@ -194,7 +194,7 @@ export class IntentFormController {
       const studentId = req.user.userId;
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                i.semester_id, i.job_position, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
+                i.semester_id, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
                 i.request_form_path, i.reject_reason, i.officer_document_no,
                 i.submitted_late, i.late_reason,
                 i.acceptance_due_date, i.acceptance_submitted_late
@@ -250,8 +250,8 @@ export class IntentFormController {
                i.dispatch_document_no, i.end_date, men.name AS mentor_name,
                men.phone AS mentor_phone, men.position AS mentor_position, men.department AS mentor_department,
                u_men.email AS mentor_email,
-               -- ที่มาของคำตอบรับ + สหกิจ 07 ที่บริษัทกรอกผ่านลิงก์ (พักไว้ ยังไม่เข้า companies จนกดรับ)
-               i.acceptance_source, i.company_form07_pending, i.job_position, i.job_description,
+               -- ที่มาของคำตอบรับ (ลิงก์ของบริษัท / นักศึกษาอัปโหลดเอง)
+               i.acceptance_source,
                doc.status AS cover_letter_status
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
@@ -339,7 +339,6 @@ export class IntentFormController {
                 c.province as company_province, c.district as company_district, c.postal_code as company_postal_code,
                 c.phone as company_phone, c.contact_person as company_contact_person, c.contact_position as company_contact_position,
                 c.email as company_email,
-                i.job_position, i.job_description,
                 i.mentor_id, men.name as mentor_name, u_men.email as mentor_email, men.phone as mentor_phone,
                 men.position as mentor_position, men.department as mentor_department
          FROM intent_forms i

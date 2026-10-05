@@ -768,7 +768,6 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                       <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800/40 dark:border-gray-800">
                         <th className="p-3.5 font-semibold">นักศึกษา</th>
                         <th className="p-3.5 font-semibold">สถานประกอบการ</th>
-                        <th className="p-3.5 font-semibold">ตำแหน่งงาน</th>
                         <th className="p-3.5 font-semibold">สถานะ</th>
                         <th className="p-3.5 font-semibold text-right">การจัดการ</th>
                       </tr>
@@ -787,9 +786,6 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                           </td>
                           <td className="p-3.5 text-gray-600 dark:text-gray-400 font-medium">
                             {intent.company_name_th}
-                          </td>
-                          <td className="p-3.5 text-gray-600 dark:text-gray-400 font-medium">
-                            {intent.job_position || '–'}
                           </td>
                           <td className="p-3.5">
                             <StatusBadge

@@ -192,34 +192,16 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await walk.step(companyPage, 'บริษัท(ลิงก์)', 'บริษัทเปิดลิงก์ในอีเมล (ทางลัด: อ่าน token จากฐาน แทนการเปิดจากอีเมลจริง) — หน้าตอบรับ ไม่ต้องล็อกอิน');
 
       await companyPage.getByTestId('al-decision-accept').check();
-      await companyPage.getByTestId('al-next').click();
+      await companyPage.getByTestId('al-submit').click();
       await expect(companyPage.getByTestId('al-error')).toBeVisible();
-      await walk.step(companyPage, 'บริษัท(ลิงก์)', 'เลือก "รับ" แล้วกดถัดไปทั้งที่ยังว่าง — ระบบบอกว่าขาดอะไร');
+      await walk.step(companyPage, 'บริษัท(ลิงก์)', 'เลือก "รับ" แล้วกดส่งทั้งที่ยังว่าง — ระบบบอกว่าขาดอะไร');
 
       await companyPage.getByTestId('al-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
       await companyPage.getByTestId('al-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
       await companyPage.getByTestId('al-signed-date').fill(today);
       await companyPage.getByTestId('al-start-date').fill('2026-11-02');
       await companyPage.getByTestId('al-evidence').setInputFiles(PDF);
-      await walk.step(companyPage, 'บริษัท(ลิงก์)', `ขั้น 1: กรอกผู้ลงนาม วันที่ และแนบแบบตอบรับ ${SHORTCUT_PDF}`);
-
-      await companyPage.getByTestId('al-next').click();
-      await expect(companyPage.getByTestId('al-manager-name')).toBeVisible();
-      await walk.step(companyPage, 'บริษัท(ลิงก์)', 'ขั้น 2: ข้อมูลสถานประกอบการ (สหกิจ 07) พี่เลี้ยง และงานที่มอบหมาย — ยังว่าง');
-
-      await companyPage.getByTestId('al-company-phone').fill('038111222');
-      await companyPage.getByTestId('al-manager-name').fill('คุณผู้จัดการ ทดสอบ');
-      await companyPage.getByTestId('al-mentor-name').fill('สุรเดช ใจดี');
-      await companyPage.getByTestId('al-mentor-position').fill('Supervisor');
-      await companyPage.getByTestId('al-mentor-phone').fill('0812223333');
-      await companyPage.getByTestId('al-mentor-email').fill('mentor-walk@example.com');
-      await companyPage.getByTestId('al-job-position').fill('Software Tester');
-      await companyPage.getByTestId('al-job-description').fill('ทดสอบระบบและเขียนรายงานผลการทดสอบ');
-      await walk.step(companyPage, 'บริษัท(ลิงก์)', 'ขั้น 2: กรอกข้อมูลครบแล้ว');
-
-      await companyPage.getByTestId('al-next').click();
-      await expect(companyPage.getByTestId('confirm-summary')).toBeVisible();
-      await walk.step(companyPage, 'บริษัท(ลิงก์)', 'ขั้น 3: ตรวจสรุปก่อนส่ง');
+      await walk.step(companyPage, 'บริษัท(ลิงก์)', `กรอกผู้ลงนาม วันที่ และแนบแบบตอบรับ ${SHORTCUT_PDF} — ฟอร์มเดียวจบ ไม่ต้องกรอกข้อมูลบริษัทหรือพี่เลี้ยง`);
 
       await companyPage.getByTestId('al-submit').click();
       await expect(companyPage.getByRole('dialog')).toBeVisible();
@@ -233,6 +215,20 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await expect(companyPage.getByTestId('al-gone')).toBeVisible();
       await walk.step(companyPage, 'บริษัท(ลิงก์)', 'เปิดลิงก์เดิมซ้ำ — หน้า "ลิงก์ถูกใช้ตอบไปแล้ว"');
 
+      // ───────── นักศึกษา: ระบุพี่เลี้ยง (บริษัทตอบทางลิงก์ไม่ได้ระบุมา) ─────────
+      await loginAs(page, 'student2');
+      await expect(page.getByTestId('mentor-form')).toBeVisible();
+      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — บริษัทตอบรับแล้ว การ์ดให้ระบุพี่เลี้ยงก่อนเจ้าหน้าที่จะรับเข้าฝึก');
+
+      await page.getByTestId('mentor-name').fill('สุรเดช ใจดี');
+      await page.getByTestId('mentor-email').fill('mentor-walk@example.com');
+      await page.getByTestId('mentor-phone').fill('0812223333');
+      await page.getByTestId('mentor-position').fill('Supervisor');
+      await page.getByTestId('mentor-submit').click();
+      await expect(page.getByTestId('status-card')).toHaveAttribute('data-state', 'wait-confirm');
+      await walk.step(page, 'นักศึกษา', 'กรอกพี่เลี้ยงแล้วกดบันทึก — การ์ดเปลี่ยนเป็นรอเจ้าหน้าที่ยืนยัน');
+      await logout(page);
+
       // ───────── เจ้าหน้าที่: รับแบบตอบรับ ─────────
       await loginAs(page, 'staff1');
       await expect(page.getByTestId(`review-acceptance-${formId}`)).toBeVisible();
@@ -240,7 +236,7 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
 
       await page.getByTestId(`review-acceptance-${formId}`).click();
       await expect(page.getByTestId('acceptance-source-link')).toBeVisible();
-      await walk.step(page, 'เจ้าหน้าที่', 'กด "ตรวจแบบตอบรับ" — เห็นว่าบริษัทตอบผ่านลิงก์ พร้อมข้อมูลพี่เลี้ยงและ สหกิจ 07');
+      await walk.step(page, 'เจ้าหน้าที่', 'กด "ตรวจแบบตอบรับ" — เห็นว่าบริษัทตอบผ่านลิงก์ พร้อมข้อมูลพี่เลี้ยงที่นักศึกษาระบุ');
 
       await page.getByTestId('acceptance-approve-submit').click();
       await expect(page.getByTestId('acceptance-approve-confirm')).toBeVisible();

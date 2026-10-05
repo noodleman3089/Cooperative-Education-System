@@ -73,10 +73,6 @@ export interface AcceptanceRow {
   acceptance_signed_date?: string | null;
   /** ที่มาของคำตอบรับ — 'link' = บริษัทตอบผ่านลิงก์ในอีเมล · 'student' = นักศึกษาอัปโหลดเอง */
   acceptance_source?: 'link' | 'student' | null;
-  /** สหกิจ 07 ส่วนบริษัทที่กรอกผ่านลิงก์ — พักไว้ จะบันทึกลงทะเบียนสถานประกอบการเมื่อกดรับ */
-  company_form07_pending?: Record<string, string> | null;
-  job_position?: string | null;
-  job_description?: string | null;
   mentor_name?: string | null;
   mentor_email?: string | null;
   mentor_phone?: string | null;
@@ -99,37 +95,6 @@ export interface DispatchRow {
   acceptance_signed_date?: string | null;
   dispatch_document_no?: string | null;
 }
-
-/** ป้ายของสหกิจ 07 ส่วนบริษัทที่พักไว้ — เรียงตามกลุ่มบนกระดาษ (หน้า 1) */
-const FORM07_GROUPS: { title: string; fields: [string, string][] }[] = [
-  {
-    title: 'ที่อยู่และการติดต่อ',
-    fields: [
-      ['house_no', 'เลขที่'], ['road', 'ถนน'], ['soi', 'ซอย'], ['subdistrict', 'ตำบล/แขวง'],
-      ['district', 'อำเภอ/เขต'], ['province', 'จังหวัด'], ['postal_code', 'รหัสไปรษณีย์'],
-      ['phone', 'โทรศัพท์'], ['fax', 'โทรสาร'], ['email', 'อีเมล'],
-    ],
-  },
-  {
-    title: 'ผู้จัดการสถานประกอบการ',
-    fields: [
-      ['manager_name', 'ชื่อ'], ['manager_position', 'ตำแหน่ง'], ['manager_department', 'ฝ่าย/แผนก'],
-      ['manager_phone', 'โทรศัพท์'], ['manager_fax', 'โทรสาร'], ['manager_email', 'อีเมล'],
-    ],
-  },
-  {
-    title: 'ผู้ประสานงาน',
-    fields: [
-      ['contact_mode', 'ผู้ที่ติดต่อ'], ['contact_person', 'ชื่อ'], ['contact_position', 'ตำแหน่ง'],
-      ['contact_department', 'ฝ่าย/แผนก'], ['contact_phone', 'โทรศัพท์'], ['contact_fax', 'โทรสาร'],
-    ],
-  },
-];
-
-const CONTACT_MODE_LABEL: Record<string, string> = {
-  manager: 'ติดต่อผู้จัดการโดยตรง',
-  delegate: 'ติดต่อผู้ที่ได้รับมอบหมาย',
-};
 
 const COOP_DEFAULT_DAYS = 111;
 
@@ -1280,14 +1245,15 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                 </div>
               )}
 
-              {!rejectingAcceptance && (reviewingAcceptance.mentor_name || reviewingAcceptance.job_position) && (
+              {/* พี่เลี้ยง: ทางลิงก์บริษัทไม่ได้ระบุมา นักศึกษาระบุเอง — ยังไม่มี = กดรับไม่ได้ (ปุ่มด้านล่างล็อก) */}
+              {!rejectingAcceptance && (
                 <div
                   className="md:flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
                   data-testid="acceptance-job-mentor"
                 >
-                  {reviewingAcceptance.mentor_name && (
+                  <p className="text-gray-600 dark:text-gray-400">พนักงานที่ปรึกษา (พี่เลี้ยง) — บัญชีจะเปิดใช้และส่งลิงก์เข้าระบบเมื่อกดรับ</p>
+                  {reviewingAcceptance.mentor_name ? (
                     <>
-                      <p className="text-gray-600 dark:text-gray-400">พนักงานที่ปรึกษา (พี่เลี้ยง) — บัญชีจะเปิดใช้และส่งลิงก์เชิญเมื่อกดรับ</p>
                       <p>
                         ชื่อ: <strong>{reviewingAcceptance.mentor_name}</strong>
                         {reviewingAcceptance.mentor_position ? ` · ${reviewingAcceptance.mentor_position}` : ''}
@@ -1298,49 +1264,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                         <strong>{reviewingAcceptance.mentor_phone || '—'}</strong>
                       </p>
                     </>
-                  )}
-                  {reviewingAcceptance.job_position && (
-                    <>
-                      <p className="pt-1 text-gray-600 dark:text-gray-400">งานที่มอบหมาย (สหกิจ 07)</p>
-                      <p>ตำแหน่งงาน: <strong>{reviewingAcceptance.job_position}</strong></p>
-                      <p className="whitespace-pre-line">ลักษณะงาน: <strong>{reviewingAcceptance.job_description || '—'}</strong></p>
-                    </>
+                  ) : (
+                    <p data-testid="acceptance-mentor-missing" className="font-bold text-amber-700 dark:text-amber-400">
+                      นักศึกษายังไม่ได้ระบุพี่เลี้ยง — รอนักศึกษากรอกก่อนจึงจะรับได้
+                    </p>
                   )}
                 </div>
               )}
               </div>
-
-              {!rejectingAcceptance && reviewingAcceptance.company_form07_pending && (
-                <div
-                  className="space-y-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-xs text-gray-800 dark:border-blue-900 dark:bg-blue-950/40 dark:text-gray-200"
-                  data-testid="acceptance-form07-pending"
-                >
-                  <p className="font-bold text-[#1E3A8A] dark:text-blue-300">ข้อมูลสถานประกอบการ (สหกิจ 07) ที่บริษัทกรอก</p>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    จะบันทึกลงทะเบียนสถานประกอบการเมื่อกดรับ — ถ้าตีกลับ ข้อมูลนี้จะถูกทิ้ง
-                  </p>
-                  {FORM07_GROUPS.map((group) => {
-                    const pending = reviewingAcceptance.company_form07_pending ?? {};
-                    const shown = group.fields.filter(([key]) => pending[key]);
-                    if (shown.length === 0) return null;
-                    return (
-                      <div key={group.title}>
-                        <p className="font-bold text-gray-700 dark:text-gray-300">{group.title}</p>
-                        <dl className="mt-1 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
-                          {shown.map(([key, label]) => (
-                            <div key={key} className="flex gap-1.5">
-                              <dt className="shrink-0 text-gray-600 dark:text-gray-400">{label}:</dt>
-                              <dd className="break-words font-bold">
-                                {key === 'contact_mode' ? CONTACT_MODE_LABEL[pending[key]] ?? pending[key] : pending[key]}
-                              </dd>
-                            </div>
-                          ))}
-                        </dl>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
             </div>
           </ModalBody>
           <ModalFooter>
@@ -1368,6 +1299,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                 <Button
                   size="sm"
                   loading={acceptanceBusy}
+                  disabled={!reviewingAcceptance.mentor_name}
                   data-testid="acceptance-approve-submit"
                   onClick={() => setConfirmingAcceptanceApprove(true)}
                 >
@@ -1551,11 +1483,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
               { label: 'พี่เลี้ยง', value: reviewingAcceptance?.mentor_name ?? '' },
               { label: 'ส่งลิงก์เชิญไปที่อีเมล', value: reviewingAcceptance?.mentor_email ?? '' },
             ]}
-            lockNote={
-              reviewingAcceptance?.company_form07_pending
-                ? 'ข้อมูลสถานประกอบการ (สหกิจ 07) ที่บริษัทกรอกจะถูกบันทึกลงทะเบียนสถานประกอบการด้วย · อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้'
-                : 'อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้'
-            }
+            lockNote="อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้"
           />
         }
       />

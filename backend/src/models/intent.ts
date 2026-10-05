@@ -15,6 +15,16 @@ import { IntentForm } from '../types';
  */
 export const COMPANY_DECISION_FROM = ['approved_by_dept_head', 'pending_sign', 'signed', 'pending_acceptance'];
 
+/** ข้อมูลพี่เลี้ยงที่นักศึกษาพิมพ์ — ผ่านด่าน SEC-03 ใน `resolvePendingMentor` ก่อนเสมอ */
+export interface MentorInput {
+  name: string;
+  email: string;
+  phone: string;
+  position?: string;
+  department?: string;
+  fax?: string;
+}
+
 /** นักศึกษาสั่งระบบส่งหนังสือ+แบบตอบรับถึงสถานประกอบการได้กี่ครั้งต่อใบ (`company_mail_count`) */
 export const COMPANY_MAIL_LIMIT = 3;
 export const STUDENT_ACCEPT_FROM = ['approved_by_dept_head', 'pending_sign', 'signed', 'pending_acceptance'];
@@ -560,25 +570,14 @@ export class IntentFormModel {
       source: 'student' | 'link';
       /** จำเป็นเมื่อ source = 'student' */
       studentUserId?: number;
-      mentorData: {
-        name: string;
-        email: string;
-        phone: string;
-        position?: string;
-        department?: string;
-        fax?: string;
-      };
+      /** ไม่ส่ง (ทางลิงก์เท่านั้น) = ยังไม่มีพี่เลี้ยง — นักศึกษาระบุทีหลังด้วย `setMentorWithTransaction` */
+      mentorData?: MentorInput;
       startDate: string;
       evidencePath: string;
       /** ส่งกลับหลังพ้น ๑๕ วันทำการ — ผู้เรียกเป็นคนตัดสินโดยเทียบวันที่ฐาน */
       submittedLate: boolean;
       /** ผู้ลงนามบนแบบตอบรับ (เอกสารหมายเลข 2) — ผู้เรียกตรวจแล้ว */
       signer: { name: string; position: string; signedDate: string } | null;
-      /** งานที่มอบหมาย (สหกิจ 07) — ใส่เมื่อมีเท่านั้น ไม่ทับค่าเดิมด้วยว่าง */
-      jobPosition?: string | null;
-      jobDescription?: string | null;
-      /** ข้อมูลบริษัทส่วน สหกิจ 07 ที่พักไว้รอเจ้าหน้าที่กดรับ (D5) — ไม่เขียน companies ตรงนี้ */
-      form07Pending?: Record<string, unknown> | null;
     }
   ): Promise<IntentForm> {
     const { intentId, source, studentUserId, mentorData, startDate, evidencePath, submittedLate, signer } = p;
@@ -608,7 +607,39 @@ export class IntentFormModel {
       source === 'link' ? ['approved_by_dept_head'] : STUDENT_ACCEPT_FROM
     );
 
-    // 3. Handle Mentor Account Onboarding Transactionally
+    // 3. พี่เลี้ยง — ทางลิงก์ไม่มี (นักศึกษาระบุทีหลังด้วย setMentorWithTransaction)
+    const mentorUserId = mentorData ? await IntentFormModel.resolvePendingMentor(client, intent, mentorData) : null;
+
+    // 4. Update Intent Form status to pending_officer_approval
+    const updateRes = await client.query(
+      `UPDATE intent_forms
+       SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
+           acceptance_evidence_path = $3, acceptance_submitted_late = $5,
+           acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8,
+           reject_reason = NULL, -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
+           acceptance_source = $9
+       WHERE form_id = $4
+       RETURNING form_id, student_id, company_id, semester_id, status, mentor_id, start_date,
+                 acceptance_evidence_path, acceptance_submitted_late, acceptance_source`,
+      [
+        mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate,
+        signer?.name ?? null, signer?.position ?? null, signer?.signedDate ?? null,
+        source,
+      ]
+    );
+    return updateRes.rows[0] as IntentForm;
+  }
+
+  /**
+   * พี่เลี้ยงของใบนี้ — หาบัญชีเดิมหรือสร้างบัญชีใหม่ (ยังไม่เปิดใช้ ไม่มีรหัสผ่าน) แล้วคืน user_id
+   * ใช้ร่วมกันทั้งตอนตอบรับ (`acceptWithClient`) และตอนนักศึกษาระบุพี่เลี้ยงทีหลัง (`setMentorWithTransaction`)
+   * ⛔ ด่าน SEC-03 ทั้งหมดอยู่ที่นี่ที่เดียว ห้ามแยกสำเนา · ไม่ BEGIN/COMMIT ผู้เรียกถือทรานแซกชันเอง
+   */
+  static async resolvePendingMentor(
+    client: PoolClient,
+    intent: { student_id: number; company_id: number },
+    mentorData: MentorInput
+  ): Promise<number> {
     const cleanEmail = mentorData.email.trim().toLowerCase();
 
     // SEC-03: a student must never be able to nominate themselves as their own
@@ -702,29 +733,65 @@ export class IntentFormModel {
         );
       }
     }
+    return mentorUserId;
+  }
 
-    // 4. Update Intent Form status to pending_officer_approval
-    const updateRes = await client.query(
-      `UPDATE intent_forms 
-       SET status = 'pending_officer_approval', mentor_id = $1, start_date = $2,
-           acceptance_evidence_path = $3, acceptance_submitted_late = $5,
-           acceptance_signer_name = $6, acceptance_signer_position = $7, acceptance_signed_date = $8,
-           reject_reason = NULL, -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
-           acceptance_source = $9,
-           job_position = COALESCE($10, job_position),
-           job_description = COALESCE($11, job_description),
-           company_form07_pending = $12::jsonb
-       WHERE form_id = $4
-       RETURNING form_id, student_id, company_id, semester_id, status, mentor_id, start_date,
-                 acceptance_evidence_path, acceptance_submitted_late, acceptance_source`,
-      [
-        mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate,
-        signer?.name ?? null, signer?.position ?? null, signer?.signedDate ?? null,
-        source, p.jobPosition ?? null, p.jobDescription ?? null,
-        p.form07Pending ? JSON.stringify(p.form07Pending) : null,
-      ]
-    );
-    return updateRes.rows[0] as IntentForm;
+  /**
+   * นักศึกษาระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ — ลิงก์ไม่ถามพี่เลี้ยงแล้ว (ตัด สหกิจ 07 ฝั่งบริษัท 2026-10-05)
+   *
+   * ⛔ ได้เฉพาะตอนใบรอเจ้าหน้าที่ยืนยัน (`pending_officer_approval`) — การกดรับของเจ้าหน้าที่คือจุดที่
+   *    บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบถูกส่ง (SEC-03 · SEC-15) เจ้าหน้าที่จึงต้องเห็นชื่อ/อีเมลนี้ก่อน
+   *    และระบุซ้ำได้จนกว่าจะถูกกดรับ (พิมพ์อีเมลผิดแล้วแก้เองได้ ไม่ต้องรบกวนเจ้าหน้าที่)
+   */
+  static async setMentorWithTransaction(
+    intentId: number,
+    studentUserId: number,
+    mentorData: MentorInput
+  ): Promise<void> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [intentId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      if (row.student_id !== studentUserId) {
+        throw new Error('คุณระบุพี่เลี้ยงได้เฉพาะคำร้องของตัวเองเท่านั้น');
+      }
+      assertAllowedTransition('set_mentor', row.status, ['pending_officer_approval']);
+
+      const mentorUserId = await IntentFormModel.resolvePendingMentor(client, row, mentorData);
+      await client.query(`UPDATE intent_forms SET mentor_id = $1 WHERE form_id = $2`, [mentorUserId, intentId]);
+
+      // แก้ชื่อ/เบอร์/ตำแหน่งของพี่เลี้ยงที่เพิ่งระบุ (อีเมลเดิม แก้ข้อมูลอื่น) — เฉพาะบัญชีที่ยังไม่เปิดใช้และไม่มีใบอื่นอ้างถึง
+      // ⛔ ห้ามเขียนทับพี่เลี้ยงที่เปิดใช้แล้วหรือผูกกับนักศึกษาคนอื่น — ชื่อ/เบอร์ของเขาไม่ใช่ของนักศึกษาคนนี้จะแก้
+      await client.query(
+        `UPDATE mentors
+            SET name = $2, position = $3, department = $4, phone = $5
+          WHERE mentor_id = $1
+            AND EXISTS (SELECT 1 FROM users WHERE user_id = $1 AND is_active = FALSE)
+            AND NOT EXISTS (SELECT 1 FROM intent_forms WHERE mentor_id = $1 AND form_id <> $6)`,
+        [
+          mentorUserId,
+          mentorData.name.trim(),
+          mentorData.position?.trim() || null,
+          mentorData.department?.trim() || null,
+          mentorData.phone.trim(),
+          intentId,
+        ]
+      );
+
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   /**

@@ -102,7 +102,7 @@ export class StudentController {
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
-                  c.email AS company_email, i.acceptance_source, i.job_position,
+                  c.email AS company_email, i.acceptance_source,
                   i.acceptance_signer_name,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
                   m.position as mentor_position, m.department as mentor_department
@@ -144,7 +144,6 @@ export class StudentController {
             company_email: row.company_email,
             // ที่มาของคำตอบรับ: 'link' = บริษัทตอบผ่านลิงก์ · 'student' = นักศึกษาอัปโหลดเอง · null = ยังไม่มี
             acceptance_source: row.acceptance_source,
-            job_position: row.job_position,
             acceptance_signer_name: row.acceptance_signer_name,
             // ชื่อผู้ลงนามแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — null = นักศึกษาต้องกรอกตอนอัปโหลด
             request_signers: await IntentFormModel.resolveRequestSigners(userId),
@@ -1084,7 +1083,6 @@ export class StudentController {
       const intentRes = await query(
         `SELECT i.start_date, i.end_date, i.mentor_id, i.company_id,
                 c.name_th as company_name,
-                i.job_position, i.job_description,
                 m.name as mentor_name, m.position as mentor_position, m.phone as mentor_phone,
                 COALESCE(i.start_date, i.acceptance_signed_date) as intent_created_at
          FROM intent_forms i
@@ -1120,8 +1118,6 @@ export class StudentController {
           : null,
         company_job_info: intent
           ? {
-              job_position: intent.job_position ?? null,
-              job_description: intent.job_description ?? null,
               mentor_name: intent.mentor_name ?? null,
               mentor_position: intent.mentor_position ?? null,
               mentor_phone: intent.mentor_phone ?? null,

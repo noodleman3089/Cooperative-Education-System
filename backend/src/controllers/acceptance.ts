@@ -9,7 +9,6 @@ import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { validateAcceptanceInput } from '../utils/acceptanceInput';
-import { updateCompanyFields } from '../utils/companyFields';
 
 export class AcceptanceController {
   /**
@@ -91,6 +90,68 @@ export class AcceptanceController {
   }
 
   /**
+   * นักศึกษาระบุพี่เลี้ยง หลังบริษัทตอบรับทางลิงก์แล้ว (ลิงก์ไม่ถามพี่เลี้ยง) — ระบุซ้ำได้จนกว่าเจ้าหน้าที่จะกดรับ
+   * Route: POST /api/intents/:id/mentor
+   * Access: student เจ้าของใบ · เฉพาะใบ `pending_officer_approval` (ตรวจในโมเดล)
+   * ⛔ ไม่เปิดบัญชี ไม่ส่งอีเมล — บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่กดรับเท่านั้น (SEC-03 · SEC-15)
+   */
+  static async setMentor(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+      const intentId = parseInt(req.params.id, 10);
+      if (isNaN(intentId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const mentor = {
+        name: text(body.name),
+        email: text(body.email),
+        phone: text(body.phone),
+        position: text(body.position),
+        department: text(body.department),
+      };
+      if (!mentor.name || !mentor.email || !mentor.phone) {
+        res.status(400).json({ message: 'กรุณากรอกชื่อ อีเมล และเบอร์โทรของพนักงานที่ปรึกษา (พี่เลี้ยง)' });
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(mentor.email)) {
+        res.status(400).json({ message: 'รูปแบบอีเมลของพนักงานที่ปรึกษาไม่ถูกต้อง' });
+        return;
+      }
+      if (
+        mentor.name.length > 255 || mentor.position.length > 255 || mentor.department.length > 255 ||
+        mentor.email.length > 254 || mentor.phone.length > 50
+      ) {
+        res.status(400).json({ message: 'ข้อมูลพนักงานที่ปรึกษายาวเกินกำหนด' });
+        return;
+      }
+
+      await IntentFormModel.setMentorWithTransaction(intentId, req.user.userId, mentor);
+
+      await writeAudit(
+        {
+          action: AuditAction.INTENT_MENTOR_SET,
+          entityType: 'intent_form',
+          entityId: intentId,
+          subjectId: req.user.userId,
+        },
+        req
+      );
+
+      res.status(200).json({ message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบและรับเข้าฝึก' });
+    } catch (error) {
+      // ข้อความจากโมเดลเป็นภาษาไทยและอธิบายสาเหตุอยู่แล้ว (SEC-03 · สถานะไม่ถูก · ไม่ใช่ของตัวเอง)
+      res.status(400).json({ message: getErrorMessage(error, 'บันทึกข้อมูลพี่เลี้ยงไม่สำเร็จ') });
+    }
+  }
+
+  /**
    * Student reports they failed the interview.
    * Route: POST /api/acceptances/student/:intent_id/fail
    * Access: student
@@ -162,7 +223,7 @@ export class AcceptanceController {
 
       // 1. Fetch and lock intent form
       const intentRes = await client.query(
-        `SELECT i.form_id, i.student_id, i.company_id, i.mentor_id, i.status, i.company_form07_pending,
+        `SELECT i.form_id, i.student_id, i.company_id, i.mentor_id, i.status,
                 (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
                 (SELECT d.dean_signature_date::date::text
                    FROM official_documents d
@@ -184,6 +245,12 @@ export class AcceptanceController {
       }
 
       if (action === 'accepted') {
+        // ⛔ ต้องมีพี่เลี้ยงก่อน — การกดรับคือจุดที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบถูกส่ง (SEC-03/15)
+        //    บริษัทที่ตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยงมาด้วย นักศึกษาต้องระบุเองก่อน (`POST /intents/:id/mentor`)
+        if (!intent.mentor_id) {
+          throw new Error('นักศึกษายังไม่ได้ระบุพี่เลี้ยง จึงยังรับเข้าฝึกไม่ได้ — รอนักศึกษากรอกข้อมูลพี่เลี้ยงก่อน');
+        }
+
         // ผู้ลงนามบนแบบตอบรับ นักศึกษากรอกตอนอัปโหลดแล้ว (ตรวจวันที่ไว้ตรงนั้น) — เจ้าหน้าที่แค่ดูเทียบกับกระดาษ
         // ⛔ ไม่รับชื่อ/ตำแหน่ง/วันที่จากเจ้าหน้าที่แล้ว (เจ้าของตัดสิน 2026-09-21) · ส่งมาก็เมิน
         const signerRes = await client.query(
@@ -196,14 +263,6 @@ export class AcceptanceController {
 
         // 2. Update intent status to accepted
         await client.query(`UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`, [intentId]);
-
-        // บริษัทตอบผ่านลิงก์: ข้อมูลบริษัทส่วน สหกิจ 07 ถูกพักไว้ที่ใบ (D5) — เขียนลง companies ตรงนี้
-        // ในทรานแซกชันเดียวกับการกดรับ แล้วล้างที่พัก · rollback ที่ไหนก็ไม่มีทะเบียนบริษัทถูกแตะครึ่งเดียว
-        // ⛔ ห้ามเขียนตอนบริษัทกดส่ง — ลิงก์ไปถึงอีเมลที่นักศึกษาพิมพ์ ใครถือลิงก์ก็แก้ทะเบียนบริษัทได้
-        if (intent.company_form07_pending) {
-          await updateCompanyFields(client, intent.company_id, intent.company_form07_pending);
-          await client.query(`UPDATE intent_forms SET company_form07_pending = NULL WHERE form_id = $1`, [intentId]);
-        }
 
         // 3. Activate mentor account if it's currently inactive
         let mentorMail: { email: string; url: string; expiresAt: Date; tokenId: number } | null = null;
@@ -337,7 +396,7 @@ export class AcceptanceController {
               SET status = 'approved_by_dept_head', reject_reason = $2,
                   acceptance_evidence_path = NULL, acceptance_signer_name = NULL,
                   acceptance_signer_position = NULL, acceptance_signed_date = NULL,
-                  acceptance_source = NULL, company_form07_pending = NULL,
+                  acceptance_source = NULL,
                   company_mail_count = 0
             WHERE form_id = $1`,
           [intentId, reason]

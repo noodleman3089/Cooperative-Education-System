@@ -36,7 +36,6 @@ interface StudentItem {
   student_code: string;
   full_name: string;
   major_name_th: string;
-  job_position: string | null;
   start_date: string;
   end_date: string;
   daily_log_required: boolean;
@@ -332,7 +331,7 @@ const MentorHome: React.FC = () => {
           <div className="card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-8">
             <EmptyState
               title="ยังไม่มีนักศึกษาในความดูแล"
-              description="เมื่อสถานประกอบการตอบรับนักศึกษาและมอบหมายท่านเป็นพี่เลี้ยงใน สหกิจ 07 รายชื่อจะแสดงที่นี่"
+              description="เมื่อสถานประกอบการตอบรับนักศึกษาและเจ้าหน้าที่คณะรับเข้าฝึกโดยระบุท่านเป็นพี่เลี้ยง รายชื่อจะแสดงที่นี่"
             />
           </div>
         ) : (
@@ -362,7 +361,6 @@ const MentorHome: React.FC = () => {
                           </h3>
                           <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                             {st.student_code} · {st.major_name_th}
-                            {st.job_position ? ` · ${st.job_position}` : ''}
                           </p>
                         </div>
                       </div>

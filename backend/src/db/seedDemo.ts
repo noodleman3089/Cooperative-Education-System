@@ -202,30 +202,26 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
     // ── S3. นักศึกษาที่ตอบรับแล้ว (accepted) กำลังฝึกอยู่ ─────────────────────────────────
     // ⛔ ทุกอย่างเลื่อนตาม offset: start_date = วันนี้ − offset · จบ = start + 111 วัน (16 สัปดาห์พอดี)
     const placements = [
-      { id: student2Id, offset: 39, daily: true, no: 'DEMO-S2',
-        pos: 'Junior Full-Stack Developer',
-        desc: 'พัฒนาหน้าจอรายงานยอดผลิตรายวันให้ฝ่ายวางแผน ร่วมทดสอบระบบ และจัดทำเอกสารประกอบ' },
-      { id: student1Id, offset: 67, daily: false, no: 'DEMO-S1',
-        pos: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-        desc: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก' },
+      { id: student2Id, offset: 39, daily: true, no: 'DEMO-S2' },
+      { id: student1Id, offset: 67, daily: false, no: 'DEMO-S1' },
     ];
     for (const p of placements) {
       await client.query(
         `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id,
-                start_date, end_date, daily_log_required, job_position, job_description,
+                start_date, end_date, daily_log_required,
                 advisor_signer_name, advisor_signed_date, dept_head_signer_name, dept_head_signed_date,
                 officer_document_no, officer_approved_at, officer_approved_by,
                 acceptance_due_date, acceptance_signer_name, acceptance_signer_position, acceptance_signed_date,
                 acceptance_source, company_mail_to, company_mail_sent_at, company_mail_count,
                 dispatch_document_no, created_at)
          VALUES ($1, $2, $3, 'accepted', $4,
-                ${TODAY} - $5::int, ${TODAY} - $5::int + 111, $6, $7, $8,
+                ${TODAY} - $5::int, ${TODAY} - $5::int + 111, $6,
                 'วิชัย ที่ปรึกษาดี', ${TODAY} - $5::int - 45, 'สมหญิง หัวหน้าสาขา', ${TODAY} - $5::int - 43,
-                'ศธ 0590/' || $9::text, NOW() - ($5::int + 20) * INTERVAL '1 day', $10,
+                'ศธ 0590/' || $7::text, NOW() - ($5::int + 20) * INTERVAL '1 day', $8,
                 ${TODAY} - $5::int - 12, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', ${TODAY} - $5::int - 25,
-                'link', $11, NOW() - ($5::int + 35) * INTERVAL '1 day', 1,
-                'ศธ 0590/SEND-' || $9::text, NOW() - ($5::int + 50) * INTERVAL '1 day')`,
-        [p.id, companyId, curSemId, mentorId, p.offset, p.daily, p.pos, p.desc, p.no, staffId, companyEmail]
+                'link', $9, NOW() - ($5::int + 35) * INTERVAL '1 day', 1,
+                'ศธ 0590/SEND-' || $7::text, NOW() - ($5::int + 50) * INTERVAL '1 day')`,
+        [p.id, companyId, curSemId, mentorId, p.offset, p.daily, p.no, staffId, companyEmail]
       );
     }
 
