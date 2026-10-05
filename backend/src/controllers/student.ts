@@ -196,9 +196,6 @@ export class StudentController {
       const progressQuery = await query(
         `SELECT
            EXISTS (SELECT 1 FROM accommodations WHERE student_id = $1) AS accommodation_submitted,
-           -- สหกิจ 07 หน้า 3 ลงนามสองฝ่าย: นักศึกษา (กดส่ง) + พนักงานที่ปรึกษา
-           EXISTS (SELECT 1 FROM work_plan_approvals
-                    WHERE student_id = $1 AND approver_role = 'mentor' AND status = 'approved') AS work_plan_certified,
            -- ส่งผ่านพี่เลี้ยงไปถึงอาจารย์แล้ว = ขั้นนักศึกษาจบ · ใบที่ยังรอพี่เลี้ยงยังไม่นับ
            EXISTS (SELECT 1 FROM report_outlines
                     WHERE student_id = $1 AND status IN ('pending_advisor', 'approved')) AS outline_submitted,
@@ -1351,7 +1348,7 @@ export class StudentController {
         res.status(200).json({
           message: submit_to_mentor
             ? 'บันทึกและส่งแผนปฏิบัติงานให้พี่เลี้ยงรับรองสำเร็จแล้ว'
-            : 'บันทึกข้อมูลที่พักและแผนปฏิบัติงานสำเร็จ',
+            : 'บันทึกข้อมูลที่พักสำเร็จ',
         });
       } catch (error) {
         await client.query('ROLLBACK');

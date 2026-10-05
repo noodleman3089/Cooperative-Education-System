@@ -153,14 +153,15 @@ test.describe('พี่เลี้ยงรับรองแผนปฏิ�
     );
     expect(roles).toEqual(['mentor']);
 
-    // เจ้าหน้าที่ (ผู้รับใบตามกระดาษ) เห็นติ๊กสหกิจ 07 จากการรับรองของพี่เลี้ยง
-    // — เดิมคอลัมน์นี้ผูกกับ intentApproved และตัวเลขนับ weekly_work_plans ซึ่งไม่ใช่ใบนี้
+    // ⛔ ความคืบหน้าของเจ้าหน้าที่ไม่นับแผนงาน สหกิจ 07 แล้ว (ตัดออกจากนักศึกษา 2026-10-05) — พี่เลี้ยงรับรองแล้วต้องไม่มีคีย์นี้
+    //    และน้ำหนัก 100% ต้องไม่หายไปไหน (สหกิจ 06 ยกเป็น 20)
     await apiLoginAs(request, 'staff1');
     const progRes = await request.get(`${API_URL}/coop-progress/dashboard`);
     expect(progRes.status()).toBe(200);
-    const mine = ((await progRes.json()).data as { studentId: number; progressDetails: { workPlanCertified: boolean } }[])
+    const mine = ((await progRes.json()).data as { studentId: number; progressDetails: Record<string, boolean> }[])
       .find((s) => s.studentId === studentId);
-    expect(mine?.progressDetails.workPlanCertified).toBe(true);
+    expect(mine).toBeDefined();
+    expect(mine?.progressDetails).not.toHaveProperty('workPlanCertified');
 
     // API ลงนาม/ตีกลับเหลือเฉพาะพี่เลี้ยง — เจ้าหน้าที่และอาจารย์ที่ปรึกษาของนักศึกษาเองก็ไม่ได้
     for (const path of ['approve', 'reject']) {

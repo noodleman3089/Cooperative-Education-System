@@ -246,6 +246,12 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
   }) => {
     test.setTimeout(120_000);
     const studentId = await seedAcceptedIntent();
+    // ผู้ติดต่อฉุกเฉินมาจากใบสมัคร สหกิจ 03 — ตั้งไว้ก่อน (ไม่มี = บันทึกที่พักไม่ได้ ดู S14)
+    await dbExec(
+      `UPDATE students SET emergency_contact_name = 'นางสมศรี ใจดี', emergency_relationship = 'มารดา',
+              emergency_phone = '0898765432' WHERE student_id = $1`,
+      [studentId]
+    );
 
     await loginAs(page, 'student2');
     await goToMenu(page, 'accommodation_plan');
@@ -271,9 +277,9 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     await page.getByTestId('acc-subdistrict').selectOption('บางพระ');
 
     // ยังไม่กรอกบ้านเลขที่ → ส่งไม่ได้ และต้องบอกว่าขาดอะไร
-    // (หน้ารีเมคเป็นหน้าเดียว ไม่มีปุ่ม "ถัดไป" แล้ว — ด่านย้ายไปอยู่ที่ปุ่มส่งให้พี่เลี้ยง)
-    await page.getByTestId('workplan-submit-mentor').click();
-    await expect(page.getByText(/กรุณากรอกข้อมูลที่พักให้ครบก่อนส่ง.*บ้านเลขที่/)).toBeVisible();
+    // (หน้าเป็นหน้าเดียว ไม่มีปุ่ม "ถัดไป" — ด่านอยู่ที่ปุ่มบันทึกข้อมูลที่พัก · ตัดแผนงาน สหกิจ 07 ออกแล้ว 2026-10-05)
+    await page.getByTestId('acc-save').click();
+    await expect(page.getByText(/กรุณากรอกข้อมูลที่พักให้ครบก่อนบันทึก.*บ้านเลขที่/)).toBeVisible();
 
     await page.getByTestId('acc-house-no').fill('199/8');
     await page.getByTestId('acc-building').fill('หอพักบ้านสวน');
@@ -282,9 +288,8 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     // ผู้ติดต่อฉุกเฉินอ่านอย่างเดียวจากใบสมัคร สหกิจ 03 แล้ว ไม่ได้กรอกที่หน้านี้
 
     // แผนที่ล่มแล้วยังต้องบันทึกได้จริง — พิสูจน์ที่ฐาน ไม่ใช่แค่ข้อความบนจอ
-    // (บันทึกร่าง: backend บังคับที่อยู่ครบอยู่แล้วแม้เป็นร่าง · แผนงานมีเทสต์ของตัวเองที่ work-plan-months)
-    await page.getByTestId('workplan-save-draft').click();
-    await expect(page.getByText('บันทึกฉบับร่างข้อมูลที่พักและแผนปฏิบัติงานเรียบร้อยแล้ว')).toBeVisible();
+    await page.getByTestId('acc-save').click();
+    await expect(page.getByText('บันทึกข้อมูลที่พัก (สหกิจ 06) เรียบร้อยแล้ว')).toBeVisible();
 
     const row = await dbRow<{ house_no: string; room_no: string; latitude: string | null }>(
       'SELECT house_no, room_no, latitude FROM accommodations WHERE student_id = $1',
@@ -442,7 +447,7 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     ).toBe('แผนเดิมที่บันทึกไว้');
   });
 
-  test('S14: ยังไม่มีผู้ติดต่อฉุกเฉินใน สหกิจ 03 → ส่งให้พี่เลี้ยงไม่ได้ และบอกว่าต้องไปกรอกที่ไหน', async ({
+  test('S14: ยังไม่มีผู้ติดต่อฉุกเฉินใน สหกิจ 03 → บันทึกที่พักไม่ได้ และบอกว่าต้องไปกรอกที่ไหน', async ({
     page,
   }) => {
     const studentId = await seedAcceptedIntent();
@@ -459,7 +464,7 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     await page.getByTestId('acc-district').selectOption('ศรีราชา');
     await page.getByTestId('acc-subdistrict').selectOption('บางพระ');
 
-    await page.getByTestId('workplan-submit-mentor').click();
+    await page.getByTestId('acc-save').click();
     await expect(page.getByText(/ต้องมีผู้ติดต่อกรณีฉุกเฉิน/)).toBeVisible();
     // กันไม่ให้ "ขึ้นข้อความเตือนแต่ส่งไปแล้ว" — ต้องไม่มีแถวที่พักเกิดขึ้นเลย
     expect(

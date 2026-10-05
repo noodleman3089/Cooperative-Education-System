@@ -206,7 +206,7 @@ const Sidebar: React.FC<SidebarProps> = ({
 
       { id: 'jobs', label: 'ยื่นคำร้องขอหนังสือ', icon: icons.jobs, group: 'ก่อนออกฝึก' },
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
-      { id: 'accommodation_plan', label: 'ที่พักและแผนงาน', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
+      { id: 'accommodation_plan', label: 'แจ้งที่พัก (สหกิจ 06)', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
       { id: 'weekly_log', label: 'บันทึกการปฏิบัติงาน', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
       { id: 'report_outline', label: 'โครงร่างรายงาน', icon: icons.report_outline, group: 'ระหว่างฝึก' },

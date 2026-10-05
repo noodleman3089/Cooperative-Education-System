@@ -27,7 +27,6 @@ interface StudentProgress {
   progressDetails: {
     intentApproved: boolean;
     accommodationSubmitted: boolean;
-    workPlanCertified: boolean;
     outlineApproved: boolean;
     supervisionCompleted: boolean;
     finalReportSubmitted: boolean;
@@ -137,7 +136,6 @@ export const FinalProgressDashboard: React.FC = () => {
     const p = s.progressDetails;
     return (
       p.accommodationSubmitted &&
-      p.workPlanCertified &&
       p.intentApproved &&
       p.outlineApproved &&
       p.supervisionCompleted &&
@@ -194,7 +192,6 @@ export const FinalProgressDashboard: React.FC = () => {
       'สาขาวิชา',
       'สถานประกอบการ',
       'สหกิจ 06 (ที่พัก)',
-      'สหกิจ 07 (แผนงาน)',
       'สหกิจ 11 (โครงร่าง)',
       'สหกิจ 13 (นิเทศ)',
       'สหกิจ 14 (เล่มรายงาน)',
@@ -217,7 +214,6 @@ export const FinalProgressDashboard: React.FC = () => {
         std.majorName,
         std.companyName || '-',
         p.accommodationSubmitted ? 'ส่งแล้ว' : '-',
-        p.workPlanCertified ? 'พี่เลี้ยงรับรองแล้ว' : '-',
         p.outlineApproved ? 'อนุมัติแล้ว' : '-',
         p.supervisionCompleted ? 'นิเทศแล้ว' : '-',
         p.finalReportSubmitted ? 'ส่งแล้ว' : '-',
@@ -372,11 +368,6 @@ export const FinalProgressDashboard: React.FC = () => {
                     <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 06</span>
                   </th>
                   <th className="p-3 font-bold text-center">
-                    แผนงาน
-                    <br />
-                    <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 07</span>
-                  </th>
-                  <th className="p-3 font-bold text-center">
                     รายสัปดาห์
                     <br />
                     <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">สหกิจ 09</span>
@@ -412,7 +403,7 @@ export const FinalProgressDashboard: React.FC = () => {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-700 dark:text-gray-300">
                 {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-gray-500 dark:text-gray-400">
+                    <td colSpan={10} className="p-8 text-center text-gray-500 dark:text-gray-400">
                       ไม่พบข้อมูลนักศึกษาตรงตามเงื่อนไขที่เลือก
                     </td>
                   </tr>
@@ -468,19 +459,6 @@ export const FinalProgressDashboard: React.FC = () => {
                           ) : (
                             <span className="w-5 h-5 rounded-md bg-gray-50 dark:bg-gray-700/50 border border-dashed border-gray-300 dark:border-gray-600 inline-flex items-center justify-center text-[11px] text-gray-600 dark:text-gray-400">
                               –
-                            </span>
-                          )}
-                        </td>
-
-                        {/* 4. สหกิจ 07 แผนงาน — ติ๊กเมื่อพี่เลี้ยงรับรองหน้า 3 แล้ว (เดิมผูกผิดกับ intentApproved) */}
-                        <td className="p-3 text-center">
-                          {p.workPlanCertified ? (
-                            <span className="w-5 h-5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800 inline-flex items-center justify-center">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </span>
-                          ) : (
-                            <span className="w-5 h-5 rounded-md bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 inline-flex items-center justify-center text-[11px] font-extrabold">
-                              !
                             </span>
                           )}
                         </td>

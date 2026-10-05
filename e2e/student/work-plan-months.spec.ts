@@ -95,40 +95,41 @@ test.describe('เดือนของแผนปฏิบัติงาน (
       return { studentId, mentorId, companyId };
     });
 
-  test('ติ๊กหัวข้องาน 2 รายการคนละเดือน บันทึก รีเฟรชแล้วค่ายังอยู่ และพี่เลี้ยงเห็นติ๊กช่องเดียวกัน', async ({
+  test('หน้าที่พักของนักศึกษาไม่มีเมทริกซ์แผนงานแล้ว · แผนที่ส่งทาง API ยังถึงหน้ารับรองของพี่เลี้ยง ติ๊กช่องเดียวกัน', async ({
     page,
+    request,
   }) => {
     await page.route('**/maps.googleapis.com/**', (route) => route.abort());
     await seedTestData();
-    await acceptWithMentor('2026-08-06', '2026-11-25');
+    const { studentId } = await acceptWithMentor('2026-08-06', '2026-11-25');
 
     await loginAs(page, 'student2');
     await goToMenu(page, 'accommodation_plan');
+    // ⛔ ตัดแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) ออกจากนักศึกษา 2026-10-05 — ไม่มีเมทริกซ์และไม่มีปุ่มส่งพี่เลี้ยง
+    await expect(page.getByTestId('acc-house-no')).toBeVisible();
+    await expect(page.getByTestId('plan-matrix')).toHaveCount(0);
+    await expect(page.getByTestId('plan-add-topic')).toHaveCount(0);
+    await expect(page.getByTestId('workplan-submit-mentor')).toHaveCount(0);
 
-    // ⛔ backend บังคับที่อยู่ครบก่อนเสมอ แม้กด "บันทึกร่าง" — ไม่ใช่แค่ตอนส่งจริง
-    await page.getByTestId('acc-house-no').fill('199/8');
-    await page.getByTestId('acc-province').selectOption('ชลบุรี');
-    await page.getByTestId('acc-district').selectOption('ศรีราชา');
-    await page.getByTestId('acc-subdistrict').selectOption('บางพระ');
-
-    await page.getByTestId('plan-add-topic').click();
-    await page.getByTestId('plan-topic-input-0').fill('ออกแบบฐานข้อมูลสำหรับระบบเบิกจ่ายพัสดุ');
-    await page.getByTestId('plan-cell-0-1').click();
-
-    await page.getByTestId('plan-add-topic').click();
-    await page.getByTestId('plan-topic-input-1').fill('พัฒนา API เชื่อมต่อระบบเบิกจ่ายกับคลังสินค้า');
-    await page.getByTestId('plan-cell-1-2').click();
-
-    await page.getByRole('button', { name: 'บันทึกร่าง' }).click();
-    await expect(page.getByText('บันทึกฉบับร่างข้อมูลที่พักและแผนปฏิบัติงานเรียบร้อยแล้ว')).toBeVisible();
-
-    // รีเฟรช — ค่าที่ติ๊กไว้ต้องยังอยู่ (มาจาก work_plan_topics จริง ไม่ใช่ localStorage)
-    await page.reload();
-    await expect(page.getByTestId('plan-topic-input-0')).toHaveValue('ออกแบบฐานข้อมูลสำหรับระบบเบิกจ่ายพัสดุ');
-    await expect(page.getByTestId('plan-cell-0-1')).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('plan-cell-0-2')).toHaveAttribute('aria-pressed', 'false');
-    await expect(page.getByTestId('plan-topic-input-1')).toHaveValue('พัฒนา API เชื่อมต่อระบบเบิกจ่ายกับคลังสินค้า');
-    await expect(page.getByTestId('plan-cell-1-2')).toHaveAttribute('aria-pressed', 'true');
+    // ฝั่งพี่เลี้ยงเก็บไว้ — endpoint ของนักศึกษายังรับแผนอยู่ (ยังไม่มีหน้าจอให้กรอก) · ส่งทาง API แทน
+    await apiLoginAs(request, 'student2');
+    const saved = await request.post(`${API_URL}/students/${studentId}/accommodation-plan`, {
+      data: {
+        accommodation: {
+          house_no: '199/8',
+          subdistrict: 'บางพระ',
+          district: 'ศรีราชา',
+          province: 'ชลบุรี',
+          postal_code: '20110',
+        },
+        work_plan_topics: [
+          { topic: 'ออกแบบฐานข้อมูลสำหรับระบบเบิกจ่ายพัสดุ', months: [1] },
+          { topic: 'พัฒนา API เชื่อมต่อระบบเบิกจ่ายกับคลังสินค้า', months: [2] },
+        ],
+        submit_to_mentor: true,
+      },
+    });
+    expect(saved.status(), await saved.text()).toBe(200);
 
     // พี่เลี้ยงเปิดหน้ารับรอง (ข้อ 1) ต้องเห็นติ๊กตรงช่องเดียวกัน — คนละหน้าจอ คนละ query
     await loginAs(page, 'mentor1');

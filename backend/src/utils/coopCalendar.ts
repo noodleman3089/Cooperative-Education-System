@@ -104,7 +104,7 @@ export const COOP_ACTIVITIES: CoopActivity[] = [
   },
   {
     key: 'accommodation_plan',
-    label: 'ส่งข้อมูลที่พัก และแผนปฏิบัติงาน 16 สัปดาห์ (สหกิจ 06)',
+    label: 'ส่งข้อมูลที่พัก (สหกิจ 06)',
     dateKind: 'range',
     locks: true,
     paperRow: 'แถว 3 — ส่ง สหกิจ 03 · 06 · 13 · 15',

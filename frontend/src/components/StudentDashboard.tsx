@@ -77,7 +77,6 @@ const StudentDashboard: React.FC = () => {
     /** ความคืบหน้าเฟส 2–4 นับจากแถวจริง — `GET /students/dashboard` */
     progress?: {
       accommodation_submitted: boolean;
-      work_plan_certified: boolean;
       outline_submitted: boolean;
       outline_approved: boolean;
       supervision_visits: number;
@@ -622,7 +621,6 @@ const StudentDashboard: React.FC = () => {
   const supervisionVisits = progress?.supervision_visits ?? 0;
 
   const step2_1Done = step1_5Done && !!progress?.accommodation_submitted;
-  const step2_2Done = step1_5Done && !!progress?.work_plan_certified;
 
   const step3_1Done = step1_5Done && !!progress?.outline_submitted;
   const step3_2Done = step1_5Done && !!progress?.outline_approved;
@@ -634,10 +632,12 @@ const StudentDashboard: React.FC = () => {
   const step4_3Done = step4_2Done;
 
   let activePhaseId = 1;
-  // เฟส 2 คือ "สัปดาห์แรกของการทำงาน" — เข้าได้ต่อเมื่อ **สถานประกอบการตอบรับแล้ว**
+  // เฟส 2 คือ "เตรียมเอกสารก่อนเริ่มฝึก" — เข้าได้ต่อเมื่อ **สถานประกอบการตอบรับแล้ว**
   // ไม่ใช่แค่ออกหนังสือเสร็จ (ของเดิมใช้ step1_3Done ที่ติ๊กตั้งแต่มีแถวหนังสือ)
+  // ⛔ นักศึกษากรอกจริงแค่ สหกิจ 06 (สหกิจ 03 พิมพ์จากเมนูใบสมัครงานสหกิจ) — แผนปฏิบัติงาน สหกิจ 07 หน้า 3
+  //    ไม่ใช่ภาระนักศึกษาและห้ามเป็นเงื่อนไขบล็อกความคืบหน้า (เจ้าของสั่ง 2026-10-05)
   if (step1_5Done) activePhaseId = 2;
-  if (step2_1Done && step2_2Done) activePhaseId = 3;
+  if (step2_1Done) activePhaseId = 3;
   if (step3_3Done || step4_1Done) activePhaseId = 4;
 
   const phases: PhaseGroup[] = [
@@ -688,24 +688,17 @@ const StudentDashboard: React.FC = () => {
     },
     {
       phaseId: 2,
-      title: '2. สัปดาห์แรกของการทำงาน',
-      subtitle: 'แจ้งที่พัก & แผนงาน 4 เดือน',
-      status: (step2_1Done && step2_2Done) ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
+      title: '2. เตรียมเอกสารก่อนเริ่มฝึก',
+      subtitle: 'ใบสมัครงานสหกิจ (สหกิจ 03) & แจ้งที่พัก (สหกิจ 06)',
+      status: step2_1Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
       subSteps: [
         {
           id: '2.1',
           title: '2.1 แบบแจ้งรายละเอียดที่พัก (สหกิจ 06)',
-          description: 'กรอกข้อมูลที่พัก แผนที่ และบุคคลติดต่อฉุกเฉินสัปดาห์แรก',
+          description:
+            'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · คณะใช้ข้อมูลนี้ออกหนังสือส่งตัวและจัดอาจารย์นิเทศ · ใบสมัครงานสหกิจ (สหกิจ 03) ตรวจทานและพิมพ์ได้จากเมนู "ใบสมัครงานสหกิจ"',
           status: step2_1Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
           actionLabel: activePhaseId === 2 && !step2_1Done ? 'กรอกรายละเอียดที่พัก' : undefined,
-          onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
-        },
-        {
-          id: '2.2',
-          title: '2.2 แผนปฏิบัติงาน 4 เดือน (สหกิจ 07)',
-          description: 'ระบุชื่อพี่เลี้ยงดูแลและจัดทำกรอบงานร่วมกับพี่เลี้ยงสัปดาห์ที่ 2',
-          status: step2_2Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
-          actionLabel: activePhaseId === 2 && !step2_2Done ? 'ส่งแผนงานร่วมกับพี่เลี้ยง' : undefined,
           onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
         }
       ]
@@ -1454,7 +1447,7 @@ const StudentDashboard: React.FC = () => {
           { label: 'เลือกสถานประกอบการ', subStepIds: ['1.1'] },
           { label: 'ขอหนังสือขอความอนุเคราะห์', subStepIds: ['1.2', '1.3'], pendingLabel: 'รอเจ้าหน้าที่' },
           { label: 'รอหนังสือตอบรับ', subStepIds: ['1.4', '1.5'], pendingLabel: 'รอสถานประกอบการ' },
-          { label: 'แจ้งที่พักและแผนงาน', subStepIds: ['2.1', '2.2'] },
+          { label: 'แจ้งที่พัก', subStepIds: ['2.1'] },
           { label: 'ปฏิบัติงานและส่งบันทึก', subStepIds: ['3.1', '3.2', '3.3'] },
           { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
         ]}

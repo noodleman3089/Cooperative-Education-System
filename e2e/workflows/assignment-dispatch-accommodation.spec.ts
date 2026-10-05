@@ -44,8 +44,7 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
       const mentorId = (await client.query("SELECT user_id FROM users WHERE email = 'mentor1@test.com'")).rows[0].user_id;
 
       await client.query(
-        // end_date ต้องมี — หน้าแผนงานคำนวณเดือน (สหกิจ 07 หน้า 3) และจำนวนสัปดาห์จากช่วงวันจริง
-        // ใบที่ตอบรับจริงผ่านสถานประกอบการมีทั้งสองวันเสมอ · 16 สัปดาห์ = 112 วัน
+        // ใบที่ตอบรับจริงมีทั้งวันเริ่มและวันสิ้นสุดเสมอ · 16 สัปดาห์ = 112 วัน
         `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id, start_date, end_date)
          VALUES ($1, $2, $3, 'accepted', $4, CURRENT_DATE, CURRENT_DATE + 111)`,
         [studentId, companyId, semesterId, mentorId]
@@ -139,32 +138,18 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
       // (ตั้งไว้ก่อนล็อกอินใน step นี้) · ขั้นอาจารย์ด้านล่างยังต้องเห็นชื่อนี้ (spec-F ข้อ 17 "คงไว้")
       await expect(page.getByTestId('acc-emg-name')).toHaveValue('นายฉุกเฉิน ทดสอบ');
 
-      // Step 2: แผนปฏิบัติงาน — ของหลักคือเมทริกซ์หัวข้องาน × เดือน (สหกิจ 07 หน้า 3)
-      //         แผนรายสัปดาห์เป็นส่วนประกอบในแถบพับ `แผนรายสัปดาห์ประกอบ`
-      await page.getByTestId('plan-add-topic').click();
-      await page.getByTestId('plan-topic-input-0').fill('ทดสอบระบบและศึกษาโค้ด');
-      await page.getByTestId('plan-cell-0-1').click();
+      // ⛔ หน้านี้เหลือกระดาษ สหกิจ 06 ใบเดียว — ไม่มีแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) ให้นักศึกษากรอก/ส่งพี่เลี้ยงแล้ว
+      //    (เจ้าของสั่งตัด 2026-10-05) · ไม่มีเมทริกซ์หัวข้องาน × เดือน และไม่มีแผนรายสัปดาห์
+      await expect(page.getByTestId('plan-add-topic')).toHaveCount(0);
+      await expect(page.getByTestId('workplan-submit-mentor')).toHaveCount(0);
+      await expect(page.locator('body')).not.toContainText('สหกิจ 07');
 
-      await page.getByText(/แผนรายสัปดาห์ประกอบ/).click();
-      const weekRows = page.getByTestId('week-row');
-      const weekCount = await weekRows.count();
-      expect(weekCount).toBeGreaterThanOrEqual(16);
-      for (let w = 1; w <= weekCount; w++) {
-        await page.getByTestId(`weekly-plan-task-${w}`).fill(`สัปดาห์ที่ ${w} ทำการทดสอบระบบและศึกษาโค้ด`);
-      }
-
-      // Submit Work Plan
-      await page.getByTestId('workplan-submit-mentor').click();
-      // ส่งถึงพี่เลี้ยงทันที — ต้องผ่านกล่องยืนยัน (2026-09-22)
-      await page.getByTestId('workplan-confirm').click();
-
-      // Verify Success
-      await expect(page.getByText('ส่งแผนปฏิบัติงานให้พี่เลี้ยงรับรองเรียบร้อยแล้ว')).toBeVisible();
-      // ⛔ แผนรายสัปดาห์ต้องถึงฐานจริง — ขั้นอาจารย์ด้านล่างอ่านข้อความนี้ (spec-F 6.1 "ต้องยังมี")
+      await page.getByTestId('acc-save').click();
+      await expect(page.getByText('บันทึกข้อมูลที่พัก (สหกิจ 06) เรียบร้อยแล้ว')).toBeVisible();
       expect(
         await dbValue<string>(
-          `SELECT COUNT(*) FROM weekly_work_plans w JOIN users u ON u.user_id = w.student_id
-           WHERE u.email = 'student2@test.com' AND w.tasks LIKE 'สัปดาห์ที่ 1 %'`
+          `SELECT COUNT(*) FROM accommodations a JOIN users u ON u.user_id = a.student_id
+           WHERE u.email = 'student2@test.com' AND a.house_no = '123/45'`
         )
       ).toBe('1');
 
@@ -186,12 +171,6 @@ test.describe('New Systems E2E Tests (System 1, 2, 3)', () => {
         'เลขที่ 123/45 ถนนสุขุมวิท ตำบลบางพระ อำเภอศรีราชา จังหวัดชลบุรี 20110'
       );
       await expect(page.locator('text=นายฉุกเฉิน ทดสอบ')).toBeVisible();
-
-      // Verify work plan is visible — แถบพับ ต้องกดเปิดก่อนถึงเห็นรายบรรทัด (SupervisionTracking.tsx)
-      await page.getByText(/แผนปฏิบัติงานรายสัปดาห์:/).click();
-      await expect(page.locator('text=สัปดาห์ที่ 1 ทำการทดสอบระบบและศึกษาโค้ด')).toBeVisible();
-      await expect(page.locator('text=สัปดาห์ที่ 16 ทำการทดสอบระบบและศึกษาโค้ด')).toBeVisible();
-      
     });
   });
 });

@@ -9,7 +9,7 @@ import { dbExec, withDb } from '../helpers/db';
  * ไทม์ไลน์หน้าแรกนักศึกษา เฟส 2–4 — ทุกขั้นต้องเดินตามแถวจริงในฐาน
  *
  * ⛔ บั๊กที่ไฟล์นี้คุม (พบ 2026-09-21):
- *   - ขั้น 2.1/2.2 ติ๊กเสร็จเองทันทีที่บริษัทตอบรับ — ยังไม่ได้แจ้งที่พักหรือส่งแผนงานเลย
+ *   - ขั้น 2.1 ติ๊กเสร็จเองทันทีที่บริษัทตอบรับ — ยังไม่ได้แจ้งที่พักเลย (ขั้น 2.2 แผนงาน สหกิจ 07 ถูกตัดออกแล้ว 2026-10-05)
  *   - ขั้น 3.x/4.x เป็น `&& false` — นักศึกษาค้างที่ "ส่งโครงร่าง" ตลอดการฝึก
  * อ่านผลผ่าน "ขั้นตอนที่ต้องทำตอนนี้" (`now-card`) ซึ่งแสดงขั้นแรกที่ยังไม่เสร็จ
  * · และสองกับดักของข้อมูล: โครงร่างที่ยังรอพี่เลี้ยงไม่นับว่าส่งแล้ว · ร่างเล่มที่พี่เลี้ยงอนุมัติ
@@ -65,17 +65,11 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     // เฟส 2 — บริษัทตอบรับแล้วแต่ยังไม่ได้กรอกอะไร ต้องยังค้างที่ที่พัก (เดิมกระโดดไปเฟส 3)
     await expectNow(page, 'แบบแจ้งรายละเอียดที่พัก (สหกิจ 06)');
 
+    // ⛔ บันทึกที่พักแล้วผ่านเฟส 2 ทันที — ไม่มีขั้นแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) ให้รอพี่เลี้ยงรับรองอีก
+    //    (เจ้าของสั่งตัด 2026-10-05 · แผนที่พี่เลี้ยงรับรองค้างอยู่ก็ต้องไม่บล็อกนักศึกษา)
     await dbExec(`INSERT INTO accommodations (student_id, house_no) VALUES ($1, '1')`, [studentId]);
-    await expectNow(page, 'แผนปฏิบัติงาน 4 เดือน (สหกิจ 07)');
-
-    // แผนงานลงนามสองฝ่าย — รอพี่เลี้ยงอยู่ยังไม่นับ
     await dbExec(
       `INSERT INTO work_plan_approvals (student_id, approver_role, status) VALUES ($1, 'mentor', 'pending')`,
-      [studentId]
-    );
-    await expectNow(page, 'แผนปฏิบัติงาน 4 เดือน (สหกิจ 07)');
-    await dbExec(
-      `UPDATE work_plan_approvals SET status = 'approved', approved_at = NOW() WHERE student_id = $1`,
       [studentId]
     );
 
@@ -139,7 +133,6 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     const progress = (await (await page.request.get(`${API_URL}/students/dashboard`)).json()).progress;
     expect(progress).toEqual({
       accommodation_submitted: true,
-      work_plan_certified: true,
       outline_submitted: true,
       outline_approved: true,
       supervision_visits: 2,
