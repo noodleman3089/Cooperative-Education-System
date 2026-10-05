@@ -57,6 +57,7 @@ DROP TABLE IF EXISTS users CASCADE;
 DROP TABLE IF EXISTS master_major CASCADE;
 DROP TABLE IF EXISTS master_faculty CASCADE;
 DROP TABLE IF EXISTS master_province CASCADE;
+DROP TABLE IF EXISTS semester_cohort CASCADE;
 DROP TABLE IF EXISTS eligible_students_list CASCADE;
 DROP TABLE IF EXISTS accommodations CASCADE;
 DROP TABLE IF EXISTS weekly_work_plans CASCADE;
@@ -588,6 +589,16 @@ CREATE TABLE IF NOT EXISTS eligible_students_list (
     student_code VARCHAR(50) PRIMARY KEY,
     cumulative_gpa NUMERIC(3, 2) NOT NULL,
     email VARCHAR(255)
+);
+
+-- รุ่นนักศึกษาต่อภาคเรียน — แดชบอร์ด "นักศึกษาตอนนี้" ใช้เป็นตัวหาร (ยังไม่ยื่น · ได้ที่ฝึก X%)
+-- ⛔ ไม่ใช่การตัดสินสิทธิ์ (SEC-02) · ผูกด้วย student_code เพราะคนที่ยังไม่เข้าระบบก็ต้องนับ
+-- เติมโดย `POST /students/import` เข้าภาคที่เปิดใช้งานอยู่ · นิยามเต็มดู migration 046
+CREATE TABLE IF NOT EXISTS semester_cohort (
+    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE CASCADE,
+    student_code VARCHAR(50) NOT NULL,
+    added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (semester_id, student_code)
 );
 
 -- 11. Staging Table for Personnel (CSV Import for Onboarding)

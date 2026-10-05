@@ -139,6 +139,16 @@ export class StaffImportController {
               [studentCode, gpa, row.email]
             );
 
+            // 1.1 เข้ารุ่นของภาคที่เปิดใช้งานอยู่ (`semester_cohort`) — ตัวหารของแดชบอร์ด "นักศึกษาตอนนี้"
+            //     ⛔ ไม่ใช่การตัดสินสิทธิ์ (SEC-02) · ไม่มีภาคที่เปิดอยู่ = ข้าม (รายชื่อยังผูกบัญชีได้ตามเดิม)
+            await client.query(
+              `INSERT INTO semester_cohort (semester_id, student_code)
+               SELECT semester_id, $1 FROM coop_semesters WHERE is_active = TRUE
+                ORDER BY semester_id DESC LIMIT 1
+               ON CONFLICT DO NOTHING`,
+              [studentCode]
+            );
+
             // 2. ตรวจว่านักศึกษาคนนี้ลงทะเบียนในระบบแล้วหรือยัง — ใช้รายงานผลเท่านั้น
             //
             //    ⛔ การนำเข้าไฟล์ *ไม่* เขียนทับ students.cumulative_gpa — เกรดของคนที่ลงทะเบียนแล้ว

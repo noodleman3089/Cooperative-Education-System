@@ -38,6 +38,7 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   // หน้าผลประเมินของนักศึกษาเป็นรายการคะแนนทีละข้อ = รูปทรงเดียวกับตาราง
   evaluation_result: 'table',
   final_progress: 'table',
+  pipeline: 'stats',
   mentor_followup: 'table',
   dispatch_letters: 'table',
   companies: 'table',

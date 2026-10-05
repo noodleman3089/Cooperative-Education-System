@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { StaffHomeController } from '../controllers/staffHome';
+import { StaffPipelineController } from '../controllers/staffPipeline';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
@@ -17,5 +18,8 @@ router.use(authorizeRoles('staff'));
 
 // GET /api/staff/home — ฤดูกาล · กองงาน 6 กอง · แถบเวลา · คำเตือนปฏิทิน
 router.get('/home', StaffHomeController.getHome);
+
+// GET /api/staff/pipeline — นักศึกษาตอนนี้: ขั้น · ใครถือเรื่อง · ค้างนาน (ต่อภาคเรียน · กรองสาขาได้)
+router.get('/pipeline', StaffPipelineController.getPipeline);
 
 export default router;

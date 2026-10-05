@@ -35,6 +35,8 @@ export type NavId =
   | 'approval'
   | 'assignment'
   | 'final_progress'
+  // นักศึกษาตอนนี้ (เจ้าหน้าที่) — ท่อสถานะ · ใครถือเรื่อง · ค้างนาน
+  | 'pipeline'
   // ติดตามพี่เลี้ยง — เจ้าหน้าที่ · หัวหน้าสาขา · อาจารย์ที่ปรึกษา/นิเทศ
   | 'mentor_followup'
   // dean
