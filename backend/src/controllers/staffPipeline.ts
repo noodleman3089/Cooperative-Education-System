@@ -15,7 +15,9 @@ import { semesterLabel } from '../utils/semesterLabel';
  * ⛔ **ตัวหาร = รุ่นของภาคเรียน** (`semester_cohort`) ∪ คนที่มีใบคำร้องในภาคนั้น — ไม่ใช่ทุกคนใน `students`
  *    (ตารางนั้นสะสมข้ามปี) · รุ่นว่าง = บอกตรง ๆ ให้ไปนำเข้ารายชื่อ ไม่แต่งตัวเลข
  * ⛔ **อายุที่ค้าง** มีเฉพาะขั้นที่ระบบเก็บเวลาไว้จริง · ขั้นที่ไม่มีเวลา = `null` ("ไม่ทราบ") ห้ามเดา
- *    · "รอเจ้าหน้าที่รับคำร้อง" นับจากวันที่สร้างใบ (ระบบไม่เก็บเวลาที่นักศึกษาอัปโหลดกระดาษ)
+ *    · เวลาเข้าขั้นมาจาก `intent_stage_events` (migration 049 · เขียนที่จุดเปลี่ยนสถานะ) · ใบเก่าที่เกิดก่อนมีตารางนี้
+ *      ขาดบางขั้น → "ไม่ทราบ" · "ระหว่างฝึก/หลังฝึก" นับจากวันเริ่ม/วันสิ้นสุดการปฏิบัติงานของใบ
+ *    · "รอเจ้าหน้าที่รับคำร้อง" ถ้าไม่มีเวลาอัปโหลดกระดาษ (ใบเก่า) ถอยไปนับจากวันที่สร้างใบ
  * ⛔ ไม่เปิดเลขบัตร/เกรด/ข้อมูล SEC-12 — มีแค่ชื่อ รหัส สาขา บริษัท ขั้น อายุ
  */
 
@@ -83,6 +85,13 @@ interface Row {
   age_doc: number | null;
   age_signed: number | null;
   age_mail: number | null;
+  age_upload: number | null;
+  age_request: number | null;
+  age_submitted: number | null;
+  age_mentor: number | null;
+  age_accepted: number | null;
+  age_start: number | null;
+  age_end: number | null;
 }
 
 interface Derived {
@@ -104,9 +113,9 @@ export function deriveStage(r: Row, today: string): Derived {
     case 'company_rejected':
       return { stage: 'exit', holder: 'student', age: null };
     case 'pending_advisor':
-      return { stage: 'await_upload', holder: 'student', age: r.age_created };
+      return { stage: 'await_upload', holder: 'student', age: r.age_upload ?? r.age_created };
     case 'pending_officer_request':
-      return { stage: 'await_officer_request', holder: 'staff', age: r.age_created };
+      return { stage: 'await_officer_request', holder: 'staff', age: r.age_request ?? r.age_created };
     case 'approved_by_dept_head':
       if (r.cover_status !== 'signed') return { stage: 'await_dean', holder: 'dean', age: r.age_doc };
       // ส่งเมลแล้วแต่เจ้าหน้าที่ตีกลับแบบตอบรับ (`reject_reason`) = นักศึกษาต้องส่งลิงก์ใหม่
@@ -116,28 +125,33 @@ export function deriveStage(r: Row, today: string): Derived {
       return { stage: 'await_company', holder: 'company', age: r.age_mail };
     case 'pending_officer_approval':
       // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง — นักศึกษาต้องระบุก่อนเจ้าหน้าที่กดรับได้
+      // รอเจ้าหน้าที่ = นับจากเหตุการณ์ล่าสุดของสองอย่าง (ได้แบบตอบรับ · นักศึกษาระบุพี่เลี้ยง) = อายุที่น้อยกว่า
       return r.mentor_id === null
-        ? { stage: 'await_mentor', holder: 'student', age: null }
-        : { stage: 'await_officer_accept', holder: 'staff', age: null };
+        ? { stage: 'await_mentor', holder: 'student', age: r.age_submitted }
+        : { stage: 'await_officer_accept', holder: 'staff', age: minKnown(r.age_submitted, r.age_mentor) };
     case 'accepted': {
       const finished = r.final_report_approved && r.mentor_evaluations >= 2;
       if (finished) return { stage: 'done', holder: 'clear', age: null };
       if (r.end_date !== null && r.end_date < today) {
         // หลังฝึก: ยังขาดผลประเมินพี่เลี้ยง = บริษัท/พี่เลี้ยงถือ · ไม่งั้นรอเล่มรายงาน = นักศึกษา
-        return { stage: 'post_placement', holder: r.mentor_evaluations < 2 ? 'company' : 'student', age: null };
+        return { stage: 'post_placement', holder: r.mentor_evaluations < 2 ? 'company' : 'student', age: r.age_end };
       }
       if (r.start_date !== null && r.start_date <= today) {
-        return { stage: 'on_placement', holder: 'clear', age: null };
+        return { stage: 'on_placement', holder: 'clear', age: r.age_start };
       }
-      if (r.dispatch_document_no === null) return { stage: 'accepted_prep', holder: 'staff', age: null };
-      if (!r.has_accommodation) return { stage: 'accepted_prep', holder: 'student', age: null };
-      return { stage: 'accepted_prep', holder: 'clear', age: null };
+      if (r.dispatch_document_no === null) return { stage: 'accepted_prep', holder: 'staff', age: r.age_accepted };
+      if (!r.has_accommodation) return { stage: 'accepted_prep', holder: 'student', age: r.age_accepted };
+      return { stage: 'accepted_prep', holder: 'clear', age: r.age_accepted };
     }
     default:
       // สถานะที่ไม่รู้จัก = ไม่แต่งเรื่อง · นับเป็นขั้นแรกที่ยังไม่ยื่นไม่ได้ จึงถือว่าอยู่กับเจ้าหน้าที่ให้ตรวจ
       return { stage: 'await_officer_request', holder: 'staff', age: null };
   }
 }
+
+/** อายุที่น้อยกว่าของสองค่าที่รู้ · ไม่รู้สักค่า = null (ห้ามเดา) */
+const minKnown = (a: number | null, b: number | null): number | null =>
+  a === null ? b : b === null ? a : Math.min(a, b);
 
 const median = (xs: number[]): number | null => {
   if (xs.length === 0) return null;
@@ -167,7 +181,15 @@ const ROW_SQL = `
          ($2::date - (i.created_at AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_created,
          ($2::date - (doc.created_at AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_doc,
          ($2::date - doc.dean_signature_date::date)::int AS age_signed,
-         ($2::date - (i.company_mail_sent_at AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_mail
+         ($2::date - (i.company_mail_sent_at AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_mail,
+         -- เวลาเข้าขั้นจาก intent_stage_events (migration 049) · ไม่มีแถว = NULL = ไม่ทราบ
+         ($2::date - (se.t_upload AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_upload,
+         ($2::date - (se.t_request AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_request,
+         ($2::date - (se.t_submitted AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_submitted,
+         ($2::date - (se.t_mentor AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_mentor,
+         ($2::date - (se.t_accepted AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_accepted,
+         ($2::date - i.start_date)::int AS age_start,
+         ($2::date - i.end_date)::int AS age_end
     FROM members m
     LEFT JOIN students s ON s.student_code = m.student_code
     LEFT JOIN master_major mj ON mj.major_id = s.major_id
@@ -191,6 +213,15 @@ const ROW_SQL = `
        ORDER BY d.doc_id DESC
        LIMIT 1
     ) doc ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT
+        MAX(e.entered_at) FILTER (WHERE e.stage IN ('form_created', 'request_returned')) AS t_upload,
+        MAX(e.entered_at) FILTER (WHERE e.stage = 'request_uploaded') AS t_request,
+        MAX(e.entered_at) FILTER (WHERE e.stage = 'acceptance_submitted') AS t_submitted,
+        MAX(e.entered_at) FILTER (WHERE e.stage = 'mentor_set') AS t_mentor,
+        MAX(e.entered_at) FILTER (WHERE e.stage = 'accepted') AS t_accepted
+        FROM intent_stage_events e WHERE e.form_id = i.form_id
+    ) se ON TRUE
     LEFT JOIN accommodations acc ON acc.student_id = s.student_id
     LEFT JOIN LATERAL (
       SELECT TRUE AS ok FROM final_reports f

@@ -55,6 +55,15 @@ interface StaffHomePayload {
   today: string;
   semester: { semester_id: number; label: string; is_active: boolean } | null;
   season: Season;
+  /** ภาคอื่นที่ยังมีเรื่องค้าง — ภาคที่ไม่มีอะไรค้างไม่ถูกส่งมา */
+  other_semesters: {
+    semester_id: number;
+    label: string;
+    closed: boolean;
+    open_forms: number;
+    on_placement: number;
+    evaluations_missing: number;
+  }[];
   season_detail: {
     headline_count: number;
     deadline: string | null;
@@ -339,6 +348,50 @@ export const StaffHome: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/*
+        ── ภาคอื่นที่ยังมีเรื่องค้าง ──
+        การ์ดฤดูกาลด้านบนผูกกับภาคที่เปิดอยู่ภาคเดียว · ภาคเก่าที่ยังมีใบรอผล/นักศึกษากำลังฝึก/ผลประเมินไม่ครบ
+        ต้องไม่หายไปพอเปิดภาคใหม่ (ปิดภาคไม่ใช่การเคลียร์ของ) — ตัวเลขทั้งหมดมาจากเซิร์ฟเวอร์
+      */}
+      {home.other_semesters.length > 0 && (
+        <section
+          data-testid="staff-home-other-semesters"
+          className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <h2 className="text-sm font-bold text-gray-900 dark:text-white">ภาคก่อนที่ยังมีเรื่องค้าง</h2>
+          <p className="mb-2 mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+            ภาคที่หยุดรับหรือปิดไปแล้วแต่ยังมีนักศึกษาที่ต้องตาม — ยังไม่ถูกย้ายหรือเปลี่ยนสถานะ
+          </p>
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+            {home.other_semesters.map((s) => (
+              <li
+                key={s.semester_id}
+                data-testid={`staff-home-other-semester-${s.semester_id}`}
+                className="flex flex-wrap items-center justify-between gap-3 py-2.5"
+              >
+                <div className="min-w-0">
+                  <span className="block text-[13px] font-bold text-gray-900 dark:text-white">
+                    {s.label}
+                    {s.closed && <span className="ml-2 text-xs font-semibold text-gray-600 dark:text-gray-400">(ปิดภาคแล้ว)</span>}
+                  </span>
+                  <span className="block text-xs text-gray-700 dark:text-gray-300">
+                    ใบรอผล {s.open_forms} · กำลังฝึก {s.on_placement} · ผลประเมินยังไม่ครบ {s.evaluations_missing}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  data-testid={`staff-home-other-semester-go-${s.semester_id}`}
+                  onClick={() => go({ menu: 'pipeline', semester_id: String(s.semester_id) })}
+                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                >
+                  ดูนักศึกษาภาคนี้
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* ── กองงาน 5 กอง ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

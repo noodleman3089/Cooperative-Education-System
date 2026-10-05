@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Users } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -125,7 +126,9 @@ export const StudentPipeline: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // null = ใช้ค่าเริ่มต้นของเซิร์ฟเวอร์ (ภาคที่เปิดใช้งาน / ทุกสาขา)
-  const [semesterId, setSemesterId] = useState<string>('');
+  // หน้าแรกเจ้าหน้าที่ลิงก์มาที่ภาคเก่าด้วย ?semester_id= — ใช้เป็นค่าเริ่มต้นครั้งแรกเท่านั้น
+  const [searchParams] = useSearchParams();
+  const [semesterId, setSemesterId] = useState<string>(searchParams.get('semester_id') ?? '');
   const [majorId, setMajorId] = useState<string>('');
 
   const load = useCallback(async (sem: string, major: string, isBackground = false) => {
@@ -400,7 +403,7 @@ export const StudentPipeline: React.FC = () => {
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">ค้างนานที่สุด — ตามคนไหนก่อน</h2>
             <p className="mb-3 mt-1 text-xs text-gray-600 dark:text-gray-400">
               เรียงตามวันที่ค้างในขั้นปัจจุบัน · แสดงเฉพาะคนที่ระบบรู้เวลา
-              {data.unknown_age > 0 && ` · อีก ${data.unknown_age} คนยังมีเรื่องค้างแต่ระบบไม่ได้เก็บเวลา (ขั้นยืนยันแบบตอบรับ / ระบุพี่เลี้ยง / เตรียมเอกสาร)`}
+              {data.unknown_age > 0 && ` · อีก ${data.unknown_age} คนยังมีเรื่องค้างแต่ระบบไม่ได้เก็บเวลา (ใบที่เกิดก่อนระบบเริ่มเก็บเวลาแต่ละขั้น)`}
             </p>
             <DataTable
               rows={data.longest}

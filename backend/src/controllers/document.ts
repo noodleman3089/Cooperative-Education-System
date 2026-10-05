@@ -20,6 +20,7 @@ import { notifyStudentStatusChangeByDocId } from '../utils/email';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { CoopCalendarModel } from '../models/coopCalendar';
 import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from '../utils/workingDays';
+import { recordStageEvent } from '../utils/stageEvents';
 import { sendUnexpectedError } from '../utils/httpError';
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
@@ -153,17 +154,21 @@ export class DocumentController {
           // ลงนามแล้ว (NULL = ยังอัปโหลดแบบตอบรับไม่ได้)
           if (doc.type === 'cover_letter') {
             const today = await CoopCalendarModel.today();
-            await query(
+            const stamped = await query(
               `UPDATE intent_forms
                   SET acceptance_due_date = $1
                 WHERE student_id = $2 AND company_id = $3
-                  AND acceptance_due_date IS NULL`,
+                  AND acceptance_due_date IS NULL
+               RETURNING form_id`,
               [
                 addWorkingDays(today, ACCEPTANCE_WORKING_DAYS),
                 doc.student_id,
                 doc.company_id,
               ]
             );
+            for (const row of stamped.rows as { form_id: number }[]) {
+              await recordStageEvent({ query }, row.form_id, 'dean_signed');
+            }
           }
 
           signedDocIds.push(parsedDocId);

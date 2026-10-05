@@ -31,6 +31,7 @@ import {
 } from '../utils/dispatchLetterPdf';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { recordStageEvent } from '../utils/stageEvents';
 import {
   IssuedAcceptanceLink,
   createAcceptanceLinkToken,
@@ -827,6 +828,7 @@ export class IntentFormController {
         `UPDATE intent_forms SET dispatch_document_no = $2, end_date = $3 WHERE form_id = $1`,
         [formId, documentNo, endDate]
       );
+      await recordStageEvent(client, formId, 'dispatch_issued');
 
       await client.query('COMMIT');
 
@@ -1164,6 +1166,7 @@ export class IntentFormController {
         [formId, companyEmail]
       );
       const saved = sent.rows[0];
+      await recordStageEvent({ query }, formId, 'mail_sent');
 
       // ส่งสำเร็จแล้ว — ยกเลิกลิงก์เก่าที่ยังไม่ใช้ของใบนี้ (เหลือแต่ลิงก์ในอีเมลฉบับล่าสุด)
       await revokeOtherAcceptanceLinkTokens(formId, link.tokenId);

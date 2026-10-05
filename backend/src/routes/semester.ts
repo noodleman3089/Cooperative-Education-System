@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { CoopSemesterController } from '../controllers/semester';
+import { SemesterCohortController } from '../controllers/semesterCohort';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
@@ -12,5 +13,12 @@ router.get('/', authenticateToken, authorizeRoles('staff'), CoopSemesterControll
 router.post('/', authenticateToken, authorizeRoles('staff'), CoopSemesterController.create);
 router.post('/:id/activate', authenticateToken, authorizeRoles('staff'), CoopSemesterController.activate);
 router.post('/:id/close', authenticateToken, authorizeRoles('staff'), CoopSemesterController.close);
+
+
+// รายชื่อรุ่นต่อภาค · ยกยอดจากภาคก่อน (⛔ /cohort/carry-over ต้องมาก่อน /cohort/:code)
+router.get('/:id/cohort', authenticateToken, authorizeRoles('staff'), SemesterCohortController.list);
+router.get('/:id/cohort/carry-over', authenticateToken, authorizeRoles('staff'), SemesterCohortController.previewCarryOver);
+router.post('/:id/cohort/carry-over', authenticateToken, authorizeRoles('staff'), SemesterCohortController.carryOver);
+router.delete('/:id/cohort/:code', authenticateToken, authorizeRoles('staff'), SemesterCohortController.remove);
 
 export default router;

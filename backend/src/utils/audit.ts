@@ -81,6 +81,9 @@ export const AuditAction = {
   SEMESTER_CREATED: 'semester.created',
   SEMESTER_ACTIVATED: 'semester.activated',
   SEMESTER_CLOSED: 'semester.closed',
+  // รายชื่อรุ่น: ถอดคนที่ใส่ผิด · ยกยอดนักศึกษาที่ยังไม่ได้ที่ฝึกจากภาคก่อน (เจ้าหน้าที่กดเอง ไม่ยกเงียบ ๆ)
+  SEMESTER_COHORT_REMOVED: 'semester.cohort_removed',
+  SEMESTER_COHORT_CARRIED_OVER: 'semester.cohort_carried_over',
   // SEC-12: ลบเลขบัตรประชาชน/เชื้อชาติ/ศาสนาอัตโนมัติ ๙๐ วันหลังประเมินครบทั้งสองใบ
   // (สหกิจ 15+16) — เขียนตอนที่ตัวจริงกำลังจะถูกลบ ก่อนคำสั่ง UPDATE จะทำให้อ่านค่า
   // เดิมไม่ได้อีกแล้ว เพื่อให้ยังสืบย้อนได้ว่า "แถวนี้เคยมีข้อมูลอ่อนไหว ถูกลบเมื่อไหร่"

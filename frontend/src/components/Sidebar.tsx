@@ -258,6 +258,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     staff: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
       { id: 'pipeline', label: 'นักศึกษาตอนนี้', icon: icons.students, group: 'งานตามฤดูกาล' },
+      { id: 'semester_summary', label: 'สรุปภาคเรียน', icon: icons.summary, group: 'งานตามฤดูกาล' },
       { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies, group: 'งานตามฤดูกาล' },
       { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
       { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },

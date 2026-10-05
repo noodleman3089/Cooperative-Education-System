@@ -48,6 +48,7 @@ export type NavId =
   | 'appointments'
   | 'calendar'
   | 'semesters'
+  | 'semester_summary'
   | 'users'
   | 'import'
   // mentor (บริษัทไม่มีบัญชีแล้ว — เมนู 'form07' ของบริษัทถูกถอด 2026-10-02)

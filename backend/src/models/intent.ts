@@ -1,6 +1,7 @@
 import type { PoolClient } from 'pg';
 import pool, { query } from '../config/database';
 import { IntentForm } from '../types';
+import { recordStageEvent } from '../utils/stageEvents';
 
 /**
  * SEC-04: explicit allow-lists for every state transition an external party can
@@ -155,6 +156,8 @@ export class IntentFormModel {
         ]
       );
 
+      await recordStageEvent(client, insertRes.rows[0].form_id, 'form_created');
+
       // Commit the transaction
       await client.query('COMMIT');
 
@@ -266,6 +269,8 @@ export class IntentFormModel {
         [studentId, companyId, semesterId, late.submitted_late, late.late_reason]
       );
 
+      await recordStageEvent(client, insertRes.rows[0].form_id, 'form_created');
+
       await client.query('COMMIT');
       return insertRes.rows[0] as IntentForm;
     } catch (error) {
@@ -352,6 +357,7 @@ export class IntentFormModel {
           WHERE form_id = $2`,
         [filePath, formId, advisorName, deptHeadName]
       );
+      await recordStageEvent(client, formId, 'request_uploaded');
 
       await client.query('COMMIT');
       return { previousPath: row.request_form_path as string | null };
@@ -413,6 +419,7 @@ export class IntentFormModel {
       await client.query('UPDATE companies SET is_verified = TRUE WHERE company_id = $1', [
         row.company_id,
       ]);
+      await recordStageEvent(client, formId, 'officer_approved');
 
       await client.query('COMMIT');
       return { studentId: row.student_id as number, companyId: row.company_id as number };
@@ -454,6 +461,7 @@ export class IntentFormModel {
           WHERE form_id = $2`,
         [reason, formId]
       );
+      await recordStageEvent(client, formId, 'request_returned');
 
       await client.query('COMMIT');
       return {
@@ -505,6 +513,7 @@ export class IntentFormModel {
       `UPDATE intent_forms SET status = 'company_rejected', reject_reason = $2 WHERE form_id = $1`,
       [intentId, reason]
     );
+    await recordStageEvent(client, intentId, 'exited');
     return (updateRes.rowCount ?? 0) > 0;
   }
 
@@ -627,6 +636,7 @@ export class IntentFormModel {
         source,
       ]
     );
+    await recordStageEvent(client, intentId, 'acceptance_submitted');
     return updateRes.rows[0] as IntentForm;
   }
 
@@ -766,6 +776,7 @@ export class IntentFormModel {
 
       const mentorUserId = await IntentFormModel.resolvePendingMentor(client, row, mentorData);
       await client.query(`UPDATE intent_forms SET mentor_id = $1 WHERE form_id = $2`, [mentorUserId, intentId]);
+      await recordStageEvent(client, intentId, 'mentor_set');
 
       // แก้ชื่อ/เบอร์/ตำแหน่งของพี่เลี้ยงที่เพิ่งระบุ (อีเมลเดิม แก้ข้อมูลอื่น) — เฉพาะบัญชีที่ยังไม่เปิดใช้และไม่มีใบอื่นอ้างถึง
       // ⛔ ห้ามเขียนทับพี่เลี้ยงที่เปิดใช้แล้วหรือผูกกับนักศึกษาคนอื่น — ชื่อ/เบอร์ของเขาไม่ใช่ของนักศึกษาคนนี้จะแก้
@@ -822,6 +833,7 @@ export class IntentFormModel {
         `UPDATE intent_forms SET status = 'rejected' WHERE form_id = $1`,
         [intentId]
       );
+      await recordStageEvent(client, intentId, 'exited');
 
       await client.query('COMMIT');
       return (updateRes.rowCount ?? 0) > 0;

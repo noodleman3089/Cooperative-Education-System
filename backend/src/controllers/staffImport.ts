@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import pool from '../config/database';
+import pool, { query } from '../config/database';
+import { CoopSemesterModel } from '../models/semester';
 import { sanitizeCsvCell } from '../middlewares/validation';
 import { sendUnexpectedError } from '../utils/httpError';
 
@@ -27,6 +28,28 @@ export class StaffImportController {
         student_code: string;
         cumulative_gpa: number | null;
         email: string | null;
+      }
+
+      // ภาคที่จะเติมรายชื่อรุ่นให้ — ไม่ระบุ = ภาคที่เปิดอยู่ (ไม่มี = ไม่เติมรุ่น รายชื่อยังผูกบัญชีได้ตามเดิม)
+      // รับได้ทั้ง query และ field ของ multipart (เฟส 1 R1-1) · ภาคที่ปิดแล้วเติมได้ (แก้รุ่นย้อนหลัง)
+      const rawSemester =
+        (typeof req.query.semester_id === 'string' && req.query.semester_id) ||
+        (req.body && typeof req.body === 'object' && typeof req.body.semester_id === 'string' && req.body.semester_id) ||
+        '';
+      let targetSemesterId: number | null = null;
+      if (rawSemester) {
+        const parsed = Number(rawSemester);
+        const found = Number.isInteger(parsed) && parsed > 0
+          ? await query('SELECT semester_id FROM coop_semesters WHERE semester_id = $1', [parsed])
+          : null;
+        if (!found || (found.rowCount ?? 0) === 0) {
+          res.status(400).json({ message: 'ไม่พบภาคเรียนที่เลือกสำหรับนำเข้ารายชื่อ' });
+          return;
+        }
+        targetSemesterId = parsed;
+      } else {
+        const active = await CoopSemesterModel.findActiveSemester();
+        targetSemesterId = active?.semester_id ?? null;
       }
 
       const studentsToImport: StudentImportRow[] = [];
@@ -139,15 +162,16 @@ export class StaffImportController {
               [studentCode, gpa, row.email]
             );
 
-            // 1.1 เข้ารุ่นของภาคที่เปิดใช้งานอยู่ (`semester_cohort`) — ตัวหารของแดชบอร์ด "นักศึกษาตอนนี้"
-            //     ⛔ ไม่ใช่การตัดสินสิทธิ์ (SEC-02) · ไม่มีภาคที่เปิดอยู่ = ข้าม (รายชื่อยังผูกบัญชีได้ตามเดิม)
-            await client.query(
-              `INSERT INTO semester_cohort (semester_id, student_code)
-               SELECT semester_id, $1 FROM coop_semesters WHERE is_active = TRUE
-                ORDER BY semester_id DESC LIMIT 1
-               ON CONFLICT DO NOTHING`,
-              [studentCode]
-            );
+            // 1.1 เข้ารุ่นของภาคที่เลือก (`semester_cohort`) — ตัวหารของแดชบอร์ด "นักศึกษาตอนนี้"
+            //     ⛔ ไม่ใช่การตัดสินสิทธิ์ (SEC-02) · คนที่อยู่ในรุ่นอื่นอยู่แล้ว (เช่นยกยอด) ไม่ถูกแก้ที่มา
+            if (targetSemesterId !== null) {
+              await client.query(
+                `INSERT INTO semester_cohort (semester_id, student_code, source)
+                 VALUES ($2, $1, 'import')
+                 ON CONFLICT DO NOTHING`,
+                [studentCode, targetSemesterId]
+              );
+            }
 
             // 2. ตรวจว่านักศึกษาคนนี้ลงทะเบียนในระบบแล้วหรือยัง — ใช้รายงานผลเท่านั้น
             //
@@ -182,6 +206,7 @@ export class StaffImportController {
       res.status(200).json({
         message: 'Student import and synchronization completed.',
         summary: {
+          semesterId: targetSemesterId,
           totalProcessed: studentsToImport.length,
           importedCount,
           updatedCount,

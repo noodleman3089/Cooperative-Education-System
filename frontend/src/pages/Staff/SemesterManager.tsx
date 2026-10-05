@@ -12,6 +12,7 @@ import { Input, Select } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
 import { semesterLabel } from '../../utils/semesterLabel';
+import SemesterCohortModal from './SemesterCohortModal';
 
 /**
  * ภาคเรียน — สร้าง · เปิด · ปิด (เจ้าหน้าที่) · แผน `.system_memory/design_semester_lifecycle.md` เฟส 0
@@ -65,6 +66,7 @@ const SemesterManager: React.FC = () => {
   const [copyFrom, setCopyFrom] = useState('');
   const [shiftYear, setShiftYear] = useState(false);
   const [formError, setFormError] = useState('');
+  const [cohortOf, setCohortOf] = useState<SemesterRow | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -227,6 +229,14 @@ const SemesterManager: React.FC = () => {
                     </span>
                   </div>
                   <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      data-testid={`semester-cohort-${r.semester_id}`}
+                      onClick={() => setCohortOf(r)}
+                    >
+                      รายชื่อรุ่น
+                    </Button>
                     {!r.is_active && (
                       <Button
                         size="sm"
@@ -282,6 +292,15 @@ const SemesterManager: React.FC = () => {
         onConfirm={confirmPending}
         onCancel={() => setPending(null)}
       />
+
+      {cohortOf && rows && (
+        <SemesterCohortModal
+          semester={cohortOf}
+          all={rows}
+          onClose={() => setCohortOf(null)}
+          onChanged={load}
+        />
+      )}
 
       {creating && (
         <Modal onClose={() => setCreating(false)} size="lg" title="สร้างภาคเรียนใหม่">

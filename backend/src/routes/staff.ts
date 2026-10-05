@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { StaffHomeController } from '../controllers/staffHome';
 import { StaffPipelineController } from '../controllers/staffPipeline';
+import { StaffSemesterSummaryController } from '../controllers/staffSemesterSummary';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 
 const router = Router();
@@ -21,5 +22,8 @@ router.get('/home', StaffHomeController.getHome);
 
 // GET /api/staff/pipeline — นักศึกษาตอนนี้: ขั้น · ใครถือเรื่อง · ค้างนาน (ต่อภาคเรียน · กรองสาขาได้)
 router.get('/pipeline', StaffPipelineController.getPipeline);
+
+// GET /api/staff/semester-summary — สรุปภาคเรียน: ตัวเลขของภาคที่เลือก เทียบภาคก่อน + เวลาที่ใช้ในแต่ละขั้น
+router.get('/semester-summary', StaffSemesterSummaryController.getSummary);
 
 export default router;

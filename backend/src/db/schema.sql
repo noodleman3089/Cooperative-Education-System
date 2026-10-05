@@ -58,6 +58,7 @@ DROP TABLE IF EXISTS master_major CASCADE;
 DROP TABLE IF EXISTS master_faculty CASCADE;
 DROP TABLE IF EXISTS master_province CASCADE;
 DROP TABLE IF EXISTS semester_cohort CASCADE;
+DROP TABLE IF EXISTS intent_stage_events CASCADE;
 DROP TABLE IF EXISTS eligible_students_list CASCADE;
 DROP TABLE IF EXISTS accommodations CASCADE;
 DROP TABLE IF EXISTS weekly_work_plans CASCADE;
@@ -606,8 +607,21 @@ CREATE TABLE IF NOT EXISTS semester_cohort (
     semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE CASCADE,
     student_code VARCHAR(50) NOT NULL,
     added_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (semester_id, student_code)
+    -- 'import' = นำเข้ารายชื่อ · 'carry_over' = เจ้าหน้าที่กดยกยอดจากภาคก่อน (migration 048)
+    source VARCHAR(20) NOT NULL DEFAULT 'import',
+    PRIMARY KEY (semester_id, student_code),
+    CONSTRAINT semester_cohort_source_check CHECK (source IN ('import', 'carry_over'))
 );
+
+-- เวลาที่ใบคำร้องเข้าแต่ละขั้น — ตารางปฏิบัติการแยกจาก audit_log (SEC-07 ไม่มี read API จึงอ่านทำอายุไม่ได้)
+-- เขียนที่จุดเปลี่ยนสถานะผ่าน utils/stageEvents.ts เท่านั้น · ไม่เก็บข้อมูลส่วนตัว · นิยามเต็มดู migration 049
+CREATE TABLE IF NOT EXISTS intent_stage_events (
+    event_id SERIAL PRIMARY KEY,
+    form_id INT NOT NULL REFERENCES intent_forms(form_id) ON DELETE CASCADE,
+    stage VARCHAR(30) NOT NULL,
+    entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_intent_stage_events_form ON intent_stage_events (form_id, stage, entered_at DESC);
 
 -- 11. Staging Table for Personnel (CSV Import for Onboarding)
 -- SEC-01: `email` binds an employee_code to exactly one identity. A claim is only

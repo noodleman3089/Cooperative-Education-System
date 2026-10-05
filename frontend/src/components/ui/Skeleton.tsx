@@ -45,6 +45,7 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
   announcements: 'table',
   calendar: 'table',
   semesters: 'table',
+  semester_summary: 'table',
   appointments: 'table',
   users: 'table',
   import: 'table',

@@ -47,6 +47,7 @@ export class StaffHomeController {
        */
       const overdueTotal = tiles.request.overdue + tiles.acceptance.overdue;
       const extra = await loadSeasonExtras(today, semester?.semester_id ?? null);
+      const otherSemesters = await loadOtherSemesters(today, semester?.semester_id ?? null);
 
       let season: Season;
       if (!semester) {
@@ -85,6 +86,9 @@ export class StaffHomeController {
             }
           : null,
         season,
+        // ภาคอื่นที่ยังมีเรื่องค้าง (เฟส 1 R1-3) — การ์ดฤดูกาลผูกกับภาคที่เปิดอยู่ภาคเดียว จึงต้องมีแถวนี้แยก
+        // ไม่งั้นนักศึกษาภาคเก่าที่ยังฝึก/รอประเมินหายจากหน้าแรกพอเปิดภาคใหม่ (F7)
+        other_semesters: otherSemesters,
         season_detail: seasonDetail(season, today, tiles, windows, extra),
         tiles,
         timeline: [
@@ -163,6 +167,15 @@ interface SeasonExtras {
   studentsOnPlacement: number;
   /** ในจำนวนนั้น ยังมีแบบประเมินไม่ครบทั้งสองใบกี่คน */
   evaluationsMissing: number;
+}
+
+interface OtherSemester {
+  semester_id: number;
+  label: string;
+  closed: boolean;
+  open_forms: number;
+  on_placement: number;
+  evaluations_missing: number;
 }
 
 const isOpen = (s: CalendarStatus): boolean => s === 'open' || s === 'late';
@@ -320,6 +333,44 @@ async function loadCalendarWindows(
     },
     warnings,
   };
+}
+
+/**
+ * ภาคที่ไม่ได้เปิดอยู่แต่ยังมีเรื่องค้าง — ใบที่ยังรอผล · นักศึกษาที่กำลังฝึก · ผลประเมินยังไม่ครบ
+ *
+ * ⛔ ภาคที่ไม่มีอะไรค้างไม่ต้องขึ้น (ไม่แต่งแถวว่าง) · ภาคที่ปิดแล้วแต่ยังมีของค้างต้องขึ้น — ปิดภาคไม่ใช่การเคลียร์ของ
+ * ⛔ "ผลประเมินยังไม่ครบ" = ยังไม่มีครบทั้งสองใบ (สหกิจ 15 + 16) ห้ามอ่านว่า "ยังไม่ผ่าน" — เหมือนที่การ์ดฤดูกาลใช้
+ */
+async function loadOtherSemesters(today: string, activeId: number | null): Promise<OtherSemester[]> {
+  const res = await query(
+    `SELECT s.semester_id, s.academic_year, s.semester, s.closed_at,
+            COUNT(*) FILTER (WHERE i.status NOT IN ('rejected', 'company_rejected', 'superseded', 'accepted'))::int AS open_forms,
+            COUNT(*) FILTER (WHERE i.status = 'accepted' AND i.start_date IS NOT NULL AND i.start_date <= $1::date
+                               AND (i.end_date IS NULL OR i.end_date >= $1::date))::int AS on_placement,
+            COUNT(*) FILTER (WHERE i.status = 'accepted' AND i.start_date IS NOT NULL AND i.start_date <= $1::date
+                               AND (SELECT COUNT(DISTINCT e.form_code) FROM final_evaluations e
+                                     WHERE e.student_id = i.student_id) < 2)::int AS evaluations_missing
+       FROM coop_semesters s
+       JOIN intent_forms i ON i.semester_id = s.semester_id
+      WHERE s.semester_id IS DISTINCT FROM $2::int
+      GROUP BY s.semester_id
+     HAVING COUNT(*) FILTER (WHERE i.status NOT IN ('rejected', 'company_rejected', 'superseded', 'accepted')) > 0
+         OR COUNT(*) FILTER (WHERE i.status = 'accepted' AND i.start_date IS NOT NULL AND i.start_date <= $1::date
+                               AND (i.end_date IS NULL OR i.end_date >= $1::date)) > 0
+         OR COUNT(*) FILTER (WHERE i.status = 'accepted' AND i.start_date IS NOT NULL AND i.start_date <= $1::date
+                               AND (SELECT COUNT(DISTINCT e.form_code) FROM final_evaluations e
+                                     WHERE e.student_id = i.student_id) < 2) > 0
+      ORDER BY s.academic_year DESC, s.semester DESC`,
+    [today, activeId]
+  );
+  return (res.rows as (Omit<OtherSemester, 'label' | 'closed'> & { academic_year: number; semester: string; closed_at: string | null })[]).map((r) => ({
+    semester_id: r.semester_id,
+    label: semesterLabel(r.semester, r.academic_year),
+    closed: r.closed_at !== null,
+    open_forms: r.open_forms,
+    on_placement: r.on_placement,
+    evaluations_missing: r.evaluations_missing,
+  }));
 }
 
 /* ── ตัวเลขที่การ์ดใบใหญ่ใช้ ────────────────────────────────────────── */

@@ -9,6 +9,7 @@ import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
 import { validateAcceptanceInput } from '../utils/acceptanceInput';
+import { recordStageEvent } from '../utils/stageEvents';
 
 export class AcceptanceController {
   /**
@@ -263,6 +264,7 @@ export class AcceptanceController {
 
         // 2. Update intent status to accepted
         await client.query(`UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`, [intentId]);
+        await recordStageEvent(client, intentId, 'accepted');
 
         // 3. Activate mentor account if it's currently inactive
         let mentorMail: { email: string; url: string; expiresAt: Date; tokenId: number } | null = null;
@@ -401,6 +403,7 @@ export class AcceptanceController {
             WHERE form_id = $1`,
           [intentId, reason]
         );
+        await recordStageEvent(client, intentId, 'acceptance_returned');
 
         await writeAudit({
           action: AuditAction.ACCEPTANCE_OFFICER_DECISION,

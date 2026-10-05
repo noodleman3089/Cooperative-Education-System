@@ -6,6 +6,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
 import type { ImportSummary } from '../../types/api';
+import { semesterLabel } from '../../utils/semesterLabel';
 
 /**
  * E6 · รายชื่อนักศึกษา & ผลการเรียน (ImportScreening.dc.html)
@@ -70,6 +71,9 @@ export const ImportScreening: React.FC = () => {
   // Registry students list & master data
   const [registeredStudents, setRegisteredStudents] = useState<StudentRegistryRow[]>([]);
   const [majors, setMajors] = useState<MajorOption[]>([]);
+  // ภาคที่จะเติมรายชื่อรุ่นให้ ('' = ภาคที่เปิดอยู่) — ใช้ทั้งอัปโหลดไฟล์และเพิ่มทีละคน
+  const [semesters, setSemesters] = useState<{ semester_id: number; academic_year: number; semester: string; is_active: boolean }[]>([]);
+  const [targetSemester, setTargetSemester] = useState('');
   const [loadingData, setLoadingData] = useState(true);
 
   // Manual student add state
@@ -96,6 +100,7 @@ export const ImportScreening: React.FC = () => {
       const list = Array.isArray(studentsRes) ? studentsRes : [];
       setRegisteredStudents(list);
       setMajors((masterRes?.majors ?? []) as MajorOption[]);
+      setSemesters(masterRes?.semesters ?? []);
       if (list.length > 0 && selectedStudentId === null) {
         setSelectedStudentId(list[0].student_id);
         setRegistryMajorId(list[0].major_id ?? null);
@@ -262,7 +267,7 @@ export const ImportScreening: React.FC = () => {
       const csvLines = parsedStudents.map((s) => `${s.student_code},${s.cumulative_gpa},${s.email}`);
       const csvString = [csvHeader, ...csvLines].join('\n');
 
-      const res = await api.post('/students/import', { csv: csvString });
+      const res = await api.post('/students/import', { csv: csvString, semester_id: targetSemester });
       setImportSummary(res.summary);
       setSuccess('นำเข้ารายชื่อนักศึกษาและเกรดเรียบร้อยแล้ว');
       setParsedStudents([]);
@@ -288,7 +293,7 @@ export const ImportScreening: React.FC = () => {
 
     try {
       const csvString = `student_code,cumulative_gpa,email\n${manualStudentCode.trim()},${manualStudentGpa.trim()},${manualStudentEmail.trim().toLowerCase()}`;
-      await api.post('/students/import', { csv: csvString });
+      await api.post('/students/import', { csv: csvString, semester_id: targetSemester });
 
       setSuccess(`เพิ่มรายชื่อนักศึกษา ${manualStudentCode} สำเร็จเรียบร้อยแล้ว`);
       setManualStudentCode('');
@@ -317,6 +322,25 @@ export const ImportScreening: React.FC = () => {
 
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
+
+      {/* รุ่นของภาค — รายชื่อที่นำเข้า/เพิ่มจะเข้ารุ่นของภาคนี้ (ตัวหารของแดชบอร์ด "นักศึกษาตอนนี้") */}
+      <label className="flex flex-wrap items-center gap-2 text-[13px] font-semibold text-gray-800 dark:text-gray-200">
+        เติมเข้ารุ่นของ
+        <select
+          value={targetSemester}
+          onChange={(e) => setTargetSemester(e.target.value)}
+          data-testid="import-target-semester"
+          className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+        >
+          <option value="">ภาคที่เปิดอยู่</option>
+          {semesters.map((s) => (
+            <option key={s.semester_id} value={s.semester_id}>
+              {semesterLabel(s.semester, s.academic_year)}
+              {s.is_active ? ' (เปิดอยู่)' : ''}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* 3. Tab Bar */}
       <div className="flex items-center gap-6 border-b border-gray-200 dark:border-gray-700">
