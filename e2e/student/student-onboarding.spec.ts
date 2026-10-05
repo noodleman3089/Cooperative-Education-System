@@ -78,7 +78,6 @@ async function fillStepOne(page: Page) {
   await page.getByTestId('onboarding-gpa').fill('3.25');
   await page.getByTestId('onboarding-phone').fill('081-234-5678');
   await page.getByTestId('onboarding-alt-email').fill('thanakrit.s@example.com');
-  await page.getByRole('button', { name: /IT\/Programming/ }).click();
 }
 
 test.describe('กรอกข้อมูลครั้งแรกของนักศึกษา (ชั้นที่ 1)', () => {
@@ -248,10 +247,15 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     });
   });
 
-  test('O3: ข้อมูลติดต่อและงานที่สนใจที่กรอกในขั้นที่ 1 ต้องลงฐานจริง', async ({ page }) => {
+  test('O3: ข้อมูลติดต่อที่กรอกในขั้นที่ 1 ต้องลงฐานจริง · ไม่มีส่วน "งานที่สนใจ" ให้กรอกแล้ว', async ({ page }) => {
     await seedTestData();
     const userId = await arriveAsFirstTimeStudent(page);
     await page.goto('/onboarding/student');
+
+    // ถอดออก 2026-10-05 — หน้าจอเคยบอกว่า "ระบบใช้จับคู่ตำแหน่งงานให้" ทั้งที่ไม่มีอะไรจับคู่จริง
+    await expect(page.getByTestId('onboarding-first-name')).toBeVisible();
+    await expect(page.getByText('งานที่สนใจ')).toHaveCount(0);
+    await expect(page.getByTestId('onboarding-region')).toHaveCount(0);
 
     await fillStepOne(page);
     await page.getByTestId('onboarding-next').click();
@@ -278,7 +282,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
       expect(row.phone).toBe('081-234-5678');
       expect(row.alt_email).toBe('thanakrit.s@example.com');
       expect(Number(row.cumulative_gpa)).toBe(3.25);
-      expect(row.interested_job_types).toContain('งานไอทีและโปรแกรมมิ่ง (IT/Programming)');
+      expect(row.interested_job_types).toBeNull();
     });
   });
 

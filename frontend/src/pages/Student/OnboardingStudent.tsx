@@ -6,7 +6,6 @@ import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
-import { JOB_TYPE_OPTIONS, WORK_REGION_OPTIONS } from '../../config/studentInterests';
 import { getErrorMessage } from '../../utils/errors';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
@@ -25,7 +24,9 @@ interface Major {
  * และลบอัตโนมัติ 90 วันหลังประเมินครบ เก็บตั้งแต่วันล็อกอินแรกแปลว่าระบบถือเลขบัตรของ
  * คนที่สุดท้ายอาจไม่ได้ไปสหกิจเลย จึงตกลงกันเมื่อ 2026-09-07 ว่าแบ่งสองชั้น:
  *
- *   ชั้นที่ 1 (หน้านี้)  ข้อมูลทั่วไป — ใช้ออกหนังสือและจับคู่ตำแหน่งงานได้ทันที
+ *   ชั้นที่ 1 (หน้านี้)  ข้อมูลทั่วไป — ใช้ออกหนังสือได้ทันที
+ *                        ("งานที่สนใจ" ถูกถอดออก 2026-10-05 — ไม่มีอะไรจับคู่งานจริง
+ *                         ช่องนี้ยังอยู่ในหน้าโปรไฟล์เพราะใบสหกิจ 03 พิมพ์)
  *   ชั้นที่ 2 (ตอนยื่นเรื่องจริง)  ข้อมูลอ่อนไหว
  *
  * ⛔ **ห้ามเติมช่องอ่อนไหวลงหน้านี้แม้แต่ช่องเดียว** เส้นแบ่งนี้คือเหตุผลทั้งหมดของการแยก
@@ -49,8 +50,6 @@ const OnboardingStudent: React.FC = () => {
   const [gpa, setGpa] = useState('');
   const [phone, setPhone] = useState('');
   const [altEmail, setAltEmail] = useState('');
-  const [jobTypes, setJobTypes] = useState<string[]>([]);
-  const [region, setRegion] = useState('');
 
   // ขั้นที่ 2 — รหัสผ่าน
   const [password, setPassword] = useState('');
@@ -159,9 +158,6 @@ const OnboardingStudent: React.FC = () => {
     }
   };
 
-  const toggleJobType = (type: string) =>
-    setJobTypes(prev => (prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]));
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setGlobalError(null);
@@ -182,8 +178,6 @@ const OnboardingStudent: React.FC = () => {
         phone: phone.trim(),
         cumulative_gpa: Number(gpa),
         alt_email: altEmail.trim() || null,
-        preferred_work_region: region || null,
-        interested_job_types: jobTypes.length > 0 ? jobTypes : null,
         password,
       });
 
@@ -274,7 +268,7 @@ const OnboardingStudent: React.FC = () => {
                   <div className="flex flex-wrap items-baseline gap-2.5">
                     <h2 className="text-lg font-bold text-gray-900 dark:text-white">ข้อมูลนักศึกษา</h2>
                     <span className="text-xs text-gray-600 dark:text-gray-400">
-                      ใช้ออกหนังสือราชการและจับคู่ตำแหน่งงาน
+                      ใช้ออกหนังสือราชการ
                     </span>
                   </div>
 
@@ -382,58 +376,6 @@ const OnboardingStudent: React.FC = () => {
                       />
                       {fieldError('altEmail')}
                     </div>
-                  </div>
-                </div>
-
-                <div className="h-px bg-gray-100 dark:bg-gray-800" />
-
-                <div className="flex flex-col gap-3.5">
-                  <div className="flex flex-wrap items-baseline gap-2.5">
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">งานที่สนใจ</h2>
-                    <span className="text-xs text-gray-600 dark:text-gray-400">
-                      ระบบใช้จับคู่ตำแหน่งงานให้ · แก้ทีหลังได้ตลอด
-                    </span>
-                  </div>
-
-                  <div>
-                    {label('ประเภทงานที่สนใจ (เลือกได้มากกว่า 1 ข้อ)')}
-                    <div className="flex flex-wrap gap-2">
-                      {JOB_TYPE_OPTIONS.map(type => {
-                        const on = jobTypes.includes(type);
-                        return (
-                          <button
-                            key={type}
-                            type="button"
-                            disabled={isSubmitting}
-                            onClick={() => toggleJobType(type)}
-                            className={`cursor-pointer rounded-full border px-3.5 py-1.5 text-xs transition-colors ${
-                              on
-                                ? 'border-brand-blue bg-blue-50 font-semibold text-brand-navy dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-400'
-                                : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-                            }`}
-                          >
-                            {type}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="sm:max-w-xs">
-                    {label('ภูมิภาคที่อยากไปฝึกงาน')}
-                    <Select
-                      value={region}
-                      disabled={isSubmitting}
-                      onChange={e => setRegion(e.target.value)}
-                      data-testid="onboarding-region"
-                    >
-                      <option value="">-- ยังไม่ระบุ --</option>
-                      {WORK_REGION_OPTIONS.map(r => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </Select>
                   </div>
                 </div>
 

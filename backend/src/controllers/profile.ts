@@ -203,26 +203,6 @@ export class ProfileController {
           Number(enrollment_year)
         );
 
-        /**
-         * งานที่สนใจ — เก็บในขั้นตอนเดียวกันโดยตั้งใจ
-         *
-         * มี `PUT /profile/student/optional` อยู่แล้วก็จริง แต่เส้นนั้นบังคับ role
-         * `student` ซึ่ง **ยังไม่มีอยู่ใน token ตอนนี้** — role เพิ่งถูกเพิ่มบรรทัดถัดไป
-         * และ token ที่ผู้เรียกถืออยู่ออกก่อนหน้านั้น ให้หน้าจอยิงตามหลังจึงได้ 403
-         * เขียนจากตรงนี้แทน หน้าจอจึงส่งครั้งเดียวจบตามที่ผู้ใช้เห็น
-         *
-         * ปลอดภัยที่จะเขียนทับ เพราะแถวเพิ่งถูกสร้าง ทุกคอลัมน์ยังเป็น NULL อยู่
-         * (`updateOptionalProfile` ไม่มี COALESCE — บนแถวที่มีข้อมูลแล้วมันล้างของเดิม)
-         */
-        const region = text(body.preferred_work_region, 255);
-        const jobTypes = Array.isArray(body.interested_job_types)
-          ? body.interested_job_types.filter((t): t is string => typeof t === 'string' && !!t.trim()).slice(0, 20)
-          : null;
-
-        if (region || (jobTypes && jobTypes.length > 0)) {
-          await StudentModel.updateOptionalProfile(userId, null, null, region, jobTypes);
-        }
-
         // Assign 'student' role in USER_ROLES
         await UserModel.addRole(userId, 'student');
 
