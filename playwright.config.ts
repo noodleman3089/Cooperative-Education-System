@@ -60,7 +60,10 @@ export default defineConfig({
       url: `${SERVER_URL}/api/master-data`,
       // E2E ต้องไม่ส่งอีเมลจริงเด็ดขาด — backend/.env ในเครื่องนี้ชี้ไป Gmail จริง
       env: { MAIL_DRY_RUN: 'true' },
-      reuseExistingServer: true,
+      // ⛔ ห้ามเปลี่ยนเป็น true — `env` ข้างบนมีผลเฉพาะ backend ที่ Playwright เปิดเอง
+      //    ถ้า reuse ตัวที่เปิดค้างไว้ (เช่น `npm run dev` ธรรมดา) เทสต์จะยิงใส่ backend ที่ต่อ Gmail จริง
+      //    เกิดมาแล้ว 2026-10-05 · มี backend ค้างที่พอร์ต 5000 = ให้ Playwright หยุดด้วย error แทน
+      reuseExistingServer: false,
       timeout: 120 * 1000,
     },
     {
