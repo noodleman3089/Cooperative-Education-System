@@ -11,6 +11,8 @@
 --    · เจอ 8 ตารางที่ตกหล่นแบบนี้เมื่อ 2026-09-09 (เทสต์ล้มเพราะแถวของเทสต์ก่อนหน้าค้างอยู่)
 --    · ตรวจซ้ำได้ด้วยการเทียบรายชื่อ DROP กับรายชื่อ CREATE ในไฟล์นี้ให้ตรงกัน
 DROP TABLE IF EXISTS audit_log CASCADE;
+-- สี่ตารางของแบบเสนองาน/ประกาศงาน (สหกิจ 02) ถูกตัดทั้งสาย 2026-10-05 (migration 044)
+-- — ไม่มี CREATE แล้ว แต่ **คง DROP ไว้** ให้ฐาน dev เก่าที่ยังมีตารางพวกนี้ถูกล้างตอน db:setup
 DROP TABLE IF EXISTS job_offer_tokens CASCADE;
 DROP TABLE IF EXISTS job_post_majors CASCADE;
 DROP TABLE IF EXISTS coop_job_offers CASCADE;
@@ -313,140 +315,6 @@ CREATE TABLE IF NOT EXISTS coop_semesters (
     is_active BOOLEAN NOT NULL DEFAULT TRUE
 );
 
--- 5.1 แบบเสนองานสหกิจศึกษา (สหกิจ 02) — "ใบสำรวจ" หนึ่งใบต่อหนึ่งบริษัทต่อหนึ่งภาคเรียน
---
--- ⛔ ในระบบนี้ไม่มีคำว่า "ประกาศรับสมัครงาน" — ตามคู่มือ งานสหกิจศึกษาประจำคณะเป็นฝ่าย
---    ส่งแบบเสนองานไปถามสถานประกอบการ **ล่วงหน้าประมาณ 1 ภาคการศึกษา** เพื่อสำรวจ
---    ความต้องการรับนักศึกษา · ตารางนี้คือ "ใบที่ส่งไปถาม" และคำตอบที่ได้กลับมา
---    ส่วน job_posts คือ "รายการตำแหน่ง" ที่อยู่ข้างในใบนั้น (กระดาษหน้า 2 หนึ่งแผ่นต่อหนึ่งรายการ)
---
--- ⛔ บริษัทสร้างใบเองไม่ได้ — เจ้าหน้าที่เป็นคนเปิดใบพร้อมกับตอนส่งแบบสำรวจ
---    (POST /api/job-offers/send) ซึ่งตรงกับความจริงว่ามหาวิทยาลัยเป็นฝ่ายเริ่มเสมอ
-CREATE TABLE IF NOT EXISTS coop_job_offers (
-    offer_id SERIAL PRIMARY KEY,
-    company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
-    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
-    -- draft     บริษัทกรอกค้างไว้ (หรือเจ้าหน้าที่เพิ่งส่งไปถาม ยังไม่มีใครตอบ)
-    -- submitted ตอบกลับแล้ว รอเจ้าหน้าที่ตรวจ
-    -- reviewed  เจ้าหน้าที่ตรวจแล้ว รายการข้างในถูกเปิดให้นักศึกษาเห็น
-    -- declined  บริษัทตอบว่า "ภาคเรียนนี้ยังไม่รับ"
-    --           ⛔ ไม่ใช่การลบใบ — การตอบว่าไม่รับก็เป็นคำตอบที่ต้องเก็บไว้
-    status VARCHAR(20) NOT NULL DEFAULT 'draft'
-        CONSTRAINT coop_job_offers_status_check
-        CHECK (status IN ('draft', 'submitted', 'reviewed', 'declined')),
-    -- "กรุณาส่งเอกสารฉบับนี้กลับมา ... ก่อนวันที่ ......" ท้ายหน้า 2 ของกระดาษ
-    -- เจ้าหน้าที่เป็นคนกำหนดตอนกดส่งแบบสำรวจ
-    due_date DATE,
-    submitted_at TIMESTAMPTZ,
-    submitted_by INT REFERENCES users(user_id) ON DELETE SET NULL,
-    reviewed_at TIMESTAMPTZ,
-    reviewed_by INT REFERENCES users(user_id) ON DELETE SET NULL,
-    -- ช่อง "ลงชื่อผู้ให้ข้อมูล / ตำแหน่ง" ท้ายหน้า 2
-    informant_name VARCHAR(255),
-    informant_position VARCHAR(255),
-    decline_reason TEXT,
-    reject_reason TEXT,                  -- เจ้าหน้าที่ตีกลับทั้งใบ
-    -- สำเนาข้อมูลบริษัท (เฉพาะฟิลด์ที่บริษัทเขียนได้) ณ วินาทีที่เจ้าหน้าที่กดส่งไปถาม
-    -- ⛔ มีไว้เพื่อตอบคำถามเดียว: "บริษัทแก้อะไรจากที่คณะมีอยู่บ้าง" ซึ่งเป็นสิ่งที่
-    --    คนตรวจใบต้องเห็น (SB3 → changed_fields) และหาจากที่อื่นไม่ได้เลย
-    --    audit_log เขียนอย่างเดียวและจงใจไม่มี read API (SEC-07) จึงเอามาอ่านไม่ได้
-    -- ⛔ NULL = ใบที่เปิดก่อน migration 029 · แปลว่า "ไม่รู้" ไม่ใช่ "ไม่มีอะไรเปลี่ยน"
-    company_snapshot JSONB,
-    -- ใบของภาคที่แล้วที่ถูกก๊อปมาเป็นค่าตั้งต้น (ปุ่ม "ใช้คำตอบเดิม")
-    -- เก็บไว้เพื่อให้หน้าจอบอกได้ว่าค่าที่เห็นมาจากไหน และตรวจย้อนได้ว่าใครตอบซ้ำของใคร
-    copied_from_offer_id INT REFERENCES coop_job_offers(offer_id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT coop_job_offers_company_semester_key UNIQUE (company_id, semester_id)
-);
-
--- 5.2 ลิงก์ตอบแบบสำรวจทางอีเมล — **อายุ 24 ชั่วโมง ใช้ได้ครั้งเดียว**
---
--- ⛔ token นี้เปิดได้ **หน้าเดียวคือแบบเสนองาน สหกิจ 02** ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย
---    ทุกหน้าที่มีข้อมูลนักศึกษา (ใบสมัคร 03 · แบบประเมิน 15/16 · บันทึกการปฏิบัติงาน)
---    ต้องล็อกอินเต็มเสมอ **ห้ามเปิดด้วย token เด็ดขาด**
--- ⛔ ห้ามให้ระบบต่ออายุเองเงียบ ๆ — หมดอายุแล้วต้องกดขอลิงก์ใหม่ ซึ่งส่งไปที่อีเมล
---    ในทะเบียนเท่านั้น (ห้ามให้พิมพ์อีเมลปลายทางเอง ไม่งั้นใครก็ดึงลิงก์ของบริษัทอื่นได้)
--- token เก็บเป็นค่าดิบแบบเดียวกับ users.reset_token โดยตั้งใจ — ให้ทั้งระบบ
--- มีแบบแผนเดียว และ token นี้ไม่ได้ให้ session หรือสิทธิ์ใด ๆ นอกจากใบสำรวจใบเดียว
-CREATE TABLE IF NOT EXISTS job_offer_tokens (
-    token_id SERIAL PRIMARY KEY,
-    token VARCHAR(64) NOT NULL UNIQUE,
-    offer_id INT NOT NULL REFERENCES coop_job_offers(offer_id) ON DELETE CASCADE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    used_at TIMESTAMPTZ,
-    created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_job_offer_tokens_offer ON job_offer_tokens(offer_id);
-
--- 6. Job Posts Table — **หนึ่งแถวคือหนึ่งรายการตำแหน่งในแบบเสนองาน (สหกิจ 02 หน้า 2)**
-CREATE TABLE IF NOT EXISTS job_posts (
-    job_id SERIAL PRIMARY KEY,
-    company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
-    title VARCHAR(255) NOT NULL,
-    description TEXT NOT NULL,
-    -- ⛔ ไม่มี image_path — แบนเนอร์ประกาศงานถูกลบเมื่อ 2026-09-08 (migration 028)
-    --    ตรวจกับแบบฟอร์ม สหกิจ 02 ตัวจริงแล้วไม่มีช่องรูปภาพ และไม่มีในขอบเขต
-    created_by INT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
-    quota INT NOT NULL,
-    -- "จำนวนงานที่เสนอนักศึกษา" คู่กับ quota บนกระดาษ — บนหน้าจออ่านว่า
-    -- "รับแล้วกี่คนจากที่เสนอ" ไม่ใช่ "จำนวนผู้สมัคร"
-    -- ⛔ ห้ามตัดคอลัมน์นี้ทิ้ง — ตรรกะโควตาเต็มใน controllers/acceptance.ts และ
-    --    models/intent.ts อ่านค่านี้อยู่
-    applied_count INT NOT NULL DEFAULT 0,
-    -- เดิมหมายถึง "วันที่ประกาศหมดอายุ" · ตอนนี้คือ **กำหนดส่งแบบสำรวจกลับ**
-    -- ซึ่งสืบค่ามาจาก coop_job_offers.due_date ของใบที่รายการนี้สังกัด
-    expire_date TIMESTAMP NOT NULL,
-    -- 'rejected' is distinct from 'closed' on purpose: closed means the posting
-    -- ran its course, rejected means staff turned it down. Reusing 'closed' for
-    -- both would have told the company its advert expired when in fact it was
-    -- refused, and left nowhere to put the reason.
-    status VARCHAR(50) NOT NULL DEFAULT 'pending_approval' CHECK (status IN ('pending_approval', 'published', 'closed', 'rejected')),
-    reject_reason TEXT,
-    -- ใบสำรวจที่รายการนี้สังกัด · NULL ได้เพราะแถวที่มีอยู่ก่อนระบบใบสำรวจยังต้องใช้งานได้
-    -- ⛔ ของใหม่ที่สร้างจากหน้าจอต้องมีค่าเสมอ — ห้ามปล่อยให้เกิดรายการลอยที่ไม่มีใบสังกัด
-    offer_id INT REFERENCES coop_job_offers(offer_id) ON DELETE CASCADE,
-    -- ⛔ หลักฐานว่าต้องมี: กระดาษหน้า 2 มีช่อง "ระยะเวลาที่ต้องการให้นักศึกษาไปปฏิบัติงาน"
-    --    ถ้าไม่มีคอลัมน์นี้ ระบบไม่รู้ว่าตำแหน่งนี้เป็นการเสนอของภาคเรียนไหน และปุ่ม
-    --    "ใช้คำตอบเดิมของภาคที่แล้ว" ทำไม่ได้เลย
-    semester_id INT REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
-    -- ช่องติ๊กสามข้อบนกระดาษ · full_year = นักศึกษาคนนั้นอยู่ยาวถึงภาคเรียนที่ 2
-    -- ⛔ **ไม่ได้แปลว่ารายการนี้ไปโผล่ในแบบสำรวจของสองภาค** — หนึ่งรายการสังกัดภาคเดียว
-    --    คือภาคที่เริ่มปฏิบัติงาน · ภาคหน้าใช้ปุ่ม "ใช้คำตอบเดิม" ซึ่งเป็นการกดของคน
-    --    (ถ้าระบบก๊อปเอง บริษัทจะถูกนับว่ารับนักศึกษาทั้งที่ไม่เคยตอบอะไรในภาคนั้น)
-    duration_term VARCHAR(10)
-        CONSTRAINT job_posts_duration_term_check
-        CHECK (duration_term IS NULL OR duration_term IN ('term1', 'term2', 'full_year')),
-    skills_required TEXT,                -- ความสามารถทางวิชาการหรือทักษะที่นักศึกษาควรมี
-    other_requirements TEXT,             -- ข้อกำหนดอื่น ๆ (อุปกรณ์ · สถานที่ปฏิบัติงานจริง)
-    -- สวัสดิการอยู่ที่ระดับ **รายการ** ไม่ใช่ระดับใบ เพราะกระดาษวางไว้หน้าเดียวกับตำแหน่ง
-    -- และของจริงตำแหน่งต่างกันอาจให้ค่าตอบแทนต่างกัน
-    -- pay_amount IS NULL = ช่อง "( ) ไม่มี" · หน่วยบนกระดาษมีสองแบบ ห้ามยุบเป็นข้อความเดียว
-    pay_amount NUMERIC(10, 2),
-    pay_unit VARCHAR(10)
-        CONSTRAINT job_posts_pay_unit_check
-        CHECK (pay_unit IS NULL OR pay_unit IN ('day', 'month')),
-    accommodation VARCHAR(20)
-        CONSTRAINT job_posts_accommodation_check
-        CHECK (accommodation IS NULL OR accommodation IN ('none', 'free', 'paid')),
-    accommodation_cost VARCHAR(100),     -- "1,200 ต่อเดือน" — กระดาษเขียน "ต่อเดือน / วัน"
-    welfare_other TEXT
-);
-
--- 6.0.1 สาขาที่ตำแหน่งหนึ่งต้องการ — หนึ่งรายการรับได้หลายสาขา
---
--- กระดาษเขียนว่า "หากต้องการมากกว่า 1 สาขาวิชา กรุณาทำสำเนาเฉพาะแผ่นนี้และเขียนแยก
--- สาขาวิชาละ 1 แผ่น" ซึ่งเป็นข้อจำกัดของกระดาษที่เขียนได้บรรทัดเดียว ไม่ใช่กติกาของงาน
--- ถ้าบังคับให้แยกรายการตามนั้น บริษัทที่บอกว่า "IT หรือ วิศวะซอฟต์แวร์ก็ได้ 2 คน"
--- จะถูกนับโควตาเป็น 4 ซึ่งผิด · ตอนพิมพ์ยังเป็นหนึ่งแผ่นต่อหนึ่งรายการเหมือนเดิม
--- แค่พิมพ์ชื่อสาขาหลายชื่อในบรรทัดเดียว
-CREATE TABLE IF NOT EXISTS job_post_majors (
-    job_id INT NOT NULL REFERENCES job_posts(job_id) ON DELETE CASCADE,
-    major_id INT NOT NULL REFERENCES master_major(major_id) ON DELETE RESTRICT,
-    CONSTRAINT job_post_majors_pkey PRIMARY KEY (job_id, major_id)
-);
-
 -- 6.1. PR Announcements Table (Staff PR & News System)
 CREATE TABLE IF NOT EXISTS announcements (
     announcement_id SERIAL PRIMARY KEY,
@@ -548,7 +416,6 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE RESTRICT,
     semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE RESTRICT,
-    job_id INT REFERENCES job_posts(job_id) ON DELETE SET NULL,
     status VARCHAR(50) NOT NULL DEFAULT 'pending_advisor',
     mentor_id INT REFERENCES mentors(mentor_id) ON DELETE SET NULL,
     start_date DATE,
@@ -575,7 +442,7 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- student was told they were rejected and never why. It lives on the row
     -- rather than only in audit_log because the person who has to read it is the
     -- student, and audit_log has no read API by design (SEC-07) — the same
-    -- reasoning as job_posts.reject_reason in round 17.
+    -- reasoning as every other reject reason in this schema.
     reject_reason TEXT,
     -- ยื่นในช่วงผ่อนผัน (เลย end_date แต่ยังไม่เลย late_end_date)
     -- ⛔ ปั๊มตอน INSERT เท่านั้น ห้ามคำนวณย้อนหลัง — เจ้าหน้าที่แก้ปฏิทินทีหลังได้
@@ -624,7 +491,6 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     daily_log_required BOOLEAN NOT NULL DEFAULT FALSE,
     -- งานที่มอบหมายนักศึกษา — ตารางกลางหน้า 2 ของ สหกิจ 07 (สถานประกอบการกรอก)
     -- อยู่ที่นี่เพราะเป็นงานของการไปฝึกครั้งนั้น ไม่ใช่ของตำแหน่งที่ประกาศไว้
-    -- (job_posts.title/description คือตำแหน่งที่ "เสนอ" ส่วนนี่คือสิ่งที่ "ได้ทำจริง")
     job_position VARCHAR(255),
     job_description TEXT,
     -- "ใบนี้เข้าคิวมาตั้งแต่เมื่อไหร่" — หน้าแรกของเจ้าหน้าที่นับ "คำร้องค้างเกิน 7 วัน"

@@ -296,7 +296,7 @@ function readName(raw: unknown): string {
 }
 
 function isBlocked(b: MajorBlockers): boolean {
-  return b.student_count > 0 || b.personnel_count > 0 || b.job_post_count > 0;
+  return b.student_count > 0 || b.personnel_count > 0;
 }
 
 /** บอกว่าติดอะไรกี่รายการ ไม่ใช่ "มีข้อมูลผูกอยู่" ลอย ๆ ที่ไม่บอกว่าต้องไปแก้ที่ไหน */
@@ -304,7 +304,6 @@ function blockerSummary(b: MajorBlockers): string {
   const parts: string[] = [];
   if (b.student_count > 0) parts.push(`นักศึกษา ${b.student_count} คน`);
   if (b.personnel_count > 0) parts.push(`บุคลากร ${b.personnel_count} คน`);
-  if (b.job_post_count > 0) parts.push(`ตำแหน่งงานที่ระบุสาขานี้ ${b.job_post_count} รายการ`);
   return parts.join(' · ');
 }
 

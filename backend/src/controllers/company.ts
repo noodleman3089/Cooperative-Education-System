@@ -385,7 +385,6 @@ export class CompanyController {
       const counts = await CompanyModel.countReferences(companyId);
       const labels: Record<string, string> = {
         intents: 'ใบแจ้งความจำนง',
-        jobs: 'ประกาศรับสมัครงาน',
         documents: 'เอกสารราชการ',
         mentors: 'พนักงานที่ปรึกษา',
         outlines: 'โครงร่างรายงาน',

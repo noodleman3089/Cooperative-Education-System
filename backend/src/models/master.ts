@@ -18,14 +18,13 @@ export interface MajorData {
   student_count?: number;
 }
 
-/** สิ่งที่ยังอ้างสาขาอยู่ — ทั้งสามตัวนี้กันการลบที่ระดับฐาน ต้องตอบเป็น 409 ไม่ใช่ 500 */
+/** สิ่งที่ยังอ้างสาขาอยู่ — ทั้งสองตัวนี้กันการลบที่ระดับฐาน ต้องตอบเป็น 409 ไม่ใช่ 500 */
 export interface MajorBlockers {
   major_id: number;
   major_code: string;
   major_name_th: string;
   student_count: number;
   personnel_count: number;
-  job_post_count: number;
 }
 
 export interface ProvinceData {
@@ -98,9 +97,9 @@ export class MasterModel {
    */
 
   /**
-   * สิ่งที่ยังอ้างสาขาพวกนี้อยู่ — **ต้องเช็คทั้งสามตาราง ไม่ใช่แค่ `students`**
+   * สิ่งที่ยังอ้างสาขาพวกนี้อยู่ — **ต้องเช็คทั้งสองตาราง ไม่ใช่แค่ `students`**
    *
-   * ⛔ `personnel.major_id` และ `job_post_majors.major_id` กันการลบที่ระดับฐานเหมือนกัน
+   * ⛔ `personnel.major_id` กันการลบที่ระดับฐานเหมือนกัน
    *    ถ้าเช็คแต่ `students` แล้วปล่อยผ่าน คำสั่ง DELETE จะตายด้วย FK error
    *    แล้วผู้ใช้ได้ 500 "เกิดข้อผิดพลาดของระบบ" ซึ่งไม่บอกว่าติดอะไร
    *    (`personnel_preseed_list.major_id` เป็น ON DELETE SET NULL จึงไม่กัน ไม่ต้องเช็ค)
@@ -110,8 +109,7 @@ export class MasterModel {
     const res = await query(
       `SELECT m.major_id, m.major_code, m.major_name_th,
               (SELECT COUNT(*)::int FROM students s WHERE s.major_id = m.major_id) AS student_count,
-              (SELECT COUNT(*)::int FROM personnel p WHERE p.major_id = m.major_id) AS personnel_count,
-              (SELECT COUNT(*)::int FROM job_post_majors j WHERE j.major_id = m.major_id) AS job_post_count
+              (SELECT COUNT(*)::int FROM personnel p WHERE p.major_id = m.major_id) AS personnel_count
          FROM master_major m
         WHERE m.major_id = ANY($1::int[])
         ORDER BY m.major_id`,

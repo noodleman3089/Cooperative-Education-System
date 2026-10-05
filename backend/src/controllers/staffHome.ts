@@ -13,7 +13,7 @@ import { sendUnexpectedError } from '../utils/httpError';
 /**
  * หน้าแรกของเจ้าหน้าที่งานสหกิจศึกษา — “คิวงานวันนี้” (spec-E ข้อ 4 · SB8)
  *
- * เส้นเดียวที่หน้าแรกเรียก · รวมฤดูกาล ตัวนับ 6 กอง แถบเวลา และคำเตือนปฏิทิน
+ * เส้นเดียวที่หน้าแรกเรียก · รวมฤดูกาล ตัวนับ 5 กอง แถบเวลา และคำเตือนปฏิทิน
  * ไว้ในคำขอเดียว เพราะทั้งหมดนี้ต้องมาจาก **“วันนี้” ก้อนเดียวกัน** — ถ้าแยกเป็น
  * หลายคำขอ แต่ละอันจะอ่านนาฬิกาคนละครั้งและตอบคนละวันได้ในช่วงเที่ยงคืน
  *
@@ -34,10 +34,9 @@ export class StaffHomeController {
       const today = await CoopCalendarModel.today();
       const semester = await CoopSemesterModel.findActiveSemester();
 
-      const [tiles, windows, surveyWindow] = await Promise.all([
+      const [tiles, windows] = await Promise.all([
         loadTiles(today),
         loadCalendarWindows(semester?.semester_id ?? null, today),
-        loadSurveyWindow(today),
       ]);
 
       /**
@@ -45,7 +44,7 @@ export class StaffHomeController {
        *    “ของที่เลยกำหนด” มาก่อนทุกอย่างโดยตั้งใจ: งานตามปฏิทินมาทุกภาคเรียน
        *    แต่ของที่เลยกำหนดแล้วไม่มีใครมาเตือนอีก
        */
-      const overdueTotal = tiles.request.overdue + tiles.acceptance.overdue + tiles.offer.overdue;
+      const overdueTotal = tiles.request.overdue + tiles.acceptance.overdue;
       const extra = await loadSeasonExtras(today, semester?.semester_id ?? null);
 
       let season: Season;
@@ -54,12 +53,6 @@ export class StaffHomeController {
         season = 'idle';
       } else if (overdueTotal > 0) {
         season = 'overdue';
-      } else if (
-        (windows.intent_submission.state === 'upcoming' ||
-          windows.intent_submission.state === 'not_configured') &&
-        extra.companiesNotSentNext > 0
-      ) {
-        season = 'survey';
       } else if (isOpen(windows.intent_submission.state)) {
         season = 'request';
       } else if (isOpen(windows.acceptance_form.state)) {
@@ -101,14 +94,6 @@ export class StaffHomeController {
         season_detail: seasonDetail(season, today, tiles, windows, extra),
         tiles,
         timeline: [
-          {
-            key: 'survey',
-            label: 'ช่วงสำรวจ',
-            state: surveyWindow.state,
-            start: surveyWindow.start,
-            end: surveyWindow.end,
-            late_end: null,
-          },
           timelineEntry('intent_submission', 'รับคำร้อง & ออกหนังสือ', windows.intent_submission),
           timelineEntry('acceptance_form', 'รับแบบตอบรับ', windows.acceptance_form),
           {
@@ -141,7 +126,6 @@ export class StaffHomeController {
 
 type Season =
   | 'overdue'
-  | 'survey'
   | 'request'
   | 'acceptance'
   | 'supervision'
@@ -158,7 +142,6 @@ interface Tiles {
   request: Tile;
   acceptance: Tile;
   dispatch: Tile;
-  offer: Tile;
   appointment: Tile;
   dean: Tile;
 }
@@ -180,10 +163,6 @@ interface Windows {
 }
 
 interface SeasonExtras {
-  /** บริษัทในทำเนียบที่ยังไม่ได้รับใบสำรวจของ**ภาคถัดไป** */
-  companiesNotSentNext: number;
-  /** ได้รับใบของภาคถัดไปไปแล้วกี่ราย — เลขขวาของ "ส่งแล้ว 0 / 62" */
-  companiesSentNext: number;
   /** คำร้องในคิวที่ถูกปั๊มว่ายื่นช่วงผ่อนผัน */
   lateRequests: number;
   /** นักศึกษาที่ออกฝึกแล้วในภาคนี้ */
@@ -194,7 +173,7 @@ interface SeasonExtras {
 
 const isOpen = (s: CalendarStatus): boolean => s === 'open' || s === 'late';
 
-/* ── ตัวนับ 6 กอง ──────────────────────────────────────────────────
+/* ── ตัวนับ 5 กอง ──────────────────────────────────────────────────
  *
  * ⛔ **ไม่กรองด้วยภาคเรียนโดยตั้งใจ** — คำร้องที่ค้างมาจากภาคที่แล้วก็ยังเป็นงานที่
  *    ต้องมีคนทำ การซ่อนมันเพราะ "คนละภาค" คือการทำให้งานหายไปจากสายตาถาวร
@@ -230,16 +209,6 @@ async function loadTiles(today: string): Promise<Tiles> {
        (SELECT COUNT(*)::int FROM intent_forms
          WHERE status = 'accepted' AND dispatch_document_no IS NULL
            AND start_date IS NOT NULL AND start_date <= $1::date)        AS dispatch_overdue,
-
-       -- 4. แบบเสนองานรอตรวจ · เลยกำหนด = เลยวันที่ขอให้ส่งกลับ
-       (SELECT COUNT(*)::int FROM coop_job_offers
-         WHERE status = 'submitted')                                    AS offer_count,
-       (SELECT COUNT(*)::int FROM coop_job_offers
-         WHERE status = 'submitted'
-           AND due_date IS NOT NULL AND due_date < $1::date)            AS offer_overdue,
-       (SELECT COUNT(*)::int FROM job_posts j
-         JOIN coop_job_offers o ON o.offer_id = j.offer_id
-        WHERE o.status = 'submitted' AND j.status = 'pending_approval') AS offer_items,
 
        -- 5. ร่างนัดหมายนิเทศรอส่ง · เลยกำหนด = วันนัดผ่านไปแล้วแต่ยังไม่ได้ส่งออก
        (SELECT COUNT(*)::int FROM supervision_appointments
@@ -277,11 +246,6 @@ async function loadTiles(today: string): Promise<Tiles> {
         r.dispatch_overdue > 0
           ? `${r.dispatch_overdue} คนถึงวันเริ่มงานแล้วแต่ยังไม่ได้รับหนังสือส่งตัว`
           : null,
-    },
-    offer: {
-      count: r.offer_count,
-      overdue: r.offer_overdue,
-      note: r.offer_items > 0 ? `${r.offer_items} ตำแหน่งข้างใน` : null,
     },
     appointment: { count: r.appointment_count, overdue: r.appointment_overdue, note: null },
     dean: {
@@ -364,29 +328,6 @@ async function loadCalendarWindows(
   };
 }
 
-/**
- * ช่วงสำรวจ — **อ่านจาก `coop_job_offers.due_date` ไม่ใช่จากปฏิทิน**
- *
- * ⛔ ห้ามเพิ่ม `activity_key` ใหม่ให้ช่วงนี้ (สเปกข้อ 4.2) — แบบสำรวจจงใจไม่ผูก
- *    ด่านปฏิทิน วันปิดของมันคือ `due_date` ที่เจ้าหน้าที่ตั้งเองตอนกดส่งแต่ละรอบ
- *    key ที่ไม่มีใครเรียกใช้คือคำสัญญาลอย ๆ ว่าระบบทำอะไรให้ (`coopCalendar.ts`)
- */
-async function loadSurveyWindow(today: string): Promise<Window> {
-  const res = await query(
-    `SELECT MIN(created_at)::date AS start, MAX(due_date)::date AS "end"
-       FROM coop_job_offers
-      WHERE semester_id = (SELECT MAX(semester_id) FROM coop_job_offers)`
-  );
-  const start = (res.rows[0]?.start as string | null) ?? null;
-  const end = (res.rows[0]?.end as string | null) ?? null;
-  return {
-    state: calendarStatus(today, start, end, null),
-    start: start === null ? null : String(start),
-    end: end === null ? null : String(end),
-    late_end: null,
-  };
-}
-
 /* ── ตัวเลขที่การ์ดใบใหญ่ใช้ ────────────────────────────────────────── */
 
 async function loadSeasonExtras(
@@ -394,21 +335,7 @@ async function loadSeasonExtras(
   semesterId: number | null
 ): Promise<SeasonExtras> {
   const res = await query(
-    `WITH next_sem AS (
-       -- ภาคถัดไปจากภาคที่เปิดอยู่ · ไม่มี = ยังไม่ได้ตั้งภาคหน้า จึงยังส่งสำรวจไม่ได้
-       SELECT MIN(semester_id) AS semester_id FROM coop_semesters
-        WHERE $2::int IS NOT NULL AND semester_id > $2::int
-     )
-     SELECT
-       (SELECT COUNT(*)::int FROM companies c
-         WHERE (SELECT semester_id FROM next_sem) IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM coop_job_offers o
-                            WHERE o.company_id = c.company_id
-                              AND o.semester_id = (SELECT semester_id FROM next_sem)))
-         AS companies_not_sent_next,
-       (SELECT COUNT(*)::int FROM coop_job_offers o
-         WHERE o.semester_id = (SELECT semester_id FROM next_sem))
-         AS companies_sent_next,
+    `SELECT
        (SELECT COUNT(*)::int FROM intent_forms
          WHERE status = 'pending_officer_request' AND submitted_late) AS late_requests,
        -- "ออกฝึกแล้ว" = ใบที่ตอบรับแล้วและถึงวันเริ่มงานแล้ว ในภาคที่เปิดอยู่
@@ -426,8 +353,6 @@ async function loadSeasonExtras(
   );
   const r = res.rows[0];
   return {
-    companiesNotSentNext: r.companies_not_sent_next,
-    companiesSentNext: r.companies_sent_next,
     lateRequests: r.late_requests,
     studentsOnPlacement: r.students_on_placement,
     evaluationsMissing: r.evaluations_missing,
@@ -460,16 +385,9 @@ function seasonDetail(
   switch (season) {
     case 'overdue':
       return pack(
-        tiles.request.overdue + tiles.acceptance.overdue + tiles.offer.overdue,
+        tiles.request.overdue + tiles.acceptance.overdue,
         null,
         0
-      );
-    case 'survey':
-      // เส้นตายของช่วงสำรวจคือ "วันที่เริ่มรับคำร้อง" — ส่งไม่ทันก่อนวันนั้นคือส่งไม่ทันรอบ
-      return pack(
-        extra.companiesNotSentNext,
-        windows.intent_submission.start,
-        extra.companiesSentNext
       );
     case 'request':
       return pack(

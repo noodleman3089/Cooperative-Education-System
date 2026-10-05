@@ -2,7 +2,6 @@ import nodemailer from 'nodemailer';
 import path from 'path';
 import { buildAcceptanceFormPdf, AcceptanceFormData } from './acceptanceFormPdf';
 import { escapeHtml as esc } from '../middlewares/validation';
-import { JOB_OFFER_TOKEN_TTL_LABEL } from './jobOfferToken';
 import { formatThaiDate } from './thaiDate';
 import { mentorLoginPageUrl } from './mentorLoginLink';
 import { query } from '../config/database';
@@ -312,12 +311,10 @@ export const notifyStudentStatusChange = async (
         i.student_id,
         s.first_name,
         s.last_name,
-        c.name_th as company_name,
-        j.title as job_title
+        c.name_th as company_name
        FROM intent_forms i
        JOIN students s ON i.student_id = s.student_id
        JOIN companies c ON i.company_id = c.company_id
-       LEFT JOIN job_posts j ON i.job_id = j.job_id
        WHERE i.form_id = $1`,
       [intentId]
     );
@@ -327,7 +324,7 @@ export const notifyStudentStatusChange = async (
       return;
     }
 
-    const { student_id, first_name, last_name, company_name, job_title } = intentQuery.rows[0];
+    const { student_id, first_name, last_name, company_name } = intentQuery.rows[0];
     // studentName is escaped by sendStudentStatusUpdateEmail; do not escape twice.
     const studentName = `${first_name || ''} ${last_name || ''}`.trim() || 'นักศึกษา';
 
@@ -340,14 +337,12 @@ export const notifyStudentStatusChange = async (
     let statusLabel = '';
     let detailsHtml = '';
 
-    const jobInfo = job_title ? `ตำแหน่งงาน: ${esc(job_title)}` : 'สมัครงานทั่วไป';
-
     // ⛔ สาขา 'approved_by_advisor' และ 'rejected_by_dept_head' ถูกลบ 2026-08-27
     //    — ไม่มีใบไหนไปถึงสองสถานะนั้นอีกแล้วตั้งแต่ลายเซ็นย้ายไปอยู่บนกระดาษ
     if (status === 'rejected') {
       statusLabel = 'อาจารย์ที่ปรึกษาตีกลับใบคำร้อง';
       detailsHtml = `
-        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> (${jobInfo}) ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยอาจารย์ที่ปรึกษาสหกิจศึกษา</p>
+        <p>ใบความจำนงขอฝึกงานที่ <b>${safeCompanyName}</b> ได้ถูก<b>ตีกลับ / ปฏิเสธ</b>โดยอาจารย์ที่ปรึกษาสหกิจศึกษา</p>
         ${reason ? `<p style="color: #d93025; font-weight: bold;">เหตุผลการตีกลับ: ${safeReason}</p>` : ''}
         <p>กรุณาเข้าระบบเพื่อตรวจสอบรายละเอียด ปรับปรุงข้อมูล หรือทำเรื่องเลือกสถานประกอบการอื่นใหม่</p>
       `;
@@ -356,7 +351,7 @@ export const notifyStudentStatusChange = async (
       // **คนที่กดคือเจ้าหน้าที่** ลายเซ็นที่ปรึกษา/หัวหน้าสาขาอยู่บนกระดาษไปแล้ว
       statusLabel = 'เจ้าหน้าที่รับคำร้องแล้ว';
       detailsHtml = `
-        <p>เจ้าหน้าที่งานสหกิจศึกษาได้<b>รับแบบคำร้องที่ลงนามครบ</b>ของท่านสำหรับ <b>${safeCompanyName}</b> (${jobInfo}) และออกเลขที่หนังสือเรียบร้อยแล้ว</p>
+        <p>เจ้าหน้าที่งานสหกิจศึกษาได้<b>รับแบบคำร้องที่ลงนามครบ</b>ของท่านสำหรับ <b>${safeCompanyName}</b> และออกเลขที่หนังสือเรียบร้อยแล้ว</p>
         <p>ขณะนี้หนังสือขอความอนุเคราะห์อยู่ในคิวรอคณบดีลงนาม เมื่อลงนามแล้วท่านจะดาวน์โหลดไปยื่นสถานประกอบการได้เอง</p>
       `;
     } else if (status === 'accepted') {
@@ -695,74 +690,6 @@ export const sendFinalReportNotificationEmail = async (
     console.log(`[Email] Final report notification email sent successfully to ${mentorEmail}`);
   } catch (error) {
     console.error(`[Email] Error sending final report email to ${mentorEmail}:`, error);
-  }
-};
-
-/**
- * แบบเสนองานสหกิจศึกษา (สหกิจ 02) — ลิงก์ตอบแบบสำรวจโดยไม่ต้องเข้าสู่ระบบ
- *
- * ⛔ อีเมลฉบับนี้ **ต้องไม่มีข้อมูลนักศึกษาแม้แต่ตัวเดียว** — ปลายทางคือกล่องรวมของ
- *    ฝ่ายบุคคล (hr@, contact@) ที่มีคนเข้าถึงหลายคน และหน้าที่ลิงก์นี้เปิดก็เป็นหน้า
- *    ที่ไม่มีข้อมูลนักศึกษาเช่นกัน
- * ⛔ ปลายทางมาจากทะเบียนเสมอ ห้ามรับจากคำขอ (ดู `JobOfferModel.contactEmail`)
- *
- * คืน `true` เมื่อ SMTP รับจดหมายไปแล้ว · `false` เมื่อส่งไม่ออก — **ไม่โยน error**
- * เพราะการส่งเมลล้มเหลวไม่ควรทำให้สิ่งที่บันทึกลงฐานไปแล้วกลายเป็น 500
- * ตอนเจ้าหน้าที่ส่งเป็นชุด ค่านี้คือตัวที่ทำให้ตัวเลข `emailed` พูดความจริง
- * (ผู้เรียกที่ไม่สนใจก็ไม่ต้องรับค่า — พฤติกรรมเดิมไม่เปลี่ยน)
- */
-export const sendJobOfferSurveyEmail = async (
-  toEmail: string,
-  answerLink: string,
-  info: { companyName: string; semesterLabel: string; dueDate: string | null }
-): Promise<boolean> => {
-  const content = `
-    <p>งานสหกิจศึกษาและการฝึกงานวิชาชีพประจำคณะ ขอสำรวจความต้องการรับนักศึกษาสหกิจศึกษา
-       ของ <b>${esc(info.companyName)}</b> ประจำ<b>${esc(info.semesterLabel)}</b></p>
-    <p>ท่านตอบแบบเสนองานสหกิจศึกษา (สหกิจ 02) ได้จากลิงก์ด้านล่างโดย<b>ไม่ต้องเข้าสู่ระบบ</b>
-       — ระบบกรอกคำตอบของภาคเรียนที่แล้วไว้ให้แล้ว หากไม่มีอะไรเปลี่ยน กดยืนยันได้ทันที</p>
-    <div style="text-align: center; margin: 24px 0;">
-      <a href="${answerLink}"
-         style="display: inline-block; padding: 12px 32px; background-color: #2563eb; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
-        ตอบแบบเสนองานสหกิจศึกษา
-      </a>
-    </div>
-  `;
-
-  const mailOptions = {
-    from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
-    to: toEmail,
-    subject: `แบบเสนองานสหกิจศึกษา (สหกิจ 02) ${info.semesterLabel} - มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก`,
-    html: renderEmailHtml({
-      title: 'ขอสำรวจความต้องการรับนักศึกษาสหกิจศึกษา',
-      themeColor: '#1a73e8',
-      content,
-      highlightBox: info.dueDate
-        ? `กรุณาส่งคำตอบกลับ<b>ก่อนวันที่ ${esc(formatThaiDate(info.dueDate))}</b>`
-        : undefined,
-      footnote: `
-        <p style="color: #9ca3af; font-size: 12px; line-height: 1.5;">
-          ลิงก์นี้ใช้ได้ครั้งเดียวและจะหมดอายุใน ${JOB_OFFER_TOKEN_TTL_LABEL}<br/>
-          หากลิงก์หมดอายุแล้ว ให้เปิดลิงก์เดิมแล้วกดขอลิงก์ใหม่ ระบบจะส่งกลับมาที่อีเมลฉบับนี้เท่านั้น<br/>
-          หากมีข้อสงสัย กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษาประจำคณะ
-        </p>
-      `,
-    }),
-  };
-
-  try {
-    await transporter.sendMail(mailOptions);
-    console.log(`Job offer survey email successfully sent to: ${toEmail}`);
-    return true;
-  } catch (err: unknown) {
-    const error = err as { message?: string; response?: string };
-    console.error('════════════════════════════════════════════════════');
-    console.error(`[Email] JOB OFFER SURVEY (SMTP failed: ${error?.message || err})`);
-    if (error?.response) console.error(`  SMTP Response: ${error.response}`);
-    console.error(`  To: ${toEmail}`);
-    console.error(`  Link: ${answerLink}`);
-    console.error('════════════════════════════════════════════════════');
-    return false;
   }
 };
 

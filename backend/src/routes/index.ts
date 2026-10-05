@@ -4,9 +4,6 @@ import masterDataRoutes from './masterData';
 import profileRoutes from './profile';
 import userRoutes from './user';
 import companyRoutes from './company';
-import jobRoutes from './job';
-import jobOfferRoutes from './jobOffer';
-import publicJobOfferRoutes from './publicJobOffer';
 import publicAcceptanceRoutes from './publicAcceptance';
 import mentorRoutes from './mentor';
 import mentorFollowupRoutes from './mentorFollowup';
@@ -42,19 +39,14 @@ router.use('/master-data', masterDataRoutes);
 router.use('/profile', profileRoutes);
 router.use('/users', userRoutes);
 router.use('/companies', companyRoutes);
-router.use('/jobs', jobRoutes);
-// แบบเสนองานสหกิจ (สหกิจ 02) — คนละเรื่องกับ /jobs ซึ่งเป็นรายการตำแหน่งที่นักศึกษาเห็น
-router.use('/job-offers', jobOfferRoutes);
 // เส้นสาธารณะทั้งหมดห้ามถูกแคช — 410 เคยถูกเบราว์เซอร์แคชไว้ ผู้ใช้กลับมาเปิดลิงก์ใหม่ยังเห็น "ใช้ไม่ได้แล้ว"
 //   (token ใช้ครั้งเดียว/หมดอายุ สถานะเปลี่ยนได้ตลอด)
 router.use('/public', (_req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-// ⛔ เส้นสาธารณะที่ไม่ต้องล็อกอิน (ชุดที่ 1 จาก 2) — เปิดได้แค่แบบเสนองาน (สหกิจ 02)
-//    ซึ่งไม่มีข้อมูลนักศึกษาอยู่เลย · เหตุผลเต็มอยู่ใน routes/publicJobOffer.ts
-router.use('/public/job-offer', publicJobOfferRoutes);
-// ⛔ เส้นสาธารณะชุดที่ 2 — ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2 + สหกิจ 07) · เหตุผลเต็มอยู่ใน routes/publicAcceptance.ts
+// ⛔ เส้นสาธารณะที่ไม่ต้องล็อกอิน มีชุดเดียว (แบบเสนองาน สหกิจ 02 ถูกตัดทั้งสาย 2026-10-05)
+//    — ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2 + สหกิจ 07) · เหตุผลเต็มอยู่ใน routes/publicAcceptance.ts
 router.use('/public/acceptance', publicAcceptanceRoutes);
 // ฝ่ายพี่เลี้ยง — คิวงานค้างและการรับรองบันทึก
 router.use('/mentor', mentorRoutes);

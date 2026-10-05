@@ -59,32 +59,6 @@ export function assertAllowedTransition(action: string, currentStatus: string, a
 }
 
 /**
- * Give a job seat back when a placement falls through. Shared by every rejection
- * path so a seat is never leaked (or double-returned) depending on who rejected.
- * The post only reopens when it is genuinely under quota again.
- */
-async function releaseJobSeat(client: PoolClient, jobId: number | null): Promise<void> {
-  if (jobId === null || jobId === undefined) return;
-
-  const jobRes = await client.query(
-    `SELECT job_id, quota, applied_count, status FROM job_posts WHERE job_id = $1 FOR UPDATE`,
-    [jobId]
-  );
-  if ((jobRes.rowCount ?? 0) === 0) return;
-
-  const job = jobRes.rows[0];
-  const newAppliedCount = Math.max(0, job.applied_count - 1);
-  const newStatus =
-    job.status === 'closed' && newAppliedCount < job.quota ? 'published' : job.status;
-
-  await client.query(`UPDATE job_posts SET applied_count = $1, status = $2 WHERE job_id = $3`, [
-    newAppliedCount,
-    newStatus,
-    jobId,
-  ]);
-}
-
-/**
  * ตราประทับว่าใบนี้ยื่นในช่วงผ่อนผัน (ส่งช้า) หรือไม่
  *
  * ค่ามาจาก `isLateWindow(res)` ซึ่งอ่านผลของด่านปฏิทินเท่านั้น — **ไม่ใช่ค่าที่
@@ -97,13 +71,12 @@ export interface LateStamp {
 
 export class IntentFormModel {
   /**
-   * Submit student intent and update job application count transactionally.
+   * Submit student intent transactionally.
    */
   static async createWithTransaction(intentData: {
     student_id: number;
     company_id: number;
     semester_id: number;
-    job_id: number | null;
     late: LateStamp;
   }): Promise<IntentForm> {
     const client = await pool.connect();
@@ -156,84 +129,17 @@ export class IntentFormModel {
         throw new Error('ภาคการศึกษาที่เลือกไม่ได้เปิดรับการยื่นแบบแจ้งความจำนง');
       }
 
-      // 4. If applying to a specific job post, run critical logic and update it
-      if (intentData.job_id !== null) {
-        // Query job post with row-locking FOR UPDATE to handle concurrent requests safely
-        const jobRes = await client.query(
-          `SELECT job_id, company_id, status, quota, applied_count, semester_id
-           FROM job_posts
-           WHERE job_id = $1
-           FOR UPDATE`,
-          [intentData.job_id]
-        );
-
-        if ((jobRes.rowCount ?? 0) === 0) {
-          throw new Error('Job post not found.');
-        }
-
-        const job = jobRes.rows[0];
-
-        // Validate that the job post belongs to the specified company
-        if (job.company_id !== intentData.company_id) {
-          throw new Error('Company ID does not match the company of the selected Job Post.');
-        }
-
-        // Validate status
-        if (job.status !== 'published') {
-          throw new Error(`Job post is not currently accepting applications. Current status: ${job.status}`);
-        }
-
-        /**
-         * ⛔ **เลิกกรองด้วย `expire_date` แล้ว** — คอลัมน์นี้เปลี่ยนความหมายไปตั้งแต่
-         *    รอบรื้อฝ่ายสถานประกอบการ จาก "วันที่ประกาศหมดอายุ" เป็น
-         *    **"กำหนดส่งแบบสำรวจกลับ"** (บรรทัดท้ายกระดาษ สหกิจ 02)
-         *    ตำแหน่งจะถูกเปิดให้นักศึกษาเห็นก็ต่อเมื่อเจ้าหน้าที่ตรวจใบผ่าน ซึ่งเกิด
-         *    **หลัง** วันนั้นเสมอ — เงื่อนไขเดิมจึงปฏิเสธการยื่นทุกใบที่เดินมาถูกทาง
-         *    (`models/job.ts` ถอดเงื่อนไขนี้ออกจากกระดานหางานไปแล้ว เหลือค้างที่นี่
-         *    ที่เดียว: นักศึกษาเห็นตำแหน่งบนกระดาน กดยื่น แล้วได้ "Job post has expired.")
-         *    ตัวที่คุมว่ายังรับอยู่ไหมคือ `status` กับโควตา ส่วนภาคเรียนคุมด้วยบรรทัดล่าง
-         *
-         * ⛔ ตำแหน่งต้องเป็นของภาคเรียนเดียวกับที่นักศึกษายื่น — ตรงกับเงื่อนไขของ
-         *    กระดานหางาน (`getAvailableJobs`) และ `semester_id` ของคำร้องถูกตรวจ
-         *    ว่า `is_active` ไปแล้วข้างบน ตำแหน่งของภาคที่ผ่านไปแล้วจึงยื่นไม่ได้
-         */
-        if (job.semester_id !== null && job.semester_id !== intentData.semester_id) {
-          throw new Error('ตำแหน่งนี้เป็นของภาคการศึกษาอื่น ไม่สามารถยื่นความจำนงในภาคนี้ได้');
-        }
-
-        // Validate quota
-        if (job.applied_count >= job.quota) {
-          throw new Error('Job post quota has already been filled.');
-        }
-
-        // Increment applied count
-        const newAppliedCount = job.applied_count + 1;
-        await client.query(
-          'UPDATE job_posts SET applied_count = $1 WHERE job_id = $2',
-          [newAppliedCount, intentData.job_id]
-        );
-
-        // If new count reaches quota, automatically close the job post
-        if (newAppliedCount >= job.quota) {
-          await client.query(
-            "UPDATE job_posts SET status = 'closed' WHERE job_id = $1",
-            [intentData.job_id]
-          );
-        }
-      }
-
       // 5. Insert Intent Form
       const insertRes = await client.query(
         `INSERT INTO intent_forms
-           (student_id, company_id, semester_id, job_id, status, submitted_late, late_reason)
-         VALUES ($1, $2, $3, $4, 'pending_advisor', $5, $6)
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status,
+           (student_id, company_id, semester_id, status, submitted_late, late_reason)
+         VALUES ($1, $2, $3, 'pending_advisor', $4, $5)
+         RETURNING form_id, student_id, company_id, semester_id, status,
                    submitted_late, late_reason`,
         [
           intentData.student_id,
           intentData.company_id,
           intentData.semester_id,
-          intentData.job_id,
           intentData.late.submitted_late,
           intentData.late.late_reason,
         ]
@@ -270,6 +176,8 @@ export class IntentFormModel {
       contact_person?: string;
       contact_position?: string;
       email?: string;
+      /** มาจากการเลือกสถานที่ใน Google Maps — ใช้กันสร้างบริษัทเดียวกันซ้ำ */
+      google_place_id?: string | null;
     },
     late: LateStamp
   ): Promise<IntentForm> {
@@ -317,9 +225,9 @@ export class IntentFormModel {
       const companyRes = await client.query(
         `INSERT INTO companies (
           name_th, name_en, address, province, district, postal_code, phone, 
-          contact_person, contact_position, email, is_verified, created_by
+          contact_person, contact_position, email, is_verified, created_by, google_place_id
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE, $11)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE, $11, $12)
          RETURNING company_id`,
         [
           companyDetails.name_th,
@@ -332,7 +240,8 @@ export class IntentFormModel {
           companyDetails.contact_person || null,
           companyDetails.contact_position || null,
           companyDetails.email || null,
-          studentId
+          studentId,
+          companyDetails.google_place_id || null
         ]
       );
       const companyId = companyRes.rows[0].company_id;
@@ -340,9 +249,9 @@ export class IntentFormModel {
       // 4. Create the intent form pointing to the new company
       const insertRes = await client.query(
         `INSERT INTO intent_forms
-           (student_id, company_id, semester_id, job_id, status, submitted_late, late_reason)
-         VALUES ($1, $2, $3, NULL, 'pending_advisor', $4, $5)
-         RETURNING form_id, student_id, company_id, semester_id, job_id, status,
+           (student_id, company_id, semester_id, status, submitted_late, late_reason)
+         VALUES ($1, $2, $3, 'pending_advisor', $4, $5)
+         RETURNING form_id, student_id, company_id, semester_id, status,
                    submitted_late, late_reason`,
         [studentId, companyId, semesterId, late.submitted_late, late.late_reason]
       );
@@ -551,7 +460,7 @@ export class IntentFormModel {
 
   static async findById(formId: number): Promise<IntentForm | null> {
     const res = await query(
-      `SELECT form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date, acceptance_evidence_path 
+      `SELECT form_id, student_id, company_id, semester_id, status, mentor_id, start_date, acceptance_evidence_path 
        FROM intent_forms 
        WHERE form_id = $1`,
       [formId]
@@ -572,7 +481,7 @@ export class IntentFormModel {
     allowedFrom: string[] = COMPANY_DECISION_FROM
   ): Promise<boolean> {
     const intentRes = await client.query(
-      `SELECT form_id, job_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+      `SELECT form_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
       [intentId]
     );
     if ((intentRes.rowCount ?? 0) === 0) {
@@ -581,8 +490,6 @@ export class IntentFormModel {
     const intent = intentRes.rows[0];
 
     assertAllowedTransition('company_reject', intent.status, allowedFrom);
-
-    await releaseJobSeat(client, intent.job_id);
 
     const updateRes = await client.query(
       `UPDATE intent_forms SET status = 'company_rejected', reject_reason = $2 WHERE form_id = $1`,
@@ -677,7 +584,7 @@ export class IntentFormModel {
     const { intentId, source, studentUserId, mentorData, startDate, evidencePath, submittedLate, signer } = p;
     // 1. Lock intent form FOR UPDATE
     const intentRes = await client.query(
-      `SELECT form_id, student_id, company_id, semester_id, job_id, status
+      `SELECT form_id, student_id, company_id, semester_id, status
        FROM intent_forms
        WHERE form_id = $1
        FOR UPDATE`,
@@ -808,7 +715,7 @@ export class IntentFormModel {
            job_description = COALESCE($11, job_description),
            company_form07_pending = $12::jsonb
        WHERE form_id = $4
-       RETURNING form_id, student_id, company_id, semester_id, job_id, status, mentor_id, start_date,
+       RETURNING form_id, student_id, company_id, semester_id, status, mentor_id, start_date,
                  acceptance_evidence_path, acceptance_submitted_late, acceptance_source`,
       [
         mentorUserId, new Date(startDate), evidencePath, intentId, submittedLate,
@@ -829,7 +736,7 @@ export class IntentFormModel {
       await client.query('BEGIN');
       
       const intentRes = await client.query(
-        `SELECT form_id, student_id, job_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        `SELECT form_id, student_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
         [intentId]
       );
       if ((intentRes.rowCount ?? 0) === 0) {
@@ -843,10 +750,6 @@ export class IntentFormModel {
       }
 
       assertAllowedTransition('student_fail', intent.status, STUDENT_FAIL_FROM);
-
-      // Hand the seat back — previously this path leaked a seat on every failed
-      // interview because only the advisor/dept-head rejections decremented.
-      await releaseJobSeat(client, intent.job_id);
 
       const updateRes = await client.query(
         `UPDATE intent_forms SET status = 'rejected' WHERE form_id = $1`,

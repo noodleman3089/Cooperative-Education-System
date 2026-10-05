@@ -248,16 +248,13 @@ export class CompanyModel {
   /**
    * นับว่ามีอะไรผูกกับบริษัทนี้อยู่บ้าง ก่อนยอมให้ลบ
    *
-   * ⛔ ต้องนับเองทั้ง 6 ตาราง ห้ามพึ่ง ON DELETE ของ FK — เพราะ `job_posts` เป็น
-   * CASCADE ตัวเดียวในกลุ่ม ถ้าปล่อยให้ฐานข้อมูลจัดการ การลบบริษัทจะลบประกาศงาน
-   * ทิ้งไปด้วยเงียบๆ ส่วนอีก 5 ตารางเป็น RESTRICT ซึ่งจะโยน error ดิบออกมาแทน
-   * ที่จะบอกผู้ใช้ได้ว่าติดอะไรอยู่
+   * ⛔ ต้องนับเองทั้ง 5 ตาราง ห้ามพึ่ง ON DELETE ของ FK — ทั้งหมดเป็น RESTRICT
+   * ซึ่งจะโยน error ดิบออกมาแทนที่จะบอกผู้ใช้ได้ว่าติดอะไรอยู่
    */
   static async countReferences(companyId: number): Promise<Record<string, number>> {
     const res = await query(
       `SELECT
          (SELECT COUNT(*) FROM intent_forms WHERE company_id = $1) AS intents,
-         (SELECT COUNT(*) FROM job_posts WHERE company_id = $1) AS jobs,
          (SELECT COUNT(*) FROM official_documents WHERE company_id = $1) AS documents,
          (SELECT COUNT(*) FROM mentors WHERE company_id = $1) AS mentors,
          (SELECT COUNT(*) FROM report_outlines WHERE company_id = $1) AS outlines,

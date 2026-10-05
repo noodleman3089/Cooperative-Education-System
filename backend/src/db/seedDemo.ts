@@ -1,13 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import type { PoolClient } from 'pg';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import pool from '../config/database';
 import { hashPassword } from '../utils/password';
 import { seedDevDemoData } from './setup';
-import { COMPANY_WRITABLE_FIELDS } from '../models/jobOffer';
-import { createJobOfferToken, jobOfferAnswerUrl } from '../utils/jobOfferToken';
 import { createAcceptanceLinkToken } from '../utils/acceptanceLinkToken';
 import { issueMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
 import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from '../utils/coverLetterPdf';
@@ -19,7 +16,6 @@ import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from '..
  * ถ้าฐานว่างทุกหน้าเป็นจอเปล่าเหมือนกันหมดและดูไม่ออกว่าอันไหนถูกอันไหนพัง
  * (แทน `scratch/seed_company.js` ที่เขียนก่อนถอดบทบาท company และตั้งรหัสผ่านพี่เลี้ยงซึ่งขัด SEC-15)
  *
- *   S1  แบบเสนองาน สหกิจ 02  ใบร่างของภาคถัดไป (ก๊อปจากภาคที่แล้ว 2 รายการ) + ลิงก์ `/offer` ที่ใช้ได้ 1 ใบ หมดอายุ 1 ใบ
  *   S2  ลิงก์ตอบรับ `/accept`  นักศึกษา 2 คนที่คณบดีลงนามหนังสือแล้วและส่งถึงบริษัท (รอบริษัทตอบ)
  *   S3  พี่เลี้ยง mentor1 ดูแลนักศึกษา 2 คน (student1 สัปดาห์ที่ 10 · student2 สัปดาห์ที่ 6 จาก 16)
  *   S4  หน้าแรกพี่เลี้ยง "รอคุณรับรอง" ครบ 6 ชนิดตาม `models/mentorQueue.ts`
@@ -48,8 +44,6 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const BACKEND_DIR = path.resolve(__dirname, '../..');
 
 export interface SeedDemoResult {
-  offerLiveUrl: string;
-  offerExpiredUrl: string;
   acceptUrls: string[];
   mentorLoginUrl: string | null;
 }
@@ -78,38 +72,6 @@ async function writePlaceholderPdf(file: string, title: string): Promise<void> {
   fs.writeFileSync(file, await doc.save());
 }
 
-/** รายการตำแหน่งในแบบเสนองาน — หนึ่งรายการต่อหนึ่งแผ่นของ สหกิจ 02 หน้า 2 */
-const OFFER_ITEMS = [
-  {
-    title: 'Full-Stack Developer',
-    quota: 3,
-    term: 'full_year',
-    desc: 'พัฒนาเว็บแอปพลิเคชันภายในด้วย React และ Node.js ร่วมกับทีมพัฒนา ดูแลการเชื่อมต่อฐานข้อมูลการผลิต และเขียนเอกสารประกอบระบบ',
-    skills: 'เขียนโปรแกรมด้วยภาษาใดภาษาหนึ่งได้ · เข้าใจฐานข้อมูลเชิงสัมพันธ์เบื้องต้น · สื่อสารภาษาอังกฤษเชิงเอกสารได้',
-    other: 'ปฏิบัติงานที่โรงงานสูงเนิน · แต่งกายตามระเบียบโรงงาน · ไม่ต้องนำคอมพิวเตอร์มาเอง',
-    pay: 350,
-    unit: 'day',
-    accommodation: 'none',
-    welfare: 'รถรับส่งพนักงาน · อาหารกลางวันในโรงอาหาร',
-    majors: ['CS01', 'IT01', 'CPE01'],
-    appliedPublished: 2, // student2 + นักศึกษา S2 คนแรก
-  },
-  {
-    title: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
-    quota: 2,
-    term: 'term1',
-    desc: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก',
-    skills: 'ใช้ Excel ระดับ Pivot ได้ · มีพื้นฐานสถิติเบื้องต้น',
-    other: 'ปฏิบัติงานที่โรงงานสูงเนิน',
-    pay: 9000,
-    unit: 'month',
-    accommodation: 'free',
-    welfare: null,
-    majors: ['CS01', 'IS01'],
-    appliedPublished: 2, // student1 + นักศึกษา S2 คนที่สอง → เต็ม
-  },
-];
-
 export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemoResult> {
   const log = opts.quiet ? () => undefined : (m: string) => console.log(`  ${m}`);
 
@@ -122,7 +84,6 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
     mentorId: number;
     companyId: number;
     companyEmail: string;
-    draftOfferId: number;
     s2Forms: { formId: number; studentId: number; studentCode: string; docNo: string }[];
   };
 
@@ -214,26 +175,13 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
     const companyEmail = (await client.query('SELECT email FROM companies WHERE company_id = $1', [companyId]))
       .rows[0].email as string;
 
-    // ── 3. ภาคเรียน: ภาคที่กำลังฝึก (is_active) และภาคถัดไปที่กำลังสำรวจ ──────────────────
+    // ── 3. ภาคเรียนที่กำลังฝึก (is_active) ─────────────────────────────────────────────────
     const cur = (await client.query(
       `SELECT semester_id, academic_year, semester FROM coop_semesters
         WHERE is_active = TRUE ORDER BY semester_id DESC LIMIT 1`
     )).rows[0];
     if (!cur) throw new Error('ไม่มีภาคเรียนที่ is_active — รัน db:setup ก่อน');
-    const nextYear = cur.semester === '1' ? cur.academic_year : cur.academic_year + 1;
-    const nextTerm = cur.semester === '1' ? '2' : '1';
-    let nextSem = (await client.query(
-      'SELECT semester_id FROM coop_semesters WHERE academic_year = $1 AND semester = $2',
-      [nextYear, nextTerm]
-    )).rows[0];
-    if (!nextSem) {
-      nextSem = (await client.query(
-        `INSERT INTO coop_semesters (academic_year, semester, is_active) VALUES ($1, $2, FALSE) RETURNING semester_id`,
-        [nextYear, nextTerm]
-      )).rows[0];
-    }
     const curSemId = cur.semester_id as number;
-    const nextSemId = nextSem.semester_id as number;
 
     // ── 4. ล้างของเดิมของนักศึกษาเดโมก่อนลงใหม่ ────────────────────────────────────────────
     for (const sql of [
@@ -251,126 +199,33 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
       await client.query(sql, [demoIds]);
     }
 
-    // ── S1. แบบเสนองาน สหกิจ 02 ────────────────────────────────────────────────────────────
-    const snapshotSql = `(SELECT jsonb_build_object(${COMPANY_WRITABLE_FIELDS.map((f) => `'${f}', c.${f}`).join(', ')})
-                            FROM companies c WHERE c.company_id = $1)`;
-    const prevOffer = (await client.query(
-      `INSERT INTO coop_job_offers (company_id, semester_id, status, due_date, submitted_at, submitted_by,
-                                    reviewed_at, reviewed_by, informant_name, informant_position, company_snapshot)
-       VALUES ($1, $2, 'reviewed', ${TODAY} - 150, NOW() - INTERVAL '150 days', $3,
-               NOW() - INTERVAL '145 days', $3, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', ${snapshotSql})
-       ON CONFLICT ON CONSTRAINT coop_job_offers_company_semester_key DO UPDATE SET
-         status = 'reviewed', due_date = EXCLUDED.due_date, submitted_at = EXCLUDED.submitted_at,
-         submitted_by = EXCLUDED.submitted_by, reviewed_at = EXCLUDED.reviewed_at,
-         reviewed_by = EXCLUDED.reviewed_by, informant_name = EXCLUDED.informant_name,
-         informant_position = EXCLUDED.informant_position, copied_from_offer_id = NULL,
-         decline_reason = NULL, reject_reason = NULL, updated_at = NOW()
-       RETURNING offer_id`,
-      [companyId, curSemId, staffId]
-    )).rows[0];
-    const draftOffer = (await client.query(
-      `INSERT INTO coop_job_offers (company_id, semester_id, status, due_date, copied_from_offer_id, company_snapshot)
-       VALUES ($1, $2, 'draft', ${TODAY} + 12, $3, ${snapshotSql})
-       ON CONFLICT ON CONSTRAINT coop_job_offers_company_semester_key DO UPDATE SET
-         status = 'draft', due_date = EXCLUDED.due_date, copied_from_offer_id = EXCLUDED.copied_from_offer_id,
-         submitted_at = NULL, submitted_by = NULL, reviewed_at = NULL, reviewed_by = NULL,
-         informant_name = NULL, informant_position = NULL, decline_reason = NULL, reject_reason = NULL,
-         company_snapshot = EXCLUDED.company_snapshot, updated_at = NOW()
-       RETURNING offer_id`,
-      [companyId, nextSemId, prevOffer.offer_id]
-    )).rows[0];
-
-    const majorIdOf = new Map<string, number>(
-      (await client.query('SELECT major_code, major_id FROM master_major')).rows.map(
-        (r) => [r.major_code as string, r.major_id as number] as [string, number]
-      )
-    );
-
-    /** เพิ่มหรืออัปเดตตำแหน่งในใบ (คีย์ = ใบ + ชื่อตำแหน่ง) — ไม่ลบแถวอื่นของบริษัท */
-    const upsertItem = async (
-      offerId: number,
-      semesterId: number,
-      it: (typeof OFFER_ITEMS)[number],
-      status: string,
-      applied: number
-    ): Promise<number> => {
-      const found = await client.query('SELECT job_id FROM job_posts WHERE offer_id = $1 AND title = $2', [
-        offerId,
-        it.title,
-      ]);
-      const values = [
-        it.desc, it.quota, applied, status, it.term, it.skills, it.other, it.pay, it.unit,
-        it.accommodation, it.welfare,
-      ];
-      let jobId: number;
-      if ((found.rowCount ?? 0) > 0) {
-        jobId = found.rows[0].job_id as number;
-        await client.query(
-          `UPDATE job_posts SET description = $2, quota = $3, applied_count = $4, status = $5, duration_term = $6,
-                  skills_required = $7, other_requirements = $8, pay_amount = $9, pay_unit = $10,
-                  accommodation = $11, welfare_other = $12, semester_id = $13,
-                  expire_date = (SELECT due_date FROM coop_job_offers WHERE offer_id = $14)::timestamp
-            WHERE job_id = $1`,
-          [jobId, ...values, semesterId, offerId]
-        );
-      } else {
-        jobId = (await client.query(
-          `INSERT INTO job_posts (company_id, offer_id, semester_id, title, description, created_by, quota,
-                                  applied_count, expire_date, status, duration_term, skills_required,
-                                  other_requirements, pay_amount, pay_unit, accommodation, welfare_other)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-                   (SELECT due_date FROM coop_job_offers WHERE offer_id = $2)::timestamp,
-                   $9, $10, $11, $12, $13, $14, $15, $16)
-           RETURNING job_id`,
-          [companyId, offerId, semesterId, it.title, it.desc, staffId, it.quota, applied, status, it.term,
-           it.skills, it.other, it.pay, it.unit, it.accommodation, it.welfare]
-        )).rows[0].job_id as number;
-      }
-      await client.query('DELETE FROM job_post_majors WHERE job_id = $1', [jobId]);
-      for (const code of it.majors) {
-        const mid = majorIdOf.get(code);
-        if (mid !== undefined) {
-          await client.query('INSERT INTO job_post_majors (job_id, major_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [jobId, mid]);
-        }
-      }
-      return jobId;
-    };
-
-    const jobIds: number[] = [];
-    for (const it of OFFER_ITEMS) {
-      // เต็มโควตาแล้ว = closed ตามที่ models/intent.ts ทำจริง
-      const full = it.appliedPublished >= it.quota;
-      jobIds.push(await upsertItem(prevOffer.offer_id, curSemId, it, full ? 'closed' : 'published', it.appliedPublished));
-      await upsertItem(draftOffer.offer_id, nextSemId, it, 'pending_approval', 0);
-    }
-
     // ── S3. นักศึกษาที่ตอบรับแล้ว (accepted) กำลังฝึกอยู่ ─────────────────────────────────
     // ⛔ ทุกอย่างเลื่อนตาม offset: start_date = วันนี้ − offset · จบ = start + 111 วัน (16 สัปดาห์พอดี)
     const placements = [
-      { id: student2Id, job: jobIds[0], offset: 39, daily: true, no: 'DEMO-S2',
+      { id: student2Id, offset: 39, daily: true, no: 'DEMO-S2',
         pos: 'Junior Full-Stack Developer',
         desc: 'พัฒนาหน้าจอรายงานยอดผลิตรายวันให้ฝ่ายวางแผน ร่วมทดสอบระบบ และจัดทำเอกสารประกอบ' },
-      { id: student1Id, job: jobIds[1], offset: 67, daily: false, no: 'DEMO-S1',
+      { id: student1Id, offset: 67, daily: false, no: 'DEMO-S1',
         pos: 'ผู้ช่วยวิเคราะห์ข้อมูลการผลิต',
         desc: 'รวบรวมและวิเคราะห์ข้อมูลรอบการผลิต จัดทำรายงานประจำสัปดาห์เสนอหัวหน้าแผนก' },
     ];
     for (const p of placements) {
       await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status, mentor_id,
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, mentor_id,
                 start_date, end_date, daily_log_required, job_position, job_description,
                 advisor_signer_name, advisor_signed_date, dept_head_signer_name, dept_head_signed_date,
                 officer_document_no, officer_approved_at, officer_approved_by,
                 acceptance_due_date, acceptance_signer_name, acceptance_signer_position, acceptance_signed_date,
                 acceptance_source, company_mail_to, company_mail_sent_at, company_mail_count,
                 dispatch_document_no, created_at)
-         VALUES ($1, $2, $3, $4, 'accepted', $5,
-                ${TODAY} - $6::int, ${TODAY} - $6::int + 111, $7, $8, $9,
-                'วิชัย ที่ปรึกษาดี', ${TODAY} - $6::int - 45, 'สมหญิง หัวหน้าสาขา', ${TODAY} - $6::int - 43,
-                'ศธ 0590/' || $10::text, NOW() - ($6::int + 20) * INTERVAL '1 day', $11,
-                ${TODAY} - $6::int - 12, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', ${TODAY} - $6::int - 25,
-                'link', $12, NOW() - ($6::int + 35) * INTERVAL '1 day', 1,
-                'ศธ 0590/SEND-' || $10::text, NOW() - ($6::int + 50) * INTERVAL '1 day')`,
-        [p.id, companyId, curSemId, p.job, mentorId, p.offset, p.daily, p.pos, p.desc, p.no, staffId, companyEmail]
+         VALUES ($1, $2, $3, 'accepted', $4,
+                ${TODAY} - $5::int, ${TODAY} - $5::int + 111, $6, $7, $8,
+                'วิชัย ที่ปรึกษาดี', ${TODAY} - $5::int - 45, 'สมหญิง หัวหน้าสาขา', ${TODAY} - $5::int - 43,
+                'ศธ 0590/' || $9::text, NOW() - ($5::int + 20) * INTERVAL '1 day', $10,
+                ${TODAY} - $5::int - 12, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', ${TODAY} - $5::int - 25,
+                'link', $11, NOW() - ($5::int + 35) * INTERVAL '1 day', 1,
+                'ศธ 0590/SEND-' || $9::text, NOW() - ($5::int + 50) * INTERVAL '1 day')`,
+        [p.id, companyId, curSemId, mentorId, p.offset, p.daily, p.pos, p.desc, p.no, staffId, companyEmail]
       );
     }
 
@@ -380,16 +235,16 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
       const code = EXTRA_STUDENTS[i].code;
       const docNo = `ศธ 0590/DEMO-L${i + 1}`;
       const form = (await client.query(
-        `INSERT INTO intent_forms (student_id, company_id, semester_id, job_id, status,
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status,
                 advisor_signer_name, advisor_signed_date, dept_head_signer_name, dept_head_signed_date,
                 officer_document_no, officer_approved_at, officer_approved_by, acceptance_due_date,
                 company_mail_to, company_mail_sent_at, company_mail_count, created_at)
-         VALUES ($1, $2, $3, $4, 'approved_by_dept_head',
+         VALUES ($1, $2, $3, 'approved_by_dept_head',
                 'วิชัย ที่ปรึกษาดี', ${TODAY} - 14, 'สมหญิง หัวหน้าสาขา', ${TODAY} - 13,
-                $5, NOW() - INTERVAL '8 days', $6, ${TODAY} + 20,
-                $7, NOW() - INTERVAL '1 day', 1, NOW() - INTERVAL '16 days')
+                $4, NOW() - INTERVAL '8 days', $5, ${TODAY} + 20,
+                $6, NOW() - INTERVAL '1 day', 1, NOW() - INTERVAL '16 days')
          RETURNING form_id`,
-        [sid, companyId, curSemId, jobIds[i], docNo, staffId, companyEmail]
+        [sid, companyId, curSemId, docNo, staffId, companyEmail]
       )).rows[0];
       await client.query(
         `INSERT INTO official_documents (document_number, type, student_id, company_id, generated_file_path,
@@ -562,7 +417,7 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
     }
 
     await client.query('COMMIT');
-    ctx = { staffId, mentorId, companyId, companyEmail, draftOfferId: draftOffer.offer_id as number, s2Forms };
+    ctx = { staffId, mentorId, companyId, companyEmail, s2Forms };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -571,15 +426,6 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
   }
 
   // ── หลัง COMMIT: ของที่ต้องออกผ่านตัวช่วยจริงของโปรเจค (ใช้ pool คนละ connection) ──────────────
-  // S1 ลิงก์ `/offer` — ใช้ได้ 1 ใบ (ออกด้วย createJobOfferToken) + หมดอายุแล้ว 1 ใบ
-  await pool.query('DELETE FROM job_offer_tokens WHERE offer_id = $1', [ctx.draftOfferId]);
-  const live = await createJobOfferToken(ctx.draftOfferId, ctx.staffId);
-  const expiredToken = crypto.randomUUID();
-  await pool.query(
-    `INSERT INTO job_offer_tokens (token, offer_id, expires_at, created_by)
-     VALUES ($1, $2, NOW() - INTERVAL '3 hours', $3)`,
-    [expiredToken, ctx.draftOfferId, ctx.staffId]
-  );
 
   // S2 ลิงก์ `/accept` + ไฟล์หนังสือขอความอนุเคราะห์ที่ลงนามแล้ว (ใบ cover letter ต้องมีไฟล์ให้ลิงก์เปิดได้)
   const acceptUrls: string[] = [];
@@ -604,17 +450,12 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
   const mentorLoginUrl = issued && 'url' in issued ? issued.url : null;
 
   const result: SeedDemoResult = {
-    offerLiveUrl: live.url,
-    offerExpiredUrl: jobOfferAnswerUrl(expiredToken),
     acceptUrls,
     mentorLoginUrl,
   };
 
   if (!opts.quiet) {
     console.log('\n✅ ใส่ข้อมูลเดโม "หนึ่งภาคเรียนที่เดินมาถึงกลางทาง" เรียบร้อย');
-    log('S1 แบบเสนองาน สหกิจ 02: ใบร่างภาคถัดไป (ก๊อป 2 รายการจากภาคที่แล้ว) — เจ้าหน้าที่เห็นในหน้า "แบบเสนองาน"');
-    log(`   ลิงก์ที่ใช้ได้ (24 ชม.): ${result.offerLiveUrl}`);
-    log(`   ลิงก์ที่หมดอายุแล้ว     : ${result.offerExpiredUrl}`);
     log('S2 ลิงก์ตอบรับของบริษัท (student3 · student4 คณบดีลงนามแล้ว รอบริษัทตอบ):');
     acceptUrls.forEach((u) => log(`   ${u}`));
     log('S3 พี่เลี้ยง mentor1 ดูแล student1 (สัปดาห์ 10/16) และ student2 (สัปดาห์ 6/16 · บันทึกรายวัน)');

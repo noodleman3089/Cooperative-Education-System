@@ -6,6 +6,7 @@ import {
   COMPANY_MAIL_LIMIT,
   LateStamp,
 } from '../models/intent';
+import { CompanyModel } from '../models/company';
 import { isLateWindow } from '../middlewares/calendarGate';
 import pool, { query } from '../config/database';
 import { notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
@@ -114,7 +115,23 @@ export class IntentFormController {
           return;
         }
 
-        intentForm = await IntentFormModel.createSelfFoundWithTransaction(studentId, parsedSemesterId, {
+        // สถานที่จาก Google Maps: ถ้ามีแถวของ place นี้อยู่แล้ว (นักศึกษาคนอื่นเคยยื่น) ใช้แถวนั้น
+        // ไม่สร้างซ้ำ — `companies.google_place_id` เป็น UNIQUE การ INSERT ซ้ำจะล้มทั้งคำร้อง
+        const googlePlaceId =
+          typeof body.google_place_id === 'string' && body.google_place_id.trim()
+            ? body.google_place_id.trim().slice(0, 255)
+            : null;
+        const knownPlace = googlePlaceId ? await CompanyModel.findByGooglePlaceId(googlePlaceId) : null;
+
+        intentForm = knownPlace
+          ? await IntentFormModel.createWithTransaction({
+              student_id: studentId,
+              company_id: knownPlace.company_id,
+              semester_id: parsedSemesterId,
+              late,
+            })
+          : await IntentFormModel.createSelfFoundWithTransaction(studentId, parsedSemesterId, {
+          google_place_id: googlePlaceId,
           name_th: company_name_th,
           name_en: company_name_en,
           address: company_address,
@@ -127,22 +144,16 @@ export class IntentFormController {
           email: contact_email
         }, late);
       } else {
-        const { company_id, job_id } = body;
+        const { company_id } = body;
         if (company_id === undefined) {
           res.status(400).json({ message: 'Required fields: company_id.' });
           return;
         }
 
         const parsedCompanyId = parseInt(String(company_id), 10);
-        const parsedJobId = job_id !== undefined && job_id !== null ? parseInt(String(job_id), 10) : null;
 
         if (isNaN(parsedCompanyId)) {
           res.status(400).json({ message: 'company_id must be a valid integer.' });
-          return;
-        }
-
-        if (parsedJobId !== null && isNaN(parsedJobId)) {
-          res.status(400).json({ message: 'job_id must be a valid integer or null.' });
           return;
         }
 
@@ -151,7 +162,6 @@ export class IntentFormController {
           student_id: studentId,
           company_id: parsedCompanyId,
           semester_id: parsedSemesterId,
-          job_id: parsedJobId,
           late,
         });
       }
@@ -184,13 +194,12 @@ export class IntentFormController {
       const studentId = req.user.userId;
       const result = await query(
         `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                i.semester_id, i.job_id, j.title as job_title, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
+                i.semester_id, i.job_position, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
                 i.request_form_path, i.reject_reason, i.officer_document_no,
                 i.submitted_late, i.late_reason,
                 i.acceptance_due_date, i.acceptance_submitted_late
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
-         LEFT JOIN job_posts j ON i.job_id = j.job_id
          WHERE i.student_id = $1
          ORDER BY i.form_id DESC`,
         [studentId]
@@ -228,7 +237,7 @@ export class IntentFormController {
       let queryStr = `
         SELECT i.form_id, i.student_id, s.student_code, s.major_id, m.major_name_th,
                s.cumulative_gpa,
-               i.company_id, c.name_th as company_name_th, i.semester_id, i.job_id, j.title as job_title, i.status,
+               i.company_id, c.name_th as company_name_th, i.semester_id, i.status,
                s.resume_file, i.acceptance_evidence_path, i.request_form_path,
                i.advisor_signer_name, i.advisor_signed_date,
                i.dept_head_signer_name, i.dept_head_signed_date, i.officer_document_no,
@@ -248,7 +257,6 @@ export class IntentFormController {
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
         JOIN companies c ON i.company_id = c.company_id
-        LEFT JOIN job_posts j ON i.job_id = j.job_id
         -- พี่เลี้ยงที่สถานประกอบการมอบหมาย — เจ้าหน้าที่ต้องเห็นตอนตรวจก่อนออกหนังสือส่งตัว
         -- เพราะชื่อนี้ถูกพิมพ์ลงหนังสือฉบับที่คณบดีเซ็น (SEC-10: บริษัทถูกตัดฟิลด์ด้านล่างอยู่แล้ว)
         LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
@@ -331,7 +339,7 @@ export class IntentFormController {
                 c.province as company_province, c.district as company_district, c.postal_code as company_postal_code,
                 c.phone as company_phone, c.contact_person as company_contact_person, c.contact_position as company_contact_position,
                 c.email as company_email,
-                i.job_id, j.title as job_title, j.description as job_description,
+                i.job_position, i.job_description,
                 i.mentor_id, men.name as mentor_name, u_men.email as mentor_email, men.phone as mentor_phone,
                 men.position as mentor_position, men.department as mentor_department
          FROM intent_forms i
@@ -340,7 +348,6 @@ export class IntentFormController {
          JOIN master_major m_maj ON s.major_id = m_maj.major_id
          JOIN master_faculty f ON m_maj.faculty_id = f.faculty_id
          JOIN companies c ON i.company_id = c.company_id
-         LEFT JOIN job_posts j ON i.job_id = j.job_id
          LEFT JOIN mentors men ON i.mentor_id = men.mentor_id
          LEFT JOIN users u_men ON i.mentor_id = u_men.user_id
          WHERE i.form_id = $1`,

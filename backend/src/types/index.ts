@@ -135,26 +135,11 @@ export interface CoopSemester {
   is_active: boolean;
 }
 
-export interface JobPost {
-  job_id: number;
-  company_id: number;
-  title: string;
-  description: string;
-  created_by: number;
-  quota: number;
-  applied_count: number;
-  expire_date: Date | string;
-  status: 'pending_approval' | 'published' | 'closed' | 'rejected';
-  /** Set only when status is 'rejected'; this is what the company is shown. */
-  reject_reason?: string | null;
-}
-
 export interface IntentForm {
   form_id: number;
   student_id: number;
   company_id: number;
   semester_id: number;
-  job_id: number | null;
   status: string;
   mentor_id?: number | null;
   start_date?: Date | string | null;
@@ -174,18 +159,9 @@ export interface GoogleSearchCompanyBody {
   phone: string;
 }
 
-export interface CreateJobPostBody {
-  company_id: number;
-  title: string;
-  description: string;
-  quota: number;
-  expire_date: string; // ISO date string or YYYY-MM-DD
-}
-
 export interface SubmitIntentBody {
   company_id: number;
   semester_id: number;
-  job_id?: number | null;
 }
 
 // Sprint 3 Entities

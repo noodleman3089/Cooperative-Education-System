@@ -98,7 +98,7 @@ export class StudentController {
         // Fetch student's intent form for this semester (not rejected/failed)
         const intentQuery = await query(
           `SELECT i.form_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
-                  i.job_id, j.title as job_title, i.status, i.start_date, i.acceptance_evidence_path,
+                  i.status, i.start_date, i.acceptance_evidence_path,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
@@ -108,7 +108,6 @@ export class StudentController {
                   m.position as mentor_position, m.department as mentor_department
            FROM intent_forms i
            JOIN companies c ON i.company_id = c.company_id
-           LEFT JOIN job_posts j ON i.job_id = j.job_id
            LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
            LEFT JOIN users u_men ON i.mentor_id = u_men.user_id
            WHERE i.student_id = $1 AND i.semester_id = $2
@@ -125,8 +124,6 @@ export class StudentController {
             company_id: row.company_id,
             company_name_th: row.company_name_th,
             company_name_en: row.company_name_en,
-            job_id: row.job_id,
-            job_title: row.job_title,
             status: row.status,
             start_date: row.start_date,
             acceptance_evidence_path: row.acceptance_evidence_path,
@@ -1087,12 +1084,11 @@ export class StudentController {
       const intentRes = await query(
         `SELECT i.start_date, i.end_date, i.mentor_id, i.company_id,
                 c.name_th as company_name,
-                j.title as job_title, j.description as job_description,
+                i.job_position, i.job_description,
                 m.name as mentor_name, m.position as mentor_position, m.phone as mentor_phone,
                 COALESCE(i.start_date, i.acceptance_signed_date) as intent_created_at
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id
-         LEFT JOIN job_posts j ON i.job_id = j.job_id
          LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
          WHERE i.student_id = $1 AND i.status = 'accepted'
          ORDER BY i.form_id DESC LIMIT 1`,
@@ -1124,7 +1120,7 @@ export class StudentController {
           : null,
         company_job_info: intent
           ? {
-              job_title: intent.job_title ?? null,
+              job_position: intent.job_position ?? null,
               job_description: intent.job_description ?? null,
               mentor_name: intent.mentor_name ?? null,
               mentor_position: intent.mentor_position ?? null,

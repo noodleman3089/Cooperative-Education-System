@@ -127,20 +127,19 @@ export async function fetchCoopApplicationPdfData(
             mj.major_name_th,
             NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS advisor_name,
             c.name_th AS company_name,
-            j.title   AS position,
+            i.job_position AS position,
             i.start_date::text AS start_date,
             i.end_date::text   AS end_date
        FROM students s
        JOIN master_major mj ON s.major_id = mj.major_id
        LEFT JOIN personnel p ON p.personnel_id = s.advisor_id
        LEFT JOIN LATERAL (
-         SELECT company_id, job_id, start_date, end_date
+         SELECT company_id, job_position, start_date, end_date
            FROM intent_forms
           WHERE student_id = s.student_id
           ORDER BY form_id DESC LIMIT 1
        ) i ON TRUE
        LEFT JOIN companies c ON c.company_id = i.company_id
-       LEFT JOIN job_posts j ON j.job_id = i.job_id
       WHERE s.student_id = $1`,
     [studentId]
   );
