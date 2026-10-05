@@ -91,6 +91,7 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await walk.step(page, 'นักศึกษา', 'กลับหน้าแรก — การ์ดสถานะและแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบกรอกให้แล้ว ให้พิมพ์ไปลงนาม');
 
       await page.getByTestId('upload-request-form').setInputFiles(PDF);
+      await page.getByTestId('request-form-confirm').click();
       await expect(page.getByTestId('request-form-uploaded')).toBeVisible();
       await walk.step(page, 'นักศึกษา', `อัปโหลดแบบคำร้องที่ลงนามแล้ว — รอเจ้าหน้าที่ตรวจ ${SHORTCUT_PDF}`);
 

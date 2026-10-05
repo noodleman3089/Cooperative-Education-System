@@ -53,7 +53,7 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     await page
       .getByTestId('upload-request-form')
       .setInputFiles(path.resolve(process.cwd(), 'e2e/fixtures/mock_official_letter.pdf'));
-    // เลือกไฟล์แล้วอัปโหลดทันที ไม่มีปุ่มยืนยันแยกแล้ว (เจ้าหน้าที่ตรวจไฟล์ก่อนรับอยู่แล้ว)
+    await page.getByTestId('request-form-confirm').click();
     await expect(page.getByTestId('request-form-uploaded')).toBeVisible();
 
     await logout(page);
@@ -81,6 +81,7 @@ test.describe('Rejection & Negative Workflow E2E Tests', () => {
     await page
       .getByTestId('upload-request-form')
       .setInputFiles(path.resolve(process.cwd(), 'e2e/fixtures/mock_official_letter.pdf'));
+    await page.getByTestId('request-form-confirm').click();
     await expect(page.getByTestId('request-form-uploaded')).toBeVisible();
 
     expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(

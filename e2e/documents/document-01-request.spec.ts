@@ -415,6 +415,20 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
 
     await page.getByTestId('signer-advisor').fill('อาจารย์สมชาย ใจดี');
     await page.getByTestId('upload-request-form').setInputFiles(pdf);
+
+    // เลือกไฟล์แล้วยังไม่ส่ง — กล่องยืนยันขึ้นพร้อมชื่อที่กรอก · กดกลับ = ไม่มีอะไรลงฐาน
+    const confirm = page.getByRole('dialog').filter({ hasText: 'ส่งแบบคำร้องที่ลงนามแล้ว' });
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('mock_official_letter.pdf');
+    await expect(confirm).toContainText('อาจารย์สมชาย ใจดี');
+    await page.getByTestId('request-form-confirm-cancel').click();
+    await expect(confirm).toBeHidden();
+    expect(
+      await dbValue<string | null>('SELECT request_form_path FROM intent_forms WHERE form_id = $1', [formId])
+    ).toBeNull();
+
+    await page.getByTestId('upload-request-form').setInputFiles(pdf);
+    await page.getByTestId('request-form-confirm').click();
     await expect(page.getByTestId('request-form-uploaded')).toBeVisible();
     expect(
       await dbValue<string>('SELECT advisor_signer_name FROM intent_forms WHERE form_id = $1', [formId])

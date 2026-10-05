@@ -103,6 +103,8 @@ const StudentDashboard: React.FC = () => {
   const [confirmingProof, setConfirmingProof] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
+  // ไฟล์แบบคำร้องที่เลือกแล้วแต่ยังไม่ส่ง — มีค่า = กล่องยืนยันเปิดอยู่
+  const [pendingRequestForm, setPendingRequestForm] = useState<{ file: File; formId: number } | null>(null);
   const [signerAdvisor, setSignerAdvisor] = useState('');
   const [signerDeptHead, setSignerDeptHead] = useState('');
   const [requestFormError, setRequestFormError] = useState<string | null>(null);
@@ -207,6 +209,18 @@ const StudentDashboard: React.FC = () => {
       return;
     }
 
+    // ยังไม่ส่ง — เปิดกล่องยืนยันให้ตรวจไฟล์กับชื่อผู้ลงนามก่อน (ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ)
+    setRequestFormError(null);
+    setPendingRequestForm({ file, formId });
+    // ให้เลือกไฟล์เดิมซ้ำได้ ถ้ายกเลิกแล้วอยากเลือกใหม่
+    e.target.value = '';
+  };
+
+  const submitRequestForm = async () => {
+    if (!pendingRequestForm) return;
+    const { file, formId } = pendingRequestForm;
+    const known = data?.activeIntent?.request_signers;
+
     const formData = new FormData();
     formData.append('request_form', file);
     if (!known?.advisor_name) formData.append('advisor_signer_name', signerAdvisor.trim());
@@ -222,8 +236,7 @@ const StudentDashboard: React.FC = () => {
       setRequestFormError(getErrorMessage(err, 'อัปโหลดแบบคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setUploadingRequestForm(false);
-      // ให้เลือกไฟล์เดิมซ้ำได้ ถ้ารอบแรกพลาด
-      e.target.value = '';
+      setPendingRequestForm(null);
     }
   };
 
@@ -1473,6 +1486,42 @@ const StudentDashboard: React.FC = () => {
             />
           }
         />
+      <ConfirmDialog
+        open={!!pendingRequestForm}
+        title="ส่งแบบคำร้องที่ลงนามแล้ว"
+        confirmLabel="ยืนยันส่ง"
+        cancelLabel="กลับไปเลือกไฟล์ใหม่"
+        confirmTestId="request-form-confirm"
+        cancelTestId="request-form-confirm-cancel"
+        busy={uploadingRequestForm}
+        onCancel={() => setPendingRequestForm(null)}
+        onConfirm={submitRequestForm}
+        message={
+          <ConfirmSummary
+            lead="เจ้าหน้าที่จะตรวจไฟล์นี้และออกเลขหนังสือ — เปิดไฟล์ดูให้แน่ใจว่าเป็นฉบับที่ลงนามครบทั้งสองช่อง"
+            groups={[
+              {
+                rows: [
+                  { label: 'ไฟล์', value: pendingRequestForm?.file.name ?? '' },
+                  {
+                    label: 'ขนาด',
+                    value: pendingRequestForm ? `${(pendingRequestForm.file.size / 1024 / 1024).toFixed(2)} MB` : '',
+                  },
+                  {
+                    label: 'อาจารย์ที่ปรึกษาที่ลงนาม',
+                    value: activeIntent?.request_signers?.advisor_name || signerAdvisor.trim(),
+                  },
+                  {
+                    label: 'หัวหน้าสาขาวิชาที่ลงนาม',
+                    value: activeIntent?.request_signers?.dept_head_name || signerDeptHead.trim(),
+                  },
+                ],
+              },
+            ]}
+            lockNote="ส่งแล้วแก้เองไม่ได้ จนกว่าเจ้าหน้าที่จะตีกลับ"
+          />
+        }
+      />
       <ConfirmDialog
         open={confirmingCompanyMail && !!activeIntent}
         title="ส่งหนังสือให้สถานประกอบการ"
