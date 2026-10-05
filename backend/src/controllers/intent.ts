@@ -16,6 +16,7 @@ import {
   sendAccessError,
 } from '../utils/access';
 import { renderRequestFormHtml, RequestFormData } from '../utils/requestFormHtml';
+import { buildRequestFormPdf, RequestFormPdfData } from '../utils/requestFormPdf';
 import {
   buildCoverLetterPdf,
   fetchCoverLetterData,
@@ -1212,7 +1213,14 @@ export class IntentFormController {
                 c.postal_code AS company_postal_code,
                 c.contact_person, c.contact_position,
                 c.phone AS company_phone, c.email AS company_email,
-                sem.academic_year, sem.semester
+                sem.academic_year, sem.semester,
+                to_char((NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS today,
+                (SELECT to_char(e.start_date, 'YYYY-MM-DD') FROM coop_calendar_events e
+                  WHERE e.semester_id = i.semester_id AND e.activity_key = 'coop_start'
+                  LIMIT 1) AS coop_start_date,
+                (SELECT to_char(e.end_date, 'YYYY-MM-DD') FROM coop_calendar_events e
+                  WHERE e.semester_id = i.semester_id AND e.activity_key = 'coop_end'
+                  LIMIT 1) AS coop_end_date
            FROM intent_forms i
            JOIN students s        ON i.student_id = s.student_id
            JOIN users u           ON s.student_id = u.user_id
@@ -1243,7 +1251,7 @@ export class IntentFormController {
         await assertCanReviewStudentWork(userId, roles, row.student_id);
       }
 
-      // ponytail: ส่งแบบฟอร์มเปล่าเป็น PDF 2 หน้าตามไฟล์ต้นฉบับทางการของมหาวิทยาลัย
+      // แบบฟอร์มตัวจริงของคณะ (PDF 2 หน้า) ที่ระบบกรอกข้อมูลให้แล้ว — ดู `utils/requestFormPdf.ts`
       // (รองรับ ?format=html สำหรับกรณีที่ต้องการผลลัพธ์แบบ HTML เดิม)
       if (req.query.format === 'html') {
         const html = renderRequestFormHtml(row as RequestFormData);
@@ -1260,9 +1268,12 @@ export class IntentFormController {
       const templatePath = templatePathCandidates.find((p) => fs.existsSync(p));
 
       if (templatePath) {
+        const pdf = await buildRequestFormPdf(templatePath, row as RequestFormPdfData);
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'inline; filename="request_form_template.pdf"');
-        res.sendFile(templatePath);
+        res.setHeader('Content-Disposition', `inline; filename="request_form_${formId}.pdf"`);
+        // มีชื่อ เบอร์โทร และอีเมลของนักศึกษา — ห้ามค้างในแคชของเบราว์เซอร์/พร็อกซี
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(200).send(Buffer.from(pdf));
         return;
       }
 

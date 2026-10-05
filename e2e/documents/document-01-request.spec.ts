@@ -7,6 +7,7 @@ import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer } from '../helpers/intent';
+import { PDFParse } from 'pdf-parse';
 
 /**
  * เอกสารหมายเลข 1 — แบบคำร้องขอหนังสือขอความอนุเคราะห์
@@ -114,6 +115,74 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     expect(html).toContain('โทรสาร');
     expect(html).not.toContain('undefined');
     expect(html).not.toContain('null<');
+  });
+
+  test('D1b: แบบคำร้องที่พิมพ์เป็นฉบับที่ระบบกรอกให้แล้ว ไม่ใช่ฟอร์มเปล่าให้เขียนมือ', async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    await seedTestData();
+
+    // ใบที่ยังไม่มีวันเริ่มจากสถานประกอบการ — วันเริ่ม/สิ้นสุดต้องมาจากปฏิทินสหกิจ
+    const formId = await seedIntent();
+    await withDb(async (db) => {
+      await db.query('UPDATE intent_forms SET start_date = NULL WHERE form_id = $1', [formId]);
+      for (const [key, day] of [
+        ['coop_start', '2026-11-16'],
+        ['coop_end', '2027-03-05'],
+      ]) {
+        await db.query(
+          `INSERT INTO coop_calendar_events (semester_id, activity_key, date_kind, start_date, end_date)
+           SELECT semester_id, $1, 'single', $2, $2 FROM coop_semesters WHERE is_active = TRUE LIMIT 1`,
+          [key, day]
+        );
+      }
+    });
+
+    await apiLoginAs(request, 'student2');
+    const res = await request.get(`${API_URL}/intents/${formId}/request-form`);
+    expect(res.status(), await res.text()).toBe(200);
+    expect(res.headers()['content-type']).toContain('application/pdf');
+    // มีชื่อ เบอร์โทร อีเมลของนักศึกษา — ห้ามค้างในแคช
+    expect(res.headers()['cache-control']).toContain('no-store');
+
+    const parser = new PDFParse({ data: new Uint8Array(await res.body()) });
+    let text = '';
+    let pages = 0;
+    try {
+      const parsed = await parser.getText();
+      text = parsed.text;
+      pages = parsed.pages.length;
+    } finally {
+      await parser.destroy();
+    }
+    // แม่แบบตัวจริงของคณะมี 2 หน้า (หน้า 2 คือกรอบของเจ้าหน้าที่) — ต้องยังอยู่ครบ
+    expect(pages).toBe(2);
+
+    const row = await dbRow<{ student_code: string; first_name: string; phone: string; company: string }>(
+      `SELECT s.student_code, s.first_name, s.phone, c.name_th AS company
+         FROM intent_forms i
+         JOIN students s ON s.student_id = i.student_id
+         JOIN companies c ON c.company_id = i.company_id
+        WHERE i.form_id = $1`,
+      [formId]
+    );
+    expect(text).toContain(row!.student_code);
+    expect(text).toContain(row!.first_name);
+    expect(text).toContain(row!.company);
+    if (row!.phone) expect(text).toContain(row!.phone);
+
+    // วันเริ่ม–สิ้นสุดจากปฏิทิน เป็น พ.ศ. และไม่เลื่อนวัน
+    expect(text).toMatch(/16[\s\S]{0,40}พฤศจิกายน[\s\S]{0,40}2569/);
+    expect(text).toMatch(/5[\s\S]{0,40}มีนาคม[\s\S]{0,40}2570/);
+
+    // วันที่ยื่น = วันนี้ตามเวลาไทย (ปี พ.ศ. ต้องอยู่บนหัวกระดาษ)
+    const todayYearBE = await dbValue<number>(
+      "SELECT EXTRACT(YEAR FROM (NOW() AT TIME ZONE 'Asia/Bangkok'))::int + 543"
+    );
+    expect(text).toContain(String(todayYearBE));
+    expect(text).not.toContain('undefined');
+    expect(text).not.toContain('null');
   });
 
   test('D2: นักศึกษาคนอื่นเปิดคำร้องนี้ไม่ได้ (403)', async ({ request }) => {

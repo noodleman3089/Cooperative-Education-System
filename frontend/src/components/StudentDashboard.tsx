@@ -789,8 +789,8 @@ const StudentDashboard: React.FC = () => {
                   {!intent.request_form_path && (
                     <div className="mb-3">
                       <p className="text-xs text-gray-600 mb-2 leading-relaxed dark:text-gray-400">
-                        พิมพ์ออกมากรอกช่องที่เว้นไว้ด้วยปากกา แล้วนำไปให้อาจารย์ที่ปรึกษาและ
-                        หัวหน้าสาขาวิชาลงนาม
+                        ระบบกรอกข้อมูลให้ครบแล้ว — ตรวจให้ถูกต้อง พิมพ์ออกมาลงชื่อ
+                        แล้วนำไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาลงนาม
                       </p>
                       <a
                         href={`${API_BASE_URL}/intents/${intent.form_id}/request-form`}

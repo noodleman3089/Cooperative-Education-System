@@ -17,7 +17,7 @@ import fontkit from '@pdf-lib/fontkit';
  */
 
 const A4: [number, number] = [595.28, 841.89];
-const FONT_PATH = () => path.join(process.cwd(), 'secure_private', 'fonts', 'THSarabunNew.ttf');
+export const FONT_PATH = () => path.join(process.cwd(), 'secure_private', 'fonts', 'THSarabunNew.ttf');
 
 export interface ThaiPdfOptions {
   /** ระยะขอบซ้าย-ขวา (pt) */
