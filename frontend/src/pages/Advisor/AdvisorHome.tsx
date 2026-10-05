@@ -789,7 +789,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                             {intent.company_name_th}
                           </td>
                           <td className="p-3.5 text-gray-600 dark:text-gray-400 font-medium">
-                            {intent.job_title || '–'}
+                            {intent.job_position || '–'}
                           </td>
                           <td className="p-3.5">
                             <StatusBadge

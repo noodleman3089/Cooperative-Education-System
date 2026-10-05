@@ -26,7 +26,6 @@ import RequestQueue from './RequestQueue';
 
 type Season =
   | 'overdue'
-  | 'survey'
   | 'request'
   | 'acceptance'
   | 'supervision'
@@ -35,7 +34,7 @@ type Season =
 
 type CalendarState = 'not_configured' | 'upcoming' | 'open' | 'late' | 'closed';
 
-type TileKind = 'request' | 'acceptance' | 'dispatch' | 'offer' | 'appointment' | 'dean';
+type TileKind = 'request' | 'acceptance' | 'dispatch' | 'appointment' | 'dean';
 
 interface Tile {
   count: number;
@@ -87,7 +86,7 @@ interface GeneratedDocument {
 type Dest = Record<string, string>;
 
 /**
- * กองงานทั้ง 6 · เรียงตามลำดับของสเปกข้อ 4.3
+ * กองงานทั้ง 5 · เรียงตามลำดับของสเปกข้อ 4.3
  *
  * ⛔ **กองที่นับได้ 0 ยังต้องแสดง** พร้อมคำอธิบายว่าทำไมถึงว่าง — ซ่อนแล้วคนใช้
  *    จะไม่รู้ว่ากองนั้นมีอยู่ (เคยเป็นเหตุผลที่งานทั้งกองหายไปจากสายตา)
@@ -111,12 +110,6 @@ const TILES: { kind: TileKind; label: string; dest: Dest | null; emptyNote: stri
     label: 'หนังสือส่งตัวรอออกเลข',
     dest: { queue: 'dispatch' },
     emptyNote: 'ยังไม่มีนักศึกษาที่สถานประกอบการตอบรับแล้ว',
-  },
-  {
-    kind: 'offer',
-    label: 'แบบเสนองานรอตรวจ',
-    dest: { menu: 'jobs', tab: 'review' },
-    emptyNote: 'ยังไม่มีสถานประกอบการส่งแบบเสนองาน สหกิจ 02 กลับมา',
   },
   {
     kind: 'appointment',
@@ -347,7 +340,7 @@ export const StaffHome: React.FC = () => {
         </div>
       </div>
 
-      {/* ── กองงาน 6 กอง ── */}
+      {/* ── กองงาน 5 กอง ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {TILES.map(({ kind, label, dest, emptyNote }) => {
           const tile = tiles[kind];
@@ -545,25 +538,16 @@ function seasonCopy(
         [
           { dest: { queue: 'request' }, overdue: tiles.request.overdue },
           { dest: { queue: 'acceptance' }, overdue: tiles.acceptance.overdue },
-          { dest: { menu: 'jobs', tab: 'review' }, overdue: tiles.offer.overdue },
         ] as { dest: Dest; overdue: number }[]
       ).sort((a, b) => b.overdue - a.overdue);
       return {
         phase: 'ต้องตามเรื่อง',
         headline: `ของที่เลยกำหนดแล้ว ${n} รายการ`,
-        body: `แบบเสนองานเลยวันส่งกลับ ${tiles.offer.overdue} ใบ · แบบตอบรับเลย 15 วันทำการ ${tiles.acceptance.overdue} ใบ · คำร้องค้างเกิน 7 วัน ${tiles.request.overdue} ใบ — ลำดับนี้มาก่อนทุกฤดูกาล เพราะของที่เลยกำหนดไม่ควรถูกกลบด้วยงานตามปฏิทิน`,
+        body: `แบบตอบรับเลย 15 วันทำการ ${tiles.acceptance.overdue} ใบ · คำร้องค้างเกิน 7 วัน ${tiles.request.overdue} ใบ — ลำดับนี้มาก่อนทุกฤดูกาล เพราะของที่เลยกำหนดไม่ควรถูกกลบด้วยงานตามปฏิทิน`,
         deadlineLabel: 'กำหนด',
         action: { label: 'ดูรายการที่เลยกำหนด', dest: worst[0].dest },
       };
     }
-    case 'survey':
-      return {
-        phase: 'ช่วงสำรวจความต้องการรับนักศึกษา',
-        headline: `ส่งแบบเสนองาน สหกิจ 02 ให้สถานประกอบการ ${n} แห่ง`,
-        body: `คู่มือกำหนดให้คณะส่งแบบสำรวจล่วงหน้าประมาณหนึ่งภาคการศึกษา · ภาคถัดไปส่งไปแล้ว ${secondary} แห่ง ยังเหลืออีก ${n} แห่ง`,
-        deadlineLabel: 'เริ่มรับคำร้อง',
-        action: { label: 'เลือกบริษัทและส่งแบบสำรวจ', dest: { menu: 'jobs', tab: 'send' } },
-      };
     case 'request':
       return {
         phase: 'ช่วงรับคำร้องและออกหนังสือ',

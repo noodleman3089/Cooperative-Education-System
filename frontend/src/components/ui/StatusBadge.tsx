@@ -42,10 +42,6 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   rejected: { text: 'อาจารย์ที่ปรึกษาตีกลับ', tone: 'rejected' },
   company_rejected: { text: 'สถานประกอบการปฏิเสธ', tone: 'rejected' },
 
-  // job posts
-  pending_approval: { text: 'รอเจ้าหน้าที่อนุมัติประกาศ', tone: 'waiting' },
-  published: { text: 'เผยแพร่แล้ว', tone: 'done' },
-  closed: { text: 'ปิดรับสมัครแล้ว', tone: 'neutral' },
 
   // report outlines / documents
   draft: { text: 'ฉบับร่าง', tone: 'neutral' },

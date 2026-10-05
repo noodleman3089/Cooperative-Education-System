@@ -95,19 +95,6 @@ export interface CoopCalendarResponse {
   custom_events: CoopCalendarCustomEvent[];
 }
 
-/** แถวในคิวอนุมัติประกาศงานของเจ้าหน้าที่ */
-export interface JobPostRow {
-  job_id: number;
-  title: string;
-  description?: string | null;
-  company_name_th?: string | null;
-  quota: number;
-  applied_count: number;
-  status: string;
-  expire_date?: string | null;
-  reject_reason?: string | null;
-}
-
 /** แถวในหน้าจัดการบัญชีผู้ใช้ */
 export interface UserRow {
   user_id: number;
@@ -318,19 +305,6 @@ export interface Company {
   email?: string | null;
 }
 
-export interface Job {
-  job_id: number;
-  company_id: number;
-  title: string;
-  description: string;
-  image_path?: string | null;
-  quota: number;
-  applied_count: number;
-  expire_date: string;
-  status: string;
-  company_name_th?: string;
-  company_name_en?: string;
-}
 
 /**
  * บันทึกข้อความของนักศึกษา — คำร้องกรณียกเว้นที่เสนอถึงคณบดี
@@ -365,8 +339,7 @@ export interface IntentForm {
   student_id: number;
   company_id: number;
   semester_id: number;
-  job_id?: number | null;
-  /** งานที่ได้ทำจริง — บริษัทกรอกตอนตอบรับ (ต่างจาก `job_title` ซึ่งคือชื่อประกาศงานที่สมัคร) */
+  /** งานที่ได้ทำจริง — บริษัทกรอกตอนตอบรับ (สหกิจ 07) · ก่อนตอบรับเป็น null */
   job_position?: string | null;
   status: string;
   mentor_id?: number | null;
@@ -411,7 +384,6 @@ export interface IntentForm {
   student_name?: string;
   major_name_th?: string;
   company_name_th?: string;
-  job_title?: string;
   first_name?: string | null;
   last_name?: string | null;
   nickname?: string | null;

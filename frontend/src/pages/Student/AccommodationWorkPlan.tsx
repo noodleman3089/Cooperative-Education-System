@@ -68,7 +68,7 @@ const BLANK_ACCOMMODATION: Accommodation = {
 };
 
 interface CompanyJobInfo {
-  job_title: string | null;
+  job_position: string | null;
   job_description: string | null;
   mentor_name: string | null;
   mentor_position: string | null;
@@ -573,7 +573,7 @@ const AccommodationWorkPlan: React.FC = () => {
           <div>
             <div className="text-xs text-gray-500 dark:text-gray-400">ตำแหน่งงาน</div>
             <div className="text-xs font-bold text-gray-900 dark:text-white mt-1">
-              {jobInfo?.job_title || '—'}
+              {jobInfo?.job_position || '—'}
             </div>
           </div>
           <div>

@@ -34,7 +34,7 @@ interface IntentDetail {
   company_name_th?: string | null;
   company_contact_person?: string | null;
   company_phone?: string | null;
-  job_title?: string | null;
+  job_position?: string | null;
   start_date?: string | null;
   status: string;
 }
@@ -125,7 +125,7 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                   </h4>
                   <div className="space-y-2 text-xs text-gray-700 dark:text-gray-300">
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">สถานประกอบการ:</span> {intentDetail.company_name_th}</p>
-                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">ตำแหน่งงาน:</span> {intentDetail.job_title || 'ฝึกงานทั่วไป'}</p>
+                    <p><span className="text-gray-600 dark:text-gray-400 font-medium">ตำแหน่งงาน:</span> {intentDetail.job_position || 'สถานประกอบการกรอกตอนตอบรับ'}</p>
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">ผู้ประสานงาน HR:</span> {intentDetail.company_contact_person || '-'}</p>
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">เบอร์ติดต่อบริษัท:</span> {intentDetail.company_phone || '-'}</p>
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">วันที่เริ่มฝึกงาน:</span> {intentDetail.start_date ? new Date(intentDetail.start_date).toLocaleDateString('th-TH') : '-'}</p>

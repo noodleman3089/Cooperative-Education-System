@@ -630,10 +630,10 @@ const StudentDashboard: React.FC = () => {
       subSteps: [
         {
           id: '1.1',
-          title: '1.1 ยื่นแบบแจ้งความจำนง (Intent Form)',
-          description: 'เลือกบริษัทและตำแหน่งงานเพื่อเสนอขอออกสหกิจศึกษา',
+          title: '1.1 ยื่นคำร้องขอหนังสือ (เอกสารหมายเลข 1)',
+          description: 'กรอกสถานประกอบการที่จะขอหนังสือขอความอนุเคราะห์ถึง',
           status: step1_1Done ? 'completed' : 'active',
-          actionLabel: !step1_1Done ? 'เลือกตำแหน่งงาน (Smart Job)' : undefined,
+          actionLabel: !step1_1Done ? 'ไปยื่นคำร้อง' : undefined,
           onAction: () => {
             window.dispatchEvent(new CustomEvent('navigate', { detail: 'jobs' }));
           }
@@ -644,7 +644,7 @@ const StudentDashboard: React.FC = () => {
           //    บนแบบคำร้อง (เอกสารหมายเลข 1) แล้วนักศึกษาอัปโหลดกลับให้เจ้าหน้าที่
           //    ข้อความเดิมทำให้นักศึกษานั่งรอให้อาจารย์กดปุ่มที่ไม่มีอยู่จริง
           title: '1.2 ลงนามบนแบบคำร้อง & อัปโหลดกลับ',
-          description: 'พิมพ์แบบคำร้อง (เอกสารหมายเลข 1) ไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนามด้วยปากกา แล้วสแกนอัปโหลดกลับเข้าระบบ',
+          description: 'พิมพ์แบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบกรอกให้แล้ว ไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนาม แล้วสแกนอัปโหลดกลับเข้าระบบ',
           status: step1_2Done ? 'completed' : step1_1Done ? 'active' : 'pending'
         },
         {
@@ -1267,9 +1267,9 @@ const StudentDashboard: React.FC = () => {
                   {activeIntent.company_name_th}
                 </span>
                 {/* หลังบริษัทตอบรับ job_position คือ "งานที่ได้ทำจริง" — ใช้แทนชื่อประกาศงานที่สมัคร */}
-                {(activeIntent.job_position || activeIntent.job_title) && (
+                {activeIntent.job_position && (
                   <span data-testid="intent-job-title" className="text-xs text-gray-600 dark:text-gray-400">
-                    ตำแหน่ง {activeIntent.job_position || activeIntent.job_title}
+                    ตำแหน่ง {activeIntent.job_position}
                   </span>
                 )}
                 {/* ข้อมูลที่เดิมอยู่บนการ์ดสถานะตอน "ได้ที่ฝึกงานแล้ว" — ขึ้นเมื่อมีเท่านั้น */}
@@ -1302,7 +1302,7 @@ const StudentDashboard: React.FC = () => {
             </div>
           ) : (
             <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-              ยังไม่ได้เลือกสถานประกอบการ — เลือกได้จากเมนู “หาที่ฝึกงาน”
+              ยังไม่ได้เลือกสถานประกอบการ — ยื่นได้จากเมนู “ยื่นคำร้องขอหนังสือ”
             </p>
           )}
         </section>
@@ -1361,7 +1361,7 @@ const StudentDashboard: React.FC = () => {
               data-testid="no-intent-card"
               className="rounded-2xl border border-gray-200 bg-white p-6 text-center text-xs text-gray-600 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400"
             >
-              ยังไม่มีคำขอยื่นความจำนง กรุณาไปที่เมนู "ตำแหน่งงาน / สมัครงาน" เพื่อกดยื่นคำขอสมัครสหกิจศึกษา
+              ยังไม่มีคำร้อง กรุณาไปที่เมนู "ยื่นคำร้องขอหนังสือ" เพื่อยื่นคำร้องขอหนังสือขอความอนุเคราะห์
             </div>
           )
         )}

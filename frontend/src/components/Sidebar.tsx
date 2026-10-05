@@ -49,7 +49,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 16a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2v-4z" />
       </svg>
     ),
-    // 2. Jobs / Smart Job
+    // 2. เมนู `jobs` ของนักศึกษา = ยื่นคำร้องขอหนังสือ (เอกสารหมายเลข 1)
     jobs: (
       <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -204,7 +204,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     student: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
 
-      { id: 'jobs', label: 'หาที่ฝึกงาน', icon: icons.jobs, group: 'ก่อนออกฝึก' },
+      { id: 'jobs', label: 'ยื่นคำร้องขอหนังสือ', icon: icons.jobs, group: 'ก่อนออกฝึก' },
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
       { id: 'accommodation_plan', label: 'ที่พักและแผนงาน', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
@@ -257,7 +257,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     staff: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
-      { id: 'jobs', label: 'แบบเสนองาน (สหกิจ 02)', icon: icons.jobs, group: 'งานตามฤดูกาล' },
       { id: 'companies', label: 'ทำเนียบสถานประกอบการ', icon: icons.companies, group: 'งานตามฤดูกาล' },
       { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
       { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },

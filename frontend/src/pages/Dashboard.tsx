@@ -22,7 +22,7 @@ import type { CoopCalendarResponse } from '../types/api';
  * fetches the handful of screens that session actually opens.
  */
 const StudentDashboard = lazy(() => import('../components/StudentDashboard'));
-const SmartJobBoard = lazy(() => import('../components/SmartJobBoard'));
+const RequestLetter = lazy(() => import('./Student/RequestLetter'));
 const StudentProfile = lazy(() => import('../components/StudentProfile'));
 const AdvisorHome = lazy(() => import('./Advisor/AdvisorHome'));
 const AdvisorStudents = lazy(() => import('./Advisor/AdvisorStudents'));
@@ -34,7 +34,6 @@ const PetitionTracking = lazy(() => import('./DeptHead/PetitionTracking'));
 const DeanSignQueue = lazy(() => import('./Dean/DeanSignQueue'));
 const DeanSignature = lazy(() => import('./Dean/DeanSignature'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
-const JobOfferManager = lazy(() => import('./Staff/JobOfferManager'));
 const UsersAndMasterData = lazy(() => import('./Staff/UsersAndMasterData'));
 const ImportScreening = lazy(() => import('./Staff/ImportScreening'));
 const AnnouncementsManager = lazy(() => import('./Staff/AnnouncementsManager'));
@@ -109,7 +108,7 @@ const StageLockedScreen: React.FC<{
 );
 
 const SUB_QUERIES_TO_CLEAR = [
-  'queue', 'form', 'tab', 'offer', 'company',
+  'queue', 'form', 'tab', 'company',
   'tile', 'scope', 'student', 'outline', 'visit', 'type', 'doc', 'view', 'major',
   'filter', 'stage'
 ];
@@ -364,7 +363,7 @@ const Dashboard: React.FC = () => {
                     ? 'กรอกประวัตินักศึกษา'
                     : stage?.intentStatus
                       ? 'ดูสถานะใบความจำนง'
-                      : 'เลือกตำแหน่งงานเพื่อยื่นความจำนง'
+                      : 'ไปยื่นคำร้องขอหนังสือ'
               }
               onAction={() =>
                 setActiveMenu(
@@ -381,7 +380,8 @@ const Dashboard: React.FC = () => {
           );
         }
         // ⛔ 'application' (สหกิจ 01) และ 'applications' ของอาจารย์/หัวหน้าสาขา ถูกตัดทั้งชุด 2026-09-14
-        if (activeMenu === 'jobs') return <SmartJobBoard />;
+        // เมนู `jobs` ของนักศึกษา = หน้ายื่นคำร้องเอกสารหมายเลข 1 (บอร์ดประกาศงานถูกตัด 2026-10-05)
+        if (activeMenu === 'jobs') return <RequestLetter />;
         if (activeMenu === 'profile') return <StudentProfile />;
         if (activeMenu === 'job_application') return <CoopJobApplication />;
         if (activeMenu === 'accommodation_plan') return <AccommodationWorkPlan />;
@@ -448,7 +448,6 @@ const Dashboard: React.FC = () => {
         
       case 'staff':
         if (activeMenu === 'appointments') return <AppointmentAudit />;
-        if (activeMenu === 'jobs') return <JobOfferManager />;
         if (activeMenu === 'announcements') return <AnnouncementsManager />;
         if (activeMenu === 'users') return <UsersAndMasterData />;
         if (activeMenu === 'import') return <ImportScreening />;

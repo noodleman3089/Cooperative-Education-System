@@ -10,7 +10,7 @@ export const Skeleton: React.FC<{ className?: string }> = ({ className = '' }) =
  *
  *  stats  — heading, a row of figures, then a table (most dashboards)
  *  table  — heading then a table (dean's signing queue, staff sub-tabs)
- *  cards  — heading then a grid of cards (job board, student dashboard)
+ *  cards  — heading then a grid of cards (student dashboard)
  *  form   — heading then a two-column form (both profile screens)
  *  split  — heading then a wide panel beside a narrow one (dean's signature pad)
  */
@@ -61,10 +61,10 @@ const VARIANT_BY_MENU: Record<string, SkeletonVariant> = {
  * a table of users looks nothing like the pipeline overview.
  */
 export const skeletonFor = (role: string, menu: string): SkeletonVariant => {
-  // A student's home and job board are card grids; every other role's home is
-  // figures over a table.
+  // A student's home is a card grid; every other role's home is figures over a
+  // table. A student's `jobs` menu is the request form (เอกสารหมายเลข 1).
   if (menu === 'dashboard') return role === 'student' ? 'cards' : 'stats';
-  if (menu === 'jobs') return role === 'student' ? 'cards' : 'table';
+  if (menu === 'jobs') return role === 'student' ? 'form' : 'table';
   return VARIANT_BY_MENU[menu] ?? 'stats';
 };
 

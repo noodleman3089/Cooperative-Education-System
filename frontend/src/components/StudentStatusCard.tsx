@@ -274,9 +274,9 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         const tiles = [
           intent.acceptance_signer_name && { label: 'ผู้อนุมัติ', value: intent.acceptance_signer_name },
           intent.mentor?.name && { label: 'พี่เลี้ยง', value: intent.mentor.name },
-          (intent.job_position || intent.job_title) && {
+          intent.job_position && {
             label: 'ตำแหน่งงาน',
-            value: (intent.job_position || intent.job_title) as string,
+            value: intent.job_position as string,
           },
         ].filter((t): t is { label: string; value: string } => !!t);
         return (
