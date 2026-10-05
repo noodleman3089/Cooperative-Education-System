@@ -675,7 +675,7 @@ const CompanyDirectory: React.FC = () => {
       {showForm && (
         <Modal
           onClose={closeForm}
-          size="xl"
+          size="3xl"
           closeOnBackdrop={false}
           title={editing ? `แก้ไขข้อมูล ${editing.name_th}` : 'เพิ่มสถานประกอบการเข้าทำเนียบ'}
         >
@@ -684,7 +684,7 @@ const CompanyDirectory: React.FC = () => {
             <ModalBody>
               <AlertBanner variant="error" message={formError} className="mb-4" />
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-4">
                 <div className="sm:col-span-2">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ชื่อสถานประกอบการ (ภาษาไทย) *
@@ -697,7 +697,7 @@ const CompanyDirectory: React.FC = () => {
                   </label>
                   <Input maxLength={255} {...field('name_en')} />
                 </div>
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-4">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ที่อยู่ *
                   </label>

@@ -877,7 +877,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         <Modal
           onClose={closeRequestReview}
           title={`แผงรับคำร้อง — เอกสารหมายเลข 1 (คำร้องที่ ${reviewingRequest.form_id})`}
-          size="xl"
+          size="5xl"
           closeOnBackdrop={false}
         >
           <ModalBody>
@@ -1199,7 +1199,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         <Modal
           onClose={closeAcceptanceReview}
           title={`ตรวจแบบตอบรับ — ${[reviewingAcceptance.first_name, reviewingAcceptance.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance.student_code || '-'})`}
-          size="lg"
+          size="3xl"
           closeOnBackdrop={false}
         >
           <ModalBody>
@@ -1248,8 +1248,10 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                 <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบตอบรับในระบบ" />
               )}
 
+              {/* จอกว้าง: ผู้ลงนามกับพี่เลี้ยง/งานวางคู่กัน · กล่องเดียวก็กินเต็มแถว */}
+              <div className="flex flex-col gap-4 md:flex-row md:items-start">
               {rejectingAcceptance ? (
-                <div>
+                <div className="md:flex-1">
                   <label
                     htmlFor="acceptance-reject-reason"
                     className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
@@ -1268,7 +1270,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
               ) : (
                 // ⛔ เจ้าหน้าที่ไม่ต้องคีย์ผู้ลงนามอีก (เจ้าของตัดสิน 2026-09-21) — นักศึกษากรอกตอนอัปโหลด แสดงให้เทียบกับกระดาษ
                 <div
-                  className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
+                  className="md:flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
                   data-testid="acceptance-signer"
                 >
                   <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ (ชื่อนี้ถูกพิมพ์ลงหนังสือส่งตัว)</p>
@@ -1280,7 +1282,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
               {!rejectingAcceptance && (reviewingAcceptance.mentor_name || reviewingAcceptance.job_position) && (
                 <div
-                  className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
+                  className="md:flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
                   data-testid="acceptance-job-mentor"
                 >
                   {reviewingAcceptance.mentor_name && (
@@ -1306,6 +1308,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                   )}
                 </div>
               )}
+              </div>
 
               {!rejectingAcceptance && reviewingAcceptance.company_form07_pending && (
                 <div
@@ -1381,7 +1384,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         <Modal
           onClose={closeDispatchReview}
           title={`ออกหนังสือส่งตัว — ${[reviewingDispatch.first_name, reviewingDispatch.last_name].filter(Boolean).join(' ')} (${reviewingDispatch.student_code || '-'})`}
-          size="lg"
+          size="2xl"
           closeOnBackdrop={false}
         >
           <ModalBody>

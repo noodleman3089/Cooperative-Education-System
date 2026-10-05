@@ -1530,10 +1530,12 @@ export const UsersAndMasterData: React.FC = () => {
         <Modal
           onClose={() => setIsAddUserModalOpen(false)}
           title="เพิ่มบัญชีผู้ใช้ใหม่"
+          size="2xl"
         >
           <ModalBody>
             <form onSubmit={handleAddUserSubmit} className="space-y-4">
               <AlertBanner variant="error" message={dialogError} />
+              <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="modal-add-email" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   อีเมล *
@@ -1563,11 +1565,12 @@ export const UsersAndMasterData: React.FC = () => {
                   required
                 />
               </div>
+              </div>
               <div>
                 <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   บทบาทในระบบ *
                 </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {Object.entries(ROLE_LABELS).filter(([k]) => k !== 'mentor').map(([k, lbl]) => (
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
@@ -1643,6 +1646,7 @@ export const UsersAndMasterData: React.FC = () => {
         <Modal
           onClose={() => setIsEditUserModalOpen(false)}
           title={`แก้ไขบัญชี: ${selectedUser?.email}`}
+          size="2xl"
         >
           <ModalBody>
             <form onSubmit={handleEditUserSubmit} className="space-y-4">
@@ -1651,7 +1655,7 @@ export const UsersAndMasterData: React.FC = () => {
                 <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   บทบาทในระบบ
                 </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {Object.entries(ROLE_LABELS).map(([k, lbl]) => (
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
