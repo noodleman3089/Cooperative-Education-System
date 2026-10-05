@@ -45,7 +45,7 @@ router.post('/decline', PublicAcceptanceController.decline);
 // ⛔ ลำดับห้ามสลับ: token (ข้างบน) → ปฏิทิน → multer → ตรวจไฟล์ → controller
 router.post(
   '/accept',
-  requireCalendarWindow('acceptance_form'),
+  requireCalendarWindow('acceptance_form', 'link'),
   uploadEvidence.single('evidence'),
   validateUploadedFile(['pdf', 'png', 'jpg']),
   PublicAcceptanceController.accept

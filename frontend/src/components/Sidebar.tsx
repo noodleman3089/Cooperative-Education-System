@@ -262,6 +262,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'appointments', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.appointments, group: 'งานตามฤดูกาล' },
       { id: 'final_progress', label: 'ติดตามเอกสารนักศึกษา', icon: icons.summary, group: 'งานตามฤดูกาล' },
       { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'งานตามฤดูกาล' },
+      { id: 'semesters', label: 'ภาคเรียน', icon: icons.calendar, group: 'ตั้งค่าของคณะ' },
       { id: 'calendar', label: 'ปฏิทินสหกิจศึกษา', icon: icons.calendar, group: 'ตั้งค่าของคณะ' },
       { id: 'import', label: 'รายชื่อนักศึกษา & เกรด', icon: icons.import, group: 'ตั้งค่าของคณะ' },
       { id: 'users', label: 'บัญชี สิทธิ์ และข้อมูลหลัก', icon: icons.users, group: 'ตั้งค่าของคณะ' },

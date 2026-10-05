@@ -5,6 +5,7 @@ import Button from './ui/Button';
 import CoopTimeline, { type TimelineRow } from './CoopTimeline';
 import { actionMenuFor, goToMenu } from '../utils/calendarMenus';
 import { formatThaiDate } from '../utils/thaiDate';
+import { semesterLabel } from '../utils/semesterLabel';
 import type { CoopCalendarResponse } from '../types/api';
 
 /**
@@ -65,7 +66,7 @@ const CoopCalendarModal: React.FC<{ data: CoopCalendarResponse; onClose: () => v
         {data.semester && (
           <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-gray-100 dark:border-gray-800">
             <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-              ภาคเรียนที่ {data.semester.semester}/{data.semester.academic_year}
+              {semesterLabel(data.semester.semester, data.semester.academic_year)}
             </p>
             <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
               <CalendarDays className="w-3.5 h-3.5 text-blue-500" />

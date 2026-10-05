@@ -102,14 +102,15 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     expect(html).toContain('2569');
     expect(html).toMatch(/กำหนดการเริ่มฝึกงานตั้งแต่วันที่[\s\S]{0,80}2[\s\S]{0,80}พฤศจิกายน/);
 
-    // ⚠️ ปีการศึกษาต้องเป็น พ.ศ. ด้วย — `coop_semesters.academic_year` เก็บเป็น ค.ศ.
-    // โดยตั้งใจ (BUG-01) แล้วแปลงตอนแสดงผล · เคยพลาดตรงนี้มาแล้วตอนเขียนครั้งแรก
-    // และเทสต์ชุดแรกจับไม่ได้เพราะดูแค่ว่ามีเลข 2569 อยู่ในหน้า (วันเริ่มฝึกก็ให้ 2569)
-    const yearAD = await dbValue<number>(
+    // ⚠️ ปีการศึกษาต้องตรงกับ `coop_semesters.academic_year` ตรง ๆ — ตั้งแต่ migration 047 ฐานเก็บ พ.ศ.
+    // อยู่แล้ว **ห้ามบวก 543 ซ้ำ** (ได้ 5138) · เทสต์ชุดแรกเคยจับไม่ได้เพราะดูแค่ว่ามีเลข 2569 อยู่ในหน้า
+    // (วันเริ่มฝึกก็ให้ 2569)
+    const yearBE = await dbValue<number>(
       'SELECT academic_year FROM coop_semesters WHERE is_active = TRUE LIMIT 1'
     );
-    expect(html).toMatch(new RegExp(`ปีการศึกษา[\\s\\S]{0,60}${Number(yearAD) + 543}`));
-    expect(html).not.toMatch(new RegExp(`ปีการศึกษา[\\s\\S]{0,60}>${yearAD}<`));
+    expect(Number(yearBE)).toBeGreaterThan(2500);
+    expect(html).toMatch(new RegExp(`ปีการศึกษา[\\s\\S]{0,60}${yearBE}`));
+    expect(html).not.toMatch(new RegExp(`ปีการศึกษา[\\s\\S]{0,60}${Number(yearBE) + 543}`));
 
     // ช่องที่ระบบไม่เก็บต้องเป็นเส้นประให้เขียนมือ ไม่ใช่คำว่า null หรือ undefined
     expect(html).toContain('โทรสาร');

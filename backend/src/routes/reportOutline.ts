@@ -13,7 +13,7 @@ router.post(
   authorizeRoles('student'),
   // ต้องอยู่ *ก่อน* multer — ไม่งั้นคำขอที่อยู่นอกช่วงจะเขียนไฟล์ลงดิสก์ก่อนถูกปฏิเสธ
   // แล้วเหลือไฟล์กำพร้าที่ไม่มีแถวในฐานอ้างถึงทุกครั้ง
-  requireCalendarWindow('report_outline'),
+  requireCalendarWindow('report_outline', 'student'),
   uploadReportOutline.single('outline'),
   ReportOutlineController.uploadOutline
 );

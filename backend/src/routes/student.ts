@@ -97,7 +97,7 @@ router.get(
 router.post(
   '/:id/accommodation-plan',
   authorizeRoles('student'),
-  requireCalendarWindow('accommodation_plan'),
+  requireCalendarWindow('accommodation_plan', 'student'),
   StudentController.submitAccommodationAndPlan
 );
 

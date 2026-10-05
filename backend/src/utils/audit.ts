@@ -76,6 +76,11 @@ export const AuditAction = {
   CALENDAR_EVENT_CREATED: 'coop_calendar.created',
   CALENDAR_EVENT_UPDATED: 'coop_calendar.updated',
   CALENDAR_EVENT_DELETED: 'coop_calendar.deleted',
+  // วงจรภาคเรียน: เปลี่ยนภาคที่เปิดอยู่ = เปลี่ยนหน้าต่างปฏิทินที่ล็อกนักศึกษาทั้งรุ่น
+  // detail.open_forms_in_previous เก็บจำนวนใบที่ยังค้างในภาคก่อนตอนกดไว้ — ปิดภาคไม่แตะสถานะใบ
+  SEMESTER_CREATED: 'semester.created',
+  SEMESTER_ACTIVATED: 'semester.activated',
+  SEMESTER_CLOSED: 'semester.closed',
   // SEC-12: ลบเลขบัตรประชาชน/เชื้อชาติ/ศาสนาอัตโนมัติ ๙๐ วันหลังประเมินครบทั้งสองใบ
   // (สหกิจ 15+16) — เขียนตอนที่ตัวจริงกำลังจะถูกลบ ก่อนคำสั่ง UPDATE จะทำให้อ่านค่า
   // เดิมไม่ได้อีกแล้ว เพื่อให้ยังสืบย้อนได้ว่า "แถวนี้เคยมีข้อมูลอ่อนไหว ถูกลบเมื่อไหร่"

@@ -19,7 +19,7 @@ router.use(authenticateToken);
 router.post(
   '/student/:intent_id/upload-proof',
   authorizeRoles('student'),
-  requireCalendarWindow('acceptance_form'),
+  requireCalendarWindow('acceptance_form', 'intent_param'),
   uploadEvidence.single('evidence'),
   validateUploadedFile(['pdf', 'png', 'jpg']),
   AcceptanceController.acceptByStudent

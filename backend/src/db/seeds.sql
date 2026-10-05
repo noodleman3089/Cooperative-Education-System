@@ -44,6 +44,6 @@ ON CONFLICT (province_name_th) DO NOTHING;
 
 -- 4. Populating Coop Semester Data
 INSERT INTO coop_semesters (academic_year, semester, is_active) VALUES
-(2026, '1', TRUE),
-(2026, '2', FALSE);
+(2569, '1', TRUE),
+(2569, '2', FALSE);
 

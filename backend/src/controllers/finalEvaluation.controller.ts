@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { CoopCalendarModel } from '../models/coopCalendar';
+import { CoopSemesterModel } from '../models/semester';
 import { calendarStatus } from '../utils/coopCalendar';
 import { formatThaiDate } from '../utils/thaiDate';
 import { AuditAction, writeAudit } from '../utils/audit';
@@ -239,7 +240,12 @@ export class FinalEvaluationController {
       // ยังไม่มีคีย์ของวันสิ้นสุดจริงๆ — ตอนนี้มีแล้วจึงเลิกใช้ตัวแทน
       // ⛔ **ห้ามส่ง late_end_date เข้า calendarStatus ตรงนี้** — ช่วงผ่อนผันเป็นเรื่อง
       //   ของการ "ส่งงานช้า" ไม่ใช่การยืดเวลาปกปิดคะแนน และด่านนี้ fail-closed
-      const window = await CoopCalendarModel.findActiveWindow('coop_end');
+      // ภาคของใบที่นักศึกษาฝึกอยู่ ไม่ใช่ภาค active — ไม่งั้นพอเปิดภาคใหม่ วันสิ้นสุดของภาคใหม่
+      // (ยังไม่ถึง) จะปิดผลประเมินของนักศึกษาที่ฝึกจบแล้วในภาคเก่า
+      const window = await CoopCalendarModel.findWindow(
+        'coop_end',
+        await CoopSemesterModel.findStudentSemesterId(studentId)
+      );
       const status = window
         ? calendarStatus(window.today, window.start_date, window.end_date)
         : 'not_configured';

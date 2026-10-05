@@ -20,7 +20,7 @@ router.post(
   '/',
   authenticateToken,
   authorizeRoles('student'),
-  requireCalendarWindow('weekly_log'),
+  requireCalendarWindow('weekly_log', 'student'),
   uploadWorkLogAttachment.single('file'),
   validateUploadedFile(['pdf', 'jpg', 'png', 'doc', 'docx']),
   WeeklyLogController.submitLog

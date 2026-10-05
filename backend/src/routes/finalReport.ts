@@ -12,7 +12,7 @@ router.post(
   authenticateToken,
   authorizeRoles('student'),
   // ต้องอยู่ *ก่อน* multer — ดูเหตุผลเดียวกันที่ routes/reportOutline.ts
-  requireCalendarWindow('final_report'),
+  requireCalendarWindow('final_report', 'student'),
   uploadFinalReport.single('report'),
   FinalReportController.submitReport
 );

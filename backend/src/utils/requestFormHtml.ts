@@ -79,10 +79,8 @@ export function renderRequestFormHtml(d: RequestFormData): string {
   const email = (d.university_email ?? '').trim() || (d.alt_email ?? '').trim();
   const start = splitThaiDate(d.start_date);
 
-  // `coop_semesters.academic_year` เก็บเป็น **ค.ศ.** โดยตั้งใจ (BUG-01) และแปลงเป็น
-  // พ.ศ. ตอนแสดงผล — เอกสารราชการใบนี้จึงต้อง +543 ไม่ใช่พิมพ์ค่าดิบลงไป
-  const academicYearBE =
-    d.academic_year === null || d.academic_year === undefined ? null : d.academic_year + 543;
+  // `coop_semesters.academic_year` เป็น พ.ศ. อยู่แล้ว (migration 047) — ห้ามบวก 543 ซ้ำ
+  const academicYearBE = d.academic_year ?? null;
 
   // `master_major.major_name_th` เก็บคำว่า "สาขาวิชา" ไว้ในค่าเอง (เช่น
   // "สาขาวิชาวิทยาการคอมพิวเตอร์") ส่วนกระดาษมีหัวข้อ "สาขาวิชา" พิมพ์ไว้แล้ว

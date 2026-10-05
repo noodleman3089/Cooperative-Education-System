@@ -12,6 +12,7 @@ import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
+import { semesterLabel as formatSemesterLabel } from '../../utils/semesterLabel';
 import { loadGoogleMapsScript } from '../../utils/googleMapsLoader';
 import {
   googleMaps,
@@ -336,7 +337,7 @@ const RequestLetter: React.FC = () => {
   const period =
     coopStart && coopEnd ? `${formatThaiDate(coopStart)} – ${formatThaiDate(coopEnd)}` : null;
   const semesterLabel = calendar?.semester
-    ? `ภาคเรียนที่ ${calendar.semester.semester}/${calendar.semester.academic_year + 543}`
+    ? formatSemesterLabel(calendar.semester.semester, calendar.semester.academic_year)
     : null;
 
   const field = (key: keyof typeof EMPTY_FORM) => ({

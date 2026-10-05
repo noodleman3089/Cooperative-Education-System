@@ -94,9 +94,8 @@ export async function buildRequestFormPdf(
   const studentName = [d.first_name, d.last_name].map(clean).filter(Boolean).join(' ');
   // `master_major.major_name_th` มีคำว่า "สาขาวิชา" ในตัวเอง ส่วนกระดาษพิมพ์ป้ายนี้ไว้แล้ว
   const majorName = clean(d.major_name_th).replace(/^สาขาวิชา\s*/, '');
-  // `coop_semesters.academic_year` เก็บเป็น ค.ศ. โดยตั้งใจ (BUG-01) — เอกสารราชการต้อง +543
-  const academicYearBE =
-    d.academic_year === null || d.academic_year === undefined ? '' : d.academic_year + 543;
+  // `coop_semesters.academic_year` เป็น พ.ศ. อยู่แล้ว (migration 047) — ห้ามบวก 543 ซ้ำ
+  const academicYearBE = d.academic_year ?? '';
   const address = [d.company_address, d.company_district, d.company_province, d.company_postal_code]
     .map(clean)
     .filter(Boolean)

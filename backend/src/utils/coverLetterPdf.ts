@@ -91,7 +91,7 @@ export async function buildCoverLetterPdf(
       `ได้จัดให้มีการเรียนการสอนในระบบสหกิจศึกษา ซึ่งกำหนดให้นักศึกษาออกปฏิบัติงานจริง ` +
       `ณ สถานประกอบการ เป็นระยะเวลาไม่น้อยกว่า 16 สัปดาห์ ` +
       `ในภาคการศึกษาที่ ${d.semester ?? '-'} ปีการศึกษา ` +
-      `${d.academic_year === null || d.academic_year === undefined ? '-' : d.academic_year + 543}`,
+      `${d.academic_year ?? '-'}`,
     { indent: 40 }
   );
   pdf.space(4);

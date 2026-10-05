@@ -15,12 +15,12 @@ router.get(
 );
 
 // POST /api/monthly-logs (Student submits or drafts monthly log)
-// ⛔ requireCalendarWindow('weekly_log') ต้องอยู่ก่อน multer เสมอ (SEC rule / Calendar Gate)
+// ⛔ requireCalendarWindow('weekly_log', 'student') ต้องอยู่ก่อน multer เสมอ (SEC rule / Calendar Gate)
 router.post(
   '/',
   authenticateToken,
   authorizeRoles('student'),
-  requireCalendarWindow('weekly_log'),
+  requireCalendarWindow('weekly_log', 'student'),
   uploadWorkLogAttachment.single('file'),
   validateUploadedFile(['pdf', 'jpg', 'png', 'doc', 'docx']),
   MonthlyLogController.submitLog

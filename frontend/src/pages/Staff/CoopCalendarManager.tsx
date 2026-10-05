@@ -6,6 +6,7 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate, formatThaiRange } from '../../utils/thaiDate';
+import { semesterLabel } from '../../utils/semesterLabel';
 import type {
   CalendarDateKind,
   CalendarStatus,
@@ -275,7 +276,7 @@ const CoopCalendarManager: React.FC = () => {
               {semesters.length === 0 && <option value="">— ยังไม่มีภาคการศึกษา —</option>}
               {semesters.map((s) => (
                 <option key={s.semester_id} value={s.semester_id}>
-                  ภาคเรียนที่ {s.semester}/{s.academic_year} {s.is_active ? '(กำลังใช้งาน)' : ''}
+                  {semesterLabel(s.semester, s.academic_year)} {s.is_active ? '(กำลังใช้งาน)' : ''}
                 </option>
               ))}
             </select>

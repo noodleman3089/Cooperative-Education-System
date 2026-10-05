@@ -1,22 +1,6 @@
 import { query } from '../config/database';
 import { AuditAction, writeAudit } from './audit';
 
-/**
- * Normalise a year to the Buddhist era before comparing.
- *
- * The two sides of the graduation check disagreed on era: `coop_semesters.
- * academic_year` is seeded as 2026 (Gregorian) while the onboarding form offers
- * 2564-2572 (Buddhist). `enrollment_year + 4 <= academic_year` was therefore
- * `2569 <= 2026` — always false, so nobody was ever deactivated. Worse, the day
- * someone set academic_year in the Buddhist era, any student who had entered a
- * Gregorian year would be deactivated immediately.
- *
- * Anything below 2400 is treated as Gregorian (Buddhist era = Gregorian + 543).
- */
-function toBuddhistYear(year: number): number {
-  return year < 2400 ? year + 543 : year;
-}
-
 export async function runAutoDeactivation(): Promise<void> {
   console.log('[DeactivationScheduler] Running automatic deactivation check...');
   try {
@@ -26,11 +10,10 @@ export async function runAutoDeactivation(): Promise<void> {
     );
     
     if ((activeSemesterRes.rowCount ?? 0) > 0) {
-      const currentAcademicYear = activeSemesterRes.rows[0].academic_year;
-      const academicYearBE = toBuddhistYear(currentAcademicYear);
+      // `academic_year` เป็น พ.ศ. เสมอ (CHECK ที่ฐาน · migration 047 · BUG-01) — ปี `enrollment_year`
+      // ของนักศึกษายังแปลงในคำสั่งข้างล่างเพราะเป็นคนละคอลัมน์ที่ไม่มี CHECK
+      const academicYearBE = activeSemesterRes.rows[0].academic_year;
 
-      // Both sides are converted to the Buddhist era inside the query so a mix of
-      // eras across student records still compares correctly.
       const deactivatedStudents = await query(
         `UPDATE users
          SET is_active = false

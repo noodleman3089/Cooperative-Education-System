@@ -309,12 +309,20 @@ CREATE TABLE IF NOT EXISTS mentors (
 );
 
 -- 5. Coop Semesters Table
+-- academic_year เป็น **พ.ศ.** เสมอ (CHECK ข้างล่าง) — เคยปนกับ ค.ศ. จน scheduler ปิดบัญชีผิดคน (BUG-01)
+-- ภาค active ได้ภาคเดียว (partial unique ล่างสุด) · closed_at = วันที่เจ้าหน้าที่กด "ปิดภาค"
+-- (ภาคที่ปิดแล้ว = is_active FALSE และ closed_at ไม่ว่าง · ปิดแล้วไม่ลบ ไม่ย้ายใบ ไม่เปลี่ยนสถานะใบ)
 CREATE TABLE IF NOT EXISTS coop_semesters (
     semester_id SERIAL PRIMARY KEY,
     academic_year INT NOT NULL,
     semester VARCHAR(50) NOT NULL,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    closed_at TIMESTAMPTZ,
+    CONSTRAINT coop_semesters_year_be CHECK (academic_year >= 2500),
+    CONSTRAINT coop_semesters_year_semester_key UNIQUE (academic_year, semester)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS uq_coop_semesters_one_active
+    ON coop_semesters (is_active) WHERE is_active;
 
 -- 6.1. PR Announcements Table (Staff PR & News System)
 CREATE TABLE IF NOT EXISTS announcements (

@@ -291,10 +291,17 @@ export class CoopCalendarController {
   static async getCalendar(req: Request, res: Response): Promise<void> {
     try {
       const raw = req.query.semester_id;
-      const semesterId = typeof raw === 'string' && raw ? parseInt(raw, 10) : undefined;
+      let semesterId = typeof raw === 'string' && raw ? parseInt(raw, 10) : undefined;
       if (semesterId !== undefined && isNaN(semesterId)) {
         res.status(400).json({ message: 'รหัสภาคการศึกษาไม่ถูกต้อง' });
         return;
+      }
+
+      // นักศึกษาที่ไม่ได้ระบุภาคได้ปฏิทินของภาคที่ใบของตัวเองอยู่ — ตรงกับที่ด่าน
+      // `requireCalendarWindow(…, 'student')` ใช้ตัดสินจริง ไม่งั้นแบนเนอร์/ล็อกเมนูอ่านภาคใหม่
+      // แต่เซิร์ฟเวอร์อ่านภาคเก่า (R0-3) · ไม่มีใบที่เดินอยู่ = ภาค active ตามเดิม
+      if (semesterId === undefined && req.user?.roles.includes('student')) {
+        semesterId = (await CoopSemesterModel.findStudentSemesterId(req.user.userId)) ?? undefined;
       }
 
       const semester = await CoopCalendarModel.resolveSemester(semesterId);

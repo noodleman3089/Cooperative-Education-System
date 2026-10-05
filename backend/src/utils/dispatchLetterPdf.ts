@@ -121,7 +121,7 @@ export async function buildDispatchLetterPdf(
     `ตามที่ ${d.company_name ?? 'สถานประกอบการ'} ได้ตอบรับนักศึกษาของ${faculty} ` +
       `มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก เข้าปฏิบัติงานสหกิจศึกษา ` +
       `ในภาคการศึกษาที่ ${d.semester ?? '-'} ปีการศึกษา ` +
-      `${d.academic_year === null || d.academic_year === undefined ? '-' : d.academic_year + 543} นั้น`,
+      `${d.academic_year ?? '-'} นั้น`,
     { indent: 40 }
   );
   pdf.space(4);

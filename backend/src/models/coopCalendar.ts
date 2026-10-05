@@ -50,27 +50,29 @@ export class CoopCalendarModel {
   }
 
   /**
-   * ช่วงเวลาของกิจกรรมหนึ่ง ในภาคการศึกษาที่เปิดใช้งานอยู่ พร้อมวันนี้ในคำขอเดียว
+   * ช่วงเวลาของกิจกรรมหนึ่ง พร้อมวันนี้ในคำขอเดียว
    *
-   * คืน null เมื่อไม่มีภาคการศึกษาที่ active เลย — ผู้เรียกต้องตีความว่า
+   * `semesterId` ว่าง = ภาคที่เปิดใช้งานอยู่ (มีได้ภาคเดียว — partial unique ที่ฐาน) · ระบุ = ภาคนั้น
+   * ด่านที่กระทำต่อ "ใบ" ของนักศึกษาต้องส่งภาคของใบมา ไม่งั้นพอเปิดภาคใหม่ ใบของภาคเก่าที่ยังเดินอยู่
+   * จะถูกล็อกด้วยหน้าต่างของภาคใหม่ (F4 ใน `.system_memory/design_semester_lifecycle.md`)
+   *
+   * คืน null เมื่อไม่มีภาคที่ตรงเงื่อนไขเลย — ผู้เรียกต้องตีความว่า
    * "ยังไม่มีกฎ" (fail-open) ไม่ใช่ "ปฏิเสธ"
-   *
-   * `LIMIT 1` ไม่มี `ORDER BY` โดยตั้งใจให้เหมือน CoopSemesterModel.findActiveSemester()
-   * เป๊ะ — schema ไม่มีอะไรห้ามให้มีภาค active สองแถว ถ้าเกิดขึ้นจริงทั้งระบบ
-   * ต้องหยิบแถวเดียวกัน ผิดพร้อมกันดีกว่าแบนเนอร์อ่านภาคหนึ่งแต่ตัวล็อกอ่านอีกภาค
    */
-  static async findActiveWindow(activityKey: string): Promise<CalendarWindowLookup | null> {
+  static async findWindow(
+    activityKey: string,
+    semesterId: number | null = null
+  ): Promise<CalendarWindowLookup | null> {
     const derived = DERIVED_WINDOWS[activityKey as keyof typeof DERIVED_WINDOWS];
-    if (derived) return this.findDerivedWindow(derived.start, derived.end);
+    if (derived) return this.findDerivedWindow(derived.start, derived.end, semesterId);
 
     const res = await query(
       `SELECT e.start_date, e.end_date, e.late_end_date, ${TODAY_SQL} AS today
          FROM coop_semesters s
          LEFT JOIN coop_calendar_events e
            ON e.semester_id = s.semester_id AND e.activity_key = $1
-        WHERE s.is_active = TRUE
-        LIMIT 1`,
-      [activityKey]
+        WHERE CASE WHEN $2::int IS NULL THEN s.is_active ELSE s.semester_id = $2 END`,
+      [activityKey, semesterId]
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as CalendarWindowLookup;
@@ -89,7 +91,8 @@ export class CoopCalendarModel {
    */
   private static async findDerivedWindow(
     startKey: string,
-    endKey: string
+    endKey: string,
+    semesterId: number | null
   ): Promise<CalendarWindowLookup | null> {
     const res = await query(
       `SELECT
@@ -101,9 +104,8 @@ export class CoopCalendarModel {
            WHERE b.semester_id = s.semester_id AND b.activity_key = $2) AS late_end_date,
          ${TODAY_SQL} AS today
          FROM coop_semesters s
-        WHERE s.is_active = TRUE
-        LIMIT 1`,
-      [startKey, endKey]
+        WHERE CASE WHEN $3::int IS NULL THEN s.is_active ELSE s.semester_id = $3 END`,
+      [startKey, endKey, semesterId]
     );
     if ((res.rowCount ?? 0) === 0) return null;
     return res.rows[0] as CalendarWindowLookup;

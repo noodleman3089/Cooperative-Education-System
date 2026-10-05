@@ -9,6 +9,7 @@ import { validateAcceptanceInput } from '../utils/acceptanceInput';
 import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
 import { notifyStudentStatusChange } from '../utils/email';
 import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
+import { semesterLabel } from '../utils/semesterLabel';
 
 /**
  * ตอบรับ/ไม่รับนักศึกษาจากลิงก์ในอีเมล (เอกสารหมายเลข 2) — **ไม่ต้องเข้าสู่ระบบ**
@@ -164,8 +165,7 @@ export class PublicAcceptanceController {
           student_code: s.student_code,
           major_name_th: s.major_name_th,
           faculty_name_th: s.faculty_name_th,
-          // `academic_year` ในฐานปนกันทั้ง ค.ศ./พ.ศ. — ใช้กติกา `> 2500` เดียวกับ staffHome.ts ให้ป้ายเป็น พ.ศ. เหมือนทุกหน้า
-          semester_label: `ภาคเรียนที่ ${s.semester}/${s.academic_year > 2500 ? s.academic_year : s.academic_year + 543}`,
+          semester_label: semesterLabel(s.semester, s.academic_year),
           email: s.email,
         },
         has_resume: !!s.resume_file,

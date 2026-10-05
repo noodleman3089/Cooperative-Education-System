@@ -35,6 +35,7 @@ const DeanSignQueue = lazy(() => import('./Dean/DeanSignQueue'));
 const DeanSignature = lazy(() => import('./Dean/DeanSignature'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
 const StudentPipeline = lazy(() => import('./Staff/StudentPipeline'));
+const SemesterManager = lazy(() => import('./Staff/SemesterManager'));
 const UsersAndMasterData = lazy(() => import('./Staff/UsersAndMasterData'));
 const ImportScreening = lazy(() => import('./Staff/ImportScreening'));
 const AnnouncementsManager = lazy(() => import('./Staff/AnnouncementsManager'));
@@ -456,6 +457,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'calendar') return <CoopCalendarManager />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
         if (activeMenu === 'pipeline') return <StudentPipeline />;
+        if (activeMenu === 'semesters') return <SemesterManager />;
         if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <StaffHome />;

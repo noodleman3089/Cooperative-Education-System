@@ -226,7 +226,7 @@ test.describe('Security hardening regressions', () => {
   // PUT /api/profile/student แล้วต้องถูกเมิน · เกรดกับสาขาแก้เองได้แล้ว (คุมที่ student/profile-gpa-major)
   test('SEC-05: student_code and enrollment_year sent by a student are ignored', async ({ request }) => {
     await withDb(async (db) => {
-      // 2568 ไม่ใช่ 2565 โดยตั้งใจ — 2565 + 4 = 2569 = academic_year ที่ seed ไว้
+      // 2568 ไม่ใช่ 2565 โดยตั้งใจ — 2565 + 4 = 2569 = academic_year (พ.ศ.) ที่ seed ไว้
       // แปลว่า "จบแล้ว" และ scheduler ของ dev server อาจปิดบัญชี student2
       // กลางเทสต์ ทำให้คำขอถัดไปตอบ 403 (ดูหมายเหตุใน staff/registry-fields.spec.ts)
       await db.query('UPDATE students SET enrollment_year = 2568 WHERE student_id = 2');
@@ -326,18 +326,20 @@ test.describe('Security hardening regressions', () => {
   });
 
   // BUG-01 — the graduation check compared a Buddhist enrollment_year against a
-  // Gregorian academic_year, so it never fired. Uses a throwaway account so a
-  // real seeded user is never left deactivated for the following tests.
-  test('BUG-01: graduation deactivation works across Buddhist/Gregorian years', async () => {
+  // Gregorian academic_year, so it never fired. Since migration 047 academic_year is
+  // Buddhist-only (CHECK >= 2500); enrollment_year is still normalised in the query.
+  // Uses a throwaway account so a real seeded user is never left deactivated for the
+  // following tests.
+  test('BUG-01: graduation deactivation compares Buddhist years (academic_year is BE-only)', async () => {
     const { runAutoDeactivation } = await import('../../backend/src/utils/deactivationScheduler');
 
     const client = await pool.connect();
     let graduatedId: number;
     let currentId: number;
     try {
-      // academic_year is seeded as 2026 CE, i.e. 2569 BE.
+      // academic_year is seeded as 2569 BE (the DB rejects anything < 2500 since migration 047).
       const year = (await client.query('SELECT academic_year FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0].academic_year;
-      expect(year).toBe(2026);
+      expect(year).toBe(2569);
 
       const majorId = (await client.query('SELECT major_id FROM master_major LIMIT 1')).rows[0].major_id;
 

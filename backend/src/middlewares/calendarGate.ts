@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { CoopCalendarModel } from '../models/coopCalendar';
+import { CoopSemesterModel } from '../models/semester';
 import {
   CoopActivityKey,
   activityByKey,
@@ -34,11 +35,45 @@ import { sendUnexpectedError } from '../utils/httpError';
  * final-reports) เพื่อให้คำขอนอกช่วงถูกปฏิเสธก่อนไฟล์ถูกเขียนลงดิสก์
  * ถ้าย้ายไปเช็คใน controller จะได้ไฟล์กำพร้าทุกครั้งที่นักศึกษายิงตอนหมดช่วง
  */
+/**
+ * หน้าต่างของ "ภาคไหน" ที่ด่านต้องอ่าน (R0-3 ของ `design_semester_lifecycle.md`)
+ *
+ *   active        ภาคที่เปิดอยู่ — การกระทำที่ยังไม่มีใบ (ยื่นคำร้องใหม่)
+ *   student       ภาคของใบที่นักศึกษาผู้เรียกยังเดินอยู่ (ไม่มี = ภาค active) — ที่พัก · บันทึก · โครงร่าง · เล่มรายงาน
+ *   intent_param  ภาคของใบที่ระบุใน `:intent_id` เฉพาะใบของผู้เรียกเอง (ไม่ใช่ของเขา/ไม่มี = ภาค active)
+ *   link          ภาคของใบที่ผูกกับลิงก์ตอบรับของบริษัท (`acceptanceTokenGate` ตั้ง `res.locals.acceptanceLink`)
+ *
+ * ⛔ ห้ามให้เหตุที่หาใบไม่เจอกลายเป็นการปฏิเสธ — ถอยไปภาค active (fail-open เหมือนเดิม) แล้วให้ controller
+ *   ตอบ 404/403 เรื่องความเป็นเจ้าของของมันเอง · ด่านนี้เป็นเรื่องกำหนดการ ไม่ใช่สิทธิ์
+ */
+export type CalendarScope = 'active' | 'student' | 'intent_param' | 'link';
+
+async function resolveSemesterId(
+  scope: CalendarScope,
+  req: Request,
+  res: Response
+): Promise<number | null> {
+  if (scope === 'link') {
+    return (res.locals.acceptanceLink?.semester_id as number | undefined) ?? null;
+  }
+  const userId = req.user?.userId;
+  if (!userId) return null;
+  if (scope === 'student') return CoopSemesterModel.findStudentSemesterId(userId);
+  if (scope === 'intent_param') {
+    const formId = Number(req.params.intent_id);
+    return Number.isInteger(formId) && formId > 0
+      ? CoopSemesterModel.findIntentSemesterId(formId, userId)
+      : null;
+  }
+  return null;
+}
+
 export const requireCalendarWindow =
-  (activityKey: CoopActivityKey) =>
-  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  (activityKey: CoopActivityKey, scope: CalendarScope = 'active') =>
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const window = await CoopCalendarModel.findActiveWindow(activityKey);
+      const semesterId = await resolveSemesterId(scope, req, res);
+      const window = await CoopCalendarModel.findWindow(activityKey, semesterId);
 
       // ไม่มีภาคการศึกษาที่เปิดใช้งาน = ยังไม่มีปฏิทินให้อ้าง → ปล่อยผ่าน
       if (!window) {

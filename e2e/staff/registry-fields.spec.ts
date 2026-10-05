@@ -23,7 +23,7 @@ test.describe('Student Enrollment Year & Personnel Birth Date E2E Tests', () => 
   //
   // ⛔ ปีที่ใช้ต้อง **ยังไม่จบการศึกษา** เสมอ — `runAutoDeactivation()` ปิดบัญชี
   //    นักศึกษาเมื่อ `enrollment_year + 4 <= academic_year` และ seed ตั้ง
-  //    academic_year = 2026 CE (= 2569 BE) ดังนั้น 2565 คือ "จบแล้ว" พอดี
+  //    academic_year = 2569 (พ.ศ.) ดังนั้น 2565 คือ "จบแล้ว" พอดี
   //    · dev server เรียก scheduler เองตอน boot+5 วิ และทุก 24 ชม. โดยเทสต์
   //      คุมไม่ได้ ถ้าจังหวะมันมาตกตรงนี้ student2 จะถูกปิดบัญชีกลางเทสต์
   //      แล้วทุกคำขอถัดไปตอบ 403 "Your account has been deactivated."

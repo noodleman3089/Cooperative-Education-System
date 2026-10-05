@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { CoopCalendarModel } from '../models/coopCalendar';
 import { sendUnexpectedError } from '../utils/httpError';
+import { semesterLabel } from '../utils/semesterLabel';
 
 /**
  * แดชบอร์ด "นักศึกษาตอนนี้" ของเจ้าหน้าที่ — นักศึกษาแต่ละคนอยู่ขั้นไหน · ใครต้องขยับ · ค้างนานแค่ไหน
@@ -241,14 +242,13 @@ export class StaffPipelineController {
       const semesterPayload = semester
         ? {
             semester_id: semester.semester_id,
-            // `academic_year` ในฐานปนกันทั้ง ค.ศ./พ.ศ. — กติกา `> 2500` เดียวกับหน้าแรกเจ้าหน้าที่
-            label: `ภาคเรียนที่ ${semester.semester}/${semester.academic_year > 2500 ? semester.academic_year : semester.academic_year + 543}`,
+            label: semesterLabel(semester.semester, semester.academic_year),
             is_active: semester.is_active,
           }
         : null;
       const semesterList = semesters.map((s) => ({
         semester_id: s.semester_id,
-        label: `ภาคเรียนที่ ${s.semester}/${s.academic_year > 2500 ? s.academic_year : s.academic_year + 543}`,
+        label: semesterLabel(s.semester, s.academic_year),
         is_active: s.is_active,
       }));
 
