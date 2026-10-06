@@ -161,7 +161,7 @@ export class StudentController {
              FROM intent_forms i
              JOIN companies c ON i.company_id = c.company_id
              WHERE i.student_id = $1 AND i.semester_id = $2
-               AND i.status IN ('rejected', 'company_rejected', 'superseded')
+               AND i.status IN ('rejected', 'company_rejected')
              ORDER BY i.form_id DESC
              LIMIT 1`,
             [userId, semesterId]

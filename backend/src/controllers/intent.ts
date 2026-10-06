@@ -682,7 +682,7 @@ export class IntentFormController {
   }
 
   /**
-   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — ยกเลิกแล้วยื่นที่ใหม่ได้ทันที
+   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — ใบถูกลบทิ้งทั้งใบ ยื่นที่ใหม่ได้ทันที
    * Route: POST /api/intents/:id/withdraw
    * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
    *
@@ -702,7 +702,8 @@ export class IntentFormController {
         return;
       }
 
-      const { previousPath, companyId } = await IntentFormModel.withdrawByStudent(formId, req.user.userId);
+      const { previousPath, companyId, companyName, companyDeleted } =
+        await IntentFormModel.withdrawByStudent(formId, req.user.userId);
 
       // ไฟล์กระดาษที่อัปไว้ไม่มีใครอ้างถึงแล้ว — ลบหลัง COMMIT เสมอ (แบบเดียวกับตอนเจ้าหน้าที่ตีกลับ)
       if (previousPath) {
@@ -715,7 +716,8 @@ export class IntentFormController {
           entityType: 'intent_form',
           entityId: formId,
           subjectId: req.user.userId,
-          detail: { company_id: companyId },
+          // ใบถูกลบไปแล้ว — บรรทัดนี้คือที่เดียวที่ตามย้อนได้ว่าเคยยื่นถึงที่ไหน
+          detail: { company_id: companyId, company_name: companyName, company_deleted: companyDeleted },
         },
         req
       ).catch(() => undefined);

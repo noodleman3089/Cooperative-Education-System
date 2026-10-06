@@ -111,7 +111,6 @@ export function deriveStage(r: Row, today: string): Derived {
   switch (r.status) {
     case 'rejected':
     case 'company_rejected':
-    case 'superseded': // นักศึกษายกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ
       return { stage: 'exit', holder: 'student', age: null };
     case 'pending_advisor':
       return { stage: 'await_upload', holder: 'student', age: r.age_upload ?? r.age_created };

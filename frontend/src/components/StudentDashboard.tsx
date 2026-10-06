@@ -55,8 +55,6 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
       return 'company-rejected';
     case 'rejected':
       return 'rejected';
-    case 'superseded':
-      return 'withdrawn';
     case 'accepted':
       // ได้ที่ฝึกงานแล้ว = จบช่วงขอที่ฝึกงาน · การ์ด "สิ่งที่ต้องทำตอนนี้" ช่วงนี้หายไป
       // เหลือ `CoopNowCard` ใบเดียวที่พาเดินต่อ (เจ้าของตัดสิน 2026-09-30: มีการ์ด "ทำอะไรตอนนี้" ได้ใบเดียวเสมอ)
@@ -122,6 +120,8 @@ const StudentDashboard: React.FC = () => {
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  // ใบถูกลบทั้งใบ การ์ดสถานะจึงหายไป — ต้องมีข้อความบอกว่ายกเลิกสำเร็จ ไม่งั้นดูเหมือนหน้าจอรีเซ็ตเฉยๆ
+  const [withdrawNotice, setWithdrawNotice] = useState<string | null>(null);
   // ส่งหนังสือให้สถานประกอบการทางอีเมล — null = ยังไม่พิมพ์เอง ใช้ค่าเริ่มต้นจากที่ระบบรู้
   const [companyMailInput, setCompanyMailInput] = useState<string | null>(null);
   const [confirmingCompanyMail, setConfirmingCompanyMail] = useState(false);
@@ -369,9 +369,13 @@ const StudentDashboard: React.FC = () => {
     setWithdrawError(null);
 
     try {
+      const company = activeIntent.company_name_th;
       await api.post(`/intents/${activeIntent.form_id}/withdraw`);
       setConfirmingWithdraw(false);
       await loadDashboardData();
+      setWithdrawNotice(
+        `ยกเลิกคำร้องถึง ${company} แล้ว — ยื่นคำร้องใหม่ได้ที่เมนู "ยื่นคำร้องขอหนังสือ"`
+      );
     } catch (err) {
       // error อยู่ในกล่องยืนยัน ไม่ใช่แถบหลังกล่อง
       setWithdrawError(getErrorMessage(err, 'ยกเลิกคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
@@ -1349,6 +1353,11 @@ const StudentDashboard: React.FC = () => {
         การ์ดอ่าน `phases` ชุดเดียวกับแถบเส้นทางด้านล่าง จึงไม่มีทางบอกคนละเรื่องกัน
       */}
       {/* การ์ด "สิ่งที่ต้องทำตอนนี้" ของช่วงขอที่ฝึกงาน (แบบ A) — ขอบฟ้า = ต้องทำ · เทา = รอ · เขียว = ได้แล้ว */}
+      {withdrawNotice && (
+        <div data-testid="withdraw-notice">
+          <AlertBanner variant="success" message={withdrawNotice} />
+        </div>
+      )}
       {statusIntent && statusState && (
         <StudentStatusCard
           state={statusState}
@@ -1708,7 +1717,7 @@ const StudentDashboard: React.FC = () => {
                   value: activeIntent?.request_form_path ? 'ถูกลบออกจากระบบ' : 'ยังไม่ได้ส่ง',
                 },
               ]}
-              lockNote="ยกเลิกแล้วเรียกคืนไม่ได้ · กระดาษที่ลงนามไว้ของใบนี้ใช้ต่อไม่ได้ ต้องพิมพ์และลงนามใบใหม่"
+              lockNote="ยกเลิกแล้วคำร้องนี้ถูกลบออกจากระบบ เรียกคืนไม่ได้ · กระดาษที่ลงนามไว้ของใบนี้ใช้ต่อไม่ได้ ต้องพิมพ์และลงนามใบใหม่"
             />
           </>
         }

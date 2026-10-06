@@ -480,19 +480,19 @@ export class IntentFormModel {
   }
 
   /**
-   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ → `superseded` (ยื่นที่ใหม่ได้ทันที)
+   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — **ลบใบทิ้งทั้งใบ** (เจ้าของตัดสิน 2026-10-06)
+   * ยื่นที่ใหม่ได้ทันที · ร่องรอยที่เหลือคือ `audit_log` (`intent.withdrawn`) เท่านั้น
    *
    * ⛔ ไม่ใช้ `failByStudent` ซ้ำ — เส้นนั้นตั้ง `rejected` และหน้าจอแปลว่า "สัมภาษณ์ไม่ผ่าน"
    *
-   * แถวสถานประกอบการ **ลบไม่ได้** เพราะใบที่ยกเลิกยังอ้างถึง (`company_id` NOT NULL · ON DELETE RESTRICT)
-   * สิ่งที่ทำแทนในทรานแซกชันเดียวกัน: ถ้าแถวนั้นนักศึกษาสร้างเอง ยังไม่รับรอง และไม่มีใบอื่นอ้างถึง
-   * ให้ปลด `google_place_id` ออก — ไม่งั้นยื่นใหม่ด้วยสถานที่เดิมจาก Google Maps จะถูกจับคู่กลับมา
-   * ที่แถวเก่า (ซึ่งข้อมูลผิดคือเหตุที่ยกเลิก) แทนที่จะใช้ข้อมูลที่เพิ่งกรอกใหม่
+   * ในทรานแซกชันเดียวกัน: แถวสถานประกอบการที่นักศึกษาสร้างเอง ยังไม่รับรอง และไม่มีอะไรอ้างถึงแล้ว
+   * ถูกลบตามไปด้วย — ข้อมูลผิดคือเหตุที่ยกเลิก ปล่อยไว้จะค้างในทำเนียบและถูกจับคู่กลับมาตอนยื่นสถานที่เดิมใหม่
+   * (ตารางลูกของใบ — `intent_stage_events` · `acceptance_link_tokens` — เป็น ON DELETE CASCADE · `student_memos` เป็น SET NULL)
    */
   static async withdrawByStudent(
     formId: number,
     studentId: number
-  ): Promise<{ previousPath: string | null; companyId: number }> {
+  ): Promise<{ previousPath: string | null; companyId: number; companyName: string; companyDeleted: boolean }> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -510,27 +510,29 @@ export class IntentFormModel {
       }
       assertAllowedTransition('student_withdraw', row.status, STUDENT_WITHDRAW_FROM);
 
-      await client.query(
-        `UPDATE intent_forms
-            SET status = 'superseded', request_form_path = NULL, reject_reason = NULL
-          WHERE form_id = $1`,
-        [formId]
-      );
-      await client.query(
-        `UPDATE companies c
-            SET google_place_id = NULL
+      const company = await client.query('SELECT name_th FROM companies WHERE company_id = $1', [
+        row.company_id,
+      ]);
+      await client.query('DELETE FROM intent_forms WHERE form_id = $1', [formId]);
+      // ⛔ ต้องเช็คทุกตารางที่อ้าง `companies` (FK เป็น RESTRICT ทั้งหมด) — หลุดตัวเดียวการยกเลิกทั้งก้อนจะ rollback
+      const removed = await client.query(
+        `DELETE FROM companies c
           WHERE c.company_id = $1 AND c.created_by = $2 AND c.is_verified = FALSE
-            AND NOT EXISTS (
-              SELECT 1 FROM intent_forms o WHERE o.company_id = c.company_id AND o.form_id <> $3
-            )`,
-        [row.company_id, studentId, formId]
+            AND NOT EXISTS (SELECT 1 FROM intent_forms x WHERE x.company_id = c.company_id)
+            AND NOT EXISTS (SELECT 1 FROM official_documents x WHERE x.company_id = c.company_id)
+            AND NOT EXISTS (SELECT 1 FROM mentors x WHERE x.company_id = c.company_id)
+            AND NOT EXISTS (SELECT 1 FROM report_outlines x WHERE x.company_id = c.company_id)
+            AND NOT EXISTS (SELECT 1 FROM supervision_appointments x WHERE x.company_id = c.company_id)
+            AND NOT EXISTS (SELECT 1 FROM supervision_records x WHERE x.company_id = c.company_id)`,
+        [row.company_id, studentId]
       );
-      await recordStageEvent(client, formId, 'exited');
 
       await client.query('COMMIT');
       return {
         previousPath: row.request_form_path as string | null,
         companyId: row.company_id as number,
+        companyName: (company.rows[0]?.name_th as string) ?? '',
+        companyDeleted: (removed.rowCount ?? 0) > 0,
       };
     } catch (error) {
       await client.query('ROLLBACK');

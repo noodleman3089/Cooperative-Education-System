@@ -56,11 +56,26 @@ test.describe('Self-Found Placement Workflow E2E Tests', () => {
     await page.getByTestId('request-contact-person').fill('นายสมหวัง ตั้งใจ');
     await page.getByTestId('request-contact-position').fill('HR Specialist');
 
-    // ตัวอย่างกระดาษต้องขึ้นค่าที่เพิ่งพิมพ์ทันที
-    const paper = page.getByTestId('request-paper-preview');
-    await expect(paper).toContainText('บริษัท สมมติสุข จำกัด');
-    await expect(paper).toContainText('นายสมหวัง ตั้งใจ');
-    await expect(paper).toContainText(studentCode as string);
+    // ตัวอย่างด้านขวาเป็น **ไฟล์ PDF ตัวจริง** (ไม่ใช่ภาพจำลอง) — ไม่วาดใหม่เองตอนพิมพ์ ต้องบอกว่าเก่าแล้วให้กดอัปเดต
+    await expect(page.getByTestId('request-preview-frame')).toHaveAttribute('src', /^blob:/);
+    await expect(page.getByTestId('request-preview-state')).toContainText('ตัวอย่างยังเป็นของเดิม');
+    const [previewReq] = await Promise.all([
+      page.waitForRequest((r) => r.url().includes('/intents/request-form/preview') && r.method() === 'POST'),
+      page.getByTestId('request-preview-refresh').click(),
+    ]);
+    // ตัวอย่างต้องวาดจากค่าที่อยู่ในฟอร์มตอนนี้ และตอบกลับเป็น PDF
+    expect(previewReq.postDataJSON()).toMatchObject({
+      company_name_th: 'บริษัท สมมติสุข จำกัด',
+      contact_person: 'นายสมหวัง ตั้งใจ',
+    });
+    const previewRes = await previewReq.response();
+    expect(previewRes!.status()).toBe(200);
+    expect(previewRes!.headers()['content-type']).toContain('application/pdf');
+    await expect(page.getByTestId('request-preview-state')).not.toContainText('ตัวอย่างยังเป็นของเดิม');
+    await expect(page.getByTestId('request-preview-open')).toHaveAttribute('href', /^blob:/);
+    // ⛔ ดูตัวอย่างกี่รอบก็ต้องไม่มีอะไรถูกบันทึก
+    expect(await dbValue<number>('SELECT COUNT(*)::int FROM intent_forms')).toBe(0);
+    expect(await dbValue<number>("SELECT COUNT(*)::int FROM companies WHERE name_th = 'บริษัท สมมติสุข จำกัด'")).toBe(0);
 
     // 5. ยื่น — กล่องยืนยันต้องแสดงชื่อและผู้รับหนังสือที่จะถูกพิมพ์ · กลับไปแก้ = ยังไม่ยื่น (2026-09-22)
     await page.getByTestId('request-submit').click();

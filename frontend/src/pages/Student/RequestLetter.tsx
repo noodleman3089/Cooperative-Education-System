@@ -1,7 +1,7 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import { AuthContext } from '../../context/AuthContext';
-import api from '../../services/api';
+import api, { API_BASE_URL } from '../../services/api';
 import type { Company, CoopCalendarResponse, StudentProfile } from '../../types/api';
 import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -29,8 +29,9 @@ import {
  * **ฟอร์มของกระดาษใบนั้น** — นักศึกษากรอกแค่ส่วนสถานประกอบการ ที่เหลือระบบดึงจาก
  * โปรไฟล์กับปฏิทินสหกิจ แล้วพิมพ์ลงแบบฟอร์มตัวจริงให้ (`backend/utils/requestFormPdf.ts`)
  *
- * ⛔ ตัวอย่างกระดาษฝั่งขวาเป็นภาพจำลองบนหน้าจอ ไม่ใช่ไฟล์จริง — ไฟล์จริงเกิดหลังยื่น
- *    (ต้องมีแถว `intent_forms` ก่อน) และเปิดจากการ์ดสถานะบนหน้าแรก
+ * ตัวอย่างฝั่งขวาคือ **ไฟล์ PDF ตัวจริง** จาก `POST /intents/request-form/preview` (ตัววาดตัวเดียวกับฉบับหลังยื่น
+ * · ไม่เขียนฐาน) — ไม่วาดใหม่ทุกครั้งที่พิมพ์ ต้องกด "อัปเดตตัวอย่าง" · จอมือถือฝัง PDF ไม่ได้ทุกเครื่อง
+ * จึงซ่อนกรอบแล้วเหลือปุ่มเปิดแท็บใหม่
  */
 
 interface Province {
@@ -84,6 +85,11 @@ const RequestLetter: React.FC = () => {
   const [lateReason, setLateReason] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  /** ตัวอย่างเอกสารจริง — `url` เป็น blob ของ PDF · `key` คือข้อมูลที่ใช้วาดรอบนั้น (ไว้บอกว่าตัวอย่างเก่ากว่าฟอร์มหรือยัง) */
+  const [preview, setPreview] = useState<{ url: string; key: string } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   const [googleMapsApiKey, setGoogleMapsApiKey] = useState('');
   const [mapsLoaded, setMapsLoaded] = useState(false);
@@ -246,6 +252,59 @@ const RequestLetter: React.FC = () => {
           .slice(0, 5)
       : [];
 
+  // ข้อมูลชุดเดียวกับที่จะส่งตอนยื่น — เลือกจากทำเนียบส่งแค่ company_id (ข้อมูลเป็นของทำเนียบ)
+  const previewPayload =
+    existingCompanyId !== null
+      ? { company_id: existingCompanyId }
+      : {
+          company_name_th: form.company_name_th,
+          company_address: form.company_address,
+          company_province: form.company_province,
+          company_district: form.company_district,
+          company_postal_code: form.company_postal_code,
+          company_phone: form.company_phone,
+          contact_person: form.contact_person,
+          contact_position: form.contact_position,
+        };
+  const previewKey = JSON.stringify(previewPayload);
+  const previewStale = preview !== null && preview.key !== previewKey;
+
+  const refreshPreview = async () => {
+    setPreviewLoading(true);
+    setPreviewError(null);
+    try {
+      // `api` แปลงคำตอบเป็น JSON เสมอ — เส้นนี้ตอบเป็นไฟล์ จึงเรียก fetch ตรง (session เป็น cookie เหมือนกัน)
+      const res = await fetch(`${API_BASE_URL}/intents/request-form/preview`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: previewKey,
+      });
+      if (!res.ok || !res.headers.get('content-type')?.includes('application/pdf')) {
+        throw new Error('preview failed');
+      }
+      setPreview({ url: URL.createObjectURL(await res.blob()), key: previewKey });
+    } catch {
+      setPreviewError('สร้างตัวอย่างเอกสารไม่สำเร็จ — ยังยื่นคำร้องได้ตามปกติ ลองกดอีกครั้งได้');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // เปิดหน้ามาเห็นแบบฟอร์มจริงที่มีส่วนของนักศึกษาทันที ไม่ต้องกดก่อน · หลังจากนั้นวาดใหม่เมื่อกดปุ่มเท่านั้น
+    // (โหลดครั้งเดียวตอนฟอร์มพร้อม — รูปแบบเดียวกับ loadData ด้านบน ปิดกฎตรงจุดพร้อมเหตุผล)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!loading && canSubmit) refreshPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, canSubmit]);
+
+  // คืนหน่วยความจำของไฟล์ตัวอย่างรอบก่อน เมื่อมีรอบใหม่หรือออกจากหน้า
+  useEffect(() => {
+    if (!preview) return;
+    return () => URL.revokeObjectURL(preview.url);
+  }, [preview]);
+
   const scrollToAlert = () =>
     requestAnimationFrame(() => alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }));
 
@@ -343,14 +402,6 @@ const RequestLetter: React.FC = () => {
       setForm((prev) => ({ ...prev, [key]: e.target.value })),
   });
 
-  /** ค่าที่ระบบพิมพ์ให้บนกระดาษ — ว่าง = เส้นประ เหมือนบนแบบฟอร์มจริง */
-  const typed = (value: string | number | null | undefined) =>
-    value === null || value === undefined || value === '' ? (
-      <span className="text-gray-400 dark:text-gray-500">……………</span>
-    ) : (
-      <b className="font-semibold text-brand-navy dark:text-blue-300">{value}</b>
-    );
-
   return (
     <div className="space-y-5 page-enter">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -417,7 +468,7 @@ const RequestLetter: React.FC = () => {
       {canSubmit && (
         <div className="flex flex-wrap items-start gap-5">
           {/* ══ ซ้าย: ฟอร์ม ══ */}
-          <form onSubmit={handleSubmit} noValidate className="min-w-0 flex-[999_1_560px] space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="min-w-0 flex-[3_1_520px] space-y-4">
             <section className="space-y-3.5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-base font-bold text-gray-900 dark:text-white">ข้อมูลของคุณ</h2>
@@ -589,35 +640,66 @@ const RequestLetter: React.FC = () => {
           </form>
 
           {/* ══ ขวา: ตัวอย่างกระดาษ + ขั้นถัดไป ══ */}
-          <aside className="min-w-0 flex-[1_1_340px] space-y-4">
+          {/* กว้างกว่าเดิม (340 → 420) — เอกสารจริงในกรอบแคบกว่านี้อ่านไม่ออก */}
+          <aside className="min-w-0 flex-[2_1_420px] space-y-4">
             <section className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4.5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white">ตัวอย่างเอกสารที่จะได้</h2>
-              <div
-                data-testid="request-paper-preview"
-                className="space-y-1.5 rounded-md border border-gray-300 bg-white p-4 text-[11px] leading-relaxed text-gray-700 shadow-md dark:border-gray-600 dark:bg-gray-950 dark:text-gray-300"
-              >
-                <p className="text-center text-xs font-bold text-gray-900 dark:text-white">
-                  แบบคำร้องขอหนังสือขอความอนุเคราะห์นักศึกษาสหกิจศึกษา
-                </p>
-                <p className="text-right">วันที่ {typed(calendar?.today ? formatThaiDate(calendar.today) : '')}</p>
-                <p>ข้าพเจ้า {typed(studentName)} รหัส {typed(profile?.student_code)}</p>
-                <p>สาขาวิชา {typed(majorName)} ชั้นปีที่ {typed(profile?.year_level)}</p>
-                <p>โทรศัพท์มือถือ {typed(profile?.phone)}</p>
-                <p>ชื่อสถานประกอบการ {typed(form.company_name_th.trim())}</p>
-                <p>ที่อยู่ {typed(fullAddress)}</p>
-                <p>ผู้รับหนังสือ {typed(form.contact_person.trim())} ตำแหน่ง {typed(form.contact_position.trim())}</p>
-                <p>โทรศัพท์ที่ทำงาน {typed(form.company_phone.trim())}</p>
-                <p>
-                  เริ่มฝึกงาน {typed(coopStart ? formatThaiDate(coopStart) : '')} ถึง{' '}
-                  {typed(coopEnd ? formatThaiDate(coopEnd) : '')}
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-1.5 text-center text-gray-600 dark:text-gray-400">
-                  <div className="rounded border border-dashed border-gray-400 p-2 dark:border-gray-600">ลงนาม<br />อาจารย์ที่ปรึกษา</div>
-                  <div className="rounded border border-dashed border-gray-400 p-2 dark:border-gray-600">ลงนาม<br />หัวหน้าสาขาวิชา</div>
-                </div>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-sm font-bold text-gray-900 dark:text-white">ตัวอย่างเอกสารจริง</h2>
+                {preview && (
+                  <a
+                    href={preview.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="request-preview-open"
+                    className="text-xs font-bold text-brand-blue underline dark:text-blue-400"
+                  >
+                    เปิดในแท็บใหม่
+                  </a>
+                )}
               </div>
+
+              <AlertBanner variant="error" message={previewError} />
+
+              {/* ตัวอย่างไม่วาดใหม่เองตอนพิมพ์ — บอกให้ชัดว่าที่เห็นอยู่เก่ากว่าฟอร์มแล้ว */}
+              <div
+                className={`flex flex-wrap items-center justify-between gap-2 rounded-xl px-3 py-2 text-xs ${
+                  previewStale
+                    ? 'bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+                    : 'bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
+                }`}
+              >
+                <span data-testid="request-preview-state">
+                  {previewLoading
+                    ? 'กำลังสร้างตัวอย่าง…'
+                    : previewStale
+                      ? 'คุณแก้ข้อมูลหลังตัวอย่างนี้ — ตัวอย่างยังเป็นของเดิม'
+                      : 'กรอกหรือแก้ข้อมูลแล้วกดอัปเดต เพื่อดูเอกสารฉบับล่าสุด'}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={previewStale ? 'primary' : 'secondary'}
+                  data-testid="request-preview-refresh"
+                  loading={previewLoading}
+                  onClick={refreshPreview}
+                >
+                  อัปเดตตัวอย่าง
+                </Button>
+              </div>
+
+              {/* จอแคบฝัง PDF ไม่ได้ทุกเครื่อง — ซ่อนกรอบ เหลือลิงก์ "เปิดในแท็บใหม่" ด้านบน */}
+              {preview && (
+                <iframe
+                  key={preview.url}
+                  // ซ่อนแถบเครื่องมือของตัวอ่าน PDF และขยายเต็มความกว้างกรอบ (ตัวอ่านที่ไม่รู้จักค่านี้จะเมินเอง)
+                  src={`${preview.url}#toolbar=0&view=FitH`}
+                  title="ตัวอย่างแบบคำร้องขอหนังสือขอความอนุเคราะห์ (เอกสารหมายเลข 1)"
+                  data-testid="request-preview-frame"
+                  className="hidden h-[32rem] w-full rounded-lg border border-gray-300 bg-gray-100 sm:block dark:border-gray-700 dark:bg-gray-800"
+                />
+              )}
               <p className="text-xs text-gray-600 dark:text-gray-400">
-                ตัวหนังสือสีน้ำเงินคือสิ่งที่ระบบพิมพ์ลงแบบฟอร์มตัวจริงให้ — ไม่มีช่องให้เขียนมือ
+                ไฟล์เดียวกับที่จะได้พิมพ์หลังกดยื่น — ระบบพิมพ์ข้อมูลลงแบบฟอร์มของคณะให้ ลายมือชื่อสามช่องเซ็นด้วยปากกา
               </p>
             </section>
 
