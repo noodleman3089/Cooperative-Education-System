@@ -145,7 +145,11 @@ export class StudentController {
             acceptance_source: row.acceptance_source,
             acceptance_signer_name: row.acceptance_signer_name,
             // ชื่อผู้ลงนามแบบคำร้อง (เอกสารหมายเลข 1) ที่ระบบรู้เอง — null = นักศึกษาต้องกรอกตอนอัปโหลด
-            request_signers: await IntentFormModel.resolveRequestSigners(userId),
+            // `candidates` = รายชื่อในสาขา ไว้ช่วยค้นตอนนักศึกษาระบุผู้ลงนามเอง (ผู้ลงนามจริงไม่ใช่คนที่ระบบรู้)
+            request_signers: {
+              ...(await IntentFormModel.resolveRequestSigners(userId)),
+              candidates: await IntentFormModel.listSignerCandidates(userId),
+            },
             mentor: row.mentor_id ? {
               mentor_id: row.mentor_id,
               name: row.mentor_name,

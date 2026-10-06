@@ -365,7 +365,10 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     expect(row?.dept_head_signer_name).toBe('อาจารย์สมหญิง รักเรียน');
   });
 
-  test('D8.2: ระบบรู้ชื่อแล้ว ชื่อที่นักศึกษาพิมพ์มาทับไม่ได้', async ({ request }) => {
+  // ⚠️ กติกาเปลี่ยน 2026-10-06 (เจ้าของตัดสิน): เดิม "ชื่อที่ระบบรู้ชนะเสมอ" ทำให้บันทึกผิดคนเมื่อมีผู้รักษาการแทน
+  //    ตอนนี้ชื่อที่นักศึกษาระบุชนะ และหน้าจอเจ้าหน้าที่ติดป้ายเมื่อไม่ตรงกับที่ระบบรู้ — คุมที่ `request-upload-rules` U1
+  //    เคสนี้เหลือคุมด้านกลับ: **ไม่ระบุชื่อมา = ใช้ชื่อที่ระบบรู้** (ช่องว่าง/ช่องว่างล้วนต้องไม่ทับ)
+  test('D8.2: ระบบรู้ชื่อแล้ว ส่งชื่อว่างมา → ใช้ชื่อที่ระบบรู้ ไม่ถูกทับด้วยค่าว่าง', async ({ request }) => {
     test.setTimeout(120_000);
     await seedTestData();
     const formId = await seedIntent();
@@ -377,8 +380,8 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
           mimeType: 'application/pdf',
           buffer: fs.readFileSync(path.resolve(__dirname, '../fixtures/mock_official_letter.pdf')),
         },
-        advisor_signer_name: 'ชื่อปลอม',
-        dept_head_signer_name: 'ชื่อปลอม',
+        advisor_signer_name: '   ',
+        dept_head_signer_name: '',
       },
     });
     expect(res.status(), await res.text()).toBe(200);
@@ -386,8 +389,8 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
       'SELECT advisor_signer_name, dept_head_signer_name FROM intent_forms WHERE form_id = $1',
       [formId]
     );
-    expect(row?.advisor_signer_name).not.toBe('ชื่อปลอม');
-    expect(row?.dept_head_signer_name).not.toBe('ชื่อปลอม');
+    expect(row?.advisor_signer_name?.trim()).toBeTruthy();
+    expect(row?.dept_head_signer_name?.trim()).toBeTruthy();
   });
 
   test('D8.3: หน้าจอ — ระบบไม่รู้ชื่อ นักศึกษาเห็นช่องกรอก และเลือกไฟล์ก่อนกรอกไม่ได้', async ({ page }) => {

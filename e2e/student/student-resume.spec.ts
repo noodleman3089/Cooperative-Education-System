@@ -92,7 +92,7 @@ test.describe('เรซูเม่นักศึกษา', () => {
       buffer: Buffer.from('<?php echo "not a pdf"; ?>'),
     });
     expect(res.status()).toBe(400);
-    expect((await res.json()).message as string).toContain('magic bytes');
+    expect((await res.json()).message as string).toContain('เนื้อหาไฟล์ไม่ตรงกับชนิดไฟล์ที่อนุญาต');
     expect(await storedResume()).toBe(before);
     expect(onDisk(before!)).toBe(true);
   });

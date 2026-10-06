@@ -25,6 +25,9 @@ export interface RequestFormRow {
   /** ชื่อผู้ลงนามแบบคำร้อง — ระบบดึงเอง/นักศึกษากรอกตอนอัปโหลด (มากับ `GET /intents`) */
   advisor_signer_name?: string | null;
   dept_head_signer_name?: string | null;
+  /** ชื่อที่ระบบรู้เอง (ที่ปรึกษาของนักศึกษา · หัวหน้าสาขา) — ไว้เทียบว่าชื่อบนใบเป็นของที่นักศึกษาระบุหรือไม่ */
+  system_advisor_name?: string | null;
+  system_dept_head_name?: string | null;
   submitted_late?: boolean;
   late_reason?: string | null;
   created_at?: string | null;
@@ -103,8 +106,12 @@ const addDays = (iso: string, days: number): string => {
 };
 
 const REJECT_PRESET_CHIPS = [
+  'นักศึกษายังไม่ลงชื่อ',
+  'ลายเซ็นอาจารย์ที่ปรึกษายังไม่ครบ',
   'ลายเซ็นหัวหน้าสาขาวิชายังไม่ครบ',
+  'ช่องความเห็นระบุว่าไม่อนุญาต',
   'ชื่อ/ที่อยู่สถานประกอบการไม่ตรงกับหนังสือ',
+  'ไฟล์ที่แนบไม่ใช่หน้า 1 ของแบบคำร้อง',
   'ไฟล์ที่แนบอ่านไม่ออก',
   'อื่น ๆ',
 ];
@@ -1085,8 +1092,22 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
                       {/* ⛔ เจ้าหน้าที่ไม่ต้องคีย์ชื่อ/วันที่จากกระดาษอีก (เจ้าของตัดสิน 2026-09-21) — แสดงให้เทียบกับกระดาษเท่านั้น */}
                       <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1" data-testid="officer-signers">
-                        <p>อาจารย์ที่ปรึกษาผู้ลงนาม: <strong>{reviewingRequest.advisor_signer_name || '—'}</strong></p>
-                        <p>หัวหน้าสาขาวิชาผู้ลงนาม: <strong>{reviewingRequest.dept_head_signer_name || '—'}</strong></p>
+                        {/* ชื่อไม่ตรงกับที่ระบบรู้ = นักศึกษาระบุเอง (ผู้รักษาการแทน · ที่ปรึกษาเพิ่งเปลี่ยน) — ให้เทียบกับกระดาษ */}
+                        {(
+                          [
+                            ['อาจารย์ที่ปรึกษาผู้ลงนาม', reviewingRequest.advisor_signer_name, reviewingRequest.system_advisor_name],
+                            ['หัวหน้าสาขาวิชาผู้ลงนาม', reviewingRequest.dept_head_signer_name, reviewingRequest.system_dept_head_name],
+                          ] as const
+                        ).map(([label, onPaper, inSystem]) => (
+                          <p key={label}>
+                            {label}: <strong>{onPaper || '—'}</strong>
+                            {onPaper && onPaper !== inSystem && (
+                              <span className="ml-1.5 text-amber-800 dark:text-amber-300" data-testid="signer-typed-by-student">
+                                (นักศึกษาระบุเอง{inSystem ? ` · ระบบบันทึกว่า ${inSystem}` : ''} — เทียบกับกระดาษ)
+                              </span>
+                            )}
+                          </p>
+                        ))}
                       </div>
 
                       <div>

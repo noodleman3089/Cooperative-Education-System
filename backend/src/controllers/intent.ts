@@ -4,6 +4,7 @@ import path from 'path';
 import {
   IntentFormModel,
   COMPANY_MAIL_LIMIT,
+  LATE_REASON_MIN_LENGTH,
   LateStamp,
   TypedCompanyInput,
 } from '../models/intent';
@@ -42,8 +43,6 @@ import {
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
 
-/** ความยาวขั้นต่ำของเหตุผลการส่งช้า — กติกาหน้าจอ ไม่ใช่ข้อบังคับของฐาน */
-const LATE_REASON_MIN_LENGTH = 20;
 
 /** อีเมลหนึ่งที่อยู่ล้วน — ไม่รับรูปแบบ "ชื่อ <a@b.c>" หรืออักขระที่ใช้ต่อหลายที่อยู่ */
 const SINGLE_EMAIL_REGEX = /^[^\s@,;<>()"[\]\\]+@[^\s@,;<>()"[\]\\]+\.[^\s@,;<>()"[\]\\]+$/;
@@ -88,7 +87,7 @@ export class IntentFormController {
             message:
               'การยื่นครั้งนี้เลยกำหนดปกติแล้ว แต่ยังอยู่ในช่วงผ่อนผัน ระบบจึงรับได้แต่นับเป็นการส่งช้า ' +
               `กรุณาระบุเหตุผลอย่างน้อย ${LATE_REASON_MIN_LENGTH} ตัวอักษร ` +
-              'ระบบจะพิมพ์ลงบันทึกข้อความชี้แจงให้พร้อมแบบคำร้อง เพื่อนำไปเสนอตามขั้นตอน',
+              'เจ้าหน้าที่จะเห็นเหตุผลนี้ตอนตรวจคำร้อง และหลังยื่นแล้วต้องทำบันทึกข้อความชี้แจงที่เมนู "บันทึกถึงคณบดี" เพื่อเสนอตามขั้นตอน',
           });
           return;
         }
@@ -326,6 +325,13 @@ export class IntentFormController {
                s.resume_file, i.acceptance_evidence_path, i.request_form_path,
                i.advisor_signer_name, i.advisor_signed_date,
                i.dept_head_signer_name, i.dept_head_signed_date, i.officer_document_no,
+               -- ชื่อผู้ลงนามที่ระบบรู้เอง — หน้าเจ้าหน้าที่เทียบกับชื่อบนใบ ถ้าไม่ตรงคือชื่อที่นักศึกษาระบุ
+               (SELECT NULLIF(TRIM(CONCAT_WS(' ', pa.first_name, pa.last_name)), '')
+                  FROM personnel pa WHERE pa.personnel_id = s.advisor_id) AS system_advisor_name,
+               (SELECT NULLIF(TRIM(CONCAT_WS(' ', pd.first_name, pd.last_name)), '')
+                  FROM user_roles rd JOIN personnel pd ON pd.personnel_id = rd.user_id
+                 WHERE rd.role_name = 'dept_head' AND pd.major_id = s.major_id
+                 ORDER BY rd.user_id LIMIT 1) AS system_dept_head_name,
                s.first_name, s.last_name, s.nickname, s.phone as student_phone, s.alt_email, s.year_level, s.current_address,
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason,
@@ -601,14 +607,21 @@ export class IntentFormController {
       }
 
       const filePath = `request_forms/${req.file.filename}`;
-      // ชื่อผู้ลงนามที่นักศึกษาพิมพ์ — ใช้เฉพาะช่องที่ระบบยังไม่รู้ (โมเดลตัดสิน)
+      // ชื่อผู้ลงนามที่นักศึกษาระบุ — ระบุมาแล้วชนะชื่อที่ระบบรู้ (โมเดลตัดสินลำดับ)
       const text = (v: unknown) => (typeof v === 'string' ? v : undefined);
       let previousPath: string | null;
       try {
-        ({ previousPath } = await IntentFormModel.attachRequestForm(formId, req.user.userId, filePath, {
-          advisorName: text(req.body?.advisor_signer_name),
-          deptHeadName: text(req.body?.dept_head_signer_name),
-        }));
+        ({ previousPath } = await IntentFormModel.attachRequestForm(
+          formId,
+          req.user.userId,
+          filePath,
+          {
+            advisorName: text(req.body?.advisor_signer_name),
+            deptHeadName: text(req.body?.dept_head_signer_name),
+          },
+          // ธงมาจากด่านปฏิทินของ route เท่านั้น ไม่ใช่จาก body — นักศึกษาประกาศเองหรือหลบธงไม่ได้
+          { inLateWindow: isLateWindow(res), reason: (text(req.body?.late_reason) ?? '').trim() }
+        ));
       } catch (error) {
         // multer เขียนไฟล์ลงดิสก์ไปแล้ว — ถูกปฏิเสธก็ต้องลบทิ้ง ไม่ให้ค้างเป็นไฟล์กำพร้า
         fs.promises.unlink(path.join(process.cwd(), 'uploads', filePath)).catch(() => undefined);
@@ -763,6 +776,9 @@ export class IntentFormController {
         },
         req
       ).catch(() => undefined);
+
+      // แจ้งนักศึกษาทางอีเมลพร้อมเหตุผล — เดิมมีอีเมลเฉพาะตอนรับ ตอนตีกลับใบค้างเงียบจนกว่านักศึกษาจะเปิดระบบเอง
+      notifyStudentStatusChange(formId, 'request_returned', reason).catch(console.error);
 
       res.status(200).json({ message: 'ตีกลับคำร้องเรียบร้อยแล้ว', form_id: formId });
     } catch (error) {

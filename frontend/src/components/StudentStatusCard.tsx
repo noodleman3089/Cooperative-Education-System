@@ -202,7 +202,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'company-rejected':
         return <Pill tone="bad">บริษัทไม่รับ</Pill>;
       case 'rejected':
-        return <Pill tone="bad">คำร้องถูกตีกลับ</Pill>;
+        return <Pill tone="bad">ปิดคำร้องแล้ว</Pill>;
       default:
         return null;
     }
@@ -365,7 +365,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         return (
           <>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-              คำร้องไม่ผ่านการพิจารณา เลือกที่ฝึกงานใหม่ได้เลย
+              คุณแจ้งว่าไม่ได้ที่ฝึกงานที่ {company} เลือกที่ใหม่ได้เลย
             </h2>
             {intent.reject_reason && <ReasonBox tone="plain">เหตุผล: {intent.reject_reason}</ReasonBox>}
             <div className="flex flex-wrap items-center gap-3">

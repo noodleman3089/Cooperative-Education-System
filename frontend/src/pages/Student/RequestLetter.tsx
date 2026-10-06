@@ -41,6 +41,7 @@ interface Province {
 
 interface ActiveIntent {
   form_id: number;
+  submitted_late?: boolean;
   company_name_th?: string;
   status: string;
 }
@@ -93,6 +94,12 @@ const RequestLetter: React.FC = () => {
    * กำลังแก้คำร้องที่ยื่นไว้แล้ว (form_id) — ทำได้เฉพาะก่อนอัปโหลดกระดาษที่ลงนาม (`pending_advisor`)
    * ใช้ฟอร์มเดียวกับตอนยื่น ต่างกันที่ปลายทาง: `PUT /intents/:id/company` แทน `POST /intents`
    */
+  /**
+   * ชื่อที่พิมพ์เองตรงกับสถานประกอบการในทำเนียบ — ถามก่อนว่าจะใช้ข้อมูลของทำเนียบไหม (กันแถวซ้ำที่เจ้าหน้าที่ต้องมาเก็บ)
+   * `acknowledgedDuplicate` = ชื่อที่นักศึกษายืนยันแล้วว่าไม่ใช่ที่เดียวกัน จะไม่ถามซ้ำสำหรับชื่อนั้น
+   */
+  const [duplicate, setDuplicate] = useState<Company | null>(null);
+  const [acknowledgedDuplicate, setAcknowledgedDuplicate] = useState('');
   const [editingFormId, setEditingFormId] = useState<number | null>(null);
   const [openingEdit, setOpeningEdit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -393,6 +400,17 @@ const RequestLetter: React.FC = () => {
       scrollToAlert();
       return;
     }
+
+    const typedName = form.company_name_th.trim().toLowerCase();
+    const sameName = locked
+      ? undefined
+      : companies.find((c) => c.name_th.trim().toLowerCase() === typedName);
+    if (sameName && acknowledgedDuplicate !== typedName) {
+      setDuplicate(sameName);
+      scrollToAlert();
+      return;
+    }
+    setDuplicate(null);
     setConfirmOpen(true);
   };
 
@@ -495,6 +513,49 @@ const RequestLetter: React.FC = () => {
       <div ref={alertRef} className="empty:hidden space-y-4">
         <AlertBanner variant="error" message={error} />
         <AlertBanner variant="success" message={success} />
+        {duplicate && (
+          <AlertBanner
+            variant="warning"
+            message={
+              <div className="space-y-2" data-testid="request-duplicate">
+                <p>
+                  <b>มีสถานประกอบการชื่อนี้ในทำเนียบของคณะแล้ว</b> — {duplicate.name_th} ({duplicate.district}{' '}
+                  {duplicate.province}) · ถ้าเป็นที่เดียวกัน ใช้ข้อมูลของทำเนียบจะไม่ต้องรอเจ้าหน้าที่ตรวจข้อมูลซ้ำ
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="sm"
+                    data-testid="request-duplicate-use"
+                    onClick={() => {
+                      fillFromCompany(duplicate);
+                      setDuplicate(null);
+                    }}
+                  >
+                    ใช้ข้อมูลจากทำเนียบ
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    data-testid="request-duplicate-keep"
+                    onClick={() => {
+                      setAcknowledgedDuplicate(form.company_name_th.trim().toLowerCase());
+                      setDuplicate(null);
+                      setConfirmOpen(true);
+                    }}
+                  >
+                    ไม่ใช่ที่เดียวกัน ใช้ข้อมูลที่พิมพ์เอง
+                  </Button>
+                </div>
+              </div>
+            }
+          />
+        )}
+        {/* ยื่นช้าแล้วต้องทำบันทึกชี้แจงเอง — ระบบไม่ได้พิมพ์ให้ จึงพาไปที่เมนูนั้นตรงๆ */}
+        {success && blockingIntent?.submitted_late && (
+          <Button size="sm" variant="secondary" data-testid="request-go-memo" onClick={() => goTo('memos')}>
+            คำร้องนี้ยื่นล่าช้า — ไปทำบันทึกถึงคณบดี
+          </Button>
+        )}
       </div>
 
       {!hasProfile && (
@@ -726,7 +787,8 @@ const RequestLetter: React.FC = () => {
                 </p>
                 <p className="text-xs text-amber-800 dark:text-amber-200">
                   {submission?.late_end_date ? `ระบบยังรับได้ถึงวันที่ ${formatThaiDate(submission.late_end_date)} ` : 'ระบบยังรับได้ '}
-                  และจะพิมพ์บันทึกข้อความชี้แจงให้พร้อมแบบคำร้อง เพื่อนำไปเสนออาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาตามขั้นตอน
+· เจ้าหน้าที่จะเห็นเหตุผลนี้ตอนตรวจคำร้อง · หลังยื่นแล้วต้องทำบันทึกข้อความชี้แจงเองที่เมนู "บันทึกถึงคณบดี"
+                  เพื่อเสนออาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาตามขั้นตอน
                 </p>
                 <label htmlFor="request-late-reason" className={labelClass}>เหตุผลที่ยื่นล่าช้า {required}</label>
                 <Textarea
@@ -736,7 +798,6 @@ const RequestLetter: React.FC = () => {
                   value={lateReason}
                   disabled={isSubmitting}
                   onChange={(e) => setLateReason(e.target.value)}
-                  placeholder="เขียนด้วยคำของตัวเอง ข้อความนี้จะถูกพิมพ์ลงบันทึกข้อความที่เสนอถึงคณบดี"
                 />
               </section>
             )}
@@ -818,7 +879,10 @@ const RequestLetter: React.FC = () => {
               {[
                 'พิมพ์แบบคำร้องที่กรอกแล้วจากหน้าแรก และลงชื่อ',
                 'ให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาลงนาม',
-                'สแกนหรือถ่ายรูป อัปโหลดกลับที่หน้าแรก',
+                // กำหนดส่งนับที่วันอัปโหลดกระดาษ ไม่ใช่วันกดยื่น (เจ้าของตัดสิน 2026-10-06)
+                submission?.end_date
+                  ? `สแกนหรือถ่ายรูปหน้า 1 อัปโหลดกลับที่หน้าแรก ภายในวันที่ ${formatThaiDate(submission.end_date)} — กำหนดส่งนับที่วันอัปโหลด`
+                  : 'สแกนหรือถ่ายรูปหน้า 1 อัปโหลดกลับที่หน้าแรก',
               ].map((step, i) => (
                 <p key={step} className="flex gap-2.5">
                   <b className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-900 text-[11px] text-amber-50 dark:bg-amber-200 dark:text-amber-950">

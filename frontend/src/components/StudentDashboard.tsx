@@ -112,6 +112,11 @@ const StudentDashboard: React.FC = () => {
   const [pendingRequestForm, setPendingRequestForm] = useState<{ file: File; formId: number } | null>(null);
   const [signerAdvisor, setSignerAdvisor] = useState('');
   const [signerDeptHead, setSignerDeptHead] = useState('');
+  // ผู้ลงนามจริงไม่ใช่คนที่ระบบรู้ (ผู้รักษาการแทน · ที่ปรึกษาเพิ่งเปลี่ยน) — นักศึกษากด "ไม่ใช่คนนี้" แล้วระบุเอง
+  const [overrideAdvisor, setOverrideAdvisor] = useState(false);
+  const [overrideDeptHead, setOverrideDeptHead] = useState(false);
+  // อัปโหลดครั้งแรกในช่วงผ่อนผัน = ส่งช้า ต้องมีเหตุผล (กำหนดส่งนับที่วันอัปโหลด)
+  const [uploadLateReason, setUploadLateReason] = useState('');
   const [requestFormError, setRequestFormError] = useState<string | null>(null);
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
@@ -203,17 +208,33 @@ const StudentDashboard: React.FC = () => {
 
   useDashboardData(loadDashboardData);
 
+  // กำหนดส่งของ "ยื่นคำร้อง" นับที่วันอัปโหลดกระดาษครั้งแรก — อยู่ช่วงผ่อนผันและใบยังไม่ติดธงส่งช้า = ถามเหตุผลก่อน
+  // (ใบที่เคยอัปโหลดแล้วหรือถูกตีกลับ เซิร์ฟเวอร์ไม่ผูกปฏิทิน · เซิร์ฟเวอร์เป็นด่านจริง ตรงนี้แค่ถามล่วงหน้า)
+  const submissionWindow = calendar?.activities.find((a) => a.activity_key === 'intent_submission');
+  const uploadNeedsLateReason =
+    submissionWindow?.status === 'late' &&
+    !!data?.activeIntent &&
+    !data.activeIntent.submitted_late &&
+    !data.activeIntent.request_form_path &&
+    !data.activeIntent.reject_reason;
+
   /** อัปโหลดแบบคำร้อง (เอกสารหมายเลข 1) ที่อาจารย์ลงนามบนกระดาษแล้ว */
   const handleRequestFormUpload = async (e: React.ChangeEvent<HTMLInputElement>, formId: number) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     // ชื่อผู้ลงนาม — ระบบรู้แล้วไม่ต้องส่ง · ระบบไม่รู้ = นักศึกษาต้องกรอกก่อน (เจ้าหน้าที่ไม่ต้องคีย์อีก)
-    const known = data?.activeIntent?.request_signers;
-    const missing = [
-      !known?.advisor_name && !signerAdvisor.trim() && 'ชื่ออาจารย์ที่ปรึกษาที่ลงนาม',
-      !known?.dept_head_name && !signerDeptHead.trim() && 'ชื่อหัวหน้าสาขาวิชาที่ลงนาม',
-    ].filter(Boolean);
+    // เปลี่ยนไฟล์ของใบที่ส่งไปแล้ว: ชื่ออยู่บนใบแล้ว ไม่ต้องกรอกซ้ำ
+    const intent = data?.activeIntent;
+    const known = intent?.request_signers;
+    const replacing = !!intent?.request_form_path;
+    const missing = replacing
+      ? []
+      : [
+          !known?.advisor_name && !signerAdvisor.trim() && 'ชื่ออาจารย์ที่ปรึกษาที่ลงนาม',
+          !known?.dept_head_name && !signerDeptHead.trim() && 'ชื่อหัวหน้าสาขาวิชาที่ลงนาม',
+          uploadNeedsLateReason && uploadLateReason.trim().length < 20 && 'เหตุผลที่ส่งล่าช้า (อย่างน้อย 20 ตัวอักษร)',
+        ].filter(Boolean);
     if (missing.length > 0) {
       setRequestFormError(`กรุณากรอก ${missing.join(' และ ')} ก่อนเลือกไฟล์`);
       e.target.value = '';
@@ -234,8 +255,14 @@ const StudentDashboard: React.FC = () => {
 
     const formData = new FormData();
     formData.append('request_form', file);
-    if (!known?.advisor_name) formData.append('advisor_signer_name', signerAdvisor.trim());
-    if (!known?.dept_head_name) formData.append('dept_head_signer_name', signerDeptHead.trim());
+    // ส่งชื่อเฉพาะช่องที่นักศึกษาระบุเอง (ระบบไม่รู้ หรือกด "ไม่ใช่คนนี้") — ไม่ส่ง = เซิร์ฟเวอร์ใช้ชื่อที่ระบบรู้
+    if ((!known?.advisor_name || overrideAdvisor) && signerAdvisor.trim()) {
+      formData.append('advisor_signer_name', signerAdvisor.trim());
+    }
+    if ((!known?.dept_head_name || overrideDeptHead) && signerDeptHead.trim()) {
+      formData.append('dept_head_signer_name', signerDeptHead.trim());
+    }
+    if (uploadNeedsLateReason) formData.append('late_reason', uploadLateReason.trim());
 
     setUploadingRequestForm(true);
     setRequestFormError(null);
@@ -864,6 +891,19 @@ const StudentDashboard: React.FC = () => {
                         >
                           เปิดไฟล์ที่ส่งไป
                         </a>
+                        {/* ส่งผิดไฟล์/ไฟล์เบลอ — เปลี่ยนได้จนกว่าเจ้าหน้าที่จะรับ (ผ่านกล่องยืนยันเดิม · ชื่อผู้ลงนามคงเดิม) */}
+                        <label className={uploadingRequestForm ? '' : 'cursor-pointer'}>
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg"
+                            disabled={uploadingRequestForm}
+                            data-testid="replace-request-form"
+                            onChange={(e) => handleRequestFormUpload(e, intent.form_id)}
+                            className="sr-only"
+                          />
+                          <span className="font-bold text-brand-blue underline dark:text-blue-400">เปลี่ยนไฟล์</span>
+                        </label>
+                        <AlertBanner variant="error" message={requestFormError} className="w-full font-normal" />
                       </div>
                     ) : (
                       <>
@@ -875,34 +915,67 @@ const StudentDashboard: React.FC = () => {
                             ระบบยังไม่มีชื่อผู้ลงนามบางคน — พิมพ์ชื่อตามที่ลงนามบนกระดาษ
                           </p>
                         )}
-                        {intent.request_signers?.advisor_name ? (
+                        {/* ช่องพิมพ์ชื่อ มีรายชื่อบุคลากรในสาขาให้ค้น (พิมพ์ชื่อนอกรายการได้ — ผู้รักษาการแทน) */}
+                        <datalist id="signer-candidates">
+                          {(intent.request_signers?.candidates ?? []).map((name) => (
+                            <option key={name} value={name} />
+                          ))}
+                        </datalist>
+                        {intent.request_signers?.advisor_name && !overrideAdvisor ? (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
-                            อาจารย์ที่ปรึกษา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.advisor_name}</span>
+                            อาจารย์ที่ปรึกษา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.advisor_name}</span>{' '}
+                            <button
+                              type="button"
+                              data-testid="signer-advisor-change"
+                              onClick={() => setOverrideAdvisor(true)}
+                              className="font-bold text-brand-blue underline dark:text-blue-400"
+                            >
+                              ผู้ลงนามไม่ใช่คนนี้
+                            </button>
                           </p>
                         ) : (
                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
                             ชื่ออาจารย์ที่ปรึกษาที่ลงนาม
                             <Input
                               data-testid="signer-advisor"
+                              list="signer-candidates"
                               value={signerAdvisor}
                               onChange={(e) => setSignerAdvisor(e.target.value)}
-                              placeholder="เช่น ผศ.ดร.สมชาย ใจดี"
                               className="mt-1 font-normal"
                             />
                           </label>
                         )}
-                        {intent.request_signers?.dept_head_name ? (
+                        {intent.request_signers?.dept_head_name && !overrideDeptHead ? (
                           <p className="text-xs text-gray-600 dark:text-gray-400">
-                            หัวหน้าสาขาวิชา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.dept_head_name}</span>
+                            หัวหน้าสาขาวิชา: <span className="font-bold text-gray-800 dark:text-gray-200">{intent.request_signers.dept_head_name}</span>{' '}
+                            <button
+                              type="button"
+                              data-testid="signer-dept-head-change"
+                              onClick={() => setOverrideDeptHead(true)}
+                              className="font-bold text-brand-blue underline dark:text-blue-400"
+                            >
+                              ผู้ลงนามไม่ใช่คนนี้
+                            </button>
                           </p>
                         ) : (
                           <label className="block text-xs font-bold text-gray-700 dark:text-gray-300">
-                            ชื่อหัวหน้าสาขาวิชาที่ลงนาม
+                            ชื่อหัวหน้าสาขาวิชา (หรือผู้รักษาการแทน) ที่ลงนาม
                             <Input
                               data-testid="signer-dept-head"
+                              list="signer-candidates"
                               value={signerDeptHead}
                               onChange={(e) => setSignerDeptHead(e.target.value)}
-                              placeholder="เช่น ดร.สมหญิง รักเรียน"
+                              className="mt-1 font-normal"
+                            />
+                          </label>
+                        )}
+                        {uploadNeedsLateReason && (
+                          <label className="block text-xs font-bold text-amber-800 dark:text-amber-300">
+                            เลยกำหนดส่งปกติแล้ว (ยังอยู่ในช่วงผ่อนผัน) การส่งครั้งนี้นับเป็นส่งช้า — เหตุผลที่ส่งล่าช้า
+                            <Input
+                              data-testid="upload-late-reason"
+                              value={uploadLateReason}
+                              onChange={(e) => setUploadLateReason(e.target.value)}
                               className="mt-1 font-normal"
                             />
                           </label>
@@ -916,8 +989,11 @@ const StudentDashboard: React.FC = () => {
                             · ยังเป็น input ตัวเดิมที่มี data-testid เดิม — setInputFiles
                             ของ Playwright ทำงานกับ input ที่ซ่อนอยู่ได้ตามปกติ */}
                         <span className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
-                          ลงนามครบทั้งสองช่องแล้ว อัปโหลดไฟล์ที่สแกนหรือถ่ายรูปกลับเข้าระบบ
-                          (PDF หรือรูปภาพ ไม่เกิน 10 MB)
+                          สแกนหรือถ่ายรูป <b>หน้า 1</b> ที่มีลายมือชื่อครบสามช่อง (นักศึกษา · อาจารย์ที่ปรึกษา · หัวหน้าสาขาวิชา)
+                          เป็นไฟล์เดียว — หน้า 2 เป็นส่วนของเจ้าหน้าที่ ไม่ต้องส่ง (PDF หรือรูปภาพ ไม่เกิน 10 MB)
+                          {submissionWindow?.end_date && !intent.reject_reason
+                            ? ` · ต้องอัปโหลดภายในวันที่ ${formatThaiDate(submissionWindow.end_date)}`
+                            : ''}
                         </span>
                         <input
                           type="file"
@@ -1660,18 +1736,32 @@ const StudentDashboard: React.FC = () => {
                     label: 'ขนาด',
                     value: pendingRequestForm ? `${(pendingRequestForm.file.size / 1024 / 1024).toFixed(2)} MB` : '',
                   },
-                  {
-                    label: 'อาจารย์ที่ปรึกษาที่ลงนาม',
-                    value: activeIntent?.request_signers?.advisor_name || signerAdvisor.trim(),
-                  },
-                  {
-                    label: 'หัวหน้าสาขาวิชาที่ลงนาม',
-                    value: activeIntent?.request_signers?.dept_head_name || signerDeptHead.trim(),
-                  },
+                  // เปลี่ยนไฟล์ของใบที่ส่งไปแล้ว: ชื่อผู้ลงนามอยู่บนใบแล้ว ไม่แสดงซ้ำ
+                  ...(activeIntent?.request_form_path
+                    ? []
+                    : [
+                        {
+                          label: 'อาจารย์ที่ปรึกษาที่ลงนาม',
+                          value:
+                            (overrideAdvisor && signerAdvisor.trim()) ||
+                            activeIntent?.request_signers?.advisor_name ||
+                            signerAdvisor.trim(),
+                        },
+                        {
+                          label: 'หัวหน้าสาขาวิชาที่ลงนาม',
+                          value:
+                            (overrideDeptHead && signerDeptHead.trim()) ||
+                            activeIntent?.request_signers?.dept_head_name ||
+                            signerDeptHead.trim(),
+                        },
+                        ...(uploadNeedsLateReason
+                          ? [{ label: 'เหตุผลที่ส่งล่าช้า', value: uploadLateReason.trim() }]
+                          : []),
+                      ]),
                 ],
               },
             ]}
-            lockNote="ส่งแล้วแก้เองไม่ได้ จนกว่าเจ้าหน้าที่จะตีกลับ"
+            lockNote="ส่งแล้วยังเปลี่ยนไฟล์ได้จนกว่าเจ้าหน้าที่จะรับคำร้อง · ข้อมูลสถานประกอบการแก้ไม่ได้แล้ว"
           />
         }
       />

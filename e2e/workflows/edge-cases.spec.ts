@@ -317,7 +317,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
 
     // Expect the backend magic bytes validation error message to display in the UI alert box
     await expect(
-      page.locator('text=File content does not match allowed types')
+      page.locator('text=เนื้อหาไฟล์ไม่ตรงกับชนิดไฟล์ที่อนุญาต')
     ).toBeVisible();
 
     // Clean up temporary spoofed file

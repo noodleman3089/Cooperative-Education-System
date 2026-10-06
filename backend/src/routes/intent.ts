@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, type RequestHandler } from 'express';
+import { query } from '../config/database';
 import { IntentFormController } from '../controllers/intent';
 import { authenticateToken, authorizeRoles } from '../middlewares/auth';
 import { MentorController } from '../controllers/mentor';
@@ -67,10 +68,39 @@ router.post(
 //    · สถานะ `approved_by_advisor` / `rejected_by_dept_head` ที่สองเส้นนี้เคยสร้าง
 //      จึงไม่มีทางเกิดขึ้นอีก
 
+/**
+ * กำหนดส่งของ "ยื่นคำร้อง" นับที่ **วันอัปโหลดกระดาษที่ลงนามครั้งแรก** (เจ้าของตัดสิน 2026-10-06)
+ * — เดิมนับที่วันกดยื่น ยื่นทันแล้วอัปโหลดช้าเท่าไหร่ก็ได้
+ *
+ * ผูกปฏิทินเฉพาะครั้งแรก: ใบที่เคยอัปโหลดแล้ว (เปลี่ยนไฟล์ระหว่างรอ · ส่งใหม่หลังเจ้าหน้าที่ตีกลับ) ผ่านเลย
+ * เพราะครั้งแรกทันกำหนดไปแล้ว และการตีกลับไม่ใช่ความล่าช้าของนักศึกษา
+ * ⛔ ต้องอยู่ **ก่อน multer** — คำขอนอกช่วงต้องไม่เขียนไฟล์ลงดิสก์
+ */
+const firstUploadWindow: RequestHandler = async (req, res, next) => {
+  try {
+    const formId = Number(req.params.id);
+    const uploadedBefore =
+      Number.isInteger(formId) && formId > 0
+        ? await query(
+            `SELECT 1 FROM intent_stage_events WHERE form_id = $1 AND stage = 'request_uploaded' LIMIT 1`,
+            [formId]
+          )
+        : null;
+    if ((uploadedBefore?.rowCount ?? 0) > 0) {
+      next();
+      return;
+    }
+    await requireCalendarWindow('intent_submission', 'intent_param')(req, res, next);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Route: POST /api/intents/:id/request-form (นักศึกษาอัปโหลดกระดาษที่ลงนามแล้ว)
 router.post(
   '/:id/request-form',
   authorizeRoles('student'),
+  firstUploadWindow,
   uploadRequestForm.single('request_form'),
   validateUploadedFile(['pdf', 'png', 'jpg']),
   IntentFormController.uploadRequestForm

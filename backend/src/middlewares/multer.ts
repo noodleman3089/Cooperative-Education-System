@@ -118,7 +118,13 @@ const evidenceFileFilter: FileFilter = (_req, file, cb) => {
   if (allowedExtensions.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error('Invalid file type. Only PDF and images (.png, .jpg, .jpeg) are allowed.'));
+    // `name = 'MulterError'` ทำให้ตัวจัดการ error กลางใน index.ts ตอบ 400 พร้อมข้อความนี้ตรงๆ
+    // (ตัวกรองอื่นยังใช้ข้อความอังกฤษขึ้นต้น "Invalid file type." ซึ่งตัวจัดการจับด้วย regex)
+    cb(
+      Object.assign(new Error('ชนิดไฟล์ไม่ถูกต้อง รองรับเฉพาะไฟล์ PDF หรือรูปภาพ (.png .jpg .jpeg)'), {
+        name: 'MulterError',
+      })
+    );
   }
 };
 
@@ -198,7 +204,9 @@ export const validateUploadedFile = (allowedTypes: ('pdf' | 'doc' | 'docx' | 'pn
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
-        res.status(400).json({ message: 'File content does not match allowed types (magic bytes validation failed).' });
+        res.status(400).json({
+          message: 'เนื้อหาไฟล์ไม่ตรงกับชนิดไฟล์ที่อนุญาต กรุณาแนบไฟล์จริง ไม่ใช่ไฟล์ที่เปลี่ยนนามสกุล',
+        });
         return;
       }
 

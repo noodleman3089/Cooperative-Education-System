@@ -106,10 +106,32 @@ const draftCompanyValues = (c: TypedCompanyInput): unknown[] => [
   c.contact_fax || null,
 ];
 
+/** ความยาวขั้นต่ำของเหตุผลการส่งช้า — ใช้ทั้งตอนยื่นคำร้องและตอนอัปโหลดกระดาษที่ลงนาม */
+export const LATE_REASON_MIN_LENGTH = 20;
+
+/** คำไทยของสถานะใบคำร้อง — ใช้ในข้อความ error เท่านั้น (คำแปลบนหน้าจออยู่ที่ `StatusBadge` ฝั่ง frontend) */
+const STATUS_TH: Record<string, string> = {
+  pending_advisor: 'รอนักศึกษาอัปโหลดแบบคำร้องที่ลงนาม',
+  pending_officer_request: 'รอเจ้าหน้าที่ตรวจแบบคำร้อง',
+  approved_by_dept_head: 'เจ้าหน้าที่รับคำร้องแล้ว',
+  pending_sign: 'รอคณบดีลงนาม',
+  signed: 'คณบดีลงนามแล้ว',
+  pending_acceptance: 'รอสถานประกอบการตอบรับ',
+  pending_officer_approval: 'รอเจ้าหน้าที่ยืนยันแบบตอบรับ',
+  accepted: 'สถานประกอบการตอบรับแล้ว',
+  rejected: 'คำร้องปิดแล้ว',
+  company_rejected: 'สถานประกอบการไม่รับ',
+  superseded: 'คำร้องถูกแทนที่แล้ว',
+};
+
 export function assertAllowedTransition(action: string, currentStatus: string, allowedFrom: string[]): void {
   if (!allowedFrom.includes(currentStatus)) {
+    // ข้อความนี้ถึงมือผู้ใช้ — บอกเป็นคำไทยว่าใบอยู่ขั้นไหน ไม่ใช่ชื่อสถานะดิบ (ชื่อ action/สถานะดิบอยู่ในวงเล็บท้ายไว้ให้คนแก้ระบบ)
+    const th = (s: string) => STATUS_TH[s] ?? s;
     throw new Error(
-      `ไม่สามารถดำเนินการ '${action}' ได้ในสถานะปัจจุบัน '${currentStatus}' (อนุญาตเฉพาะ: ${allowedFrom.join(', ')})`
+      `ทำรายการนี้ไม่ได้ เพราะคำร้องอยู่ในขั้น "${th(currentStatus)}" — ทำได้เฉพาะขั้น ${allowedFrom
+        .map((s) => `"${th(s)}"`)
+        .join(' หรือ ')} (${action})`
     );
   }
 }
@@ -326,18 +348,39 @@ export class IntentFormModel {
     return res.rows[0] ?? { advisor_name: null, dept_head_name: null };
   }
 
+  /**
+   * รายชื่อบุคลากรในสาขาของนักศึกษา — ตัวช่วยค้นหาในช่องชื่อผู้ลงนามตอนอัปโหลดแบบคำร้อง
+   * ⛔ ชื่ออย่างเดียว ไม่มีอีเมล/เบอร์/รหัส (หน้านี้นักศึกษาเป็นคนเห็น) · พิมพ์ชื่อนอกรายการได้ (ผู้รักษาการแทนจากสาขาอื่น)
+   * ⛔ การเลือกชื่อไม่ใช่การตั้ง `students.advisor_id` — นั่นเป็นงานของหัวหน้าสาขา
+   */
+  static async listSignerCandidates(studentId: number): Promise<string[]> {
+    const res = await query(
+      `SELECT DISTINCT TRIM(CONCAT_WS(' ', p.first_name, p.last_name)) AS name
+         FROM personnel p
+         JOIN students s ON s.major_id = p.major_id
+        WHERE s.student_id = $1 AND TRIM(CONCAT_WS(' ', p.first_name, p.last_name)) <> ''
+        ORDER BY name`,
+      [studentId]
+    );
+    return res.rows.map((r: { name: string }) => r.name);
+  }
+
   static async attachRequestForm(
     formId: number,
     studentId: number,
     filePath: string,
-    typedSigners: { advisorName?: string; deptHeadName?: string } = {}
+    typedSigners: { advisorName?: string; deptHeadName?: string } = {},
+    /** ผลของด่านปฏิทิน ณ ตอนอัปโหลด — กำหนดส่งนับที่วันอัปโหลดกระดาษ (เจ้าของตัดสิน 2026-10-06) */
+    late: { inLateWindow: boolean; reason: string } = { inLateWindow: false, reason: '' }
   ): Promise<{ previousPath: string | null }> {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
 
       const current = await client.query(
-        `SELECT student_id, status, request_form_path FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        `SELECT student_id, status, request_form_path, submitted_late,
+                advisor_signer_name, dept_head_signer_name
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
         [formId]
       );
       if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
@@ -348,10 +391,24 @@ export class IntentFormModel {
       }
       assertAllowedTransition('upload_request_form', row.status, OFFICER_RECEIVE_FROM);
 
-      // ชื่อที่ระบบรู้ชนะเสมอ — นักศึกษากรอกได้เฉพาะช่องที่ระบบยังไม่รู้
+      // อัปโหลดในช่วงผ่อนผัน = ส่งช้า ต้องมีเหตุผล (ใบที่ติดธงตั้งแต่ตอนยื่นมีเหตุผลอยู่แล้ว ไม่ถามซ้ำ)
+      // ⛔ ธงตั้งได้อย่างเดียว ไม่มีทางถอด — ปั๊ม ณ ตอนเกิดเหตุ ไม่คำนวณย้อนหลังจากปฏิทิน
+      const stampLate = late.inLateWindow && !row.submitted_late;
+      if (stampLate && late.reason.length < LATE_REASON_MIN_LENGTH) {
+        throw new Error(
+          'การส่งแบบคำร้องที่ลงนามครั้งนี้เลยกำหนดปกติแล้ว แต่ยังอยู่ในช่วงผ่อนผัน ระบบจึงรับได้แต่นับเป็นการส่งช้า ' +
+            `กรุณาระบุเหตุผลอย่างน้อย ${LATE_REASON_MIN_LENGTH} ตัวอักษร`
+        );
+      }
+
+      // ลำดับของชื่อผู้ลงนาม (เจ้าของตัดสิน 2026-10-06 — เดิมชื่อที่ระบบรู้ชนะเสมอ ทำให้บันทึกผิดคนเมื่อมีผู้รักษาการแทน):
+      //   ชื่อที่นักศึกษาระบุรอบนี้ → ชื่อที่อยู่บนใบจากรอบก่อน (เปลี่ยนไฟล์/ส่งใหม่) → ชื่อที่ระบบรู้
+      // ชื่อนี้ไม่ถูกพิมพ์ลงหนังสือ ใช้แสดงให้เจ้าหน้าที่/หัวหน้าสาขาเท่านั้น และหน้าจอเจ้าหน้าที่ติดป้ายเมื่อไม่ตรงกับที่ระบบรู้
       const known = await IntentFormModel.resolveRequestSigners(studentId, client);
-      const advisorName = known.advisor_name ?? (typedSigners.advisorName?.trim() || null);
-      const deptHeadName = known.dept_head_name ?? (typedSigners.deptHeadName?.trim() || null);
+      const advisorName =
+        typedSigners.advisorName?.trim() || row.advisor_signer_name || known.advisor_name || null;
+      const deptHeadName =
+        typedSigners.deptHeadName?.trim() || row.dept_head_signer_name || known.dept_head_name || null;
       const missing = [
         !advisorName && 'ชื่ออาจารย์ที่ปรึกษาที่ลงนาม',
         !deptHeadName && 'ชื่อหัวหน้าสาขาวิชาที่ลงนาม',
@@ -363,9 +420,11 @@ export class IntentFormModel {
       await client.query(
         `UPDATE intent_forms
             SET request_form_path = $1, status = 'pending_officer_request', reject_reason = NULL,
-                advisor_signer_name = $3, dept_head_signer_name = $4
+                advisor_signer_name = $3, dept_head_signer_name = $4,
+                submitted_late = submitted_late OR $5,
+                late_reason = CASE WHEN $5 THEN $6 ELSE late_reason END
           WHERE form_id = $2`,
-        [filePath, formId, advisorName, deptHeadName]
+        [filePath, formId, advisorName, deptHeadName, stampLate, stampLate ? late.reason : null]
       );
       await recordStageEvent(client, formId, 'request_uploaded');
 

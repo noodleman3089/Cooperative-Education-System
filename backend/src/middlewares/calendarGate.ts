@@ -60,7 +60,8 @@ async function resolveSemesterId(
   if (!userId) return null;
   if (scope === 'student') return CoopSemesterModel.findStudentSemesterId(userId);
   if (scope === 'intent_param') {
-    const formId = Number(req.params.intent_id);
+    // route ของใบคำร้องเองใช้ `:id` (`/intents/:id/request-form`) · route อื่นใช้ `:intent_id`
+    const formId = Number(req.params.intent_id ?? req.params.id);
     return Number.isInteger(formId) && formId > 0
       ? CoopSemesterModel.findIntentSemesterId(formId, userId)
       : null;

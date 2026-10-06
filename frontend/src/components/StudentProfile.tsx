@@ -628,7 +628,7 @@ const StudentProfile: React.FC = () => {
 
               <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  อีเมลสำรอง
+                  อีเมลสำหรับติดต่องาน
                 </label>
                 <input
                   type="email"

@@ -401,7 +401,7 @@ const OnboardingStudent: React.FC = () => {
                       {fieldError('phone')}
                     </div>
                     <div>
-                      {label('อีเมลสำรอง')}
+                      {label('อีเมลสำหรับติดต่องาน')}
                       <Input
                         value={altEmail}
                         disabled={isSubmitting}
