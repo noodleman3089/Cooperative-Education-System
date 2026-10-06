@@ -161,9 +161,9 @@ test.describe('E7 · แท็บคณะและสาขาวิชา', ()
     await openMasterTab(page);
 
     const facultyId = await dbValue<number>(
-      "SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะวิทยาศาสตร์'"
+      "SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ'"
     );
-    await page.getByTestId(`master-faculty-row-${facultyId}`).getByText('คณะวิทยาศาสตร์').click();
+    await page.getByTestId(`master-faculty-row-${facultyId}`).getByText('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ').click();
 
     await page.getByTestId('master-major-add').click();
     await page.fill('#master-major-code', 'G6TEST');

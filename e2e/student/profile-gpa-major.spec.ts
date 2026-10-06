@@ -63,6 +63,13 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
 
   test('P1: แก้เกรดกับสาขาจากหน้าจอ → ลงฐาน · ล้างที่ปรึกษา · ลง audit · กล่องทะเบียนใหญ่หายไป', async ({ page }) => {
     await resetStudent2();
+    // seed มีสาขาเฉพาะของคณะบริหารธุรกิจฯ — ใส่สาขาทดสอบให้คณะศิลปศาสตร์ เพื่อให้มีปลายทางข้ามคณะ
+    await withDb((db) =>
+      db.query(
+        `INSERT INTO master_major (faculty_id, major_code, major_name_th)
+         SELECT faculty_id, 'TST01', 'สาขาวิชาทดสอบ ก' FROM master_faculty WHERE faculty_name_th = 'คณะศิลปศาสตร์'`
+      )
+    );
     // ย้ายข้ามคณะ — คุมด้วยว่าช่องคณะกรองรายการสาขาจริง (เลือกคณะก่อน สาขาของคณะนั้นถึงโผล่)
     const { major_id: target, faculty_id: targetFaculty } = (await otherFacultyMajor())!;
     await withDb(async (db) => {

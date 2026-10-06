@@ -42,7 +42,7 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
     expect(publicRead.status()).toBe(200);
     expect((await publicRead.json()).faculties.length).toBeGreaterThan(0);
 
-    const facultyId = await facultyIdOf('คณะวิทยาศาสตร์');
+    const facultyId = await facultyIdOf('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ');
     const majorId = await majorIdOf('CS01');
 
     // ไม่ล็อกอิน = 401 · ล็อกอินแต่ผิดบทบาท = 403 · ทั้งสองอย่างต้องไม่ใช่ 200
@@ -119,8 +119,9 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
 
   test('แก้ชื่อคณะและย้ายสาขาข้ามคณะได้ · ลง audit_log ทุกครั้ง', async ({ request }) => {
     await apiLoginAs(request, 'staff1');
-    const sci = await facultyIdOf('คณะวิทยาศาสตร์');
-    const eng = await facultyIdOf('คณะวิศวกรรมศาสตร์');
+    // seed มีคณะจริงสองคณะ (2026-10-06) — ชื่อตัวแปรเดิมคงไว้: sci = คณะที่ถูกแก้ชื่อ · eng = คณะปลายทางของการย้ายสาขา
+    const sci = await facultyIdOf('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ');
+    const eng = await facultyIdOf('คณะศิลปศาสตร์');
     const mm = await majorIdOf('MM01');
 
     const renamed = await request.put(`${API_URL}/master-data/faculties/${sci}`, {
@@ -154,7 +155,7 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
     const row = await dbRow<{ detail: Record<string, unknown> }>(
       `SELECT detail FROM audit_log WHERE action = 'master_data.faculty_updated' ORDER BY audit_id DESC LIMIT 1`
     );
-    expect(row!.detail.previous).toBe('คณะวิทยาศาสตร์');
+    expect(row!.detail.previous).toBe('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ');
   });
 
   test('ลบสาขาที่มีคนสังกัดไม่ได้ — และข้อความต้องบอกว่าติดอะไรกี่รายการ', async ({ request }) => {

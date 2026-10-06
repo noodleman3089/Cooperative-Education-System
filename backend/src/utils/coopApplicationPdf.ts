@@ -248,7 +248,7 @@ export async function buildCoopApplicationPdf(d: CoopApplicationPdfData): Promis
 
   // ═══ หน้า ๑ — ข้อมูลส่วนตัวนักศึกษา ═══════════════════════════════════════
   formTag();
-  pdf.line('คณะบริหารธุรกิจและเทศโนโลยีสารสนเทศ', { size: 12, x: LEFT + 96, gap: 14 });
+  pdf.line('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ', { size: 12, x: LEFT + 96, gap: 14 });
   pdf.line('มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก วิทยาเขตจักรพงษภูวนารถ', {
     size: 12,
     x: LEFT + 96,

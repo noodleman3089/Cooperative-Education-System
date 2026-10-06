@@ -1,31 +1,42 @@
 -- Master Data Seeds for Online Cooperative Education Management System
 
 -- 1. Populating Faculty Data
+-- คณะจริงของวิทยาเขตจักรพงษภูวนารถ (เจ้าของให้ 2026-10-06 · เดิมเป็นคณะสมมติ 4 คณะ)
+-- ⚠️ คณะศิลปศาสตร์ยังไม่มีสาขาใน seed — เจ้าของยังไม่มีรายชื่อ เจ้าหน้าที่เพิ่มเองได้ที่หน้าข้อมูลหลัก
+--    (หน้าตั้งโปรไฟล์ของนักศึกษาแสดงเฉพาะคณะที่มีสาขา คณะนี้จึงยังไม่ขึ้นให้เลือกจนกว่าจะมีสาขา)
 INSERT INTO master_faculty (faculty_name_th) VALUES
-('คณะวิทยาศาสตร์'),
-('คณะวิศวกรรมศาสตร์'),
-('คณะบริหารธุรกิจ'),
+('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ'),
 ('คณะศิลปศาสตร์')
 ON CONFLICT (faculty_name_th) DO NOTHING;
 
 -- 2. Populating Major Data (linked to Faculty)
-INSERT INTO master_major (faculty_id, major_code, major_name_th) VALUES
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะวิทยาศาสตร์'), 'CS01', 'สาขาวิชาวิทยาการคอมพิวเตอร์'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะวิทยาศาสตร์'), 'IT01', 'สาขาวิชาเทคโนโลยีสารสนเทศ'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะวิศวกรรมศาสตร์'), 'CPE01', 'สาขาวิชาวิศวกรรมคอมพิวเตอร์'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'IS01', 'สาขาวิชาระบบสารสนเทศ'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'MGT01', 'สาขาวิชาการจัดการ'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'MKT01', 'สาขาวิชาการตลาด'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'ACC01', 'สาขาวิชาการบัญชี'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะวิทยาศาสตร์'), 'MM01', 'สาขาวิชามัลติมีเดีย'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะศิลปศาสตร์'), 'PR01', 'สาขาวิชาโฆษณาและประชาสัมพันธ์'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'LOG01', 'สาขาวิชาโลจิสติกส์และการจัดการระบบขนส่ง'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'ECO01', 'สาขาวิชาเศรษฐศาสตร์'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'DIB01', 'สาขาวิชานวัตกรรมและธุรกิจดิจิทัล'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะศิลปศาสตร์'), 'LANG01', 'สาขาวิชาภาษา'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะศิลปศาสตร์'), 'GEN01', 'สาขาวิชาศึกษาทั่วไป'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'TH01', 'สาขาวิชาการท่องเที่ยวและการโรงแรม'),
-((SELECT faculty_id FROM master_faculty WHERE faculty_name_th = 'คณะบริหารธุรกิจ'), 'SM01', 'สาขาวิชาการจัดการการกีฬา')
+-- รายชื่อสาขาตามเว็บคณะ https://busit.rmutto.ac.th/ ณ 2026-10-06 · รหัสสาขา (`major_code`) เป็นรหัสภายในของระบบนี้
+-- ไม่ใช่รหัสทางการ — ใช้ตอนนำเข้ารายชื่อบุคลากร/ผู้ใช้
+-- ลำดับ (`ord`) คงของเดิมไว้ — CS01 ต้องเป็นแถวแรก: เทสต์หลายตัวหยิบ "สาขาแรก" แล้วคาดว่าเป็นสาขาของบัญชีทดสอบ
+INSERT INTO master_major (faculty_id, major_code, major_name_th)
+SELECT f.faculty_id, v.major_code, v.major_name_th
+  FROM (VALUES
+    (1,  'CS01',   'สาขาวิชาวิทยาการคอมพิวเตอร์'),
+    (2,  'IT01',   'สาขาวิชาเทคโนโลยีสารสนเทศ'),
+    (3,  'IS01',   'สาขาวิชาระบบสารสนเทศ'),
+    (4,  'MGT01',  'สาขาวิชาการจัดการ'),
+    (5,  'MKT01',  'สาขาวิชาการตลาด'),
+    (6,  'ACC01',  'สาขาวิชาการบัญชี'),
+    (7,  'MM01',   'สาขาวิชาเทคโนโลยีมัลติมีเดีย'),
+    (8,  'PR01',   'สาขาวิชาเทคโนโลยีการโฆษณาและประชาสัมพันธ์'),
+    (9,  'LOG01',  'สาขาวิชาเทคโนโลยีโลจิสติกส์และการจัดการระบบขนส่ง'),
+    (10, 'ECO01',  'สาขาวิชาเศรษฐศาสตร์'),
+    (11, 'DIB01',  'สาขาวิชานวัตกรรมและธุรกิจดิจิทัล'),
+    (12, 'LANG01', 'สาขาวิชาภาษา'),
+    (13, 'GEN01',  'สาขาวิชาศึกษาทั่วไป'),
+    (14, 'TH01',   'สาขาวิชาการท่องเที่ยวและการโรงแรม'),
+    (15, 'SM01',   'สาขาวิชาการจัดการการกีฬา'),
+    (16, 'HCS01',  'สาขาวิชาการจัดการทุนมนุษย์และนวัตกรรมสังคม'),
+    (17, 'INT01',  'INTER BUSIT')
+  ) AS v(ord, major_code, major_name_th)
+  CROSS JOIN master_faculty f
+ WHERE f.faculty_name_th = 'คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ'
+ ORDER BY v.ord
 ON CONFLICT (major_code) DO NOTHING;
 
 -- 3. Populating Province Data
