@@ -27,6 +27,10 @@ const TYPED = {
   company_phone: '038111222',
   contact_person: 'คุณสมหญิง ทดสอบ',
   contact_position: 'ผู้จัดการฝ่ายบุคคล',
+  // มือถือ · โทรสาร · E-mail ของผู้รับหนังสือ — ไม่บังคับ (เจ้าของสั่งเพิ่ม 2026-10-06)
+  contact_mobile: '0899998888',
+  contact_fax: '038111223',
+  contact_email: 'hr-preview@example.com',
 };
 
 async function pdfText(res: APIResponse): Promise<{ text: string; pages: number }> {
@@ -66,6 +70,9 @@ test.describe('ตัวอย่างเอกสารหมายเลข 1
     expect(text).toContain(TYPED.company_name_th);
     expect(text).toContain(TYPED.contact_person);
     expect(text).toContain(TYPED.company_phone);
+    expect(text).toContain(TYPED.contact_mobile);
+    expect(text).toContain(TYPED.contact_fax);
+    expect(text).toContain(TYPED.contact_email);
     expect(text).not.toContain('undefined');
     expect(text).not.toContain('null');
 
@@ -120,6 +127,71 @@ test.describe('ตัวอย่างเอกสารหมายเลข 1
     const res = await request.post(PREVIEW, { data: TYPED });
     expect(res.status()).toBe(404);
     expect((await res.json()).message).toContain('โปรไฟล์');
+  });
+
+  test('V5: ที่อยู่ยาวที่พิมพ์ติดกันไม่เว้นวรรค ต้องถูกตัดลงหลายบรรทัด ไม่กองบรรทัดเดียวจนล้นขอบกระดาษ', async ({ request }) => {
+    test.setTimeout(120_000);
+    await seedTestData();
+    await apiLoginAs(request, 'student2');
+
+    const address = 'อาคารสำนักงานใหญ่ชั้น25ห้อง2501เลขที่999/99หมู่ที่12ซอยสุขุมวิท101/1ถนนสุขุมวิทแขวงบางจากเขตพระโขนงนิคมอุตสาหกรรมตัวอย่างโซนBอาคารโรงงานหมายเลข7'
+      .repeat(2)
+      .slice(0, 255);
+    const res = await request.post(PREVIEW, { data: { ...TYPED, company_address: address } });
+    expect(res.status(), await res.text()).toBe(200);
+    const { text } = await pdfText(res);
+
+    // ต้นที่อยู่ยังอยู่ครบ แต่ทั้งก้อนต้องไม่อยู่ในบรรทัดเดียว (เดิมไม่ตัดคำที่ยาวกว่าบรรทัด → ล้นขอบขวา)
+    expect(text).toContain(address.slice(0, 30));
+    expect(text).not.toContain(address);
+    const lineOf = (needle: string) => text.split('\n').findIndex((line) => line.includes(needle));
+    expect(lineOf(address.slice(0, 30))).toBeGreaterThanOrEqual(0);
+    expect(lineOf(address.slice(-20))).toBeGreaterThan(lineOf(address.slice(0, 30)));
+  });
+
+  test('V6: ยื่นจริง — มือถือ/โทรสาร/E-mail ไม่บังคับ · กรอกแล้วลงฐานและขึ้นบนกระดาษ · E-mail ผิดรูป 400 · กรอก E-mail ไม่ทำให้ระบบส่งเมล', async ({ request }) => {
+    test.setTimeout(120_000);
+    await seedTestData();
+    await apiLoginAs(request, 'student2');
+    const semesterId = await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
+    const before = await counts();
+    const submit = (extra: Record<string, unknown>) =>
+      request.post(`${API_URL}/intents`, { data: { is_self_found: true, semester_id: semesterId, ...TYPED, ...extra } });
+
+    // E-mail ผิดรูป / หลายที่อยู่ → 400 และต้องไม่มีใบหรือบริษัทเกิดขึ้น
+    for (const bad of ['not-an-email', 'a@example.com, b@example.com']) {
+      const res = await submit({ contact_email: bad });
+      expect(res.status(), bad).toBe(400);
+      expect((await res.json()).message).toContain('E-mail');
+    }
+    expect(await counts()).toEqual(before);
+
+    const ok = await submit({});
+    expect(ok.status(), await ok.text()).toBe(201);
+    const row = await dbRow<{
+      form_id: number; contact_phone: string; contact_fax: string; email: string;
+      company_mail_count: number; company_mail_sent_at: string | null;
+    }>(
+      `SELECT i.form_id, c.contact_phone, c.contact_fax, c.email, i.company_mail_count, i.company_mail_sent_at
+         FROM intent_forms i JOIN companies c ON c.company_id = i.company_id
+        WHERE c.name_th = $1`,
+      [TYPED.company_name_th]
+    );
+    expect(row).toMatchObject({
+      contact_phone: TYPED.contact_mobile,
+      contact_fax: TYPED.contact_fax,
+      email: TYPED.contact_email,
+      // ⛔ กรอก E-mail เป็นแค่การบันทึก — ไม่มีอะไรถูกส่งออกไป
+      company_mail_count: 0,
+      company_mail_sent_at: null,
+    });
+
+    // ฉบับจริงหลังยื่นต้องพิมพ์สามช่องนี้เหมือนตัวอย่าง
+    const paper = await request.get(`${API_URL}/intents/${row!.form_id}/request-form`);
+    const { text } = await pdfText(paper);
+    expect(text).toContain(TYPED.contact_mobile);
+    expect(text).toContain(TYPED.contact_fax);
+    expect(text).toContain(TYPED.contact_email);
   });
 
   test('V4: company_id ของแถวที่ยังไม่รับรอง หรือไม่มีอยู่ → 404 (ไม่เปิดข้อมูลที่ยังไม่มีใครตรวจ)', async ({ request }) => {

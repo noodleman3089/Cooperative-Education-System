@@ -302,6 +302,9 @@ export interface Company {
   contact_person?: string | null;
   contact_position?: string | null;
   email?: string | null;
+  /** มือถือ/โทรสารของผู้รับหนังสือ — พิมพ์ลงเอกสารหมายเลข 1 */
+  contact_phone?: string | null;
+  contact_fax?: string | null;
 }
 
 

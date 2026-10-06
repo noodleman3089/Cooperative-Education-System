@@ -957,7 +957,7 @@ const StudentDashboard: React.FC = () => {
                           <>
                             <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {intent.reject_reason}
                             <br />
-                            แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย · ถ้าข้อมูลสถานประกอบการผิด ให้ยกเลิกคำร้องนี้แล้วยื่นใหม่
+                            แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย · ถ้าข้อมูลสถานประกอบการผิด กด "แก้ไขข้อมูล" ด้านล่าง แล้วพิมพ์ฉบับใหม่
                           </>
                         }
                       />
@@ -966,6 +966,21 @@ const StudentDashboard: React.FC = () => {
 
                   {/* ยกเลิกได้จนกว่าเจ้าหน้าที่จะรับ — ทางเดียวที่เปลี่ยนสถานประกอบการ/แก้ข้อมูลบริษัทของใบที่ยื่นไปแล้ว */}
                   <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                    {/* แก้ได้เฉพาะก่อนอัปโหลดกระดาษที่ลงนาม — ฟอร์มแก้อยู่ที่หน้ายื่นคำร้อง (ฟอร์มเดียวกับตอนยื่น) */}
+                    {intent.status === 'pending_advisor' && (
+                      <>
+                        ข้อมูลสถานประกอบการผิดหรือกรอกไม่ครบ?{' '}
+                        <button
+                          type="button"
+                          data-testid="request-edit-link"
+                          onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'jobs' }))}
+                          className="font-bold text-brand-blue underline dark:text-blue-400"
+                        >
+                          แก้ไขข้อมูล
+                        </button>
+                        {' · '}
+                      </>
+                    )}
                     เลือกสถานประกอบการผิด หรืออาจารย์ไม่อนุญาต?{' '}
                     <button
                       type="button"

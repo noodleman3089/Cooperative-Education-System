@@ -7,7 +7,7 @@ export class CompanyModel {
    */
   static async findByGooglePlaceId(googlePlaceId: string): Promise<Company | null> {
     const res = await query(
-      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_fax
        FROM companies 
        WHERE google_place_id = $1`,
       [googlePlaceId]
@@ -21,7 +21,7 @@ export class CompanyModel {
    */
   static async findById(companyId: number): Promise<Company | null> {
     const res = await query(
-      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_fax
        FROM companies 
        WHERE company_id = $1`,
       [companyId]
@@ -110,7 +110,7 @@ export class CompanyModel {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `
-      SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_fax
       FROM companies 
       ${whereClause} 
       ORDER BY name_th ASC
@@ -148,7 +148,7 @@ export class CompanyModel {
    */
   static async findByNameTh(nameTh: string, excludeId?: number): Promise<Company | null> {
     const values: unknown[] = [nameTh.trim()];
-    let sql = `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email FROM companies WHERE LOWER(TRIM(name_th)) = LOWER($1)`;
+    let sql = `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_faxFROM companies WHERE LOWER(TRIM(name_th)) = LOWER($1)`;
     if (excludeId !== undefined) {
       sql += ' AND company_id <> $2';
       values.push(excludeId);

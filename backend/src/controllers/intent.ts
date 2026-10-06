@@ -5,6 +5,7 @@ import {
   IntentFormModel,
   COMPANY_MAIL_LIMIT,
   LateStamp,
+  TypedCompanyInput,
 } from '../models/intent';
 import { CompanyModel } from '../models/company';
 import { isLateWindow } from '../middlewares/calendarGate';
@@ -98,29 +99,15 @@ export class IntentFormController {
       let intentForm;
 
       if (is_self_found === true) {
-        const {
-          company_name_th,
-          company_address,
-          company_province,
-          company_district,
-          company_postal_code,
-          company_phone,
-          contact_person,
-          contact_position,
-          contact_email
-        } = body;
-
-        if (!company_name_th || !company_address || !company_province || !company_district || !company_postal_code || !company_phone) {
-          res.status(400).json({ message: 'กรุณากรอกข้อมูลสถานที่ฝึกงานที่จำเป็นให้ครบถ้วน' });
+        const typed = IntentFormController.readTypedCompany(body);
+        if ('error' in typed) {
+          res.status(400).json({ message: typed.error });
           return;
         }
 
         // สถานที่จาก Google Maps: ถ้ามีแถวของ place นี้อยู่แล้ว (นักศึกษาคนอื่นเคยยื่น) ใช้แถวนั้น
         // ไม่สร้างซ้ำ — `companies.google_place_id` เป็น UNIQUE การ INSERT ซ้ำจะล้มทั้งคำร้อง
-        const googlePlaceId =
-          typeof body.google_place_id === 'string' && body.google_place_id.trim()
-            ? body.google_place_id.trim().slice(0, 255)
-            : null;
+        const googlePlaceId = typed.company.google_place_id;
         const knownPlace = googlePlaceId ? await CompanyModel.findByGooglePlaceId(googlePlaceId) : null;
 
         intentForm = knownPlace
@@ -130,18 +117,7 @@ export class IntentFormController {
               semester_id: parsedSemesterId,
               late,
             })
-          : await IntentFormModel.createSelfFoundWithTransaction(studentId, parsedSemesterId, {
-          google_place_id: googlePlaceId,
-          name_th: company_name_th,
-          address: company_address,
-          province: company_province,
-          district: company_district,
-          postal_code: company_postal_code,
-          phone: company_phone,
-          contact_person,
-          contact_position,
-          email: contact_email
-        }, late);
+          : await IntentFormModel.createSelfFoundWithTransaction(studentId, parsedSemesterId, typed.company, late);
       } else {
         const { company_id } = body;
         if (company_id === undefined) {
@@ -176,6 +152,116 @@ export class IntentFormController {
       res.status(400).json({
         message: getErrorMessage(error, 'An error occurred while submitting your cooperative education intent.'),
       });
+    }
+  }
+
+  /**
+   * ช่องสถานประกอบการที่นักศึกษาพิมพ์เอง — ตรวจและแปลงที่เดียว ใช้ทั้งตอนยื่น (`submitIntent`)
+   * และตอนแก้ก่อนอัปโหลดกระดาษ (`updateIntentCompany`)
+   */
+  private static readTypedCompany(
+    body: Record<string, unknown>
+  ): { error: string } | { company: TypedCompanyInput } {
+    const text = (key: string) => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
+    const required = {
+      name_th: text('company_name_th'),
+      address: text('company_address'),
+      province: text('company_province'),
+      district: text('company_district'),
+      postal_code: text('company_postal_code'),
+      phone: text('company_phone'),
+    };
+    if (Object.values(required).some((v) => !v)) {
+      return { error: 'กรุณากรอกข้อมูลสถานที่ฝึกงานที่จำเป็นให้ครบถ้วน' };
+    }
+
+    // มือถือ · โทรสาร · E-mail ของผู้รับหนังสือ — ไม่บังคับ พิมพ์ลงเอกสารหมายเลข 1 เท่านั้น
+    // ⛔ E-mail ที่กรอกตรงนี้ **ไม่ทำให้ระบบส่งอะไรออกไป** — การส่งหนังสือถึงบริษัทยังเป็นปุ่มของนักศึกษา (SEC-13)
+    const mobile = text('contact_mobile');
+    const fax = text('contact_fax');
+    const email = text('contact_email');
+    if (mobile.length > 50 || fax.length > 50) {
+      return { error: 'โทรศัพท์มือถือและโทรสารของผู้รับหนังสือต้องยาวไม่เกิน 50 ตัวอักษร' };
+    }
+    if (email && (email.length > 254 || !SINGLE_EMAIL_REGEX.test(email))) {
+      return { error: 'E-mail ของผู้รับหนังสือไม่ถูกต้อง กรุณากรอกอีเมลเดียวในรูปแบบ name@example.com' };
+    }
+
+    return {
+      company: {
+        ...required,
+        contact_person: text('contact_person') || undefined,
+        contact_position: text('contact_position') || undefined,
+        email: email || undefined,
+        contact_phone: mobile || undefined,
+        contact_fax: fax || undefined,
+        google_place_id: text('google_place_id').slice(0, 255) || null,
+      },
+    };
+  }
+
+  /**
+   * นักศึกษาแก้สถานประกอบการของคำร้องที่ยื่นแล้ว ก่อนอัปโหลดกระดาษที่ลงนาม
+   * Route: PUT /api/intents/:id/company
+   * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
+   *
+   * รับรูปเดียวกับ `POST /intents`: `company_id` (เลือกจากทำเนียบ) หรือชุดช่องที่พิมพ์เอง
+   * ⛔ ไม่ผูกปฏิทินกิจกรรม — เป็นการแก้ใบที่ยื่นไปแล้ว ไม่ใช่การยื่นใหม่ (ตราส่งช้าของใบเดิมคงอยู่)
+   */
+  static async updateIntentCompany(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      let target: { companyId: number } | { typed: TypedCompanyInput };
+      if (body.company_id !== undefined && body.company_id !== null) {
+        const companyId = parseInt(String(body.company_id), 10);
+        if (isNaN(companyId)) {
+          res.status(400).json({ message: 'company_id must be a valid integer.' });
+          return;
+        }
+        target = { companyId };
+      } else {
+        const typed = IntentFormController.readTypedCompany(body);
+        if ('error' in typed) {
+          res.status(400).json({ message: typed.error });
+          return;
+        }
+        target = { typed: typed.company };
+      }
+
+      const { fromCompanyId, toCompanyId } = await IntentFormModel.changeCompanyByStudent(
+        formId,
+        req.user.userId,
+        target
+      );
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_COMPANY_CHANGED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: req.user.userId,
+          detail: { from_company_id: fromCompanyId, to_company_id: toCompanyId },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: 'แก้ไขข้อมูลคำร้องเรียบร้อยแล้ว กรุณาพิมพ์แบบคำร้องฉบับใหม่',
+        form_id: formId,
+      });
+    } catch (error) {
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถแก้ไขคำร้องได้') });
     }
   }
 
@@ -338,6 +424,9 @@ export class IntentFormController {
                 c.province as company_province, c.district as company_district, c.postal_code as company_postal_code,
                 c.phone as company_phone, c.contact_person as company_contact_person, c.contact_position as company_contact_position,
                 c.email as company_email,
+                -- หน้ายื่นคำร้องใช้เติมฟอร์มตอนนักศึกษากลับมาแก้ (ก่อนอัปโหลดกระดาษ)
+                c.contact_phone as company_mobile, c.contact_fax as company_fax,
+                c.is_verified as company_is_verified, c.google_place_id as company_google_place_id,
                 i.mentor_id, men.name as mentor_name, u_men.email as mentor_email, men.phone as mentor_phone,
                 men.position as mentor_position, men.department as mentor_department
          FROM intent_forms i
@@ -1320,6 +1409,7 @@ export class IntentFormController {
               c.postal_code AS company_postal_code,
               c.contact_person, c.contact_position,
               c.phone AS company_phone, c.email AS company_email,
+              c.contact_phone AS company_mobile, c.contact_fax AS company_fax,
               sem.academic_year, sem.semester,
               NULL::text AS start_date,
               to_char((NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS today,
@@ -1416,6 +1506,8 @@ export class IntentFormController {
         data.contact_person = text('contact_person');
         data.contact_position = text('contact_position');
         data.company_email = text('contact_email');
+        data.company_mobile = text('contact_mobile');
+        data.company_fax = text('contact_fax');
       }
 
       await IntentFormController.sendRequestFormPdf(res, data, 'request_form_preview.pdf');

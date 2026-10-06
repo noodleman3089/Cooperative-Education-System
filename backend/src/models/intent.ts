@@ -65,6 +65,46 @@ export const OFFICER_DECISION_FROM = ['pending_officer_request'];
  * หลังเจ้าหน้าที่รับ = บริษัทถูกรับรองและเลขที่หนังสือออกไปแล้ว ย้อนด้วยปุ่มของนักศึกษาไม่ได้
  */
 export const STUDENT_WITHDRAW_FROM = ['pending_advisor', 'pending_officer_request'];
+/**
+ * นักศึกษาแก้ข้อมูลสถานประกอบการของใบที่ยื่นแล้วได้ **เฉพาะก่อนอัปโหลดกระดาษที่ลงนาม** (เจ้าของสั่ง 2026-10-06)
+ * อัปโหลดแล้ว = กระดาษถูกเซ็นด้วยข้อมูลชุดนั้น แก้ต่อจะทำให้ระบบไม่ตรงกับกระดาษที่เจ้าหน้าที่ตรวจ
+ * (ใบที่เจ้าหน้าที่ตีกลับจะกลับมาที่ `pending_advisor` จึงแก้ได้อีก)
+ */
+export const STUDENT_EDIT_COMPANY_FROM = ['pending_advisor'];
+
+/** ช่องสถานประกอบการที่นักศึกษาพิมพ์เองในหน้ายื่นคำร้อง — ผู้เรียกตรวจรูปแบบแล้ว */
+export interface TypedCompanyInput {
+  name_th: string;
+  address: string;
+  province: string;
+  district: string;
+  postal_code: string;
+  phone: string;
+  contact_person?: string;
+  contact_position?: string;
+  email?: string;
+  /** มือถือ/โทรสารของผู้รับหนังสือ — พิมพ์ลงเอกสารหมายเลข 1 */
+  contact_phone?: string;
+  contact_fax?: string;
+  /** มาจากการเลือกสถานที่ใน Google Maps — ใช้กันสร้างบริษัทเดียวกันซ้ำ */
+  google_place_id?: string | null;
+}
+
+/** ค่าของ `TypedCompanyInput` เรียงตามลำดับคอลัมน์ที่ INSERT/UPDATE ด้านล่างใช้ร่วมกัน ($3–$14) */
+const draftCompanyValues = (c: TypedCompanyInput): unknown[] => [
+  c.name_th,
+  c.address,
+  c.province,
+  c.district,
+  c.postal_code,
+  c.phone,
+  c.contact_person || null,
+  c.contact_position || null,
+  c.email || null,
+  c.google_place_id || null,
+  c.contact_phone || null,
+  c.contact_fax || null,
+];
 
 export function assertAllowedTransition(action: string, currentStatus: string, allowedFrom: string[]): void {
   if (!allowedFrom.includes(currentStatus)) {
@@ -183,19 +223,7 @@ export class IntentFormModel {
   static async createSelfFoundWithTransaction(
     studentId: number,
     semesterId: number,
-    companyDetails: {
-      name_th: string;
-      address: string;
-      province: string;
-      district: string;
-      postal_code: string;
-      phone: string;
-      contact_person?: string;
-      contact_position?: string;
-      email?: string;
-      /** มาจากการเลือกสถานที่ใน Google Maps — ใช้กันสร้างบริษัทเดียวกันซ้ำ */
-      google_place_id?: string | null;
-    },
+    companyDetails: TypedCompanyInput,
     late: LateStamp
   ): Promise<IntentForm> {
     const client = await pool.connect();
@@ -239,28 +267,7 @@ export class IntentFormModel {
       }
 
       // 3. Create the unverified company
-      const companyRes = await client.query(
-        `INSERT INTO companies (
-          name_th, address, province, district, postal_code, phone,
-          contact_person, contact_position, email, is_verified, created_by, google_place_id
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, $11)
-         RETURNING company_id`,
-        [
-          companyDetails.name_th,
-          companyDetails.address,
-          companyDetails.province,
-          companyDetails.district,
-          companyDetails.postal_code,
-          companyDetails.phone,
-          companyDetails.contact_person || null,
-          companyDetails.contact_position || null,
-          companyDetails.email || null,
-          studentId,
-          companyDetails.google_place_id || null
-        ]
-      );
-      const companyId = companyRes.rows[0].company_id;
+      const companyId = await IntentFormModel.insertDraftCompany(client, studentId, companyDetails);
 
       // 4. Create the intent form pointing to the new company
       const insertRes = await client.query(
@@ -514,26 +521,142 @@ export class IntentFormModel {
         row.company_id,
       ]);
       await client.query('DELETE FROM intent_forms WHERE form_id = $1', [formId]);
-      // ⛔ ต้องเช็คทุกตารางที่อ้าง `companies` (FK เป็น RESTRICT ทั้งหมด) — หลุดตัวเดียวการยกเลิกทั้งก้อนจะ rollback
-      const removed = await client.query(
-        `DELETE FROM companies c
-          WHERE c.company_id = $1 AND c.created_by = $2 AND c.is_verified = FALSE
-            AND NOT EXISTS (SELECT 1 FROM intent_forms x WHERE x.company_id = c.company_id)
-            AND NOT EXISTS (SELECT 1 FROM official_documents x WHERE x.company_id = c.company_id)
-            AND NOT EXISTS (SELECT 1 FROM mentors x WHERE x.company_id = c.company_id)
-            AND NOT EXISTS (SELECT 1 FROM report_outlines x WHERE x.company_id = c.company_id)
-            AND NOT EXISTS (SELECT 1 FROM supervision_appointments x WHERE x.company_id = c.company_id)
-            AND NOT EXISTS (SELECT 1 FROM supervision_records x WHERE x.company_id = c.company_id)`,
-        [row.company_id, studentId]
-      );
+      const companyDeleted = await IntentFormModel.deleteDraftCompanyIfOrphan(client, row.company_id, studentId);
 
       await client.query('COMMIT');
       return {
         previousPath: row.request_form_path as string | null,
         companyId: row.company_id as number,
         companyName: (company.rows[0]?.name_th as string) ?? '',
-        companyDeleted: (removed.rowCount ?? 0) > 0,
+        companyDeleted,
       };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /** สร้างแถวสถานประกอบการที่นักศึกษากรอกเอง (ยังไม่รับรอง) — ใช้ทั้งตอนยื่นและตอนแก้ */
+  private static async insertDraftCompany(
+    client: PoolClient,
+    studentId: number,
+    c: TypedCompanyInput
+  ): Promise<number> {
+    const res = await client.query(
+      `INSERT INTO companies (
+         is_verified, created_by,
+         name_th, address, province, district, postal_code, phone,
+         contact_person, contact_position, email, google_place_id, contact_phone, contact_fax
+       )
+       VALUES (FALSE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       RETURNING company_id`,
+      [studentId, ...draftCompanyValues(c)]
+    );
+    return res.rows[0].company_id as number;
+  }
+
+  /**
+   * ลบแถวสถานประกอบการที่นักศึกษาสร้างเอง ยังไม่รับรอง และไม่มีอะไรอ้างถึงแล้ว (ใบถูกยกเลิก/ย้ายไปบริษัทอื่น)
+   * ⛔ ต้องเช็คทุกตารางที่อ้าง `companies` (FK เป็น RESTRICT ทั้งหมด) — หลุดตัวเดียวทรานแซกชันของผู้เรียกจะ rollback
+   * ⛔ ห้ามผ่อนเงื่อนไข `created_by` / `is_verified` — แถวของทำเนียบและแถวของนักศึกษาคนอื่นต้องไม่หายจากเส้นนี้
+   */
+  private static async deleteDraftCompanyIfOrphan(
+    client: PoolClient,
+    companyId: number,
+    studentId: number
+  ): Promise<boolean> {
+    const removed = await client.query(
+      `DELETE FROM companies c
+        WHERE c.company_id = $1 AND c.created_by = $2 AND c.is_verified = FALSE
+          AND NOT EXISTS (SELECT 1 FROM intent_forms x WHERE x.company_id = c.company_id)
+          AND NOT EXISTS (SELECT 1 FROM official_documents x WHERE x.company_id = c.company_id)
+          AND NOT EXISTS (SELECT 1 FROM mentors x WHERE x.company_id = c.company_id)
+          AND NOT EXISTS (SELECT 1 FROM report_outlines x WHERE x.company_id = c.company_id)
+          AND NOT EXISTS (SELECT 1 FROM supervision_appointments x WHERE x.company_id = c.company_id)
+          AND NOT EXISTS (SELECT 1 FROM supervision_records x WHERE x.company_id = c.company_id)`,
+      [companyId, studentId]
+    );
+    return (removed.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * นักศึกษาแก้สถานประกอบการของใบที่ยื่นแล้ว **ก่อนอัปโหลดกระดาษที่ลงนาม** — ใบเดิม (form_id · ตราส่งช้า) คงอยู่
+   * เปลี่ยนแค่ว่าใบชี้ไปสถานประกอบการไหน:
+   *   - เลือกจากทำเนียบ          → ชี้ไปแถวนั้น (ต้องรับรองแล้ว)
+   *   - พิมพ์เอง + แถวเดิมเป็นร่างของตัวเองที่ไม่มีใบอื่นอ้าง → **แก้ในแถวเดิม**
+   *   - พิมพ์เอง + แถวเดิมเป็นของทำเนียบ/ของคนอื่น/มีใบอื่นอ้าง → สร้างแถวร่างใหม่
+   * ⛔ เส้นนี้ **ห้าม UPDATE แถวที่รับรองแล้วหรือแถวที่คนอื่นสร้าง** — ชื่อ/ที่อยู่ของทำเนียบถูกพิมพ์ลงหนังสือของนักศึกษาคนอื่น
+   * แถวร่างเดิมที่ไม่มีอะไรอ้างถึงแล้วถูกลบในทรานแซกชันเดียวกัน
+   */
+  static async changeCompanyByStudent(
+    formId: number,
+    studentId: number,
+    target: { companyId: number } | { typed: TypedCompanyInput }
+  ): Promise<{ fromCompanyId: number; toCompanyId: number }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      if (row.student_id !== studentId) {
+        throw new Error('คุณแก้ไขได้เฉพาะคำร้องของตัวเองเท่านั้น');
+      }
+      assertAllowedTransition('student_edit_company', row.status, STUDENT_EDIT_COMPANY_FROM);
+
+      const fromCompanyId = row.company_id as number;
+      let toCompanyId: number;
+
+      if ('companyId' in target) {
+        const found = await client.query(
+          'SELECT 1 FROM companies WHERE company_id = $1 AND is_verified = TRUE',
+          [target.companyId]
+        );
+        if ((found.rowCount ?? 0) === 0) throw new Error('ไม่พบสถานประกอบการนี้ในทำเนียบของคณะ');
+        toCompanyId = target.companyId;
+      } else {
+        const typed = target.typed;
+        // สถานที่เดียวกันจาก Google Maps มีแถวอยู่แล้ว (ของคนอื่น) → ใช้แถวนั้น แบบเดียวกับตอนยื่น
+        const samePlace = typed.google_place_id
+          ? await client.query('SELECT company_id FROM companies WHERE google_place_id = $1', [typed.google_place_id])
+          : null;
+        const samePlaceId = samePlace?.rows[0]?.company_id as number | undefined;
+
+        if (samePlaceId !== undefined && samePlaceId !== fromCompanyId) {
+          toCompanyId = samePlaceId;
+        } else {
+          const updated = await client.query(
+            `UPDATE companies c
+                SET name_th = $3, address = $4, province = $5, district = $6, postal_code = $7, phone = $8,
+                    contact_person = $9, contact_position = $10, email = $11, google_place_id = $12,
+                    contact_phone = $13, contact_fax = $14
+              WHERE c.company_id = $1 AND c.created_by = $2 AND c.is_verified = FALSE
+                AND NOT EXISTS (
+                  SELECT 1 FROM intent_forms x WHERE x.company_id = c.company_id AND x.form_id <> $15
+                )`,
+            [fromCompanyId, studentId, ...draftCompanyValues(typed), formId]
+          );
+          toCompanyId =
+            (updated.rowCount ?? 0) > 0
+              ? fromCompanyId
+              : await IntentFormModel.insertDraftCompany(client, studentId, typed);
+        }
+      }
+
+      if (toCompanyId !== fromCompanyId) {
+        await client.query('UPDATE intent_forms SET company_id = $1 WHERE form_id = $2', [toCompanyId, formId]);
+        await IntentFormModel.deleteDraftCompanyIfOrphan(client, fromCompanyId, studentId);
+      }
+
+      await client.query('COMMIT');
+      return { fromCompanyId, toCompanyId };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

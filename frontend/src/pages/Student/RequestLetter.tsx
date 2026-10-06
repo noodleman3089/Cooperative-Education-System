@@ -40,6 +40,7 @@ interface Province {
 }
 
 interface ActiveIntent {
+  form_id: number;
   company_name_th?: string;
   status: string;
 }
@@ -53,6 +54,10 @@ const EMPTY_FORM = {
   company_phone: '',
   contact_person: '',
   contact_position: '',
+  // สามช่องนี้ไม่บังคับ — พิมพ์ลงเอกสารหมายเลข 1 เท่านั้น (E-mail ไม่ได้ทำให้ระบบส่งอะไรออกไป)
+  contact_mobile: '',
+  contact_fax: '',
+  contact_email: '',
 };
 
 const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
@@ -84,6 +89,12 @@ const RequestLetter: React.FC = () => {
   const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [lateReason, setLateReason] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
+  /**
+   * กำลังแก้คำร้องที่ยื่นไว้แล้ว (form_id) — ทำได้เฉพาะก่อนอัปโหลดกระดาษที่ลงนาม (`pending_advisor`)
+   * ใช้ฟอร์มเดียวกับตอนยื่น ต่างกันที่ปลายทาง: `PUT /intents/:id/company` แทน `POST /intents`
+   */
+  const [editingFormId, setEditingFormId] = useState<number | null>(null);
+  const [openingEdit, setOpeningEdit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   /** ตัวอย่างเอกสารจริง — `url` เป็น blob ของ PDF · `key` คือข้อมูลที่ใช้วาดรอบนั้น (ไว้บอกว่าตัวอย่างเก่ากว่าฟอร์มหรือยัง) */
@@ -106,7 +117,10 @@ const RequestLetter: React.FC = () => {
 
   const blockingIntent =
     currentIntent && !CLOSED_INTENT_STATUSES.includes(currentIntent.status) ? currentIntent : null;
-  const canSubmit = hasProfile && blockingIntent === null;
+  const editing = editingFormId !== null;
+  const canSubmit = hasProfile && (blockingIntent === null || editing);
+  // แก้ใบเดิมไม่ใช่การยื่นใหม่ — ตราส่งช้าของใบเดิมคงอยู่ ไม่ถามเหตุผลซ้ำ
+  const askLateReason = isLate && !editing;
   const locked = existingCompanyId !== null;
 
   const loadData = async () => {
@@ -181,6 +195,9 @@ const RequestLetter: React.FC = () => {
       company_phone: company.phone,
       contact_person: company.contact_person ?? '',
       contact_position: company.contact_position ?? '',
+      contact_mobile: company.contact_phone ?? '',
+      contact_fax: company.contact_fax ?? '',
+      contact_email: company.email ?? '',
     });
   };
 
@@ -189,6 +206,44 @@ const RequestLetter: React.FC = () => {
     setSelectedPlaceId(null);
     setSearch('');
     setForm(EMPTY_FORM);
+  };
+
+  /** เปิดฟอร์มแก้คำร้องที่ยื่นไว้ — เติมค่าปัจจุบันของใบนั้นให้ก่อน */
+  const startEdit = async (formId: number) => {
+    setOpeningEdit(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const d = await api.get(`/intents/${formId}`);
+      // บริษัทของทำเนียบ: ล็อกช่องไว้ (แก้ข้อมูลไม่ได้ แต่กด "เลือกที่อื่น" เพื่อเปลี่ยนที่ได้)
+      setExistingCompanyId(d.company_is_verified ? d.company_id : null);
+      setSelectedPlaceId(d.company_is_verified ? null : (d.company_google_place_id ?? null));
+      setSearch(d.company_name_th ?? '');
+      setForm({
+        company_name_th: d.company_name_th ?? '',
+        company_address: d.company_address ?? '',
+        company_province: d.company_province ?? '',
+        company_district: d.company_district ?? '',
+        company_postal_code: d.company_postal_code ?? '',
+        company_phone: d.company_phone ?? '',
+        contact_person: d.company_contact_person ?? '',
+        contact_position: d.company_contact_position ?? '',
+        contact_mobile: d.company_mobile ?? '',
+        contact_fax: d.company_fax ?? '',
+        contact_email: d.company_email ?? '',
+      });
+      setEditingFormId(formId);
+    } catch (err) {
+      setError(getErrorMessage(err, 'เปิดข้อมูลคำร้องเพื่อแก้ไขไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+      scrollToAlert();
+    } finally {
+      setOpeningEdit(false);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingFormId(null);
+    clearCompany();
   };
 
   const handlePlaceSelected = async (place: PlaceResult) => {
@@ -265,6 +320,9 @@ const RequestLetter: React.FC = () => {
           company_phone: form.company_phone,
           contact_person: form.contact_person,
           contact_position: form.contact_position,
+          contact_mobile: form.contact_mobile,
+          contact_fax: form.contact_fax,
+          contact_email: form.contact_email,
         };
   const previewKey = JSON.stringify(previewPayload);
   const previewStale = preview !== null && preview.key !== previewKey;
@@ -324,7 +382,9 @@ const RequestLetter: React.FC = () => {
     } else if (!locked && (!form.contact_person.trim() || !form.contact_position.trim())) {
       // ชื่อนี้ถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ — ว่างแล้วหนังสือไม่มีผู้รับ
       problem = 'กรุณากรอกชื่อและตำแหน่งของผู้รับหนังสือที่สถานประกอบการ';
-    } else if (isLate && lateReason.trim().length < LATE_REASON_MIN) {
+    } else if (!locked && form.contact_email.trim() && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(form.contact_email.trim())) {
+      problem = 'E-mail ของผู้รับหนังสือไม่ถูกต้อง กรุณากรอกอีเมลเดียวในรูปแบบ name@example.com';
+    } else if (askLateReason && lateReason.trim().length < LATE_REASON_MIN) {
       problem = `กรุณาเขียนเหตุผลที่ยื่นล่าช้าอย่างน้อย ${LATE_REASON_MIN} ตัวอักษร`;
     }
 
@@ -339,40 +399,48 @@ const RequestLetter: React.FC = () => {
   const submit = async () => {
     setIsSubmitting(true);
     try {
-      const activeSemester = await api.get('/semesters/active');
-      const late_reason = isLate ? lateReason.trim() : undefined;
+      // ชุดเดียวกันทั้งตอนยื่นและตอนแก้ — เลือกจากทำเนียบส่งแค่ company_id
+      const company =
+        existingCompanyId !== null
+          ? { company_id: existingCompanyId }
+          : {
+              company_name_th: form.company_name_th.trim(),
+              company_address: form.company_address.trim(),
+              company_province: form.company_province,
+              company_district: form.company_district.trim(),
+              company_postal_code: form.company_postal_code.trim(),
+              company_phone: form.company_phone.trim(),
+              contact_person: form.contact_person.trim(),
+              contact_position: form.contact_position.trim(),
+              contact_mobile: form.contact_mobile.trim() || undefined,
+              contact_fax: form.contact_fax.trim() || undefined,
+              contact_email: form.contact_email.trim() || undefined,
+              google_place_id: selectedPlaceId ?? undefined,
+            };
 
-      if (existingCompanyId !== null) {
-        await api.post('/intents', {
-          company_id: existingCompanyId,
-          semester_id: activeSemester.semester_id,
-          late_reason,
-        });
+      if (editingFormId !== null) {
+        await api.put(`/intents/${editingFormId}/company`, company);
+        setSuccess(
+          `แก้ไขคำร้องถึง ${form.company_name_th.trim()} แล้ว — แบบคำร้องที่พิมพ์ไว้ก่อนหน้านี้ใช้ไม่ได้ ไปที่หน้าแรกเพื่อพิมพ์ฉบับใหม่`
+        );
+        setEditingFormId(null);
       } else {
+        const activeSemester = await api.get('/semesters/active');
         await api.post('/intents', {
-          is_self_found: true,
+          ...company,
+          is_self_found: existingCompanyId === null ? true : undefined,
           semester_id: activeSemester.semester_id,
-          company_name_th: form.company_name_th.trim(),
-          company_address: form.company_address.trim(),
-          company_province: form.company_province,
-          company_district: form.company_district.trim(),
-          company_postal_code: form.company_postal_code.trim(),
-          company_phone: form.company_phone.trim(),
-          contact_person: form.contact_person.trim(),
-          contact_position: form.contact_position.trim(),
-          google_place_id: selectedPlaceId ?? undefined,
-          late_reason,
+          late_reason: isLate ? lateReason.trim() : undefined,
         });
+        setSuccess(
+          `ยื่นคำร้องถึง ${form.company_name_th.trim()} เรียบร้อยแล้ว — ไปที่หน้าแรกเพื่อพิมพ์แบบคำร้องที่ระบบกรอกให้ นำไปลงนาม แล้วอัปโหลดกลับ`
+        );
       }
-
-      setSuccess(
-        `ยื่นคำร้องถึง ${form.company_name_th.trim()} เรียบร้อยแล้ว — ไปที่หน้าแรกเพื่อพิมพ์แบบคำร้องที่ระบบกรอกให้ นำไปลงนาม แล้วอัปโหลดกลับ`
-      );
       clearCompany();
       setLateReason('');
       await loadData();
     } catch (err) {
-      setError(getErrorMessage(err, 'ยื่นคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+      setError(getErrorMessage(err, editing ? 'แก้ไขคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' : 'ยื่นคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setIsSubmitting(false);
       setConfirmOpen(false);
@@ -444,7 +512,7 @@ const RequestLetter: React.FC = () => {
         />
       )}
 
-      {blockingIntent && (
+      {blockingIntent && !editing && (
         <AlertBanner
           variant="info"
           message={
@@ -455,10 +523,39 @@ const RequestLetter: React.FC = () => {
                 <StatusBadge status={blockingIntent.status} domain="intent" />
               </p>
               <p>
-                ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา · ก่อนเจ้าหน้าที่รับคำร้อง คุณยกเลิกใบนี้เองได้ที่หน้าแรกแล้วยื่นที่ใหม่ · หลังจากนั้นต้องรอผลของใบนี้ก่อน
+                ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา · ก่อนอัปโหลดแบบคำร้องที่ลงนาม แก้ข้อมูลสถานประกอบการได้ที่นี่ ·
+                ก่อนเจ้าหน้าที่รับคำร้อง ยกเลิกใบนี้ได้ที่หน้าแรก · หลังจากนั้นต้องรอผลของใบนี้ก่อน
               </p>
-              <Button variant="secondary" size="sm" onClick={() => goTo('dashboard')}>
-                ไปพิมพ์แบบคำร้องและดูความคืบหน้าที่หน้าแรก
+              <div className="flex flex-wrap gap-2">
+                {blockingIntent.status === 'pending_advisor' && (
+                  <Button
+                    size="sm"
+                    data-testid="request-edit-open"
+                    loading={openingEdit}
+                    onClick={() => startEdit(blockingIntent.form_id)}
+                  >
+                    แก้ไขข้อมูลคำร้องนี้
+                  </Button>
+                )}
+                <Button variant="secondary" size="sm" onClick={() => goTo('dashboard')}>
+                  ไปพิมพ์แบบคำร้องและดูความคืบหน้าที่หน้าแรก
+                </Button>
+              </div>
+            </div>
+          }
+        />
+      )}
+
+      {editing && (
+        <AlertBanner
+          variant="warning"
+          message={
+            <div className="flex flex-wrap items-center justify-between gap-2" data-testid="request-editing">
+              <span>
+                <b>กำลังแก้ไขคำร้องที่ยื่นไว้</b> — บันทึกแล้วต้องพิมพ์แบบคำร้องฉบับใหม่ไปลงนาม
+              </span>
+              <Button variant="secondary" size="sm" data-testid="request-edit-cancel" disabled={isSubmitting} onClick={cancelEdit}>
+                ยกเลิกการแก้ไข
               </Button>
             </div>
           }
@@ -600,16 +697,29 @@ const RequestLetter: React.FC = () => {
                 </div>
                 <div className="col-span-2">
                   <label htmlFor="request-contact-person" className={labelClass}>ชื่อผู้รับหนังสือ {required}</label>
-                  <Input id="request-contact-person" data-testid="request-contact-person" maxLength={255} placeholder="เช่น คุณสมหญิง วงศ์สวัสดิ์" {...field('contact_person')} />
+                  <Input id="request-contact-person" data-testid="request-contact-person" maxLength={255} {...field('contact_person')} />
                 </div>
                 <div className="col-span-2">
                   <label htmlFor="request-contact-position" className={labelClass}>ตำแหน่ง {required}</label>
-                  <Input id="request-contact-position" data-testid="request-contact-position" maxLength={255} placeholder="เช่น ผู้จัดการฝ่ายทรัพยากรบุคคล" {...field('contact_position')} />
+                  <Input id="request-contact-position" data-testid="request-contact-position" maxLength={255} {...field('contact_position')} />
+                </div>
+                {/* สามช่องตามบรรทัดบนเอกสารหมายเลข 1 — ไม่บังคับ ไม่กรอก = กระดาษขีด "-" */}
+                <div>
+                  <label htmlFor="request-contact-mobile" className={labelClass}>โทรศัพท์มือถือ</label>
+                  <Input id="request-contact-mobile" data-testid="request-contact-mobile" inputMode="tel" maxLength={50} {...field('contact_mobile')} />
+                </div>
+                <div>
+                  <label htmlFor="request-contact-fax" className={labelClass}>โทรสาร</label>
+                  <Input id="request-contact-fax" data-testid="request-contact-fax" inputMode="tel" maxLength={50} {...field('contact_fax')} />
+                </div>
+                <div className="col-span-2">
+                  <label htmlFor="request-contact-email" className={labelClass}>E-mail ของผู้รับหนังสือ</label>
+                  <Input id="request-contact-email" data-testid="request-contact-email" type="email" maxLength={254} {...field('contact_email')} />
                 </div>
               </div>
             </section>
 
-            {isLate && (
+            {askLateReason && (
               <section className="space-y-2 rounded-2xl border border-amber-200 bg-amber-50 p-5 dark:border-amber-900/40 dark:bg-amber-950/20">
                 <p className="text-sm font-bold text-amber-800 dark:text-amber-300">
                   การยื่นครั้งนี้เลยกำหนดปกติแล้ว จึงนับเป็นการส่งช้า
@@ -634,7 +744,7 @@ const RequestLetter: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span className="text-xs text-gray-600 dark:text-gray-400">ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา</span>
               <Button type="submit" data-testid="request-submit" loading={isSubmitting}>
-                ตรวจแล้ว ยื่นคำร้อง
+                {editing ? 'ตรวจแล้ว บันทึกการแก้ไข' : 'ตรวจแล้ว ยื่นคำร้อง'}
               </Button>
             </div>
           </form>
@@ -724,8 +834,8 @@ const RequestLetter: React.FC = () => {
 
       <ConfirmDialog
         open={confirmOpen}
-        title="ยืนยันยื่นคำร้อง"
-        confirmLabel="ยืนยันยื่นคำร้อง"
+        title={editing ? 'ยืนยันแก้ไขคำร้อง' : 'ยืนยันยื่นคำร้อง'}
+        confirmLabel={editing ? 'ยืนยันบันทึกการแก้ไข' : 'ยืนยันยื่นคำร้อง'}
         cancelLabel="กลับไปแก้"
         confirmTestId="request-confirm"
         cancelTestId="request-confirm-cancel"
@@ -734,7 +844,11 @@ const RequestLetter: React.FC = () => {
         onConfirm={submit}
         message={
           <ConfirmSummary
-            lead="ยื่นแล้วระบบเริ่มเดินเรื่องขอหนังสือกับสถานประกอบการนี้ให้"
+            lead={
+              editing
+                ? 'คำร้องที่ยื่นไว้จะเปลี่ยนเป็นข้อมูลชุดนี้'
+                : 'ยื่นแล้วพิมพ์แบบคำร้องไปลงนาม แล้วอัปโหลดกลับ — คำร้องจะถึงเจ้าหน้าที่หลังอัปโหลดเท่านั้น'
+            }
             rows={[
               { label: 'สถานประกอบการ', value: form.company_name_th.trim() },
               { label: 'ที่อยู่', value: fullAddress },
@@ -742,9 +856,19 @@ const RequestLetter: React.FC = () => {
                 label: 'ผู้รับหนังสือ',
                 value: [form.contact_person.trim(), form.contact_position.trim()].filter(Boolean).join(' · ') || '—',
               },
-              ...(isLate ? [{ label: 'เหตุผลที่ยื่นช้า', value: lateReason.trim() }] : []),
+              {
+                label: 'มือถือ · โทรสาร · E-mail',
+                value:
+                  [form.contact_mobile.trim(), form.contact_fax.trim(), form.contact_email.trim()].filter(Boolean).join(' · ') ||
+                  'ไม่ได้กรอก (กระดาษจะขีด "-")',
+              },
+              ...(askLateReason ? [{ label: 'เหตุผลที่ยื่นช้า', value: lateReason.trim() }] : []),
             ]}
-            lockNote="ชื่อและที่อยู่นี้จะถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ · ยื่นแล้วแก้ในใบเดิมไม่ได้ ถ้าผิดต้องยกเลิกคำร้องที่หน้าแรกแล้วยื่นใหม่ (ทำได้จนกว่าเจ้าหน้าที่จะรับคำร้อง)"
+            lockNote={
+              editing
+                ? 'แบบคำร้องที่พิมพ์ไว้ก่อนหน้านี้ใช้ไม่ได้แล้ว ต้องพิมพ์ฉบับใหม่ไปลงนาม'
+                : 'ชื่อและที่อยู่นี้จะถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ · ยังกลับมาแก้ได้จนกว่าจะอัปโหลดแบบคำร้องที่ลงนามแล้ว'
+            }
           />
         }
       />

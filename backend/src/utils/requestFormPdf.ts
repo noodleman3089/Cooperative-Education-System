@@ -19,7 +19,8 @@ import { RequestFormData } from './requestFormHtml';
  * และกรอบของเจ้าหน้าที่ในหน้า 2 — ระบบไม่มีสิทธิ์เติมลายมือชื่อแทนใคร (SEC-04)
  *
  * ค่าที่ฐานไม่มี → ไม่วาดอะไร เส้นประของแม่แบบยังอยู่ให้เขียนมือได้เป็นทางสำรอง
- * ส่วน **โทรศัพท์บ้าน · มือถือและโทรสารของสถานประกอบการ** ระบบไม่เก็บโดยตั้งใจ จึงขีด "-"
+ * ส่วน **โทรศัพท์บ้าน** ระบบไม่เก็บโดยตั้งใจ จึงขีด "-" · มือถือ/โทรสาร/E-mail ของผู้รับหนังสือ
+ * นักศึกษากรอกได้ตอนยื่น (ไม่บังคับ · เจ้าของสั่ง 2026-10-06) ไม่กรอก = "-"
  */
 
 export interface RequestFormPdfData extends RequestFormData {
@@ -28,6 +29,9 @@ export interface RequestFormPdfData extends RequestFormData {
   /** วันเริ่ม/สิ้นสุดการปฏิบัติงานจากปฏิทินสหกิจของภาคเรียนที่ยื่น */
   coop_start_date: string | null;
   coop_end_date: string | null;
+  /** มือถือและโทรสารของผู้รับหนังสือ (`companies.contact_phone` / `contact_fax`) — นักศึกษากรอกเองตอนยื่น ไม่บังคับ */
+  company_mobile?: string | null;
+  company_fax?: string | null;
 }
 
 const SIZE = 14;
@@ -54,19 +58,34 @@ function thaiDateParts(iso: string | null): { day: string; month: string; year: 
   return { day: String(Number(match[3])), month, year: String(Number(match[1]) + 543) };
 }
 
-/** ตัดบรรทัดตามช่องว่าง · บรรทัดสุดท้ายรับส่วนที่เหลือทั้งหมด (ตัววาดจะย่อตัวอักษรให้พอดี) */
+/** สระบน/ล่างและวรรณยุกต์ — ห้ามตัดบรรทัดไว้หน้าตัวพวกนี้ ไม่งั้นลอยอยู่ต้นบรรทัดโดยไม่มีพยัญชนะ */
+const THAI_COMBINING = /[ัิ-ฺ็-๎]/;
+
+/**
+ * ตัดบรรทัดตามช่องว่าง · บรรทัดสุดท้ายรับส่วนที่เหลือทั้งหมด (ตัววาดจะย่อตัวอักษรให้พอดี)
+ * คำเดียวที่ยาวกว่าทั้งบรรทัด (ที่อยู่ที่พิมพ์ติดกันไม่เว้นวรรค) ถูกตัดกลางคำ — เดิมไม่ตัด
+ * ทั้งก้อนจึงกองอยู่บรรทัดแรกแล้วล้นขอบขวากระดาษ
+ */
 function wrap(font: PDFFont, text: string, widths: number[]): string[] {
   const lines: string[] = [];
   let current = '';
-  for (const word of text.split(/\s+/).filter(Boolean)) {
+  const isLastLine = () => lines.length === widths.length - 1;
+  const fits = (s: string) => font.widthOfTextAtSize(s, SIZE) <= widths[lines.length];
+
+  for (let word of text.split(/\s+/).filter(Boolean)) {
     const next = current ? `${current} ${word}` : word;
-    const isLastLine = lines.length === widths.length - 1;
-    if (current && !isLastLine && font.widthOfTextAtSize(next, SIZE) > widths[lines.length]) {
-      lines.push(current);
-      current = word;
-    } else {
+    if (isLastLine() || fits(next)) {
       current = next;
+      continue;
     }
+    if (current) lines.push(current);
+    while (!isLastLine() && !fits(word)) {
+      let cut = word.length - 1;
+      while (cut > 1 && (!fits(word.slice(0, cut)) || THAI_COMBINING.test(word[cut]))) cut--;
+      lines.push(word.slice(0, cut));
+      word = word.slice(cut);
+    }
+    current = word;
   }
   if (current) lines.push(current);
   return lines;
@@ -129,8 +148,9 @@ export async function buildRequestFormPdf(
   put(d.contact_person, 234, 383.4);
   put(d.contact_position, 127, 363.5, 210);
   put(d.company_phone, 410, 363.5);
-  put('-', 149, 343.7);
-  put('-', 376, 343.7);
+  // ไม่ได้กรอก = ขีด "-" (สองช่องนี้ไม่บังคับ บริษัทจำนวนมากไม่มีโทรสารแล้ว)
+  put(clean(d.company_mobile) || '-', 149, 343.7, 190);
+  put(clean(d.company_fax) || '-', 376, 343.7);
   put(d.company_email, 124, 324.1);
 
   // วันเริ่ม: ถ้าสถานประกอบการยืนยันวันแล้วใช้วันนั้น ไม่งั้นใช้ปฏิทินสหกิจ · วันสิ้นสุด: ปฏิทินสหกิจ

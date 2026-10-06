@@ -80,6 +80,10 @@ router.post(
 // ⛔ ไม่ผูกปฏิทินกิจกรรม — การยกเลิกไม่ใช่การยื่น นอกช่วงเปิดรับก็ต้องยกเลิกได้
 router.post('/:id/withdraw', authorizeRoles('student'), IntentFormController.withdrawIntent);
 
+// Route: PUT /api/intents/:id/company (นักศึกษาแก้สถานประกอบการของคำร้อง ก่อนอัปโหลดกระดาษที่ลงนาม)
+// ⛔ ไม่ผูกปฏิทินกิจกรรม — แก้ใบที่ยื่นไปแล้ว ไม่ใช่การยื่นใหม่
+router.put('/:id/company', authorizeRoles('student'), IntentFormController.updateIntentCompany);
+
 // Route: PATCH /api/intents/:id/officer-approve (เจ้าหน้าที่รับคำร้อง)
 router.patch(
   '/:id/officer-approve',

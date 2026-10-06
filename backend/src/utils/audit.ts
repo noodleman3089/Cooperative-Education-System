@@ -41,6 +41,8 @@ export const AuditAction = {
   INTENT_OFFICER_REJECTED: 'intent.officer_rejected',
   // นักศึกษายกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ — ใบถูกลบทั้งใบ บรรทัด audit คือร่องรอยเดียวที่เหลือ
   INTENT_WITHDRAWN: 'intent.withdrawn',
+  // นักศึกษาแก้สถานประกอบการของคำร้องก่อนอัปโหลดกระดาษที่ลงนาม (from = to คือแก้ข้อมูลในแถวร่างเดิม)
+  INTENT_COMPANY_CHANGED: 'intent.company_changed',
   INTENT_COVER_LETTER_EMAILED: 'intent.cover_letter_emailed',
   // บริษัทตอบผ่านลิงก์ในอีเมล (ไม่มีบัญชี) — บรรทัดนี้คือสิ่งเดียวที่ตามย้อนได้ว่าคำตอบมาจากลิงก์ใบไหน (เก็บ token_id ไม่เก็บ token)
   INTENT_ACCEPTED_VIA_LINK: 'intent.accepted_via_link',

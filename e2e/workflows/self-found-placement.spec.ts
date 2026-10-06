@@ -56,6 +56,14 @@ test.describe('Self-Found Placement Workflow E2E Tests', () => {
     await page.getByTestId('request-contact-person').fill('นายสมหวัง ตั้งใจ');
     await page.getByTestId('request-contact-position').fill('HR Specialist');
 
+    // มือถือ · โทรสาร · E-mail ไม่บังคับ — แต่ E-mail ที่กรอกต้องเป็นรูปแบบอีเมลจริง (2026-10-06)
+    await page.getByTestId('request-contact-mobile').fill('0891112222');
+    await page.getByTestId('request-contact-email').fill('ไม่ใช่อีเมล');
+    await page.getByTestId('request-submit').click();
+    await expect(page.getByText('E-mail ของผู้รับหนังสือไม่ถูกต้อง')).toBeVisible();
+    await expect(page.getByTestId('confirm-summary')).toHaveCount(0);
+    await page.getByTestId('request-contact-email').fill('somwang@example.com');
+
     // ตัวอย่างด้านขวาเป็น **ไฟล์ PDF ตัวจริง** (ไม่ใช่ภาพจำลอง) — ไม่วาดใหม่เองตอนพิมพ์ ต้องบอกว่าเก่าแล้วให้กดอัปเดต
     await expect(page.getByTestId('request-preview-frame')).toHaveAttribute('src', /^blob:/);
     await expect(page.getByTestId('request-preview-state')).toContainText('ตัวอย่างยังเป็นของเดิม');
@@ -67,6 +75,8 @@ test.describe('Self-Found Placement Workflow E2E Tests', () => {
     expect(previewReq.postDataJSON()).toMatchObject({
       company_name_th: 'บริษัท สมมติสุข จำกัด',
       contact_person: 'นายสมหวัง ตั้งใจ',
+      contact_mobile: '0891112222',
+      contact_email: 'somwang@example.com',
     });
     const previewRes = await previewReq.response();
     expect(previewRes!.status()).toBe(200);
@@ -96,7 +106,7 @@ test.describe('Self-Found Placement Workflow E2E Tests', () => {
     // 7. Verify DB state: intent form created, points to the new company, and status is pending_advisor
     await withDb(async (db) => {
       const companyRes = await db.query(
-        "SELECT company_id, is_verified, created_by, contact_person, contact_position FROM companies WHERE name_th = 'บริษัท สมมติสุข จำกัด'"
+        "SELECT company_id, is_verified, created_by, contact_person, contact_position, contact_phone, contact_fax, email FROM companies WHERE name_th = 'บริษัท สมมติสุข จำกัด'"
       );
       expect(companyRes.rowCount).toBe(1);
       const company = companyRes.rows[0];
@@ -104,6 +114,10 @@ test.describe('Self-Found Placement Workflow E2E Tests', () => {
       // ผู้รับหนังสือที่กรอกต้องลงฐานจริง — ถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์
       expect(company.contact_person).toBe('นายสมหวัง ตั้งใจ');
       expect(company.contact_position).toBe('HR Specialist');
+      // ช่องไม่บังคับ: ที่กรอกต้องลงฐาน · ที่ไม่กรอก (โทรสาร) ต้องเป็น NULL ไม่ใช่สตริงว่าง
+      expect(company.contact_phone).toBe('0891112222');
+      expect(company.email).toBe('somwang@example.com');
+      expect(company.contact_fax).toBeNull();
 
       const intentRes = await db.query(
         "SELECT status, company_id FROM intent_forms WHERE company_id = $1",
