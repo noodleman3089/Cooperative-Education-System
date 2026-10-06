@@ -141,7 +141,10 @@ test.describe('Business Rules & Guards E2E Tests', () => {
 
     // 4. ต้องถูกปฏิเสธ และสถานะในฐานต้องไม่ขยับ
     expect(approveRes.status(), await approveRes.text()).toBe(400);
-    expect(await approveRes.text()).toContain('pending_officer_request');
+    // ข้อความถึงมือผู้ใช้เป็นคำไทยตั้งแต่ `bb59066` — บอกว่าใบอยู่ขั้นไหน และขั้นไหนถึงกดได้
+    const refusal = (await approveRes.json()).message as string;
+    expect(refusal).toContain('คำร้องอยู่ในขั้น "รอนักศึกษาอัปโหลดแบบคำร้องที่ลงนาม"');
+    expect(refusal).toContain('ทำได้เฉพาะขั้น "รอเจ้าหน้าที่ตรวจแบบคำร้อง"');
 
     await withDb(async (db) => {
       const statusRes = await db.query(
