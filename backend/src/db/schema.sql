@@ -455,7 +455,8 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- reasoning as every other reject reason in this schema.
     reject_reason TEXT,
     -- ยื่นในช่วงผ่อนผัน (เลย end_date แต่ยังไม่เลย late_end_date)
-    -- ⛔ ปั๊มตอน INSERT เท่านั้น ห้ามคำนวณย้อนหลัง — เจ้าหน้าที่แก้ปฏิทินทีหลังได้
+    -- ⛔ ปั๊ม ณ ตอนเกิดเหตุเท่านั้น (ตอนยื่น · หรือตอนอัปโหลดกระดาษที่ลงนามครั้งแรก — กำหนดส่งนับที่วันอัปโหลด 2026-10-06)
+    --    ตั้งได้อย่างเดียวไม่มีทางถอด · ห้ามคำนวณย้อนหลัง — เจ้าหน้าที่แก้ปฏิทินทีหลังได้
     --    ถ้าคำนวณสด ใบที่เคยส่งช้าจะกลายเป็นส่งตรงเวลาทันทีที่ขยายวัน หลักฐานหาย
     submitted_late BOOLEAN NOT NULL DEFAULT FALSE,
     late_reason TEXT,
