@@ -50,7 +50,7 @@ const COUNTS_SQL = `
     (SELECT COUNT(*)::int FROM members) AS cohort_total,
     (SELECT COUNT(DISTINCT student_id)::int FROM intent_forms WHERE semester_id = $1) AS submitted,
     (SELECT COUNT(DISTINCT student_id)::int FROM intent_forms WHERE semester_id = $1 AND status = 'accepted') AS placed,
-    (SELECT COUNT(*)::int FROM intent_forms WHERE semester_id = $1 AND status IN ('rejected', 'company_rejected')) AS exited,
+    (SELECT COUNT(*)::int FROM intent_forms WHERE semester_id = $1 AND status IN (${TERMINAL})) AS exited,
     (SELECT COUNT(*)::int FROM intent_forms WHERE semester_id = $1 AND status NOT IN (${TERMINAL}, 'accepted')) AS in_flight,
     (SELECT COUNT(*)::int FROM intent_forms WHERE semester_id = $1 AND submitted_late) AS late_forms,
     (SELECT COUNT(*)::int FROM intent_forms i

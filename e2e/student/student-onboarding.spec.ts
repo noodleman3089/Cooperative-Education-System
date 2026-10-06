@@ -74,6 +74,8 @@ async function fillStepOne(page: Page) {
   await page.getByTestId('onboarding-student-code').fill(NEW_STUDENT_CODE);
   // ⛔ ปีต้อง > 2565 ไม่งั้น DeactivationScheduler ปิดบัญชีกลางเทสต์ (กฎ e2e ข้อ 12)
   await page.getByTestId('onboarding-enrollment-year').fill('2567');
+  // คณะต้องเลือกก่อน — ช่องสาขาปิดอยู่จนกว่าจะเลือกคณะ และแสดงเฉพาะสาขาของคณะนั้น
+  await page.getByTestId('onboarding-faculty').selectOption({ index: 1 });
   await page.getByTestId('onboarding-major').selectOption({ index: 1 });
   await page.getByTestId('onboarding-gpa').fill('3.25');
   await page.getByTestId('onboarding-phone').fill('081-234-5678');
@@ -305,6 +307,40 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     await expect(page.getByTestId('onboarding-alt-email')).toHaveValue('thanakrit.s@example.com');
   });
 
+  test('O4b: เลือกคณะก่อน แล้วเห็นเฉพาะสาขาของคณะนั้น · เปลี่ยนคณะแล้วสาขาที่เลือกไว้ถูกล้าง', async ({ page }) => {
+    await seedTestData();
+    await arriveAsFirstTimeStudent(page);
+    await page.goto('/onboarding/student');
+
+    // คณะที่มีสาขามากกว่าหนึ่ง กับอีกคณะหนึ่ง — อ่านจากฐาน ไม่ผูกกับชื่อใน seed
+    const faculties = await withDb(async db =>
+      (await db.query(
+        `SELECT f.faculty_id, f.faculty_name_th,
+                array_agg(m.major_name_th ORDER BY m.major_id) AS majors
+           FROM master_faculty f JOIN master_major m ON m.faculty_id = f.faculty_id
+          GROUP BY f.faculty_id ORDER BY COUNT(*) DESC, f.faculty_id LIMIT 2`
+      )).rows as { faculty_id: number; faculty_name_th: string; majors: string[] }[]
+    );
+    const [first, second] = faculties;
+
+    const major = page.getByTestId('onboarding-major');
+    await expect(major).toBeDisabled();
+
+    await page.getByTestId('onboarding-faculty').selectOption(String(first.faculty_id));
+    await expect(major).toBeEnabled();
+    // ตัวเลือกแรกคือ placeholder ที่เหลือต้องเป็นสาขาของคณะนี้ครบและไม่มีของคณะอื่น
+    expect((await major.locator('option').allTextContents()).slice(1).map(t => t.trim())).toEqual(first.majors);
+
+    await major.selectOption({ index: 1 });
+    await page.getByTestId('onboarding-faculty').selectOption(String(second.faculty_id));
+    await expect(major).toHaveValue('');
+    expect((await major.locator('option').allTextContents()).slice(1).map(t => t.trim())).toEqual(second.majors);
+
+    // ไม่เลือกสาขา = ไปขั้นถัดไปไม่ได้
+    await page.getByTestId('onboarding-next').click();
+    await expect(page.getByText('กรุณาเลือกสาขาวิชาที่สังกัด')).toBeVisible();
+  });
+
   test('O5: กล่องยืนยันแสดงค่าทะเบียนจริง · กลับไปแก้แล้วไม่มีอะไรถูกบันทึก', async ({ page }) => {
     await seedTestData();
     const userId = await arriveAsFirstTimeStudent(page);
@@ -312,6 +348,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
 
     await fillStepOne(page);
     const majorName = (await page.getByTestId('onboarding-major').locator('option:checked').textContent())!.trim();
+    const facultyName = (await page.getByTestId('onboarding-faculty').locator('option:checked').textContent())!.trim();
     await page.getByTestId('onboarding-next').click();
     await page.getByTestId('onboarding-password').fill('Passw0rd1');
     await page.getByTestId('onboarding-confirm-password').fill('Passw0rd1');
@@ -321,6 +358,7 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     const summary = page.getByTestId('confirm-summary');
     await expect(summary).toContainText(NEW_STUDENT_CODE);
     await expect(summary).toContainText(majorName);
+    await expect(summary).toContainText(facultyName);
     await expect(summary).toContainText('2567');
     await expect(summary).toContainText('แก้เองไม่ได้');
 

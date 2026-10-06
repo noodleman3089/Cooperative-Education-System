@@ -7,7 +7,7 @@ export class CompanyModel {
    */
   static async findByGooglePlaceId(googlePlaceId: string): Promise<Company | null> {
     const res = await query(
-      `SELECT company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
        FROM companies 
        WHERE google_place_id = $1`,
       [googlePlaceId]
@@ -21,7 +21,7 @@ export class CompanyModel {
    */
   static async findById(companyId: number): Promise<Company | null> {
     const res = await query(
-      `SELECT company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
        FROM companies 
        WHERE company_id = $1`,
       [companyId]
@@ -35,7 +35,6 @@ export class CompanyModel {
    */
   static async create(companyData: {
     name_th: string;
-    name_en?: string | null;
     address: string;
     province: string;
     district: string;
@@ -45,12 +44,11 @@ export class CompanyModel {
     created_by: number;
   }): Promise<Company> {
     const res = await query(
-      `INSERT INTO companies (name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9)
-       RETURNING company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
+      `INSERT INTO companies (name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8)
+       RETURNING company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
       [
         companyData.name_th,
-        companyData.name_en || null,
         companyData.address,
         companyData.province,
         companyData.district,
@@ -104,15 +102,15 @@ export class CompanyModel {
       conditions.push('is_verified = TRUE');
     }
 
-    // Search filter (partial match ILIKE on name_th or name_en)
+    // Search filter (partial match ILIKE on name_th)
     if (filters.search) {
-      conditions.push(`(name_th ILIKE $${values.length + 1} OR name_en ILIKE $${values.length + 1})`);
+      conditions.push(`name_th ILIKE $${values.length + 1}`);
       values.push(`%${filters.search}%`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `
-      SELECT company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
+      SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email 
       FROM companies 
       ${whereClause} 
       ORDER BY name_th ASC
@@ -150,7 +148,7 @@ export class CompanyModel {
    */
   static async findByNameTh(nameTh: string, excludeId?: number): Promise<Company | null> {
     const values: unknown[] = [nameTh.trim()];
-    let sql = `SELECT company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email FROM companies WHERE LOWER(TRIM(name_th)) = LOWER($1)`;
+    let sql = `SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email FROM companies WHERE LOWER(TRIM(name_th)) = LOWER($1)`;
     if (excludeId !== undefined) {
       sql += ' AND company_id <> $2';
       values.push(excludeId);
@@ -170,7 +168,6 @@ export class CompanyModel {
    */
   static async createByStaff(companyData: {
     name_th: string;
-    name_en?: string | null;
     address: string;
     province: string;
     district: string;
@@ -182,12 +179,11 @@ export class CompanyModel {
     created_by: number;
   }): Promise<Company> {
     const res = await query(
-      `INSERT INTO companies (name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, TRUE, $8, $9, $10, $11)
-       RETURNING company_id, name_th, name_en, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
+      `INSERT INTO companies (name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email)
+       VALUES ($1, $2, $3, $4, $5, $6, NULL, TRUE, $7, $8, $9, $10)
+       RETURNING company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
       [
         companyData.name_th.trim(),
-        companyData.name_en?.trim() || null,
         companyData.address.trim(),
         companyData.province.trim(),
         companyData.district.trim(),
@@ -212,7 +208,6 @@ export class CompanyModel {
     companyId: number,
     data: {
       name_th: string;
-      name_en?: string | null;
       address: string;
       province: string;
       district: string;
@@ -225,13 +220,12 @@ export class CompanyModel {
   ): Promise<boolean> {
     const res = await query(
       `UPDATE companies
-       SET name_th = $2, name_en = $3, address = $4, province = $5, district = $6,
-           postal_code = $7, phone = $8, contact_person = $9, contact_position = $10, email = $11
+       SET name_th = $2, address = $3, province = $4, district = $5,
+           postal_code = $6, phone = $7, contact_person = $8, contact_position = $9, email = $10
        WHERE company_id = $1`,
       [
         companyId,
         data.name_th.trim(),
-        data.name_en?.trim() || null,
         data.address.trim(),
         data.province.trim(),
         data.district.trim(),

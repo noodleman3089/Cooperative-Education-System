@@ -205,7 +205,7 @@ export class WeeklyLogController {
       // Intent & company & mentor info
       const intentRes = await query(
         `SELECT i.form_id, i.start_date, i.end_date, i.uses_company_log_form,
-                c.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
+                c.company_id, c.name_th as company_name_th,
                 m.mentor_id, m.name as mentor_name
          FROM intent_forms i
          JOIN companies c ON i.company_id = c.company_id

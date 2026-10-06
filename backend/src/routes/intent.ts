@@ -51,6 +51,15 @@ router.post(
   IntentFormController.submitIntent
 );
 
+// Route: POST /api/intents/request-form/preview (ตัวอย่างเอกสารหมายเลข 1 ก่อนกดยื่น)
+// ⛔ ไม่ผ่านด่านปฏิทิน — ดูตัวอย่างไม่ใช่การยื่น · ไม่เขียนฐานข้อมูล
+router.post(
+  '/request-form/preview',
+  authorizeRoles('student'),
+  requireStudentProfile,
+  IntentFormController.previewRequestForm
+);
+
 // ⛔ ถอดออกเมื่อ 2026-08-27 — **ห้ามเอากลับมา**
 //    `PATCH /:id/status` (advisor) และ `PATCH /:id/dept-head-status` (dept_head)
 //    คือการอนุมัติของเส้นทางเดิม ซึ่งย้ายไปอยู่บนกระดาษ (แบบคำร้อง เอกสารหมายเลข 1)
@@ -66,6 +75,10 @@ router.post(
   validateUploadedFile(['pdf', 'png', 'jpg']),
   IntentFormController.uploadRequestForm
 );
+
+// Route: POST /api/intents/:id/withdraw (นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ)
+// ⛔ ไม่ผูกปฏิทินกิจกรรม — การยกเลิกไม่ใช่การยื่น นอกช่วงเปิดรับก็ต้องยกเลิกได้
+router.post('/:id/withdraw', authorizeRoles('student'), IntentFormController.withdrawIntent);
 
 // Route: PATCH /api/intents/:id/officer-approve (เจ้าหน้าที่รับคำร้อง)
 router.patch(

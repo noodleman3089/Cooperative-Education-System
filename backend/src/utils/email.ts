@@ -465,7 +465,7 @@ export const sendPersonnelAssignmentEmail = async (
         c.name_th as company_name
        FROM students s
        JOIN users u_s ON s.student_id = u_s.user_id
-       LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
+       LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'superseded')
        LEFT JOIN companies c ON i.company_id = c.company_id
        JOIN personnel a ON a.personnel_id = $2
        JOIN users u_a ON a.personnel_id = u_a.user_id

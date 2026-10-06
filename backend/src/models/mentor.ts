@@ -32,12 +32,11 @@ export class MentorModel {
     department: string | null;
     phone: string;
     company_name_th: string;
-    company_name_en: string | null;
     email: string;
   } | null> {
     const res = await query(
       `SELECT m.mentor_id, m.company_id, m.name, m.position, m.department, m.phone,
-              c.name_th AS company_name_th, c.name_en AS company_name_en,
+              c.name_th AS company_name_th,
               u.email
        FROM mentors m
        JOIN companies c ON m.company_id = c.company_id

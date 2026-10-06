@@ -100,7 +100,6 @@ export class IntentFormController {
       if (is_self_found === true) {
         const {
           company_name_th,
-          company_name_en,
           company_address,
           company_province,
           company_district,
@@ -134,7 +133,6 @@ export class IntentFormController {
           : await IntentFormModel.createSelfFoundWithTransaction(studentId, parsedSemesterId, {
           google_place_id: googlePlaceId,
           name_th: company_name_th,
-          name_en: company_name_en,
           address: company_address,
           province: company_province,
           district: company_district,
@@ -194,7 +192,7 @@ export class IntentFormController {
       }
       const studentId = req.user.userId;
       const result = await query(
-        `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
+        `SELECT i.form_id, i.student_id, i.company_id, c.name_th as company_name_th,
                 i.semester_id, i.status, i.mentor_id, i.start_date, i.end_date, i.uses_company_log_form, i.acceptance_evidence_path,
                 i.request_form_path, i.reject_reason, i.officer_document_no,
                 i.submitted_late, i.late_reason,
@@ -336,7 +334,7 @@ export class IntentFormController {
                 s.student_id, s.student_code, s.cumulative_gpa, s.resume_file,
                 m_maj.major_name_th, m_maj.major_code, f.faculty_name_th,
                 u_std.email as student_email,
-                c.company_id, c.name_th as company_name_th, c.name_en as company_name_en, c.address as company_address,
+                c.company_id, c.name_th as company_name_th, c.address as company_address,
                 c.province as company_province, c.district as company_district, c.postal_code as company_postal_code,
                 c.phone as company_phone, c.contact_person as company_contact_person, c.contact_position as company_contact_position,
                 c.email as company_email,
@@ -680,6 +678,51 @@ export class IntentFormController {
       res.status(200).json({ message: 'ตีกลับคำร้องเรียบร้อยแล้ว', form_id: formId });
     } catch (error) {
       res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถตีกลับคำร้องได้') });
+    }
+  }
+
+  /**
+   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — ยกเลิกแล้วยื่นที่ใหม่ได้ทันที
+   * Route: POST /api/intents/:id/withdraw
+   * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
+   *
+   * ครอบสามกรณี: เลือกสถานประกอบการผิด · อาจารย์/หัวหน้าสาขาไม่อนุญาตบนกระดาษ ·
+   * เจ้าหน้าที่ตีกลับเพราะข้อมูลสถานประกอบการผิด (ข้อมูลบริษัทแก้ในใบเดิมไม่ได้)
+   */
+  static async withdrawIntent(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const { previousPath, companyId } = await IntentFormModel.withdrawByStudent(formId, req.user.userId);
+
+      // ไฟล์กระดาษที่อัปไว้ไม่มีใครอ้างถึงแล้ว — ลบหลัง COMMIT เสมอ (แบบเดียวกับตอนเจ้าหน้าที่ตีกลับ)
+      if (previousPath) {
+        fs.promises.unlink(path.join(process.cwd(), 'uploads', previousPath)).catch(() => undefined);
+      }
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_WITHDRAWN,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: req.user.userId,
+          detail: { company_id: companyId },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({ message: 'ยกเลิกคำร้องเรียบร้อยแล้ว ยื่นคำร้องใหม่ได้เลย', form_id: formId });
+    } catch (error) {
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถยกเลิกคำร้องได้') });
     }
   }
 
@@ -1212,41 +1255,21 @@ export class IntentFormController {
         return;
       }
 
-      const result = await query(
-        `SELECT i.student_id, i.start_date,
-                s.student_code, s.first_name, s.last_name, s.year_level, s.phone, s.alt_email,
-                u.email AS university_email,
-                mj.major_name_th, f.faculty_name_th,
-                c.name_th AS company_name, c.address AS company_address,
-                c.district AS company_district, c.province AS company_province,
-                c.postal_code AS company_postal_code,
-                c.contact_person, c.contact_position,
-                c.phone AS company_phone, c.email AS company_email,
-                sem.academic_year, sem.semester,
-                to_char((NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS today,
-                (SELECT to_char(e.start_date, 'YYYY-MM-DD') FROM coop_calendar_events e
-                  WHERE e.semester_id = i.semester_id AND e.activity_key = 'coop_start'
-                  LIMIT 1) AS coop_start_date,
-                (SELECT to_char(e.end_date, 'YYYY-MM-DD') FROM coop_calendar_events e
-                  WHERE e.semester_id = i.semester_id AND e.activity_key = 'coop_end'
-                  LIMIT 1) AS coop_end_date
-           FROM intent_forms i
-           JOIN students s        ON i.student_id = s.student_id
-           JOIN users u           ON s.student_id = u.user_id
-           JOIN master_major mj   ON s.major_id = mj.major_id
-           JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
-           JOIN companies c       ON i.company_id = c.company_id
-           JOIN coop_semesters sem ON i.semester_id = sem.semester_id
-          WHERE i.form_id = $1`,
+      const intent = await query(
+        `SELECT student_id, semester_id, company_id, start_date FROM intent_forms WHERE form_id = $1`,
         [formId]
       );
+      const found = intent.rows[0];
+      const data = found
+        ? await IntentFormController.loadRequestFormData(found.student_id, found.semester_id, found.company_id)
+        : null;
 
-      if ((result.rowCount ?? 0) === 0) {
+      if (!data) {
         res.status(404).json({ message: 'ไม่พบคำร้องที่ต้องการ' });
         return;
       }
 
-      const row = result.rows[0];
+      const row = { ...data, student_id: found.student_id as number, start_date: found.start_date };
       const { userId, roles } = req.user;
 
       // นักศึกษาเปิดได้เฉพาะของตัวเอง — บุคลากรใช้กติกาเดียวกับการตรวจงานนักศึกษา
@@ -1269,30 +1292,133 @@ export class IntentFormController {
         return;
       }
 
-      const templatePathCandidates = [
-        path.join(process.cwd(), 'secure_private', 'templates', 'request_form_template.pdf'),
-        path.join(process.cwd(), 'backend', 'secure_private', 'templates', 'request_form_template.pdf'),
-        path.resolve(__dirname, '../../secure_private/templates/request_form_template.pdf'),
-      ];
-      const templatePath = templatePathCandidates.find((p) => fs.existsSync(p));
-
-      if (templatePath) {
-        const pdf = await buildRequestFormPdf(templatePath, row as RequestFormPdfData);
-        res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', `inline; filename="request_form_${formId}.pdf"`);
-        // มีชื่อ เบอร์โทร และอีเมลของนักศึกษา — ห้ามค้างในแคชของเบราว์เซอร์/พร็อกซี
-        res.setHeader('Cache-Control', 'no-store');
-        res.status(200).send(Buffer.from(pdf));
-        return;
-      }
-
-      // Fallback กรณีหาไฟล์เทมเพลตไม่เจอ
-      const html = renderRequestFormHtml(row as RequestFormData);
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.status(200).send(html);
+      await IntentFormController.sendRequestFormPdf(res, row, `request_form_${formId}.pdf`);
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Get Request Form Error', 'เกิดข้อผิดพลาดขณะสร้างแบบคำร้อง');
+    }
+  }
+
+  /**
+   * ข้อมูลทุกช่องของเอกสารหมายเลข 1 — ใช้ร่วมกันทั้งฉบับของใบที่ยื่นแล้ว (`getRequestForm`)
+   * และตัวอย่างก่อนยื่น (`previewRequestForm`) ห้ามเขียน SQL ชุดที่สอง
+   *   semesterId = null → ภาคเรียนที่เปิดอยู่ · companyId = null → ช่องสถานประกอบการว่าง (ผู้เรียกเติมเอง)
+   */
+  private static async loadRequestFormData(
+    studentId: number,
+    semesterId: number | null,
+    companyId: number | null
+  ): Promise<RequestFormPdfData | null> {
+    const result = await query(
+      `SELECT s.student_code, s.first_name, s.last_name, s.year_level, s.phone, s.alt_email,
+              u.email AS university_email,
+              mj.major_name_th, f.faculty_name_th,
+              c.name_th AS company_name, c.address AS company_address,
+              c.district AS company_district, c.province AS company_province,
+              c.postal_code AS company_postal_code,
+              c.contact_person, c.contact_position,
+              c.phone AS company_phone, c.email AS company_email,
+              sem.academic_year, sem.semester,
+              NULL::text AS start_date,
+              to_char((NOW() AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS today,
+              (SELECT to_char(e.start_date, 'YYYY-MM-DD') FROM coop_calendar_events e
+                WHERE e.semester_id = sem.semester_id AND e.activity_key = 'coop_start'
+                LIMIT 1) AS coop_start_date,
+              (SELECT to_char(e.end_date, 'YYYY-MM-DD') FROM coop_calendar_events e
+                WHERE e.semester_id = sem.semester_id AND e.activity_key = 'coop_end'
+                LIMIT 1) AS coop_end_date
+         FROM students s
+         JOIN users u           ON s.student_id = u.user_id
+         JOIN master_major mj   ON s.major_id = mj.major_id
+         JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
+         LEFT JOIN companies c  ON c.company_id = $3
+         LEFT JOIN coop_semesters sem ON sem.semester_id = COALESCE(
+           $2::int, (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1))
+        WHERE s.student_id = $1`,
+      [studentId, semesterId, companyId]
+    );
+    return (result.rows[0] as RequestFormPdfData | undefined) ?? null;
+  }
+
+  /** วาดเอกสารหมายเลข 1 ทับแม่แบบตัวจริงแล้วส่งออก · หาแม่แบบไม่เจอ = ตกไปเป็นหน้า HTML เดิม */
+  private static async sendRequestFormPdf(
+    res: Response,
+    row: RequestFormPdfData,
+    fileName: string
+  ): Promise<void> {
+    // มีชื่อ เบอร์โทร และอีเมลของนักศึกษา — ห้ามค้างในแคชของเบราว์เซอร์/พร็อกซี
+    res.setHeader('Cache-Control', 'no-store');
+
+    const templatePath = [
+      path.join(process.cwd(), 'secure_private', 'templates', 'request_form_template.pdf'),
+      path.join(process.cwd(), 'backend', 'secure_private', 'templates', 'request_form_template.pdf'),
+      path.resolve(__dirname, '../../secure_private/templates/request_form_template.pdf'),
+    ].find((p) => fs.existsSync(p));
+
+    if (!templatePath) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.status(200).send(renderRequestFormHtml(row));
+      return;
+    }
+
+    const pdf = await buildRequestFormPdf(templatePath, row);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+    res.status(200).send(Buffer.from(pdf));
+  }
+
+  /**
+   * ตัวอย่างเอกสารหมายเลข 1 **ก่อนกดยื่น** — วาดด้วยตัววาดตัวเดียวกับฉบับจริง
+   * Route: POST /api/intents/request-form/preview
+   * Access: student (มีโปรไฟล์แล้ว) · ไม่ผ่านด่านปฏิทิน เพราะดูตัวอย่างไม่ใช่การยื่น
+   *
+   * ⛔ **ห้ามเขียนฐานข้อมูล** — ไม่สร้างใบ ไม่สร้างสถานประกอบการ (E2E คุมจำนวนแถวไว้)
+   * ⛔ ไม่รับรหัสนักศึกษาจากผู้เรียก ใช้ `req.user.userId` เท่านั้น
+   * `company_id` รับเฉพาะสถานประกอบการที่รับรองแล้ว (ชุดเดียวกับที่ `GET /companies` ให้นักศึกษาเห็น)
+   * — ไม่งั้นจะใช้ไล่อ่านที่อยู่/ผู้ติดต่อของแถวที่นักศึกษาคนอื่นกรอกและยังไม่มีใครตรวจได้
+   */
+  static async previewRequestForm(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      let companyId: number | null = null;
+      if (body.company_id !== undefined && body.company_id !== null) {
+        companyId = parseInt(String(body.company_id), 10);
+        const company = isNaN(companyId) ? null : await CompanyModel.findById(companyId);
+        if (!company || !company.is_verified) {
+          res.status(404).json({ message: 'ไม่พบสถานประกอบการนี้ในทำเนียบของคณะ' });
+          return;
+        }
+      }
+
+      const data = await IntentFormController.loadRequestFormData(req.user.userId, null, companyId);
+      if (!data) {
+        res.status(404).json({ message: 'ไม่พบโปรไฟล์นักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อนยื่นคำร้อง' });
+        return;
+      }
+
+      if (companyId === null) {
+        // ช่องที่นักศึกษากำลังพิมพ์ — ชื่อช่องเดียวกับ `POST /intents` · ยังกรอกไม่ครบก็ดูตัวอย่างได้
+        const text = (key: string): string | null =>
+          typeof body[key] === 'string' ? (body[key] as string).trim().slice(0, 255) || null : null;
+        data.company_name = text('company_name_th');
+        data.company_address = text('company_address');
+        data.company_district = text('company_district');
+        data.company_province = text('company_province');
+        data.company_postal_code = text('company_postal_code');
+        data.company_phone = text('company_phone');
+        data.contact_person = text('contact_person');
+        data.contact_position = text('contact_position');
+        data.company_email = text('contact_email');
+      }
+
+      await IntentFormController.sendRequestFormPdf(res, data, 'request_form_preview.pdf');
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Preview Request Form Error', 'เกิดข้อผิดพลาดขณะสร้างตัวอย่างแบบคำร้อง');
     }
   }
 

@@ -41,6 +41,8 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   accepted: { text: 'สถานประกอบการตอบรับแล้ว', tone: 'done' },
   rejected: { text: 'อาจารย์ที่ปรึกษาตีกลับ', tone: 'rejected' },
   company_rejected: { text: 'สถานประกอบการปฏิเสธ', tone: 'rejected' },
+  // นักศึกษากดยกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ — ไม่ใช่การถูกปฏิเสธ จึงไม่ใช้โทนแดง
+  superseded: { text: 'นักศึกษายกเลิกคำร้องเอง · ยื่นที่ใหม่ได้', tone: 'neutral' },
 
 
   // report outlines / documents

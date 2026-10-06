@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { withDb, dbValue } from '../helpers/db';
+import { withDb, dbRow, dbValue } from '../helpers/db';
 import { loginAs, apiLoginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 
@@ -32,6 +32,16 @@ const otherMajorId = () =>
     [STUDENT_ID]
   );
 
+/** สาขาใน**คณะอื่น** — หน้าโปรไฟล์กรองสาขาตามคณะ จึงต้องเปลี่ยนคณะก่อนถึงจะเห็นสาขานี้ */
+const otherFacultyMajor = () =>
+  dbRow<{ major_id: number; faculty_id: number }>(
+    `SELECT m.major_id, m.faculty_id FROM master_major m
+      WHERE m.faculty_id <> (SELECT mm.faculty_id FROM students s JOIN master_major mm ON mm.major_id = s.major_id
+                              WHERE s.student_id = $1)
+      ORDER BY m.major_id DESC LIMIT 1`,
+    [STUDENT_ID]
+  );
+
 async function insertIntent(status: string) {
   await withDb(async (db) => {
     const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0]
@@ -53,7 +63,8 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
 
   test('P1: แก้เกรดกับสาขาจากหน้าจอ → ลงฐาน · ล้างที่ปรึกษา · ลง audit · กล่องทะเบียนใหญ่หายไป', async ({ page }) => {
     await resetStudent2();
-    const target = (await otherMajorId())!;
+    // ย้ายข้ามคณะ — คุมด้วยว่าช่องคณะกรองรายการสาขาจริง (เลือกคณะก่อน สาขาของคณะนั้นถึงโผล่)
+    const { major_id: target, faculty_id: targetFaculty } = (await otherFacultyMajor())!;
     await withDb(async (db) => {
       const advisor = (await db.query("SELECT user_id FROM users WHERE email = 'advisor1@test.com'")).rows[0].user_id;
       await db.query('UPDATE students SET advisor_id = $1, supervisor_id = $1 WHERE student_id = $2', [advisor, STUDENT_ID]);
@@ -68,6 +79,9 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
 
     await expect(page.getByTestId('profile-gpa')).toHaveValue('3.75');
     await page.getByTestId('profile-gpa').fill('3.10');
+    // สาขาของคณะอื่นต้องยังไม่อยู่ในรายการ จนกว่าจะเปลี่ยนคณะ
+    await expect(page.getByTestId('profile-major').locator(`option[value="${target}"]`)).toHaveCount(0);
+    await page.getByTestId('profile-faculty').selectOption(String(targetFaculty));
     await page.getByTestId('profile-major').selectOption(String(target));
     await page.getByTestId('profile-save').click();
     await expect(page.getByText('บันทึกข้อมูลส่วนตัวและเรซูเม่เรียบร้อยแล้ว')).toBeVisible();

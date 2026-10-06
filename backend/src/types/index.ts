@@ -114,7 +114,6 @@ export interface OptionalStudentProfileBody {
 export interface Company {
   company_id: number;
   name_th: string;
-  name_en: string | null;
   address: string;
   province: string;
   district: string;
@@ -151,7 +150,6 @@ export interface IntentForm {
 export interface GoogleSearchCompanyBody {
   google_place_id: string;
   name_th: string;
-  name_en?: string;
   address: string;
   province: string;
   district: string;

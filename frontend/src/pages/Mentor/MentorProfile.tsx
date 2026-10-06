@@ -30,7 +30,6 @@ interface MentorProfileData {
   department: string | null;
   phone: string;
   company_name_th: string;
-  company_name_en: string | null;
   email: string;
 }
 
@@ -138,7 +137,6 @@ const MentorProfile: React.FC = () => {
               </label>
               <div className={readOnlyClass}>
                 {profile.company_name_th}
-                {profile.company_name_en ? ` (${profile.company_name_en})` : ''}
               </div>
             </div>
 

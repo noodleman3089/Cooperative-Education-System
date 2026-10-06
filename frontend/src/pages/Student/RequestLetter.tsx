@@ -54,7 +54,7 @@ const EMPTY_FORM = {
   contact_position: '',
 };
 
-const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected'];
+const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
 const LATE_REASON_MIN = 20;
 
 const labelClass = 'mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300';
@@ -242,11 +242,7 @@ const RequestLetter: React.FC = () => {
   const directoryMatches =
     !locked && query.length >= 2
       ? companies
-          .filter(
-            (c) =>
-              c.name_th.toLowerCase().includes(query) ||
-              (c.name_en ?? '').toLowerCase().includes(query)
-          )
+          .filter((c) => c.name_th.toLowerCase().includes(query))
           .slice(0, 5)
       : [];
 
@@ -408,7 +404,7 @@ const RequestLetter: React.FC = () => {
                 <StatusBadge status={blockingIntent.status} domain="intent" />
               </p>
               <p>
-                ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา หากต้องการเปลี่ยนที่ ต้องรอผลของใบนี้ก่อน หรือติดต่ออาจารย์ที่ปรึกษา
+                ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา · ก่อนเจ้าหน้าที่รับคำร้อง คุณยกเลิกใบนี้เองได้ที่หน้าแรกแล้วยื่นที่ใหม่ · หลังจากนั้นต้องรอผลของใบนี้ก่อน
               </p>
               <Button variant="secondary" size="sm" onClick={() => goTo('dashboard')}>
                 ไปพิมพ์แบบคำร้องและดูความคืบหน้าที่หน้าแรก
@@ -440,6 +436,7 @@ const RequestLetter: React.FC = () => {
                 {[
                   ['ชื่อ-นามสกุล', studentName],
                   ['รหัสนักศึกษา', profile?.student_code],
+                  ['คณะ', profile?.faculty_name_th],
                   ['สาขาวิชา · ชั้นปี', [majorName, profile?.year_level ? `ปี ${profile.year_level}` : ''].filter(Boolean).join(' · ')],
                   ['โทรศัพท์มือถือ', profile?.phone],
                   ['E-mail', email],
@@ -665,7 +662,7 @@ const RequestLetter: React.FC = () => {
               },
               ...(isLate ? [{ label: 'เหตุผลที่ยื่นช้า', value: lateReason.trim() }] : []),
             ]}
-            lockNote="ชื่อและที่อยู่นี้จะถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ · เปลี่ยนสถานประกอบการได้จนกว่าเจ้าหน้าที่จะออกเลขหนังสือ"
+            lockNote="ชื่อและที่อยู่นี้จะถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ · ยื่นแล้วแก้ในใบเดิมไม่ได้ ถ้าผิดต้องยกเลิกคำร้องที่หน้าแรกแล้วยื่นใหม่ (ทำได้จนกว่าเจ้าหน้าที่จะรับคำร้อง)"
           />
         }
       />

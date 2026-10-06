@@ -12,7 +12,7 @@ import { intentDisplayStatus, getIntentStage, type DeptHeadIntentStage } from '.
 import { formatThaiDate } from '../../utils/thaiDate';
 import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 
-const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected'];
+const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
 
 const studentDisplayName = (s: { first_name?: string | null; last_name?: string | null; student_code?: string }): string =>
   [s.first_name, s.last_name].filter(Boolean).join(' ').trim() || s.student_code || 'ไม่ระบุชื่อ';

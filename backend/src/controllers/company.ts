@@ -20,7 +20,7 @@ export class CompanyController {
       }
 
       const body = req.body as GoogleSearchCompanyBody;
-      const { google_place_id, name_th, name_en, address, province, district, postal_code, phone } = body;
+      const { google_place_id, name_th, address, province, district, postal_code, phone } = body;
 
       if (!google_place_id || typeof google_place_id !== 'string') {
         res.status(400).json({ message: 'google_place_id is required and must be a valid string.' });
@@ -50,7 +50,6 @@ export class CompanyController {
       const studentUserId = req.user.userId;
       const newCompany = await CompanyModel.create({
         name_th,
-        name_en: name_en || null,
         address,
         province,
         district,
@@ -215,7 +214,7 @@ export class CompanyController {
   private static readFields(body: Record<string, unknown>): { values?: Record<string, string | null>; error?: string } {
     const text = (key: string) => (typeof body[key] === 'string' ? (body[key] as string).trim() : '');
     const required: Array<[string, number, string]> = [
-      ['name_th', 255, 'ชื่อสถานประกอบการ (ภาษาไทย)'],
+      ['name_th', 255, 'ชื่อสถานประกอบการ'],
       ['address', 255, 'ที่อยู่'],
       ['province', 100, 'จังหวัด'],
       ['district', 100, 'อำเภอ/เขต'],
@@ -230,7 +229,6 @@ export class CompanyController {
     }
 
     const optional: Array<[string, number, string]> = [
-      ['name_en', 255, 'ชื่อสถานประกอบการ (ภาษาอังกฤษ)'],
       ['contact_person', 255, 'ชื่อผู้ติดต่อ'],
       ['contact_position', 255, 'ตำแหน่งผู้ติดต่อ'],
       ['email', 255, 'อีเมล'],
@@ -274,7 +272,6 @@ export class CompanyController {
 
       const company = await CompanyModel.createByStaff({
         name_th: values.name_th!,
-        name_en: values.name_en,
         address: values.address!,
         province: values.province!,
         district: values.district!,
@@ -337,7 +334,6 @@ export class CompanyController {
 
       await CompanyModel.updateDetails(companyId, {
         name_th: values.name_th!,
-        name_en: values.name_en,
         address: values.address!,
         province: values.province!,
         district: values.district!,

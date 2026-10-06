@@ -55,6 +55,8 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
       return 'company-rejected';
     case 'rejected':
       return 'rejected';
+    case 'superseded':
+      return 'withdrawn';
     case 'accepted':
       // ได้ที่ฝึกงานแล้ว = จบช่วงขอที่ฝึกงาน · การ์ด "สิ่งที่ต้องทำตอนนี้" ช่วงนี้หายไป
       // เหลือ `CoopNowCard` ใบเดียวที่พาเดินต่อ (เจ้าของตัดสิน 2026-09-30: มีการ์ด "ทำอะไรตอนนี้" ได้ใบเดียวเสมอ)
@@ -116,6 +118,10 @@ const StudentDashboard: React.FC = () => {
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
   const [confirmingFailure, setConfirmingFailure] = useState(false);
+  // ยกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ (`POST /intents/:id/withdraw`) — คนละเส้นกับ "สัมภาษณ์ไม่ผ่าน" ข้างบน
+  const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
   // ส่งหนังสือให้สถานประกอบการทางอีเมล — null = ยังไม่พิมพ์เอง ใช้ค่าเริ่มต้นจากที่ระบบรู้
   const [companyMailInput, setCompanyMailInput] = useState<string | null>(null);
   const [confirmingCompanyMail, setConfirmingCompanyMail] = useState(false);
@@ -354,6 +360,23 @@ const StudentDashboard: React.FC = () => {
       setError(getErrorMessage(err, 'การรายงานผลสัมภาษณ์ล้มเหลวล้มเหลว กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setReportingFail(false);
+    }
+  };
+
+  const handleWithdraw = async () => {
+    if (!activeIntent) return;
+    setWithdrawing(true);
+    setWithdrawError(null);
+
+    try {
+      await api.post(`/intents/${activeIntent.form_id}/withdraw`);
+      setConfirmingWithdraw(false);
+      await loadDashboardData();
+    } catch (err) {
+      // error อยู่ในกล่องยืนยัน ไม่ใช่แถบหลังกล่อง
+      setWithdrawError(getErrorMessage(err, 'ยกเลิกคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -930,12 +953,28 @@ const StudentDashboard: React.FC = () => {
                           <>
                             <strong>เจ้าหน้าที่ตีกลับแบบคำร้อง</strong> — {intent.reject_reason}
                             <br />
-                            แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย
+                            แก้ไขตามที่แจ้งแล้วอัปโหลดใหม่ได้เลย · ถ้าข้อมูลสถานประกอบการผิด ให้ยกเลิกคำร้องนี้แล้วยื่นใหม่
                           </>
                         }
                       />
                     </div>
                   )}
+
+                  {/* ยกเลิกได้จนกว่าเจ้าหน้าที่จะรับ — ทางเดียวที่เปลี่ยนสถานประกอบการ/แก้ข้อมูลบริษัทของใบที่ยื่นไปแล้ว */}
+                  <p className="mt-3 text-xs text-gray-600 dark:text-gray-400">
+                    เลือกสถานประกอบการผิด หรืออาจารย์ไม่อนุญาต?{' '}
+                    <button
+                      type="button"
+                      data-testid="withdraw-open"
+                      onClick={() => {
+                        setWithdrawError(null);
+                        setConfirmingWithdraw(true);
+                      }}
+                      className="font-bold text-red-700 underline dark:text-red-400"
+                    >
+                      ยกเลิกคำร้องนี้
+                    </button>
+                  </p>
                 </div>
   );
 
@@ -1646,6 +1685,34 @@ const StudentDashboard: React.FC = () => {
       {/* Co-op Calendar Modal */}
       {calendarModal}
 
+      <ConfirmDialog
+        open={confirmingWithdraw && !!activeIntent}
+        title="ยกเลิกคำร้องนี้"
+        confirmLabel="ยืนยันยกเลิกคำร้อง"
+        cancelLabel="ไม่ยกเลิก"
+        confirmTestId="withdraw-confirm"
+        cancelTestId="withdraw-confirm-cancel"
+        destructive
+        busy={withdrawing}
+        onConfirm={handleWithdraw}
+        onCancel={() => setConfirmingWithdraw(false)}
+        message={
+          <>
+            <AlertBanner variant="error" message={withdrawError} className="mb-3" />
+            <ConfirmSummary
+              lead="ยกเลิกแล้วยื่นคำร้องถึงสถานประกอบการอื่น (หรือที่เดิมด้วยข้อมูลที่แก้แล้ว) ได้ทันที"
+              rows={[
+                { label: 'สถานประกอบการ', value: activeIntent?.company_name_th ?? '' },
+                {
+                  label: 'ไฟล์ที่ส่งไปแล้ว',
+                  value: activeIntent?.request_form_path ? 'ถูกลบออกจากระบบ' : 'ยังไม่ได้ส่ง',
+                },
+              ]}
+              lockNote="ยกเลิกแล้วเรียกคืนไม่ได้ · กระดาษที่ลงนามไว้ของใบนี้ใช้ต่อไม่ได้ ต้องพิมพ์และลงนามใบใหม่"
+            />
+          </>
+        }
+      />
       <ConfirmDialog
         open={confirmingFailure}
         title="รายงานผลการสัมภาษณ์ไม่ผ่าน"

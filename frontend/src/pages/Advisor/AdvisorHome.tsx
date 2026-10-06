@@ -194,7 +194,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     viewAllUrl: '/dashboard',
   };
 
-  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected'];
+  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
   const trackedIntents = intents.filter(
     (i) => !DEAD_INTENT_STATUSES.includes(i.status)
   );

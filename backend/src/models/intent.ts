@@ -60,6 +60,11 @@ export const STUDENT_FAIL_FROM = [
  */
 export const OFFICER_RECEIVE_FROM = ['pending_advisor', 'pending_officer_request'];
 export const OFFICER_DECISION_FROM = ['pending_officer_request'];
+/**
+ * นักศึกษายกเลิกคำร้องเองได้ **ก่อนเจ้าหน้าที่รับเท่านั้น** (เจ้าของสั่ง 2026-10-06)
+ * หลังเจ้าหน้าที่รับ = บริษัทถูกรับรองและเลขที่หนังสือออกไปแล้ว ย้อนด้วยปุ่มของนักศึกษาไม่ได้
+ */
+export const STUDENT_WITHDRAW_FROM = ['pending_advisor', 'pending_officer_request'];
 
 export function assertAllowedTransition(action: string, currentStatus: string, allowedFrom: string[]): void {
   if (!allowedFrom.includes(currentStatus)) {
@@ -180,7 +185,6 @@ export class IntentFormModel {
     semesterId: number,
     companyDetails: {
       name_th: string;
-      name_en?: string;
       address: string;
       province: string;
       district: string;
@@ -237,14 +241,13 @@ export class IntentFormModel {
       // 3. Create the unverified company
       const companyRes = await client.query(
         `INSERT INTO companies (
-          name_th, name_en, address, province, district, postal_code, phone, 
+          name_th, address, province, district, postal_code, phone,
           contact_person, contact_position, email, is_verified, created_by, google_place_id
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, FALSE, $11, $12)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, FALSE, $10, $11)
          RETURNING company_id`,
         [
           companyDetails.name_th,
-          companyDetails.name_en || null,
           companyDetails.address,
           companyDetails.province,
           companyDetails.district,
@@ -467,6 +470,67 @@ export class IntentFormModel {
       return {
         studentId: row.student_id as number,
         previousPath: row.request_form_path as string | null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ → `superseded` (ยื่นที่ใหม่ได้ทันที)
+   *
+   * ⛔ ไม่ใช้ `failByStudent` ซ้ำ — เส้นนั้นตั้ง `rejected` และหน้าจอแปลว่า "สัมภาษณ์ไม่ผ่าน"
+   *
+   * แถวสถานประกอบการ **ลบไม่ได้** เพราะใบที่ยกเลิกยังอ้างถึง (`company_id` NOT NULL · ON DELETE RESTRICT)
+   * สิ่งที่ทำแทนในทรานแซกชันเดียวกัน: ถ้าแถวนั้นนักศึกษาสร้างเอง ยังไม่รับรอง และไม่มีใบอื่นอ้างถึง
+   * ให้ปลด `google_place_id` ออก — ไม่งั้นยื่นใหม่ด้วยสถานที่เดิมจาก Google Maps จะถูกจับคู่กลับมา
+   * ที่แถวเก่า (ซึ่งข้อมูลผิดคือเหตุที่ยกเลิก) แทนที่จะใช้ข้อมูลที่เพิ่งกรอกใหม่
+   */
+  static async withdrawByStudent(
+    formId: number,
+    studentId: number
+  ): Promise<{ previousPath: string | null; companyId: number }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status, request_form_path
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+
+      const row = current.rows[0];
+      if (row.student_id !== studentId) {
+        throw new Error('คุณยกเลิกได้เฉพาะคำร้องของตัวเองเท่านั้น');
+      }
+      assertAllowedTransition('student_withdraw', row.status, STUDENT_WITHDRAW_FROM);
+
+      await client.query(
+        `UPDATE intent_forms
+            SET status = 'superseded', request_form_path = NULL, reject_reason = NULL
+          WHERE form_id = $1`,
+        [formId]
+      );
+      await client.query(
+        `UPDATE companies c
+            SET google_place_id = NULL
+          WHERE c.company_id = $1 AND c.created_by = $2 AND c.is_verified = FALSE
+            AND NOT EXISTS (
+              SELECT 1 FROM intent_forms o WHERE o.company_id = c.company_id AND o.form_id <> $3
+            )`,
+        [row.company_id, studentId, formId]
+      );
+      await recordStageEvent(client, formId, 'exited');
+
+      await client.query('COMMIT');
+      return {
+        previousPath: row.request_form_path as string | null,
+        companyId: row.company_id as number,
       };
     } catch (error) {
       await client.query('ROLLBACK');

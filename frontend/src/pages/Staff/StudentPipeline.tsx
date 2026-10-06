@@ -277,7 +277,7 @@ export const StudentPipeline: React.FC = () => {
                 id: 'exit',
                 label: 'ต้องหาที่ฝึกใหม่',
                 value: kpis.exited,
-                sub: 'บริษัทไม่รับ / คำร้องไม่ผ่าน',
+                sub: 'บริษัทไม่รับ / คำร้องไม่ผ่าน / ยกเลิกเอง',
                 tone: 'text-red-800 dark:text-red-300',
               },
               {

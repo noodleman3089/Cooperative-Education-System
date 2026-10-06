@@ -97,7 +97,7 @@ export class StudentController {
         
         // Fetch student's intent form for this semester (not rejected/failed)
         const intentQuery = await query(
-          `SELECT i.form_id, i.company_id, c.name_th as company_name_th, c.name_en as company_name_en,
+          `SELECT i.form_id, i.company_id, c.name_th as company_name_th,
                   i.status, i.start_date, i.acceptance_evidence_path,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
@@ -111,7 +111,7 @@ export class StudentController {
            LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
            LEFT JOIN users u_men ON i.mentor_id = u_men.user_id
            WHERE i.student_id = $1 AND i.semester_id = $2
-             AND i.status NOT IN ('rejected', 'company_rejected')
+             AND i.status NOT IN ('rejected', 'company_rejected', 'superseded')
            ORDER BY i.form_id DESC
            LIMIT 1`,
           [userId, semesterId]
@@ -123,7 +123,6 @@ export class StudentController {
             form_id: row.form_id,
             company_id: row.company_id,
             company_name_th: row.company_name_th,
-            company_name_en: row.company_name_en,
             status: row.status,
             start_date: row.start_date,
             acceptance_evidence_path: row.acceptance_evidence_path,
@@ -162,7 +161,7 @@ export class StudentController {
              FROM intent_forms i
              JOIN companies c ON i.company_id = c.company_id
              WHERE i.student_id = $1 AND i.semester_id = $2
-               AND i.status IN ('rejected', 'company_rejected')
+               AND i.status IN ('rejected', 'company_rejected', 'superseded')
              ORDER BY i.form_id DESC
              LIMIT 1`,
             [userId, semesterId]
@@ -806,7 +805,7 @@ export class StudentController {
         LEFT JOIN master_province p ON s.province_id = p.province_id
         LEFT JOIN users u_adv ON s.advisor_id = u_adv.user_id
         LEFT JOIN users u_sup ON s.supervisor_id = u_sup.user_id
-        LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected')
+        LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status NOT IN ('rejected', 'company_rejected', 'superseded')
         LEFT JOIN companies c ON i.company_id = c.company_id
         WHERE 1=1
       `;

@@ -285,7 +285,7 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       ['email', 'faculty_name_th', 'full_name', 'major_name_th', 'semester_label', 'student_code'].sort()
     );
     // บริษัทเห็นแค่ชื่อของตัวเอง — ไม่มีที่อยู่/ผู้จัดการ/ผู้ประสานงาน (ตัดสหกิจ 07 ฝั่งบริษัท 2026-10-05)
-    expect(Object.keys(body.company).sort()).toEqual(['name_en', 'name_th']);
+    expect(Object.keys(body.company).sort()).toEqual(['name_th']);
     expect(body.student.email).toBe('student2@test.com');
     expect(body.student.full_name.length).toBeGreaterThan(0);
     expect(body.student.semester_label).toMatch(/^ภาคเรียนที่ \d\/\d{4}$/);

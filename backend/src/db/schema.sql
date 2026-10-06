@@ -244,8 +244,8 @@ CREATE TABLE IF NOT EXISTS students (
 -- 4. Companies Table
 CREATE TABLE IF NOT EXISTS companies (
     company_id SERIAL PRIMARY KEY,
+    -- ชื่อสถานประกอบการช่องเดียว (ชื่อภาษาอังกฤษ `name_en` ถูกตัดใน migration 050 · คงชื่อคอลัมน์ `name_th` ไว้)
     name_th VARCHAR(255) NOT NULL,
-    name_en VARCHAR(255),
     address VARCHAR(255) NOT NULL,
     province VARCHAR(100) NOT NULL,
     district VARCHAR(100) NOT NULL,
@@ -263,7 +263,7 @@ CREATE TABLE IF NOT EXISTS companies (
     -- (ของจริงเจ้าหน้าที่ส่งฟอร์มเดิมทุกปีและบริษัทกรอกเรื่องเดิมทุกปี) การเก็บที่ใบสำรวจ
     -- จะทำให้ปุ่ม "ใช้คำตอบเดิมของภาคที่แล้ว" ต้องก๊อปข้อมูลบริษัทตามไปด้วยทุกครั้ง
     --
-    -- ⛔ บัญชีบริษัทเขียนได้เฉพาะกลุ่มนี้ **ห้ามเขียน name_th/name_en/address/province/
+    -- ⛔ บัญชีบริษัทเขียนได้เฉพาะกลุ่มนี้ **ห้ามเขียน name_th/address/province/
     --    district/postal_code/is_verified** ซึ่งเป็นตัวตนที่เจ้าหน้าที่รับรองและถูกพิมพ์
     --    ลงหนังสือราชการที่คณบดีลงนาม (ดู spec-D ข้อ 3.2)
     fax VARCHAR(50),

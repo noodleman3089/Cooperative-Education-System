@@ -26,7 +26,8 @@ export type StatusCardState =
   | 'add-mentor'
   | 'wait-confirm'
   | 'company-rejected'
-  | 'rejected';
+  | 'rejected'
+  | 'withdrawn';
 
 /** ฟิลด์ที่ `GET /students/dashboard` ส่งมาแต่ `IntentForm` ยังไม่ได้ประกาศ — optional ทั้งหมด */
 export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm, 'status'>> & {
@@ -50,6 +51,7 @@ const TONE: Record<StatusCardState, Tone> = {
   'add-mentor': 'act',
   'company-rejected': 'act',
   rejected: 'act',
+  withdrawn: 'act',
   'wait-staff': 'wait',
   'wait-dean': 'wait',
   'wait-company': 'wait',
@@ -82,6 +84,7 @@ const ACTIVE_STEP: Record<StatusCardState, number> = {
   // เริ่มขั้น 1 ใหม่ — ใบเดิมปิดแล้ว
   'company-rejected': 0,
   rejected: 0,
+  withdrawn: 0,
 };
 
 const STEPS = [
@@ -101,6 +104,7 @@ function headerLabel(state: StatusCardState): string {
       return 'สิ่งที่ต้องทำตอนนี้ · กลับไปขั้น 5';
     case 'company-rejected':
     case 'rejected':
+    case 'withdrawn':
       return 'สิ่งที่ต้องทำตอนนี้ · เริ่มขั้น 1 ใหม่';
     default:
       return TONE[state] === 'act'
@@ -203,6 +207,8 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         return <Pill tone="bad">บริษัทไม่รับ</Pill>;
       case 'rejected':
         return <Pill tone="bad">คำร้องถูกตีกลับ</Pill>;
+      case 'withdrawn':
+        return <Pill>ยกเลิกแล้ว</Pill>;
       default:
         return null;
     }
@@ -373,6 +379,22 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
                 หาที่ฝึกงานใหม่
               </Button>
               <span className="text-sm text-gray-600 dark:text-gray-400">คำร้องเดิมปิดแล้ว ไม่ต้องยกเลิกเอง</span>
+            </div>
+          </>
+        );
+      case 'withdrawn':
+        return (
+          <>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              คุณยกเลิกคำร้องนี้เอง ยื่นที่ใหม่ได้เลย
+            </h2>
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              คำร้องถึง {company} ถูกยกเลิกแล้ว · กระดาษที่พิมพ์หรือลงนามไว้ของใบนี้ใช้ต่อไม่ได้ ต้องพิมพ์ใบใหม่หลังยื่น
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button data-testid="status-primary" onClick={onFindPlacement}>
+                ยื่นคำร้องใหม่
+              </Button>
             </div>
           </>
         );

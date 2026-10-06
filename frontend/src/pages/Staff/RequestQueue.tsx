@@ -43,7 +43,6 @@ export interface RequestDetailData {
   faculty_name_th?: string | null;
   company_id: number;
   company_name_th?: string;
-  company_name_en?: string | null;
   company_address?: string | null;
   company_district?: string | null;
   company_province?: string | null;
@@ -977,7 +976,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
                       </div>
                     </dl>
                     <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      ⛔ ค่าพวกนี้แก้ที่นี่ไม่ได้ — เป็นของแถวคำร้อง ถ้าผิดต้องตีกลับให้นักศึกษาแก้แล้วยื่นใหม่ (SEC-05: ฟิลด์ทะเบียนเป็นของเซิร์ฟเวอร์)
+                      ⛔ ค่าพวกนี้แก้ที่นี่ไม่ได้ — เป็นของแถวคำร้อง ถ้าผิดต้องตีกลับ: ข้อมูลนักศึกษาผิด = นักศึกษาแก้โปรไฟล์แล้วพิมพ์ใหม่ · ข้อมูลสถานประกอบการผิด = นักศึกษายกเลิกคำร้องนี้แล้วยื่นใหม่ (SEC-05: ฟิลด์ทะเบียนเป็นของเซิร์ฟเวอร์)
                     </p>
                   </div>
 

@@ -14,6 +14,8 @@ interface Major {
   major_id: number;
   major_code: string;
   major_name_th: string;
+  faculty_id: number;
+  faculty_name_th: string;
 }
 
 /**
@@ -46,6 +48,8 @@ const OnboardingStudent: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [studentCode, setStudentCode] = useState('');
   const [enrollmentYear, setEnrollmentYear] = useState('');
+  // คณะไม่ถูกส่งไปเก็บ — คณะมาจากสาขาที่เดียว (`master_major.faculty_id`) ช่องนี้มีไว้กรองรายการสาขา
+  const [selectedFacultyId, setSelectedFacultyId] = useState<number | ''>('');
   const [selectedMajorId, setSelectedMajorId] = useState<number | ''>('');
   const [gpa, setGpa] = useState('');
   const [phone, setPhone] = useState('');
@@ -91,6 +95,11 @@ const OnboardingStudent: React.FC = () => {
     loadMasterData();
   }, [auth, navigate]);
 
+  // รายการคณะดึงจากรายการสาขา — คณะที่ยังไม่มีสาขาเลือกไปก็ไปต่อไม่ได้ จึงไม่ต้องแสดง
+  const faculties = majors.filter(
+    (m, i) => majors.findIndex(x => x.faculty_id === m.faculty_id) === i
+  );
+
   const clearError = (key: string) => setErrors(prev => (prev[key] ? { ...prev, [key]: '' } : prev));
 
   const validateStepOne = () => {
@@ -105,6 +114,7 @@ const OnboardingStudent: React.FC = () => {
       next.studentCode = 'รูปแบบรหัสนักศึกษาไม่ถูกต้อง ต้องเป็นตัวเลข 12 หลัก ตามด้วยขีดกลางและเลข 1 หลัก';
     }
 
+    if (selectedFacultyId === '') next.faculty = 'กรุณาเลือกคณะที่สังกัด';
     if (selectedMajorId === '') next.major = 'กรุณาเลือกสาขาวิชาที่สังกัด';
     if (!enrollmentYear) next.enrollmentYear = 'กรุณาระบุปีการศึกษาที่เข้าศึกษา';
     if (!phone.trim()) next.phone = 'กรุณากรอกเบอร์โทรศัพท์ที่ติดต่อได้';
@@ -320,10 +330,33 @@ const OnboardingStudent: React.FC = () => {
                       {fieldError('enrollmentYear')}
                     </div>
                     <div className="sm:col-span-2">
+                      {label('คณะ *')}
+                      <Select
+                        value={selectedFacultyId}
+                        disabled={isSubmitting}
+                        error={!!errors.faculty}
+                        onChange={e => {
+                          setSelectedFacultyId(e.target.value ? Number(e.target.value) : '');
+                          // สาขาที่เลือกไว้เป็นของคณะเดิม — ล้างเสมอ ไม่ให้ค้างสาขาที่มองไม่เห็นในรายการ
+                          setSelectedMajorId('');
+                          clearError('faculty');
+                        }}
+                        data-testid="onboarding-faculty"
+                      >
+                        <option value="">-- เลือกคณะที่สังกัด --</option>
+                        {faculties.map(f => (
+                          <option key={f.faculty_id} value={f.faculty_id}>
+                            {f.faculty_name_th}
+                          </option>
+                        ))}
+                      </Select>
+                      {fieldError('faculty')}
+                    </div>
+                    <div className="sm:col-span-2">
                       {label('สาขาวิชา *')}
                       <Select
                         value={selectedMajorId}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || selectedFacultyId === ''}
                         error={!!errors.major}
                         onChange={e => {
                           setSelectedMajorId(e.target.value ? Number(e.target.value) : '');
@@ -331,8 +364,10 @@ const OnboardingStudent: React.FC = () => {
                         }}
                         data-testid="onboarding-major"
                       >
-                        <option value="">-- เลือกสาขาวิชาที่สังกัด --</option>
-                        {majors.map(m => (
+                        <option value="">
+                          {selectedFacultyId === '' ? '-- เลือกคณะก่อน --' : '-- เลือกสาขาวิชาที่สังกัด --'}
+                        </option>
+                        {majors.filter(m => m.faculty_id === selectedFacultyId).map(m => (
                           <option key={m.major_id} value={m.major_id}>
                             {m.major_name_th}
                           </option>
@@ -487,6 +522,10 @@ const OnboardingStudent: React.FC = () => {
             lead="ตรวจอีกครั้งก่อนบันทึก รหัสและปีที่เข้าถูกพิมพ์ลงหนังสือที่คณบดีลงนาม"
             rows={[
               { label: 'รหัสนักศึกษา', value: studentCode.trim() },
+              {
+                label: 'คณะ',
+                value: majors.find(m => m.major_id === selectedMajorId)?.faculty_name_th ?? '—',
+              },
               {
                 label: 'สาขาวิชา',
                 value: majors.find(m => m.major_id === selectedMajorId)?.major_name_th ?? '—',

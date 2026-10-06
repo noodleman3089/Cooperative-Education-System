@@ -147,7 +147,7 @@ export class PublicAcceptanceController {
         [gate.student_id, gate.semester_id]
       );
       const companyRes = await query(
-        `SELECT name_th, name_en FROM companies WHERE company_id = $1`,
+        `SELECT name_th FROM companies WHERE company_id = $1`,
         [gate.company_id]
       );
       if ((studentRes.rowCount ?? 0) === 0 || (companyRes.rowCount ?? 0) === 0) {
@@ -171,7 +171,6 @@ export class PublicAcceptanceController {
         has_resume: !!s.resume_file,
         company: {
           name_th: c.name_th,
-          name_en: c.name_en,
         },
         token_expires_at: new Date(gate.expires_at).toISOString(),
       });

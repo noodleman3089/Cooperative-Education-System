@@ -57,12 +57,11 @@ export async function seedTestData() {
     // 6. Insert Test Company (Seagate Technology)
     const companyInsertRes = await client.query(
       `INSERT INTO companies (
-        name_th, name_en, address, province, district, postal_code, phone, 
+        name_th, address, province, district, postal_code, phone,
         is_verified, created_by, contact_person, contact_position, email
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE, $8, $9, $10, $11) RETURNING company_id`,
+      ) VALUES ($1, $2, $3, $4, $5, $6, TRUE, $7, $8, $9, $10) RETURNING company_id`,
       [
         'บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด',
-        'Seagate Technology (Thailand) Co., Ltd.',
         '90 หมู่ 15 ถนนมิตรภาพ ตำบลสูงเนิน',
         'นครราชสีมา',
         'สูงเนิน',

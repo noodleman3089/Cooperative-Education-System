@@ -111,6 +111,7 @@ export function deriveStage(r: Row, today: string): Derived {
   switch (r.status) {
     case 'rejected':
     case 'company_rejected':
+    case 'superseded': // นักศึกษายกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ
       return { stage: 'exit', holder: 'student', age: null };
     case 'pending_advisor':
       return { stage: 'await_upload', holder: 'student', age: r.age_upload ?? r.age_created };
@@ -199,7 +200,7 @@ const ROW_SQL = `
         FROM intent_forms x
        WHERE x.student_id = s.student_id AND x.semester_id = $1
        -- ใบที่ยังเดินอยู่มาก่อนใบที่ถูกปิด · ถ้ามีแต่ใบที่ปิด = ใช้ใบล่าสุด (ขั้น "ออกจากท่อ")
-       ORDER BY (x.status IN ('rejected', 'company_rejected')) ASC, x.form_id DESC
+       ORDER BY (x.status IN ('rejected', 'company_rejected', 'superseded')) ASC, x.form_id DESC
        LIMIT 1
     ) i ON TRUE
     LEFT JOIN companies c ON c.company_id = i.company_id

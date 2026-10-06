@@ -42,7 +42,6 @@ type StatusFilter = 'all' | 'unverified' | 'verified' | 'noemail';
 /** ฟิลด์ที่ฟอร์มเพิ่ม/แก้ไขจัดการ — ตรงกับที่ backend รับ */
 interface CompanyForm {
   name_th: string;
-  name_en: string;
   address: string;
   district: string;
   province: string;
@@ -55,7 +54,6 @@ interface CompanyForm {
 
 const EMPTY_FORM: CompanyForm = {
   name_th: '',
-  name_en: '',
   address: '',
   district: '',
   province: '',
@@ -68,7 +66,6 @@ const EMPTY_FORM: CompanyForm = {
 
 const toForm = (company: Company): CompanyForm => ({
   name_th: company.name_th,
-  name_en: company.name_en || '',
   address: company.address,
   district: company.district,
   province: company.province,
@@ -183,7 +180,7 @@ const CompanyDirectory: React.FC = () => {
       if (statusFilter === 'noemail' && c.email) return false;
       const keyword = search.trim().toLowerCase();
       if (!keyword) return true;
-      return [c.name_th, c.name_en, c.province, c.district, c.contact_person]
+      return [c.name_th, c.province, c.district, c.contact_person]
         .some(field => (field || '').toLowerCase().includes(keyword));
     })
     // ที่ยังไม่รับรองขึ้นก่อนเสมอ — คิวงานอยู่บนสุดโดยไม่ต้องซ่อนแถวอื่น
@@ -317,7 +314,6 @@ const CompanyDirectory: React.FC = () => {
         <>
           <p className="font-bold text-sm text-gray-900 dark:text-white">{company.name_th}</p>
           <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-            {company.name_en ? `${company.name_en} · ` : ''}
             {company.district ? `${company.district}, ` : ''}{company.province}
           </p>
         </>
@@ -685,17 +681,11 @@ const CompanyDirectory: React.FC = () => {
               <AlertBanner variant="error" message={formError} className="mb-4" />
 
               <div className="grid gap-4 sm:grid-cols-4">
-                <div className="sm:col-span-2">
+                <div className="sm:col-span-4">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                    ชื่อสถานประกอบการ (ภาษาไทย) *
+                    ชื่อสถานประกอบการ *
                   </label>
                   <Input required maxLength={255} {...field('name_th')} />
-                </div>
-                <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
-                    ชื่อสถานประกอบการ (ภาษาอังกฤษ)
-                  </label>
-                  <Input maxLength={255} {...field('name_en')} />
                 </div>
                 <div className="sm:col-span-4">
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">

@@ -92,7 +92,6 @@ interface IntentData {
   uses_company_log_form: boolean;
   company_id: number;
   company_name_th: string;
-  company_name_en: string | null;
   mentor_id: number | null;
   mentor_name: string | null;
 }

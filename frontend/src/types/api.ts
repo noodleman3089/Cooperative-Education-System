@@ -292,7 +292,6 @@ export interface PersonnelProfile {
 export interface Company {
   company_id: number;
   name_th: string;
-  name_en?: string | null;
   address: string;
   province: string;
   district: string;

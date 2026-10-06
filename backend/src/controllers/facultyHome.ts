@@ -289,7 +289,7 @@ export class FacultyHomeController {
                     AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
                   ORDER BY d.doc_id DESC LIMIT 1
                ) doc ON TRUE
-              WHERE s.major_id = $1 AND i.status NOT IN ('rejected', 'company_rejected')
+              WHERE s.major_id = $1 AND i.status NOT IN ('rejected', 'company_rejected', 'superseded')
               ORDER BY i.student_id, i.form_id DESC
            )
            SELECT COUNT(*)::int AS live_total,

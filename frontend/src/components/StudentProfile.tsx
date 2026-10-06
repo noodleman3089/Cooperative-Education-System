@@ -16,6 +16,8 @@ interface Major {
   major_id: number;
   major_code: string;
   major_name_th: string;
+  faculty_id: number;
+  faculty_name_th: string;
 }
 
 const StudentProfile: React.FC = () => {
@@ -72,6 +74,11 @@ const StudentProfile: React.FC = () => {
   const jobTypeOptions = JOB_TYPE_OPTIONS;
 
   const currentMajor = majors.find((m) => m.major_id === selectedMajorId);
+  // คณะไม่มีคอลัมน์ของตัวเอง — มาจากสาขาที่เลือก (`master_major.faculty_id`) ที่เดียว
+  const selectedFacultyId = currentMajor?.faculty_id ?? '';
+  const faculties = majors.filter(
+    (m, i) => majors.findIndex((x) => x.faculty_id === m.faculty_id) === i
+  );
   const majorIdentifier =
     currentMajor?.major_code ||
     profile?.major_code ||
@@ -387,6 +394,28 @@ const StudentProfile: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                คณะ *
+              </label>
+              <select
+                data-testid="profile-faculty"
+                value={selectedFacultyId}
+                onChange={(e) => {
+                  // เปลี่ยนคณะ = เลือกสาขาแรกของคณะนั้นให้ทันที ช่องสาขาจึงไม่มีสภาพ "ว่าง" ที่บันทึกไม่ได้
+                  const first = majors.find((m) => m.faculty_id === Number(e.target.value));
+                  if (first) setSelectedMajorId(first.major_id);
+                }}
+                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+              >
+                {faculties.map((f) => (
+                  <option key={f.faculty_id} value={f.faculty_id}>
+                    {f.faculty_name_th}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 สาขาวิชา *
               </label>
               <select
@@ -395,7 +424,7 @@ const StudentProfile: React.FC = () => {
                 onChange={(e) => setSelectedMajorId(e.target.value ? Number(e.target.value) : '')}
                 className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
               >
-                {majors.map((m) => (
+                {majors.filter((m) => m.faculty_id === selectedFacultyId).map((m) => (
                   <option key={m.major_id} value={m.major_id}>
                     {m.major_name_th}
                   </option>

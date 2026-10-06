@@ -31,7 +31,6 @@ export interface AccommodationFormData {
   year_level: number | null;
   section: string | null;
   company_name_th: string | null;
-  company_name_en: string | null;
   company_address: string | null;
   house_no: string | null;
   building: string | null;
@@ -62,7 +61,6 @@ export async function fetchAccommodationFormData(
     `SELECT s.first_name, s.last_name, s.student_code, s.year_level, s.section,
             mj.major_name_th,
             c.name_th  AS company_name_th,
-            c.name_en  AS company_name_en,
             c.address  AS company_address,
             a.house_no, a.building, a.room_no, a.soi, a.road,
             a.subdistrict, a.district, a.province, a.postal_code, a.address_legacy,
@@ -151,7 +149,8 @@ export async function buildAccommodationFormPdf(d: AccommodationFormData): Promi
   pdf.line('ชื่อสถานประกอบการ  (ภาษาไทย)', { size: F, gap: 0 });
   pdf.line(fill(`${clean(d.company_name_th)} `, NAME_X, RIGHT), { size: F, x: NAME_X, gap: 19 });
   pdf.line('(ภาษาอังกฤษ)', { size: F, x: LEFT + 56, gap: 0 });
-  pdf.line(fill(`${clean(d.company_name_en)} `, NAME_X, RIGHT), { size: F, x: NAME_X, gap: 22 });
+  // ระบบเลิกเก็บชื่อภาษาอังกฤษของสถานประกอบการแล้ว (migration 050) — บรรทัดนี้ของแบบฟอร์มเว้นเส้นประไว้ให้เขียนมือ
+  pdf.line(fill('', NAME_X, RIGHT), { size: F, x: NAME_X, gap: 22 });
 
   // ── ที่พัก ─────────────────────────────────────────────────────────────────
   pdf.line('ขอแจ้งรายละเอียดเกี่ยวกับที่พักระหว่างปฏิบัติงานสหกิจศึกษา  ดังนี้', { size: F, gap: 20 });
