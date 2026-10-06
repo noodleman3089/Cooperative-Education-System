@@ -37,6 +37,14 @@ system_testing_manual.md
 backend/secure_private/signatures/*
 !backend/secure_private/signatures/.gitkeep
 
+# ตรามหาวิทยาลัยและแม่แบบแบบคำร้อง (เอกสารหมายเลข 1) เป็นเอกสารของมหาวิทยาลัย — repo นี้เปิดสาธารณะ
+# จึงไม่เก็บใน git (เอาออกพร้อมประวัติ 2026-10-06) · วางไฟล์เองที่เครื่องที่รันระบบ:
+#   backend/secure_private/emblems/rmutto_seal.png
+#   backend/secure_private/templates/request_form_template.pdf
+# ไม่มีไฟล์ = ระบบยังทำงาน แต่แบบตอบรับไม่มีตรา และแบบคำร้องตกไปเป็นหน้า HTML
+backend/secure_private/emblems/*
+backend/secure_private/templates/*
+
 # Backend uploads & generated documents
 # ⛔ ครอบทั้งโฟลเดอร์โดยตั้งใจ — ของเดิมระบุทีละโฟลเดอร์ย่อย พอ multer เพิ่มปลายทางใหม่
 # (request_forms เมื่อ 2026-08-26) ไฟล์ที่ผู้ใช้อัปโหลดก็หลุดเข้า git ทันทีโดยไม่มีใครรู้
