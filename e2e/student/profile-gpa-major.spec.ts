@@ -63,13 +63,6 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
 
   test('P1: แก้เกรดกับสาขาจากหน้าจอ → ลงฐาน · ล้างที่ปรึกษา · ลง audit · กล่องทะเบียนใหญ่หายไป', async ({ page }) => {
     await resetStudent2();
-    // seed มีสาขาเฉพาะของคณะบริหารธุรกิจฯ — ใส่สาขาทดสอบให้คณะศิลปศาสตร์ เพื่อให้มีปลายทางข้ามคณะ
-    await withDb((db) =>
-      db.query(
-        `INSERT INTO master_major (faculty_id, major_code, major_name_th)
-         SELECT faculty_id, 'TST01', 'สาขาวิชาทดสอบ ก' FROM master_faculty WHERE faculty_name_th = 'คณะศิลปศาสตร์'`
-      )
-    );
     // ย้ายข้ามคณะ — คุมด้วยว่าช่องคณะกรองรายการสาขาจริง (เลือกคณะก่อน สาขาของคณะนั้นถึงโผล่)
     const { major_id: target, faculty_id: targetFaculty } = (await otherFacultyMajor())!;
     await withDb(async (db) => {
@@ -85,6 +78,9 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
     await expect(page.getByText('เกรดที่คุณแจ้งไว้ตอนกรอกข้อมูลครั้งแรก')).toHaveCount(0);
 
     await expect(page.getByTestId('profile-gpa')).toHaveValue('3.75');
+    // โหมด dev (StrictMode) โหลดโปรไฟล์สองรอบ — รอบสองที่มาถึงช้าจะเขียนทับค่าที่เพิ่งพิมพ์ (เคยแดงแบบสุ่ม 2026-10-06)
+    // รอให้คำขอทั้งหมดจบก่อนเริ่มพิมพ์
+    await page.waitForLoadState('networkidle');
     await page.getByTestId('profile-gpa').fill('3.10');
     // สาขาของคณะอื่นต้องยังไม่อยู่ในรายการ จนกว่าจะเปลี่ยนคณะ
     await expect(page.getByTestId('profile-major').locator(`option[value="${target}"]`)).toHaveCount(0);

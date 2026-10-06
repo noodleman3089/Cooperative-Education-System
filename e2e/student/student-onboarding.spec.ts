@@ -312,17 +312,6 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     await arriveAsFirstTimeStudent(page);
     await page.goto('/onboarding/student');
 
-    // seed มีสาขาเฉพาะของคณะบริหารธุรกิจฯ (คณะศิลปศาสตร์ยังไม่มีรายชื่อสาขา) — ใส่สาขาทดสอบให้คณะที่สอง
-    // เพื่อให้มีสองคณะที่เลือกได้จริง
-    await withDb(db =>
-      db.query(
-        `INSERT INTO master_major (faculty_id, major_code, major_name_th)
-         SELECT faculty_id, v.code, v.name
-           FROM master_faculty CROSS JOIN (VALUES ('TST01', 'สาขาวิชาทดสอบ ก'), ('TST02', 'สาขาวิชาทดสอบ ข')) AS v(code, name)
-          WHERE faculty_name_th = 'คณะศิลปศาสตร์'`
-      )
-    );
-
     // คณะที่มีสาขามากกว่าหนึ่ง กับอีกคณะหนึ่ง — อ่านจากฐาน ไม่ผูกกับชื่อใน seed
     const faculties = await withDb(async db =>
       (await db.query(
