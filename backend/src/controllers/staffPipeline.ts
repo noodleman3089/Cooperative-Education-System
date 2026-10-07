@@ -40,22 +40,25 @@ export type StageKey =
 /** ใครต้องเป็นคนขยับ — `clear` = ไม่มีใครต้องทำอะไรตอนนี้ */
 export type Holder = 'student' | 'staff' | 'company' | 'dean' | 'clear';
 
-/** ลำดับ = ลำดับที่แสดงบนจอ · `label` เป็นถ้อยคำที่หน้าจอใช้ตรง ๆ (ที่เดียว) */
-export const STAGES: { key: StageKey; label: string }[] = [
-  { key: 'not_registered', label: 'ยังไม่เข้าระบบ (ยังไม่ตั้งโปรไฟล์)' },
-  { key: 'no_intent', label: 'ยังไม่ยื่นคำร้อง' },
-  { key: 'await_upload', label: 'ยื่นแล้ว รออัปโหลดกระดาษที่ลงนาม' },
-  { key: 'await_officer_request', label: 'รอเจ้าหน้าที่รับคำร้อง' },
-  { key: 'await_dean', label: 'รอคณบดีลงนามหนังสือ' },
-  { key: 'await_send', label: 'รอนักศึกษาส่งหนังสือให้บริษัท' },
-  { key: 'await_company', label: 'รอบริษัทตอบรับ' },
-  { key: 'await_mentor', label: 'รอนักศึกษาระบุพี่เลี้ยง' },
-  { key: 'await_officer_accept', label: 'รอเจ้าหน้าที่ยืนยันแบบตอบรับ' },
-  { key: 'accepted_prep', label: 'ตอบรับแล้ว · เตรียมเอกสารก่อนฝึก' },
-  { key: 'on_placement', label: 'ระหว่างปฏิบัติงานและนิเทศ' },
-  { key: 'post_placement', label: 'หลังฝึก · ส่งรายงาน / ประเมิน' },
-  { key: 'done', label: 'ครบ · รายงานอนุมัติและประเมินส่งครบ' },
-  { key: 'exit', label: 'ออกจากท่อ · ต้องหาที่ฝึกใหม่' },
+/**
+ * ลำดับ = ลำดับที่แสดงบนจอ · `label` เป็นถ้อยคำที่หน้าจอใช้ตรง ๆ (ที่เดียว)
+ * `short` = ชื่อย่อสำหรับแถบท่อ 14 ช่องท้ายหน้าแรกเจ้าหน้าที่ (ช่องแคบ ใส่ชื่อเต็มไม่พอ) — คนอ่านคือเจ้าหน้าที่ จึงเขียนว่า "รอคุณ…"
+ */
+export const STAGES: { key: StageKey; label: string; short: string }[] = [
+  { key: 'not_registered', label: 'ยังไม่เข้าระบบ (ยังไม่ตั้งโปรไฟล์)', short: 'ยังไม่เข้าระบบ' },
+  { key: 'no_intent', label: 'ยังไม่ยื่นคำร้อง', short: 'ยังไม่ยื่น' },
+  { key: 'await_upload', label: 'ยื่นแล้ว รออัปโหลดกระดาษที่ลงนาม', short: 'รออัปโหลดกระดาษ' },
+  { key: 'await_officer_request', label: 'รอเจ้าหน้าที่รับคำร้อง', short: 'รอคุณรับคำร้อง' },
+  { key: 'await_dean', label: 'รอคณบดีลงนามหนังสือ', short: 'รอคณบดี' },
+  { key: 'await_send', label: 'รอนักศึกษาส่งหนังสือให้บริษัท', short: 'รอส่งหนังสือ' },
+  { key: 'await_company', label: 'รอบริษัทตอบรับ', short: 'รอบริษัทตอบ' },
+  { key: 'await_mentor', label: 'รอนักศึกษาระบุพี่เลี้ยง', short: 'รอระบุพี่เลี้ยง' },
+  { key: 'await_officer_accept', label: 'รอเจ้าหน้าที่ยืนยันแบบตอบรับ', short: 'รอคุณยืนยันตอบรับ' },
+  { key: 'accepted_prep', label: 'ตอบรับแล้ว · เตรียมเอกสารก่อนฝึก', short: 'เตรียมเอกสาร' },
+  { key: 'on_placement', label: 'ระหว่างปฏิบัติงานและนิเทศ', short: 'ระหว่างฝึก' },
+  { key: 'post_placement', label: 'หลังฝึก · ส่งรายงาน / ประเมิน', short: 'หลังฝึก' },
+  { key: 'done', label: 'ครบ · รายงานอนุมัติและประเมินส่งครบ', short: 'ครบ' },
+  { key: 'exit', label: 'ออกจากท่อ · ต้องหาที่ฝึกใหม่', short: 'ต้องหาที่ใหม่' },
 ];
 
 interface Row {
@@ -293,7 +296,7 @@ export class StaffPipelineController {
       const rows = (await query(ROW_SQL, [semester.semester_id, today, rawMajor])).rows as Row[];
       const derived = rows.map((r) => ({ r, d: deriveStage(r, today) }));
 
-      const stages = STAGES.map(({ key, label }) => {
+      const stages = STAGES.map(({ key, label, short }) => {
         const members = derived.filter((x) => x.d.stage === key);
         const ages = members.map((x) => x.d.age).filter((a): a is number => a !== null && a >= 0);
         // ใครต้องขยับในขั้นนี้ — ขั้นเดียวอาจมีหลายคนถือ (เช่น ตอบรับแล้ว: ของเจ้าหน้าที่ + ของนักศึกษา)
@@ -302,6 +305,7 @@ export class StaffPipelineController {
         return {
           key,
           label,
+          short,
           count: members.length,
           holders: byHolder,
           // มัธยฐานของคนที่ "รู้อายุ" เท่านั้น · ไม่มีใครรู้ = null (หน้าจอเขียน "ไม่ทราบ")

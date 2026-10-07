@@ -146,11 +146,16 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
       'season',
       'season_detail',
       'tiles',
+      'work_total',
+      'missing_cover_letters',
       'timeline',
       'calendar_warnings',
     ]) {
       expect(body, `คีย์ ${key} หายไป`).toHaveProperty(key);
     }
+    // seed ไม่มีงานค้าง — ผลรวมของ 4 กองที่เป็นงานของเจ้าหน้าที่ต้องเป็น 0 และไม่มีใบที่รับแล้วไม่มีหนังสือ
+    expect(body.work_total).toBe(0);
+    expect(body.missing_cover_letters).toEqual([]);
     // กองงานต้องมีครบ 5 กองเสมอ — ⛔ ห้ามซ่อนกองที่ว่าง (สเปกข้อ 4.3)
     for (const kind of ['request', 'acceptance', 'dispatch', 'appointment', 'dean']) {
       expect(body.tiles, `กอง ${kind} หายไป`).toHaveProperty(kind);
@@ -283,6 +288,9 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     const body = await home(request);
     expect(body.tiles.request.count).toBe(3);
     expect(body.tiles.request.overdue, 'นับเฉพาะใบที่รอเจ้าหน้าที่เกิน 7 วันจริง').toBe(1);
+    // "รอนานสุด" บนการ์ดงาน = ใบที่อัปโหลดมานานสุด (ใบที่ไม่รู้อายุไม่ถูกนับ) · ผลรวมงานที่รอคือ 3 ใบนี้
+    expect(body.tiles.request.oldest_days).toBe(9);
+    expect(body.work_total).toBe(3);
 
     // รายการคิวต้องตอบตรงกับกองงาน — ที่มาเดียวกัน และหน้าจอไม่นับเอง
     const rows = (await (

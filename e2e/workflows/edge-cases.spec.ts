@@ -402,7 +402,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await confirmRejectBtn.click();
 
     // 5. ใบหลุดจากคิว และเหตุผลถูกเก็บบนแถวให้นักศึกษาอ่าน (ไม่ใช่แค่ audit_log — SEC-07)
-    await expect(page.locator('text=คำร้องขอหนังสือขอความอนุเคราะห์รอตรวจ (0 รายการ)')).toBeVisible();
+    await expect(page.getByTestId('staff-queue-request')).toContainText('คำร้องรอรับ · 0 คน');
     expect(
       await dbValue<string>('SELECT reject_reason FROM intent_forms WHERE form_id = $1', [formId])
     ).toContain('ขาดลายเซ็นหัวหน้าสาขาวิชา');

@@ -9,7 +9,7 @@ import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
-import { Search, ExternalLink, AlertTriangle } from 'lucide-react';
+import { Search, ExternalLink } from 'lucide-react';
 import RequestReviewPanel from './RequestReviewPanel';
 
 export interface RequestFormRow {
@@ -85,12 +85,67 @@ const addDays = (iso: string, days: number): string => {
   return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
 };
 
-interface RequestQueueProps {
-  onDataChanged?: () => void;
-  showAllIfNoQueueFilter?: boolean;
+export type QueueKind = 'request' | 'acceptance' | 'dispatch';
+
+const QUEUE_COPY: Record<QueueKind, { title: string; order: string; empty: string }> = {
+  request: {
+    title: 'คำร้องรอรับ',
+    order: 'เรียงจากรอนานสุด',
+    empty: 'ไม่มีคำร้องรอตรวจในขณะนี้',
+  },
+  acceptance: {
+    title: 'แบบตอบรับรอตรวจ',
+    order: 'เรียงจากกำหนดส่งกลับใกล้สุด',
+    empty: 'ไม่มีแบบตอบรับรอตรวจในขณะนี้',
+  },
+  dispatch: {
+    title: 'หนังสือส่งตัวรอออก',
+    order: 'เรียงจากวันเริ่มงานใกล้สุด',
+    empty: 'ไม่มีใบที่รอออกหนังสือส่งตัวในขณะนี้',
+  },
+};
+
+const QUEUE_ROW = 'flex flex-wrap items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5';
+
+/** ค่าว่าง (ไม่ทราบ) ไปท้ายเสมอ — ใบที่ไม่รู้อายุต้องไม่ถูกดันขึ้นหัวรายการเหมือนรอนานสุด */
+const byNullsLast =
+  <T,>(pick: (row: T) => number | string | null | undefined, direction: 1 | -1) =>
+  (a: T, b: T): number => {
+    const x = pick(a);
+    const y = pick(b);
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return x < y ? -direction : x > y ? direction : 0;
+  };
+
+/** จำนวนวันมาจากเซิร์ฟเวอร์ (`request_wait_days`) — ที่นี่แค่เลือกคำ */
+function requestWaitText(row: RequestFormRow): string {
+  const days = row.request_wait_days;
+  const waited = days == null ? 'ไม่ทราบว่ารอมากี่วัน' : days === 0 ? 'ส่งมาวันนี้' : `รอ ${days} วัน`;
+  if (row.request_overdue) return `${waited} · เลยกำหนด`;
+  if (row.submitted_late) return `${waited} · ส่งช่วงผ่อนผัน`;
+  return waited;
 }
 
-export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showAllIfNoQueueFilter = true }) => {
+const QueueWho: React.FC<{
+  row: { first_name?: string | null; last_name?: string | null; student_code?: string; company_name_th?: string };
+}> = ({ row }) => (
+  <div className="min-w-0 flex-[1_1_300px]">
+    <span className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
+      {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'} · {row.student_code || '-'}
+    </span>{' '}
+    <span className="text-[13px] text-gray-700 dark:text-gray-300">· {row.company_name_th || '-'}</span>
+  </div>
+);
+
+interface RequestQueueProps {
+  /** กองที่แสดง — หน้าแรกเลือกจากการ์ดงาน (`?queue=`) */
+  queue: QueueKind;
+  onDataChanged?: () => void;
+}
+
+export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const queueParam = searchParams.get('queue'); // 'request' | 'acceptance' | 'dispatch' | null
   const formParam = searchParams.get('form'); // e.g. '41'
@@ -103,9 +158,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  // Search and quick filter
   const [searchQuery, setSearchQuery] = useState('');
-  const [onlyLate, setOnlyLate] = useState(false);
 
   // แผงรับคำร้อง (E1) — ของที่เจ้าหน้าที่พิมพ์ค้าง (เลขที่หนังสือ · เหตุผลตีกลับ) อยู่ใน `RequestReviewPanel`
   // ไม่ได้อยู่ที่นี่ การโหลดคิวซ้ำจึงล้างมันไม่ได้
@@ -181,19 +234,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadQueues();
   }, [loadQueues]);
-
-  const setQueueFilter = (q: 'request' | 'acceptance' | 'dispatch' | null) => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev);
-        if (q) next.set('queue', q);
-        else next.delete('queue');
-        next.delete('form');
-        return next;
-      },
-      { replace: false }
-    );
-  };
 
   const openRequestReview = (row: RequestFormRow) => {
     setReviewingRequest(row);
@@ -330,398 +370,160 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     }
   };
 
-  // Filter lists based on search & late toggles
-  const filteredRequests = useMemo(() => {
-    return requestQueue.filter((r) => {
-      if (onlyLate && !r.submitted_late) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        r.student_code?.toLowerCase().includes(q) ||
-        r.first_name?.toLowerCase().includes(q) ||
-        r.last_name?.toLowerCase().includes(q) ||
-        r.company_name_th?.toLowerCase().includes(q)
+  // ค้นในกองที่แสดงอยู่ แล้วเรียงตามสิ่งที่เจ้าหน้าที่ต้องหยิบก่อน
+  const matchesSearch = useCallback(
+    (r: { student_code?: string; first_name?: string | null; last_name?: string | null; company_name_th?: string }) => {
+      const q = searchQuery.trim().toLowerCase();
+      if (!q) return true;
+      return [r.student_code, r.first_name, r.last_name, r.company_name_th].some((v) =>
+        v?.toLowerCase().includes(q)
       );
-    });
-  }, [requestQueue, searchQuery, onlyLate]);
+    },
+    [searchQuery]
+  );
 
-  const filteredAcceptances = useMemo(() => {
-    return acceptanceQueue.filter((r) => {
-      if (onlyLate && !r.acceptance_submitted_late) return false;
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        r.student_code?.toLowerCase().includes(q) ||
-        r.first_name?.toLowerCase().includes(q) ||
-        r.last_name?.toLowerCase().includes(q) ||
-        r.company_name_th?.toLowerCase().includes(q)
-      );
-    });
-  }, [acceptanceQueue, searchQuery, onlyLate]);
+  const filteredRequests = useMemo(
+    () => requestQueue.filter(matchesSearch).sort(byNullsLast((r) => r.request_wait_days, -1)),
+    [requestQueue, matchesSearch]
+  );
+  const filteredAcceptances = useMemo(
+    () => acceptanceQueue.filter(matchesSearch).sort(byNullsLast((r) => r.acceptance_due_date, 1)),
+    [acceptanceQueue, matchesSearch]
+  );
+  const filteredDispatches = useMemo(
+    () => dispatchQueue.filter(matchesSearch).sort(byNullsLast((r) => r.start_date, 1)),
+    [dispatchQueue, matchesSearch]
+  );
 
-  const filteredDispatches = useMemo(() => {
-    return dispatchQueue.filter((r) => {
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        r.student_code?.toLowerCase().includes(q) ||
-        r.first_name?.toLowerCase().includes(q) ||
-        r.last_name?.toLowerCase().includes(q) ||
-        r.company_name_th?.toLowerCase().includes(q)
-      );
-    });
-  }, [dispatchQueue, searchQuery]);
-
-  const showRequest = queueParam === 'request' || (!queueParam && showAllIfNoQueueFilter);
-  const showAcceptance = queueParam === 'acceptance' || (!queueParam && showAllIfNoQueueFilter);
-  const showDispatch = queueParam === 'dispatch' || (!queueParam && showAllIfNoQueueFilter);
-
-  const totalLateCount =
-    requestQueue.filter((r) => r.submitted_late).length +
-    acceptanceQueue.filter((r) => r.acceptance_submitted_late).length;
+  const activeTotal = { request: requestQueue, acceptance: acceptanceQueue, dispatch: dispatchQueue }[queue].length;
+  const activeShown = { request: filteredRequests, acceptance: filteredAcceptances, dispatch: filteredDispatches }[queue]
+    .length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
 
-      {/* Filter Queue Chips & Search Bar */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-800 dark:bg-gray-900 space-y-4">
-        {/* Chips for switching queues */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setQueueFilter(null)}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                !queueParam
-                  ? 'bg-brand-blue text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              คิวทั้งหมด ({requestQueue.length + acceptanceQueue.length + dispatchQueue.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueueFilter('request')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                queueParam === 'request'
-                  ? 'bg-brand-blue text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              คำร้องขอหนังสือ ({requestQueue.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueueFilter('acceptance')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                queueParam === 'acceptance'
-                  ? 'bg-brand-blue text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              แบบตอบรับ ({acceptanceQueue.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setQueueFilter('dispatch')}
-              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                queueParam === 'dispatch'
-                  ? 'bg-brand-blue text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'
-              }`}
-            >
-              รอออกหนังสือส่งตัว ({dispatchQueue.length})
-            </button>
-          </div>
-
-          {/* Quick late count badge */}
-          {totalLateCount > 0 && (
-            <span className="text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 px-2.5 py-1 rounded-lg">
-              ในนี้ {totalLateCount} ใบยื่นช่วงผ่อนผัน/ส่งช้า
-            </span>
-          )}
+      {/*
+        ── รายการเดียวของกองที่เลือก (หน้าแรกแบบ B) ──
+        กองถูกเลือกจากการ์ดงานของ StaffHome (`queue`) — แสดงทีละกอง ไม่วางสามตารางพร้อมกัน
+        ⛔ "รอกี่วัน" และ "เลยกำหนด" มาจากเซิร์ฟเวอร์ (`request_wait_days` · `request_overdue`) หน้าจอไม่นับเอง
+      */}
+      <section
+        data-testid={`staff-queue-${queue}`}
+        className="flex flex-col gap-2.5 rounded-2xl border border-gray-200 bg-white p-[18px] shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-lg font-extrabold text-gray-900 dark:text-white">
+            {QUEUE_COPY[queue].title} · {activeTotal} คน
+          </h2>
+          <span className="text-[13px] text-gray-600 dark:text-gray-400">
+            {activeShown !== activeTotal
+              ? `แสดง ${activeShown} จาก ${activeTotal} คน`
+              : QUEUE_COPY[queue].order}
+          </span>
         </div>
 
-        {/* Search & In-Queue Filters */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
-          <div className="relative flex-grow">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        {activeTotal > 0 && (
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500 dark:text-gray-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ค้นหาชื่อนักศึกษา, รหัสนักศึกษา หรือสถานประกอบการ..."
-              className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-brand-blue focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              aria-label="ค้นหาในรายการนี้"
+              placeholder="ค้นหาชื่อ รหัสนักศึกษา หรือสถานประกอบการ"
+              className="min-h-11 w-full rounded-xl border border-gray-300 bg-white py-2 pl-10 pr-3 text-sm text-gray-900 placeholder:text-gray-500 focus:border-brand-blue focus:outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-400"
             />
           </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => setOnlyLate(!onlyLate)}
-            className={`px-3 py-2 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-1.5 shrink-0 ${
-              onlyLate
-                ? 'border-amber-500 bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300'
-            }`}
-          >
-            <AlertTriangle className="h-3.5 w-3.5" />
-            เฉพาะยื่นช่วงผ่อนผัน ({totalLateCount})
-          </button>
-        </div>
-      </div>
+        {loading && (
+          <p className="py-6 text-center text-sm text-gray-600 dark:text-gray-400">กำลังโหลดรายการคิวงาน...</p>
+        )}
 
-      {loading && (
-        <div className="p-8 text-center text-xs text-gray-500 dark:text-gray-400">
-          กำลังโหลดรายการคิวงาน...
-        </div>
-      )}
+        {!loading && activeShown === 0 && (
+          <p className="py-8 text-center text-sm text-gray-600 dark:text-gray-400">
+            {activeTotal === 0 ? QUEUE_COPY[queue].empty : 'ไม่พบรายการที่ตรงกับคำค้น'}
+          </p>
+        )}
 
-      {/* คิวคำร้องขอหนังสือ (เอกสารหมายเลข 1) */}
-      {showRequest && (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
-          <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                คำร้องขอหนังสือขอความอนุเคราะห์รอตรวจ ({requestQueue.length} รายการ)
+        {queue === 'request' &&
+          filteredRequests.map((row) => (
+            <div
+              key={row.form_id}
+              className={`${QUEUE_ROW} ${
+                row.request_overdue
+                  ? 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+                  : 'border-gray-200 dark:border-gray-700'
+              }`}
+            >
+              <QueueWho row={row} />
+              <span
+                className={`text-[13px] ${
+                  row.request_overdue
+                    ? 'font-bold text-red-700 dark:text-red-300'
+                    : row.submitted_late
+                      ? 'font-bold text-amber-800 dark:text-amber-300'
+                      : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {requestWaitText(row)}
               </span>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                เปิดไฟล์ที่นักศึกษาอัปโหลด ตรวจว่าลงนามครบสองช่อง แล้วกรอกชื่อผู้ลงนามกับเลขที่หนังสือออกก่อนกดรับคำร้อง
-              </p>
+              <Button
+                className="min-h-11 shrink-0"
+                data-testid={`review-request-${row.form_id}`}
+                onClick={() => openRequestReview(row)}
+              >
+                ตรวจคำร้อง
+              </Button>
             </div>
-            {filteredRequests.length !== requestQueue.length && (
-              <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                แสดง {filteredRequests.length} จาก {requestQueue.length} รายการ
-              </span>
-            )}
-          </div>
+          ))}
 
-          {filteredRequests.length > 0 ? (
-            <div className="overflow-x-auto" data-testid="staff-queue-table">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/70 text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
-                    <th className="p-4 font-semibold">นักศึกษา</th>
-                    <th className="p-4 font-semibold">สถานประกอบการ</th>
-                    <th className="p-4 font-semibold">สถานะ</th>
-                    <th className="p-4 font-semibold text-right">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredRequests.map((row) => (
-                    <tr
-                      key={row.form_id}
-                      className={`hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors ${
-                        row.submitted_late ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''
-                      }`}
-                    >
-                      <td className="p-4">
-                        <span className="font-bold text-gray-900 dark:text-gray-100 block">
-                          {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
-                        </span>
-                        <span className="text-gray-500 dark:text-gray-400 block mt-0.5">
-                          {row.student_code} {row.major_name_th ? `· ${row.major_name_th}` : ''}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200 block">
-                          {row.company_name_th || '-'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {row.submitted_late ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50">
-                            ยื่นช่วงผ่อนผัน
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50">
-                            รอออกเลข
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          data-testid={`review-request-${row.form_id}`}
-                          onClick={() => openRequestReview(row)}
-                          className="shrink-0 border-brand-blue text-brand-blue hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                        >
-                          ตรวจคำร้อง
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">
-              ไม่มีคำร้องรอตรวจในขณะนี้
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* คิวแบบตอบรับ (เอกสารหมายเลข 2) */}
-      {showAcceptance && (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
-          <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                แบบตอบรับจากสถานประกอบการรอตรวจ ({acceptanceQueue.length} รายการ)
+        {queue === 'acceptance' &&
+          filteredAcceptances.map((row) => (
+            <div key={row.form_id} className={`${QUEUE_ROW} border-gray-200 dark:border-gray-700`}>
+              <QueueWho row={row} />
+              <span
+                className={`text-[13px] ${
+                  row.acceptance_submitted_late
+                    ? 'font-bold text-amber-800 dark:text-amber-300'
+                    : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {row.acceptance_submitted_late
+                  ? 'ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ'
+                  : row.acceptance_due_date
+                    ? `ครบกำหนด ${formatThaiDate(row.acceptance_due_date)}`
+                    : 'ในกำหนด'}
               </span>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                เปิดไฟล์ที่นักศึกษาอัปโหลด ตรวจว่ามีลายเซ็นและตราประทับครบ แล้วคีย์ชื่อผู้อนุมัติกับวันที่ตามที่ปรากฏบนกระดาษ
-              </p>
+              <Button
+                className="min-h-11 shrink-0"
+                data-testid={`review-acceptance-${row.form_id}`}
+                onClick={() => openAcceptanceReview(row)}
+              >
+                ตรวจแบบตอบรับ
+              </Button>
             </div>
-            {filteredAcceptances.length !== acceptanceQueue.length && (
-              <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                แสดง {filteredAcceptances.length} จาก {acceptanceQueue.length} รายการ
-              </span>
-            )}
-          </div>
+          ))}
 
-          {filteredAcceptances.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/70 text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
-                    <th className="p-4 font-semibold">นักศึกษา</th>
-                    <th className="p-4 font-semibold">สถานประกอบการ</th>
-                    <th className="p-4 font-semibold">กำหนด / ส่งกลับ</th>
-                    <th className="p-4 font-semibold text-right">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredAcceptances.map((row) => (
-                    <tr
-                      key={row.form_id}
-                      className={`hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors ${
-                        row.acceptance_submitted_late ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''
-                      }`}
-                    >
-                      <td className="p-4">
-                        <span className="font-bold text-gray-900 dark:text-gray-100 block">
-                          {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
-                        </span>
-                        <span className="text-gray-500 dark:text-gray-400 block mt-0.5">
-                          {row.student_code}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200 block">
-                          {row.company_name_th || '-'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        {row.acceptance_submitted_late ? (
-                          <span className="inline-block rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50">
-                            ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ
-                          </span>
-                        ) : (
-                          <span className="text-gray-500 dark:text-gray-400">
-                            {row.acceptance_due_date ? `ครบกำหนด ${formatThaiDate(row.acceptance_due_date)}` : 'ในกำหนด'}
-                          </span>
-                        )}
-                      </td>
-                      <td className="p-4 text-right">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          data-testid={`review-acceptance-${row.form_id}`}
-                          onClick={() => openAcceptanceReview(row)}
-                          className="shrink-0 border-brand-blue text-brand-blue hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                        >
-                          ตรวจแบบตอบรับ
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">
-              ไม่มีแบบตอบรับรอตรวจในขณะนี้
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* คิวหนังสือส่งตัว */}
-      {showDispatch && (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-sm overflow-hidden dark:border-gray-800 dark:bg-gray-900">
-          <div className="border-b border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-800 dark:bg-gray-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <span className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                รอออกหนังสือส่งตัว ({dispatchQueue.length} รายการ)
+        {queue === 'dispatch' &&
+          filteredDispatches.map((row) => (
+            <div key={row.form_id} className={`${QUEUE_ROW} border-gray-200 dark:border-gray-700`}>
+              <QueueWho row={row} />
+              <span className="text-[13px] text-gray-600 dark:text-gray-400">
+                {row.start_date ? `เริ่มงาน ${formatThaiDate(row.start_date)}` : 'ยังไม่มีวันเริ่มงาน'}
               </span>
-              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                ตรวจข้อมูลที่จะถูกพิมพ์ลงหนังสือ แล้วออกเลขที่หนังสือส่งตัวและระบุวันสิ้นสุดการปฏิบัติงาน — หนังสือจะเข้าคิวให้คณบดีลงนาม
-              </p>
+              <Button
+                className="min-h-11 shrink-0"
+                data-testid={`issue-dispatch-${row.form_id}`}
+                onClick={() => openDispatchReview(row)}
+              >
+                ออกหนังสือส่งตัว
+              </Button>
             </div>
-            {filteredDispatches.length !== dispatchQueue.length && (
-              <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">
-                แสดง {filteredDispatches.length} จาก {dispatchQueue.length} รายการ
-              </span>
-            )}
-          </div>
-
-          {filteredDispatches.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-xs">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50/70 text-gray-500 dark:border-gray-800 dark:bg-gray-800/50 dark:text-gray-400">
-                    <th className="p-4 font-semibold">นักศึกษา</th>
-                    <th className="p-4 font-semibold">สถานประกอบการ</th>
-                    <th className="p-4 font-semibold">วันเริ่มงาน</th>
-                    <th className="p-4 font-semibold text-right">จัดการ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredDispatches.map((row) => (
-                    <tr key={row.form_id} className="hover:bg-gray-50/70 dark:hover:bg-gray-800/30 transition-colors">
-                      <td className="p-4">
-                        <span className="font-bold text-gray-900 dark:text-gray-100 block">
-                          {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
-                        </span>
-                        <span className="text-gray-500 dark:text-gray-400 block mt-0.5">
-                          {row.student_code}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <span className="font-semibold text-gray-800 dark:text-gray-200 block">
-                          {row.company_name_th || '-'}
-                        </span>
-                      </td>
-                      <td className="p-4 text-gray-600 dark:text-gray-300">
-                        {row.start_date ? formatThaiDate(row.start_date) : '-'}
-                      </td>
-                      <td className="p-4 text-right">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          data-testid={`issue-dispatch-${row.form_id}`}
-                          onClick={() => openDispatchReview(row)}
-                          className="shrink-0 border-brand-blue text-brand-blue hover:bg-blue-50 dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-950/40"
-                        >
-                          ออกหนังสือส่งตัว
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="py-12 text-center text-xs text-gray-500 dark:text-gray-400">
-              ไม่มีใบที่รอออกหนังสือส่งตัวในขณะนี้
-            </div>
-          )}
-        </div>
-      )}
+          ))}
+      </section>
 
       {/* ══ แผงรับคำร้อง (เอกสารหมายเลข 1) — แถวล่าสุดของคิวถ้ายังอยู่ ไม่งั้นใช้แถวตอนกดเปิด ══ */}
       {reviewingRequest && (

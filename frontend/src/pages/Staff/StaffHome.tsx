@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
@@ -8,23 +8,21 @@ import { Input } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorCode, getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
-import RequestQueue from './RequestQueue';
+import RequestQueue, { type QueueKind } from './RequestQueue';
 
 /**
- * E0 · หน้าแรกของเจ้าหน้าที่ — “คิวงานวันนี้” (StaffHome.dc.html · สเปกหัวข้อ 4)
+ * E0 · หน้าแรกของเจ้าหน้าที่ — แบบ B “งานของฉันนำ” (เจ้าของเลือก 2026-10-07)
  *
- * ⛔ **ทุกตัวเลขบนหน้านี้มาจาก `GET /api/staff/home` คำขอเดียว** — ห้ามยิงเส้นอื่น
- *    มาประกอบตัวเลขเพิ่ม เพราะ “วันนี้” ต้องเป็นก้อนเดียวกันทั้งหน้า ถ้าแยกหลายคำขอ
- *    แต่ละอันจะอ่านนาฬิกาคนละครั้งและตอบคนละวันได้ในช่วงเที่ยงคืน
+ * บนสุดคืองานที่รอมือเจ้าหน้าที่ 4 กอง · กลางคือรายการเดียวของกองที่เลือก · ท้ายคือท่อย่อของทั้งรุ่น
+ * ของที่ถอดจากแบบเดิม (เจ้าของเคาะ): การ์ดฤดูกาลใบใหญ่ (เหลือบรรทัดกำหนดที่หัวหน้า) · กอง “ค้างที่คณบดี”
+ * (ย้ายไปช่อง “รอคณบดี” ของท่อย่อ) · แถบปฏิทิน 4 ช่วง (เมนูปฏิทินสหกิจยังอยู่ และแถบเตือนยังอยู่)
  *
- * ⛔ **หน้าจอไม่ตัดสินฤดูกาลเอง** — อ่าน `season` ที่เซิร์ฟเวอร์ส่งมาอย่างเดียว
- *    ตรรกะที่อยู่สองที่จะเพี้ยนคนละทางแน่นอน และเบราว์เซอร์ไม่รู้ “วันนี้” ของฐานข้อมูล
+ * ⛔ **ตัวเลขทุกตัวมาจากเซิร์ฟเวอร์** — `GET /api/staff/home` (งานที่รอ · กำหนด · ภาคอื่น) และ
+ *    `GET /api/staff/pipeline` (ท่อย่อ) · หน้าจอห้ามนับเอง คำนวณไม่ได้ = “ไม่ทราบ”
+ * ⛔ **หน้าจอไม่ตัดสินฤดูกาลเอง และไม่เทียบวันเอง** — อ่าน `season` กับ `days_left` ที่เซิร์ฟเวอร์ส่งมา
+ *    (เบราว์เซอร์ไม่รู้ “วันนี้” ของฐานข้อมูล)
  *
- * ⛔ **ห้ามเทียบวันเอง** — `season_detail.days_left` คิดมาจากเซิร์ฟเวอร์แล้ว
- *
- * ตารางคิวงานสามกอง (E1) ยังเป็น `RequestQueue` ตัวเดิม ซึ่งโหลดข้อมูลของตัวเอง —
- * นั่นคือ “หน้าจออีกหน้าที่วางอยู่บนหน้าเดียวกัน” (ข้อตัดสิน 14.1) ไม่ใช่การเอาเส้นอื่น
- * มาประกอบสรุปของหน้าแรก
+ * รายการคิวและแผงตรวจทั้งสามแบบอยู่ใน `RequestQueue` ซึ่งโหลดแถวของตัวเอง
  */
 
 type Season =
@@ -35,23 +33,17 @@ type Season =
   | 'evaluation'
   | 'idle';
 
-type CalendarState = 'not_configured' | 'upcoming' | 'open' | 'late' | 'closed';
-
-type TileKind = 'request' | 'acceptance' | 'dispatch' | 'appointment' | 'dean';
+/** งานของเจ้าหน้าที่ 4 กอง (เซิร์ฟเวอร์ยังส่งกอง `dean` มาด้วย — หน้านี้ไม่แสดง ดูท่อย่อแทน) */
+type TileKind = 'request' | 'acceptance' | 'dispatch' | 'appointment';
 
 interface Tile {
   count: number;
   overdue: number;
   note: string | null;
-}
-
-interface TimelineEntry {
-  key: string;
-  label: string;
-  state: CalendarState;
-  start: string | null;
-  end: string | null;
-  late_end: string | null;
+  /** รอนานสุดกี่วัน (คำร้อง · แบบตอบรับ) — null = ไม่ทราบ */
+  oldest_days: number | null;
+  /** วันที่ใกล้สุดของกอง (วันเริ่มงาน · วันนัดนิเทศ) */
+  next_date: string | null;
 }
 
 interface StaffHomePayload {
@@ -68,10 +60,8 @@ interface StaffHomePayload {
     evaluations_missing: number;
   }[];
   season_detail: {
-    headline_count: number;
     deadline: string | null;
     days_left: number | null;
-    secondary_count: number;
   };
   /** คำร้องที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี (การสร้างหนังสือล้มหลังรับ) — ต้องกดสร้างอีกครั้ง */
   missing_cover_letters: {
@@ -82,8 +72,22 @@ interface StaffHomePayload {
     document_no: string | null;
   }[];
   tiles: Record<TileKind, Tile>;
-  timeline: TimelineEntry[];
+  /** ผลรวมของ 4 กอง — เซิร์ฟเวอร์บวกให้ */
+  work_total: number;
   calendar_warnings: { activity_key: string | null; label: string }[];
+}
+
+interface PipelineStage {
+  key: string;
+  label: string;
+  short: string;
+  count: number;
+  holders: { student: number; staff: number; company: number; dean: number; clear: number };
+}
+
+interface PipelinePayload {
+  cohort_total: number;
+  stages: PipelineStage[];
 }
 
 interface GeneratedDocument {
@@ -107,49 +111,114 @@ interface GeneratedDocument {
 /** ปลายทางของปุ่ม — คีย์ query ที่ `Dashboard.tsx` อ่าน (`menu` หายไป = หน้าแรก) */
 type Dest = Record<string, string>;
 
-/**
- * กองงานทั้ง 5 · เรียงตามลำดับของสเปกข้อ 4.3
- *
- * ⛔ **กองที่นับได้ 0 ยังต้องแสดง** พร้อมคำอธิบายว่าทำไมถึงว่าง — ซ่อนแล้วคนใช้
- *    จะไม่รู้ว่ากองนั้นมีอยู่ (เคยเป็นเหตุผลที่งานทั้งกองหายไปจากสายตา)
- * ⛔ **“ค้างที่คณบดี” ไม่มีปุ่ม** — บอกให้รู้ว่าค้างที่ใคร ไม่ใช่งานของเจ้าหน้าที่ (ข้อ 14.8)
- */
-const TILES: { kind: TileKind; label: string; dest: Dest | null; emptyNote: string }[] = [
+/** การ์ดงาน 4 ใบ · `queue` = กองที่รายการกลางหน้าแสดง (null = มีเมนูของตัวเอง) */
+const JOBS: { kind: TileKind; label: string; queue: QueueKind | null; emptyNote: string }[] = [
   {
     kind: 'request',
-    label: 'คำร้องรอออกเลขหนังสือ',
-    dest: { queue: 'request' },
-    emptyNote: 'ยังไม่มีนักศึกษาอัปโหลดคำร้องที่ลงนามแล้วกลับเข้ามา',
+    label: 'คำร้องรอรับ',
+    queue: 'request',
+    emptyNote: 'ยังไม่มีนักศึกษาอัปโหลดคำร้องที่ลงนามแล้วเข้ามา',
   },
   {
     kind: 'acceptance',
     label: 'แบบตอบรับรอตรวจ',
-    dest: { queue: 'acceptance' },
+    queue: 'acceptance',
     emptyNote: 'ยังไม่มีแบบตอบรับ (เอกสารหมายเลข 2) ส่งเข้ามา',
   },
   {
     kind: 'dispatch',
-    label: 'หนังสือส่งตัวรอออกเลข',
-    dest: { queue: 'dispatch' },
+    label: 'หนังสือส่งตัวรอออก',
+    queue: 'dispatch',
     emptyNote: 'ยังไม่มีนักศึกษาที่สถานประกอบการตอบรับแล้ว',
   },
   {
     kind: 'appointment',
-    label: 'ร่างนัดหมายนิเทศรอส่ง',
-    dest: { menu: 'appointments' },
-    emptyNote: 'ยังไม่ถึงช่วงนิเทศ',
-  },
-  {
-    kind: 'dean',
-    label: 'ค้างที่คณบดี',
-    dest: null,
-    emptyNote: 'ไม่มีหนังสือค้างรอลงนาม',
+    label: 'ร่างนัดนิเทศรอส่ง',
+    queue: null,
+    emptyNote: 'ยังไม่มีร่างนัดนิเทศรอส่ง',
   },
 ];
 
+const isQueueKind = (v: string | null): v is QueueKind =>
+  v === 'request' || v === 'acceptance' || v === 'dispatch';
+
+/**
+ * ถ้อยคำของช่วงปฏิทิน — ⛔ ที่นี่แปล `season` เป็นคำเท่านั้น **ไม่ได้ตัดสินว่าอยู่ช่วงไหน**
+ * (การตัดสินอยู่ที่ `controllers/staffHome.ts` ที่เดียว)
+ */
+const SEASON_COPY: Record<Season, { phase: string; deadlineLabel: string }> = {
+  overdue: { phase: 'มีงานเลยกำหนด', deadlineLabel: 'กำหนด' },
+  request: { phase: 'ช่วงรับคำร้องและออกหนังสือ', deadlineLabel: 'ปิดรับ' },
+  acceptance: { phase: 'ช่วงรับแบบตอบรับและออกหนังสือส่งตัว', deadlineLabel: 'ปิดรับ' },
+  supervision: { phase: 'ช่วงระหว่างปฏิบัติงานและนิเทศ', deadlineLabel: 'สิ้นสุดการปฏิบัติงาน' },
+  evaluation: { phase: 'ช่วงประเมินและปิดภาค', deadlineLabel: 'ปิดภาค' },
+  idle: { phase: 'ยังไม่ถึงช่วงของงานถัดไปตามปฏิทิน', deadlineLabel: 'กำหนด' },
+};
+
+/**
+ * บรรทัดล่างของการ์ดงาน — จำนวนวัน/วันที่มาจากเซิร์ฟเวอร์ ที่นี่แค่เลือกคำ
+ * `urgent` = มีของเลยกำหนดในกองนี้ (ตัวแดง)
+ */
+function jobLine(kind: TileKind, tile: Tile, emptyNote: string): { text: string; urgent: boolean } {
+  if (tile.count === 0) return { text: emptyNote, urgent: false };
+  const urgent = tile.overdue > 0;
+  switch (kind) {
+    case 'request':
+    case 'acceptance': {
+      const oldest =
+        tile.oldest_days == null
+          ? 'ไม่ทราบว่ารอนานสุดกี่วัน'
+          : tile.oldest_days === 0
+            ? 'เข้ามาวันนี้'
+            : `รอนานสุด ${tile.oldest_days} วัน`;
+      return { text: urgent ? `${oldest} · เลยกำหนด ${tile.overdue}` : oldest, urgent };
+    }
+    case 'dispatch': {
+      const next = tile.next_date ? `เริ่มงาน ${formatThaiDate(tile.next_date)}` : 'ยังไม่มีวันเริ่มงาน';
+      return { text: urgent ? `${next} · ถึงวันเริ่มงานแล้ว ${tile.overdue}` : next, urgent };
+    }
+    default: {
+      const next = tile.next_date ? `นัดใกล้สุด ${formatThaiDate(tile.next_date)}` : 'ยังไม่ได้ระบุวันนัด';
+      return { text: urgent ? `${next} · เลยวันนัดแล้ว ${tile.overdue}` : next, urgent };
+    }
+  }
+}
+
+/** สีของช่องในท่อย่อ: น้ำเงินเข้ม = รอเจ้าหน้าที่ · ม่วง = รอคณบดี · ส้ม = รอบริษัท · เทา = รอนักศึกษา/ไม่มีงานค้าง */
+function cellTone(stage: PipelineStage): string {
+  if (stage.count === 0) return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400';
+  switch (stage.key) {
+    case 'await_officer_request':
+    case 'await_officer_accept':
+      return 'bg-brand-blue text-white';
+    case 'await_dean':
+      return 'bg-purple-100 text-purple-900 dark:bg-purple-950/60 dark:text-purple-200';
+    case 'await_company':
+      return 'bg-orange-100 text-orange-900 dark:bg-orange-950/60 dark:text-orange-200';
+    case 'accepted_prep':
+      return stage.holders.staff > 0
+        ? 'bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-200'
+        : 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100';
+    default:
+      return 'bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100';
+  }
+}
+
+const THAI_WEEKDAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+/** `วันอังคารที่ 7 ต.ค. 2569` จากวันที่ของเซิร์ฟเวอร์ — หาวันในสัปดาห์จากสตริงล้วน ไม่อ่านนาฬิกาเบราว์เซอร์ */
+function weekdayDate(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `วัน${THAI_WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}ที่ ${formatThaiDate(iso)}`;
+}
+
 export const StaffHome: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const queueParam = searchParams.get('queue');
   const [home, setHome] = useState<StaffHomePayload | null>(null);
+  const [pipeline, setPipeline] = useState<PipelinePayload | null>(null);
+  const [pipelineError, setPipelineError] = useState<string | null>(null);
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,11 +257,22 @@ export const StaffHome: React.FC = () => {
     }
   }, []);
 
+  /** ท่อย่อท้ายหน้า — ภาคที่เปิดอยู่ ทุกสาขา (ค่าเริ่มต้นของเส้นนี้) · ล้มแยกจากงานที่รอด้านบน */
+  const loadPipeline = useCallback(async () => {
+    try {
+      setPipeline((await api.get('/staff/pipeline')) as PipelinePayload);
+      setPipelineError(null);
+    } catch (err) {
+      setPipelineError(getErrorMessage(err, 'ไม่สามารถโหลดภาพรวมนักศึกษาทั้งรุ่นได้'));
+    }
+  }, []);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadHome();
     loadDocuments();
-  }, [loadHome, loadDocuments]);
+    loadPipeline();
+  }, [loadHome, loadDocuments, loadPipeline]);
 
   const go = (dest: Dest) => {
     const next = new URLSearchParams();
@@ -263,8 +343,12 @@ export const StaffHome: React.FC = () => {
     );
   }
 
-  const { season, season_detail: detail, tiles, timeline, calendar_warnings: warnings } = home;
-  const copy = seasonCopy(season, detail, tiles);
+  const { season, season_detail: detail, tiles, calendar_warnings: warnings } = home;
+
+  // กองที่รายการกลางหน้าแสดง: ตาม `?queue=` · ไม่ระบุ = กองแรกที่มีงาน (ไม่มีเลย = คำร้อง)
+  const activeQueue: QueueKind = isQueueKind(queueParam)
+    ? queueParam
+    : (JOBS.find((j) => j.queue !== null && tiles[j.kind].count > 0)?.queue ?? 'request');
 
   // `activity_key` เป็น null = ประโยคเต็มจากเซิร์ฟเวอร์ (ยังไม่เปิดภาคเรียน) แสดงทีละบรรทัด
   // มีค่า = เป็น "ชื่อกิจกรรม" เปล่า ๆ ต้องต่อท้ายเองว่ายังไม่ได้ตั้งช่วงเวลา และผลคืออะไร
@@ -281,20 +365,29 @@ export const StaffHome: React.FC = () => {
 
   return (
     <div className="space-y-4 page-enter">
-      {/* ── หัวเรื่อง ── */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">คิวงานวันนี้</h1>
-          <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
-            ทุกกองที่รอมือคุณอยู่ที่เดียว — เรียงตามช่วงของปฏิทินสหกิจ ไม่ต้องเปิดทีละเมนู
-          </p>
-        </div>
-        <div className="text-[13px] text-gray-600 dark:text-gray-400 text-right">
-          <span className="block font-semibold text-gray-800 dark:text-gray-200">
-            {home.semester ? home.semester.label : 'ยังไม่ได้เปิดภาคเรียน'}
-          </span>
-          <span>วันนี้ {formatThaiDate(home.today)}</span>
-        </div>
+      {/* ── หัวเรื่อง: งานที่รอคุณ ── */}
+      <div className="min-w-0">
+        <span className="block text-[13px] font-semibold text-brand-blue dark:text-blue-400">
+          {home.semester ? home.semester.label : 'ยังไม่ได้เปิดภาคเรียน'} · {weekdayDate(home.today)}
+        </span>
+        <h1 className="text-[26px] font-extrabold leading-tight text-gray-900 dark:text-white">
+          {home.work_total > 0 ? `งานที่รอคุณ ${home.work_total} เรื่อง` : 'ตอนนี้ไม่มีงานรอคุณ'}
+        </h1>
+        {/*
+          ช่วงของปฏิทินและกำหนดปิดรับ — ย่อมาจากการ์ดฤดูกาลใบใหญ่เดิม (เจ้าของเคาะ 2026-10-07)
+          ⛔ `season` และ `days_left` มาจากเซิร์ฟเวอร์ หน้าจอไม่ตัดสินฤดูกาลและไม่เทียบวันเอง
+        */}
+        <p
+          data-testid="staff-home-season"
+          data-season={season}
+          className="mt-0.5 text-[13px] text-gray-600 dark:text-gray-400"
+        >
+          {SEASON_COPY[season].phase}
+          {detail.deadline &&
+            ` · ${SEASON_COPY[season].deadlineLabel} ${formatThaiDate(detail.deadline)}${
+              detail.days_left !== null ? ` · ${daysLeftText(detail.days_left)}` : ''
+            }`}
+        </p>
       </div>
 
       <AlertBanner variant="error" message={error} />
@@ -337,54 +430,6 @@ export const StaffHome: React.FC = () => {
         </section>
       )}
 
-      {/* ── แถบฤดูกาล 5 ช่วง — ชูช่วงที่วันนี้อยู่ ── */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <span className="text-xs font-bold text-gray-600 dark:text-gray-400">
-            ปฏิทินสหกิจศึกษา
-          </span>
-          <button
-            type="button"
-            onClick={() => go({ menu: 'calendar' })}
-            className="-my-3 py-3 text-xs font-semibold text-blue-700 hover:underline dark:text-blue-400"
-          >
-            แก้ช่วงเวลา
-          </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {timeline.map((t) => {
-            const now = t.state === 'open' || t.state === 'late';
-            return (
-              <div
-                key={t.key}
-                data-testid={`staff-home-timeline-${t.key}`}
-                data-state={t.state}
-                className={`rounded-xl px-3 py-2 border ${
-                  now
-                    ? 'bg-blue-900 border-blue-900 dark:bg-blue-800 dark:border-blue-700'
-                    : 'bg-gray-50 border-gray-200 dark:bg-gray-900/50 dark:border-gray-700'
-                }`}
-              >
-                <span
-                  className={`block text-[11px] font-bold ${
-                    now ? 'text-white' : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  {t.label}
-                </span>
-                <span
-                  className={`block mt-0.5 text-[11px] ${
-                    now ? 'text-blue-100' : 'text-gray-500 dark:text-gray-400'
-                  }`}
-                >
-                  {windowText(t)}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
       {/*
         ── แถบเตือนปฏิทิน ──
         ⛔ ด่านปฏิทิน fail-open **โดยตั้งใจ** (ตรงข้ามกับ SEC-06 ซึ่งเป็นเรื่องสิทธิ์
@@ -416,52 +461,77 @@ export const StaffHome: React.FC = () => {
         </div>
       )}
 
-      {/* ── การ์ดใบใหญ่ประจำฤดูกาล — `season` มาจากเซิร์ฟเวอร์ ── */}
-      <div
-        data-testid="staff-home-season"
-        data-season={season}
-        className={`rounded-2xl border p-6 shadow-sm ${
-          season === 'overdue'
-            ? 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20'
-            : season === 'idle'
-              ? 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800'
-              : 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/20'
-        }`}
-      >
-        <span className="text-xs font-bold text-blue-700 dark:text-blue-400">
-          {copy.phase}
-        </span>
-        <h2 className="mt-1.5 text-xl font-extrabold leading-snug text-gray-900 dark:text-white">
-          {copy.headline}
-        </h2>
-        <p className="mt-2 max-w-3xl text-[13px] leading-relaxed text-gray-700 dark:text-gray-300">
-          {copy.body}
-        </p>
-
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {copy.action && (
+      {/*
+        ── การ์ดงาน 4 ใบ ──
+        ⛔ ใบที่นับได้ 0 ยังต้องแสดง พร้อมบอกว่าทำไมถึงว่าง — ซ่อนแล้วคนใช้จะไม่รู้ว่ากองนั้นมีอยู่
+        สามใบแรกเลือกรายการด้านล่าง (`?queue=`) · ร่างนัดนิเทศพาไปเมนูของมันเอง
+      */}
+      <div className="flex flex-wrap gap-3.5">
+        {JOBS.map(({ kind, label, queue, emptyNote }) => {
+          const tile = tiles[kind];
+          const selected = queue !== null && queue === activeQueue;
+          const line = jobLine(kind, tile, emptyNote);
+          return (
             <button
+              key={kind}
               type="button"
-              data-testid="staff-home-season-action"
-              onClick={() => go(copy.action!.dest)}
-              className="px-4 py-2 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700"
+              data-testid={`staff-home-tile-${kind}`}
+              aria-pressed={queue !== null ? selected : undefined}
+              onClick={() => go(queue !== null ? { queue } : { menu: 'appointments' })}
+              className={`flex min-h-11 min-w-0 flex-[1_1_220px] flex-col gap-1 rounded-2xl border-2 p-4 text-left ${
+                selected
+                  ? 'border-brand-blue bg-blue-50 dark:border-blue-500 dark:bg-blue-950/40'
+                  : 'border-gray-200 bg-white hover:border-blue-400 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-blue-600'
+              }`}
             >
-              {copy.action.label}
+              <span
+                className={`text-sm font-bold ${
+                  selected ? 'text-blue-900 dark:text-blue-200' : 'text-gray-900 dark:text-gray-100'
+                }`}
+              >
+                {label}
+              </span>
+              <span
+                data-testid={`staff-home-tile-${kind}-count`}
+                className={`text-[34px] font-extrabold leading-tight tabular-nums ${
+                  selected
+                    ? 'text-blue-900 dark:text-blue-200'
+                    : tile.count === 0
+                      ? 'text-gray-600 dark:text-gray-400'
+                      : 'text-gray-900 dark:text-white'
+                }`}
+              >
+                {tile.count}
+              </span>
+              <span
+                className={`text-[13px] ${
+                  line.urgent
+                    ? 'font-bold text-red-700 dark:text-red-300'
+                    : 'text-gray-600 dark:text-gray-400'
+                }`}
+              >
+                {line.text}
+              </span>
             </button>
-          )}
-          {detail.deadline && (
-            <span className="text-xs text-gray-700 dark:text-gray-300">
-              {copy.deadlineLabel} {formatThaiDate(detail.deadline)}
-              {detail.days_left !== null && ` · ${daysLeftText(detail.days_left)}`}
-            </span>
-          )}
-        </div>
+          );
+        })}
       </div>
+
+      {/* ── รายการเดียวของการ์ดที่เลือก (แผงตรวจทั้งสามแบบอยู่ในนี้) ── */}
+      <RequestQueue
+        queue={activeQueue}
+        onDataChanged={() => {
+          void loadHome(true);
+          // รับคำร้อง/ออกหนังสือส่งตัว = มีหนังสือใบใหม่ในตารางด้านล่าง และนักศึกษาย้ายช่องในท่อ
+          void loadDocuments();
+          void loadPipeline();
+        }}
+      />
 
       {/*
         ── ภาคอื่นที่ยังมีเรื่องค้าง ──
-        การ์ดฤดูกาลด้านบนผูกกับภาคที่เปิดอยู่ภาคเดียว · ภาคเก่าที่ยังมีใบรอผล/นักศึกษากำลังฝึก/ผลประเมินไม่ครบ
-        ต้องไม่หายไปพอเปิดภาคใหม่ (ปิดภาคไม่ใช่การเคลียร์ของ) — ตัวเลขทั้งหมดมาจากเซิร์ฟเวอร์
+        ภาคเก่าที่ยังมีใบรอผล/นักศึกษากำลังฝึก/ผลประเมินไม่ครบ ต้องไม่หายไปพอเปิดภาคใหม่
+        (ปิดภาคไม่ใช่การเคลียร์ของ) — ตัวเลขทั้งหมดมาจากเซิร์ฟเวอร์
       */}
       {home.other_semesters.length > 0 && (
         <section
@@ -502,90 +572,62 @@ export const StaffHome: React.FC = () => {
         </section>
       )}
 
-      {/* ── กองงาน 5 กอง ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {TILES.map(({ kind, label, dest, emptyNote }) => {
-          const tile = tiles[kind];
-          const empty = tile.count === 0;
-          const body = (
-            <>
-              <div className="flex items-baseline justify-between gap-2">
-                <span
-                  className={`text-[13px] font-bold ${
-                    empty ? 'text-gray-600 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'
-                  }`}
+      {/*
+        ── ท่อย่อ 14 ช่อง: นักศึกษาทั้งรุ่นอยู่ขั้นไหน ──
+        ตัวเลขและชื่อช่องมาจาก `GET /api/staff/pipeline` (ที่เดียวกับเมนู "นักศึกษาตอนนี้") หน้าจอไม่นับเอง
+        โหลดแยกและล้มแยก — ท่อโหลดไม่ได้ต้องไม่ทำให้งานที่รอด้านบนหายไปทั้งหน้า
+      */}
+      <section
+        data-testid="staff-home-pipeline"
+        className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-[18px] shadow-sm dark:border-gray-800 dark:bg-gray-900"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="text-base font-extrabold text-gray-900 dark:text-white">
+            {pipeline && pipeline.stages.length > 0
+              ? `นักศึกษาทั้งรุ่น ${pipeline.cohort_total} คน อยู่ขั้นไหน`
+              : 'นักศึกษาทั้งรุ่นอยู่ขั้นไหน'}
+          </h2>
+          <button
+            type="button"
+            data-testid="staff-home-pipeline-open"
+            onClick={() => go({ menu: 'pipeline' })}
+            className="-my-2 py-2 text-[13px] font-bold text-brand-blue hover:underline dark:text-blue-400"
+          >
+            เปิดหน้านักศึกษาตอนนี้
+          </button>
+        </div>
+        {pipelineError ? (
+          <p className="text-sm text-red-700 dark:text-red-300">{pipelineError}</p>
+        ) : !pipeline ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400">กำลังโหลด...</p>
+        ) : pipeline.stages.length === 0 || pipeline.cohort_total === 0 ? (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            ยังไม่มีนักศึกษาในรุ่นของภาคเรียนนี้
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-1.5">
+              {pipeline.stages.map((stage) => (
+                <div
+                  key={stage.key}
+                  data-testid={`staff-home-pipeline-${stage.key}`}
+                  title={stage.label}
+                  className={`flex min-w-0 flex-[1_1_84px] flex-col items-center gap-0.5 rounded-[10px] px-1.5 py-2 text-center ${cellTone(stage)}`}
                 >
-                  {label}
-                </span>
-                <span
-                  data-testid={`staff-home-tile-${kind}-count`}
-                  className={`text-2xl font-extrabold tabular-nums ${
-                    empty ? 'text-gray-500 dark:text-gray-400' : 'text-blue-900 dark:text-blue-300'
-                  }`}
-                >
-                  {tile.count}
-                </span>
-              </div>
-              {/*
-                เรียงความสำคัญ: เลยกำหนดก่อน แล้วค่อยหมายเหตุ แล้วค่อยเหตุผลที่ว่าง
-                ⛔ `note` ของกองคณบดีเป็น “ไม่ทราบว่าค้างมานานเท่าไร…” ได้ — แสดงตามนั้น
-                   ห้ามแปลงเป็น “ค้างมา 0 วัน” ซึ่งอ่านว่าเพิ่งเข้าคิววันนี้
-              */}
-              {tile.overdue > 0 && (
-                <span className="block text-[11px] font-bold text-red-700 dark:text-red-300">
-                  เลยกำหนดแล้ว {tile.overdue} รายการ
-                </span>
-              )}
-              {tile.note && (
-                <span className="block text-[11px] text-gray-600 dark:text-gray-400">
-                  {tile.note}
-                </span>
-              )}
-              {empty && !tile.note && (
-                <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                  {emptyNote}
-                </span>
-              )}
-            </>
-          );
-
-          const shell =
-            'rounded-2xl border p-4 flex flex-col gap-1 text-left shadow-sm bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700';
-
-          // ค้างที่คณบดี = อ่านอย่างเดียว ไม่ใช่ปุ่ม (ข้อ 14.8)
-          return dest === null ? (
-            <div
-              key={kind}
-              data-testid={`staff-home-tile-${kind}`}
-              className={`${shell} border-dashed bg-gray-50 dark:bg-gray-900/40`}
-            >
-              {body}
-              <span className="block text-[11px] text-gray-500 dark:text-gray-400">
-                ไม่ใช่งานของคุณ · รอคณบดีลงนาม
-              </span>
+                  <b className="text-lg font-extrabold tabular-nums">{stage.count}</b>
+                  <span className="text-[11.5px] leading-snug">
+                    {stage.short}
+                    {stage.key === 'accepted_prep' && stage.holders.staff > 0 && ` (รอคุณ ${stage.holders.staff})`}
+                  </span>
+                </div>
+              ))}
             </div>
-          ) : (
-            <button
-              key={kind}
-              type="button"
-              data-testid={`staff-home-tile-${kind}`}
-              onClick={() => go(dest)}
-              className={`${shell} hover:border-blue-400 dark:hover:border-blue-600`}
-            >
-              {body}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* ── ตารางคิวงานสามกอง (E1) ── */}
-      <RequestQueue
-        onDataChanged={() => {
-          void loadHome(true);
-          // รับคำร้อง/ออกหนังสือส่งตัว = มีหนังสือใบใหม่ในตารางด้านล่าง
-          void loadDocuments();
-        }}
-      />
+            <p className="text-[13px] text-gray-600 dark:text-gray-400">
+              ช่องสีน้ำเงินเข้มคือขั้นที่รอคุณ · สีม่วงรอคณบดี · สีส้มรอบริษัท · สีเทารอนักศึกษาหรือไม่มีงานค้าง
+            </p>
+          </>
+        )}
+      </section>
 
       {/* ── ประวัติหนังสือราชการ & สถานะการลงนามของคณบดี ── */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
@@ -747,101 +789,6 @@ export const StaffHome: React.FC = () => {
     </div>
   );
 };
-
-/* ── ข้อความประจำฤดูกาล ─────────────────────────────────────────────
- *
- * ⛔ ที่นี่แปล `season` เป็นถ้อยคำเท่านั้น **ไม่ได้ตัดสินว่าอยู่ฤดูกาลไหน**
- *    การตัดสินอยู่ที่ `controllers/staffHome.ts` ที่เดียว
- */
-function seasonCopy(
-  season: Season,
-  detail: StaffHomePayload['season_detail'],
-  tiles: Record<TileKind, Tile>
-): {
-  phase: string;
-  headline: string;
-  body: string;
-  deadlineLabel: string;
-  action: { label: string; dest: Dest } | null;
-} {
-  const n = detail.headline_count;
-  const secondary = detail.secondary_count;
-
-  switch (season) {
-    case 'overdue': {
-      // ปลายทางของปุ่มคือกองที่เลยกำหนดมากที่สุด — ไม่ใช่กองแรกเสมอไป
-      const worst = (
-        [
-          { dest: { queue: 'request' }, overdue: tiles.request.overdue },
-          { dest: { queue: 'acceptance' }, overdue: tiles.acceptance.overdue },
-        ] as { dest: Dest; overdue: number }[]
-      ).sort((a, b) => b.overdue - a.overdue);
-      return {
-        phase: 'ต้องตามเรื่อง',
-        headline: `ของที่เลยกำหนดแล้ว ${n} รายการ`,
-        body: `แบบตอบรับเลย 15 วันทำการ ${tiles.acceptance.overdue} ใบ · คำร้องค้างเกิน 7 วัน ${tiles.request.overdue} ใบ — ลำดับนี้มาก่อนทุกฤดูกาล เพราะของที่เลยกำหนดไม่ควรถูกกลบด้วยงานตามปฏิทิน`,
-        deadlineLabel: 'กำหนด',
-        action: { label: 'ดูรายการที่เลยกำหนด', dest: worst[0].dest },
-      };
-    }
-    case 'request':
-      return {
-        phase: 'ช่วงรับคำร้องและออกหนังสือ',
-        headline: `รับคำร้องขอหนังสือ ${n} ใบ แล้วออกเลขที่หนังสือ`,
-        body: 'การกด “รับคำร้อง” หนึ่งครั้งทำสามอย่างในทรานแซกชันเดียว: เลื่อนสถานะคำร้อง · รับรองสถานประกอบการ · ออกหนังสือขอความอนุเคราะห์เข้าคิวคณบดี',
-        deadlineLabel: 'ปิดรับ',
-        action: { label: `เปิดคิวคำร้อง ${n} ใบ`, dest: { queue: 'request' } },
-      };
-    case 'acceptance':
-      return {
-        phase: 'ช่วงรับแบบตอบรับและออกหนังสือส่งตัว',
-        headline: `ตรวจแบบตอบรับ ${n} ใบ และออกหนังสือส่งตัวให้ ${secondary} คน`,
-        body: 'นักศึกษาอัปโหลดแบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2) ที่สถานประกอบการลงนาม · คุณคีย์ชื่อผู้ลงนาม ตำแหน่ง และวันที่จากกระดาษ แล้วออกเลขหนังสือส่งตัวพร้อมวันสิ้นสุดการปฏิบัติงาน',
-        deadlineLabel: 'ปิดรับ',
-        action: { label: 'เปิดคิวแบบตอบรับ', dest: { queue: 'acceptance' } },
-      };
-    case 'supervision':
-      return {
-        phase: 'ช่วงระหว่างปฏิบัติงานและนิเทศ',
-        headline: `ส่งหนังสือนัดหมายนิเทศ ${n} ฉบับให้สถานประกอบการ`,
-        body: `อาจารย์ร่างนัดหมายไว้แล้ว รอคุณตรวจแล้วสั่งส่ง — นี่คือแบบยืนยันการนิเทศ (สหกิจ 12) บนกระดาษ · ตอนนี้มีนักศึกษาออกฝึกอยู่ ${secondary} คน`,
-        deadlineLabel: 'สิ้นสุดการปฏิบัติงาน',
-        action: { label: 'ตรวจร่างนัดหมาย', dest: { menu: 'appointments' } },
-      };
-    case 'evaluation':
-      return {
-        phase: 'ช่วงประเมินและปิดภาค',
-        headline: `แบบประเมินยังไม่ครบ ${n} คน จาก ${secondary} คน`,
-        body: 'พี่เลี้ยงต้องส่งทั้ง สหกิจ 15 (ใช้ตัดเกรด) และ สหกิจ 16 (ประเมินรายงาน) · ป้ายบนจอเขียนว่า “ครบทั้ง 2 ใบ” ไม่ใช่ “ผ่าน” เพราะระบบรู้แค่ว่ามีใบส่งเข้ามาแล้วหรือยัง อาจารย์เป็นผู้ตัดเกรด',
-        deadlineLabel: 'ปิดภาค',
-        action: { label: 'ดูรายชื่อที่ยังไม่ครบ', dest: { menu: 'final_progress' } },
-      };
-    default:
-      return {
-        phase: 'ช่วงว่าง',
-        headline: 'ตอนนี้ไม่มีอะไรค้างรอคุณ',
-        body: 'คิวเอกสารว่างและยังไม่ถึงช่วงของงานถัดไป — ถ้ายังไม่ได้เปิดภาคเรียนหรือยังไม่ได้ตั้งปฏิทิน แถบเตือนด้านบนจะบอกไว้แล้ว',
-        deadlineLabel: 'กำหนด',
-        action: { label: 'ดูสรุปภาคเรียนที่ผ่านมา', dest: { menu: 'final_progress' } },
-      };
-  }
-}
-
-/** ช่วงเวลาหนึ่งช่องบนแถบฤดูกาล — สถานะมาจากเซิร์ฟเวอร์ ไม่ได้เทียบวันที่นี่ */
-function windowText(t: TimelineEntry): string {
-  switch (t.state) {
-    case 'not_configured':
-      return 'ยังไม่ได้ตั้ง';
-    case 'upcoming':
-      return t.start ? `เริ่ม ${formatThaiDate(t.start)}` : 'ยังไม่ถึงช่วง';
-    case 'open':
-      return t.end ? `ถึง ${formatThaiDate(t.end)} · วันนี้` : 'กำลังเปิด · วันนี้';
-    case 'late':
-      return t.late_end ? `ช่วงผ่อนผัน ถึง ${formatThaiDate(t.late_end)}` : 'ช่วงผ่อนผัน';
-    default:
-      return t.end ? `ปิดแล้ว ${formatThaiDate(t.end)}` : 'ปิดแล้ว';
-  }
-}
 
 /** `days_left` คิดมาจากเซิร์ฟเวอร์แล้ว ที่นี่แค่เลือกคำ — ติดลบได้แปลว่าเลยมาแล้ว */
 function daysLeftText(days: number): string {

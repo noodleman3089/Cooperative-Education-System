@@ -95,6 +95,9 @@ export class StaffHomeController {
         // ใบที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี — ไม่มีใครเห็นถ้าไม่ขึ้นที่นี่ (แถวแดงบนสุดของหน้าแรก)
         missing_cover_letters: missingCoverLetters,
         tiles,
+        // "งานที่รอคุณ N เรื่อง" บนหัวหน้าแรก — เฉพาะ 4 กองที่เป็นงานของเจ้าหน้าที่ (ไม่รวมของที่ค้างที่คณบดี)
+        work_total:
+          tiles.request.count + tiles.acceptance.count + tiles.dispatch.count + tiles.appointment.count,
         timeline: [
           timelineEntry('intent_submission', 'รับคำร้อง & ออกหนังสือ', windows.intent_submission),
           timelineEntry('acceptance_form', 'รับแบบตอบรับ', windows.acceptance_form),
@@ -138,6 +141,10 @@ interface Tile {
   count: number;
   overdue: number;
   note: string | null;
+  /** รอนานสุดกี่วัน (คำร้อง · แบบตอบรับ) — null = ไม่มีของในกอง หรือไม่ทราบอายุ ห้ามให้หน้าจอนับเอง */
+  oldest_days: number | null;
+  /** วันที่ใกล้สุดของกอง (วันเริ่มงานของใบที่รอหนังสือส่งตัว · วันนัดของร่างนัดนิเทศ) */
+  next_date: string | null;
 }
 
 interface Tiles {
@@ -217,6 +224,12 @@ async function loadTiles(today: string): Promise<Tiles> {
          WHERE status = 'pending_officer_approval'
            AND acceptance_due_date IS NOT NULL
            AND acceptance_due_date < $1::date)                          AS acceptance_overdue,
+       -- รอเจ้าหน้าที่ตรวจนานสุดกี่วัน = นับจากได้แบบตอบรับครั้งล่าสุดของใบ · ไม่มีเหตุการณ์ (ใบเก่า) = ไม่ทราบ
+       (SELECT MAX($1::date - ((SELECT MAX(e.entered_at) FROM intent_stage_events e
+                                 WHERE e.form_id = i.form_id AND e.stage = 'acceptance_submitted')
+                               AT TIME ZONE 'Asia/Bangkok')::date)::int
+          FROM intent_forms i
+         WHERE i.status = 'pending_officer_approval')                   AS acceptance_oldest_days,
 
        -- 3. หนังสือส่งตัวรอออกเลข · เลยกำหนด = นักศึกษาถึงวันเริ่มงานแล้วแต่ยังไม่มีหนังสือ
        --    (ไม่มีเส้นตายของตัวเองบนปฏิทิน — วันเริ่มงานคือเส้นตายจริงของใบนี้)
@@ -225,6 +238,8 @@ async function loadTiles(today: string): Promise<Tiles> {
        (SELECT COUNT(*)::int FROM intent_forms
          WHERE status = 'accepted' AND dispatch_document_no IS NULL
            AND start_date IS NOT NULL AND start_date <= $1::date)        AS dispatch_overdue,
+       (SELECT MIN(start_date)::text FROM intent_forms
+         WHERE status = 'accepted' AND dispatch_document_no IS NULL)     AS dispatch_next_start,
 
        -- 5. ร่างนัดหมายนิเทศรอส่ง · เลยกำหนด = วันนัดผ่านไปแล้วแต่ยังไม่ได้ส่งออก
        (SELECT COUNT(*)::int FROM supervision_appointments
@@ -233,6 +248,8 @@ async function loadTiles(today: string): Promise<Tiles> {
          WHERE status = 'draft'
            AND appointment_date IS NOT NULL
            AND appointment_date < $1::date)                             AS appointment_overdue,
+       (SELECT MIN(appointment_date)::text FROM supervision_appointments
+         WHERE status = 'draft')                                        AS appointment_next_date,
 
        -- 6. ค้างที่คณบดี — อ่านอย่างเดียว ไม่ใช่งานของเจ้าหน้าที่ จึงไม่มี "เลยกำหนด"
        (SELECT COUNT(*)::int FROM official_documents
@@ -253,8 +270,16 @@ async function loadTiles(today: string): Promise<Tiles> {
       count: r.request_count,
       overdue: r.request_overdue,
       note: r.request_late > 0 ? `${r.request_late} ใบยื่นช่วงผ่อนผัน` : null,
+      oldest_days: r.request_oldest_days ?? null,
+      next_date: null,
     },
-    acceptance: { count: r.acceptance_count, overdue: r.acceptance_overdue, note: null },
+    acceptance: {
+      count: r.acceptance_count,
+      overdue: r.acceptance_overdue,
+      note: null,
+      oldest_days: r.acceptance_oldest_days ?? null,
+      next_date: null,
+    },
     dispatch: {
       count: r.dispatch_count,
       overdue: r.dispatch_overdue,
@@ -262,11 +287,21 @@ async function loadTiles(today: string): Promise<Tiles> {
         r.dispatch_overdue > 0
           ? `${r.dispatch_overdue} คนถึงวันเริ่มงานแล้วแต่ยังไม่ได้รับหนังสือส่งตัว`
           : null,
+      oldest_days: null,
+      next_date: r.dispatch_next_start ?? null,
     },
-    appointment: { count: r.appointment_count, overdue: r.appointment_overdue, note: null },
+    appointment: {
+      count: r.appointment_count,
+      overdue: r.appointment_overdue,
+      note: null,
+      oldest_days: null,
+      next_date: r.appointment_next_date ?? null,
+    },
     dean: {
       count: r.dean_count,
       overdue: 0,
+      oldest_days: deanDays,
+      next_date: null,
       // ⛔ ไม่มี created_at (แถวก่อน migration 030) = บอกตรง ๆ ว่าไม่ทราบ
       //    ห้ามเขียน "ค้างมา 0 วัน" ซึ่งอ่านว่าเพิ่งเข้าคิววันนี้
       note:
