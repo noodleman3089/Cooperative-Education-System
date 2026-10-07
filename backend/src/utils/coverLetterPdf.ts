@@ -45,7 +45,18 @@ export interface CoverLetterData {
   semester: string | null;
   dean_title: string | null;
   dean_name: string | null;
+  /** ตำแหน่งใต้ชื่อ (ขึ้นบรรทัดใหม่ได้) — ว่าง = พิมพ์ "คณบดี" + ชื่อคณะ · ตั้งที่ `personnel.signing_position` */
+  dean_position?: string | null;
 }
+
+/** บรรทัดตำแหน่งใต้ลายมือชื่อ — ค่าที่ผู้ลงนามตั้งเองชนะ · ว่าง = "คณบดี…" ตามเดิม */
+export const signingPositionLines = (position: string | null | undefined, fallback: string): string[] => {
+  const lines = (position ?? '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : [fallback];
+};
 
 const UNIVERSITY = 'มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก';
 
@@ -237,7 +248,8 @@ export async function buildCoverLetterPdf(
   // ⛔ ทุกตำแหน่งด้านล่างอ้างอิง `cursorY` ปัจจุบัน ไม่ใช่พิกัดคงที่ — ถ้าเนื้อหา
   // ด้านบนยาวขึ้น บล็อกนี้เลื่อนลงทั้งก้อน และขึ้นหน้าใหม่เองถ้าที่ไม่พอ
   // ความสูงของทั้งบล็อก (เว้น 12 + คำลงท้าย + ที่ลายมือชื่อ + สามบรรทัดชื่อ) — ต้องไม่ถูกตัดข้ามหน้า
-  pdf.ensureSpace(12 + LINE + SIGN_ROOM + LINE * 3);
+  const positionLines = signingPositionLines(d.dean_position, `คณบดี${d.faculty_name_th?.trim() ?? ''}`);
+  pdf.ensureSpace(12 + LINE + SIGN_ROOM + LINE * (2 + positionLines.length));
   pdf.space(12);
   pdf.line('ขอแสดงความนับถือ', { centerX: SIGN_AXIS, gap: LINE });
 
@@ -263,7 +275,7 @@ export async function buildCoverLetterPdf(
     ? `${d.dean_title?.trim() ?? ''}${d.dean_name.trim()}`
     : '.....................................................';
   pdf.line(`(${deanName})`, { centerX: SIGN_AXIS, gap: LINE });
-  pdf.line(`คณบดี${d.faculty_name_th?.trim() ?? ''}`, { centerX: SIGN_AXIS, gap: LINE });
+  positionLines.forEach((text) => pdf.line(text, { centerX: SIGN_AXIS, gap: LINE }));
   pdf.line(UNIVERSITY, { centerX: SIGN_AXIS, gap: LINE });
 
   return pdf.save();
@@ -296,7 +308,7 @@ const COVER_LETTER_SELECT = `
          sem.academic_year, sem.semester,
          officer.email AS officer_email,
          dean.first_name AS dean_first_name, dean.last_name AS dean_last_name,
-         dean.academic_title AS dean_title
+         dean.academic_title AS dean_title, dean.signing_position AS dean_position
     FROM intent_forms i
     JOIN students s         ON i.student_id = s.student_id
     JOIN master_major mj    ON s.major_id = mj.major_id
@@ -305,9 +317,10 @@ const COVER_LETTER_SELECT = `
     JOIN coop_semesters sem ON i.semester_id = sem.semester_id
     LEFT JOIN users officer ON officer.user_id = i.officer_approved_by
     LEFT JOIN LATERAL (
-      SELECT p.first_name, p.last_name, p.academic_title
+      SELECT p.first_name, p.last_name, p.academic_title, p.signing_position
         FROM personnel p
         JOIN user_roles ur ON ur.user_id = p.personnel_id AND ur.role_name = 'dean'
+       ORDER BY p.personnel_id
        LIMIT 1
     ) dean ON TRUE
 `;
@@ -367,6 +380,7 @@ export function toCoverLetterData(row: Record<string, unknown>): CoverLetterData
     academic_year: (row.academic_year as number) ?? null,
     semester: text('semester'),
     dean_title: text('dean_title'),
+    dean_position: text('dean_position'),
     // ฉบับจริงเว้นสองเคาะระหว่างชื่อกับนามสกุลของผู้ลงนาม
     dean_name: [row.dean_first_name, row.dean_last_name].filter(Boolean).join('  ').trim() || null,
   };

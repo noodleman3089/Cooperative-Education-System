@@ -978,3 +978,77 @@ export const sendMentorSilentDigestEmail = async (
     return false;
   }
 };
+
+/**
+ * แจ้งเจ้าหน้าที่ที่รับคำร้องว่า **คณบดีตีกลับหนังสือ** — ใบกลับมารอรับใหม่ในคิวคำร้อง
+ * ปลายทาง = บัญชีที่กดรับใบนั้น (`intent_forms.officer_approved_by`) ไม่ใช่เจ้าหน้าที่ทุกคน
+ * ⛔ ไม่ส่งอะไรถึงนักศึกษา — เจ้าหน้าที่เป็นคนตัดสินว่าจะรับใหม่หรือตีกลับนักศึกษา
+ * ทุกค่าที่แทรกในมาร์กอัปผ่าน `esc()` (เหตุผลเป็นข้อความอิสระของคณบดี · ชื่อบริษัทนักศึกษาพิมพ์เอง)
+ */
+export const notifyOfficerLetterReturned = async (
+  officerUserId: number,
+  info: { studentName: string; companyName: string; documentNo: string | null; reason: string }
+): Promise<void> => {
+  try {
+    const res = await query(
+      `SELECT email FROM users WHERE user_id = $1 AND is_active = TRUE AND email IS NOT NULL`,
+      [officerUserId]
+    );
+    if ((res.rowCount ?? 0) === 0) return;
+    const toEmail = (res.rows[0].email as string).trim();
+
+    const content = `
+      <p>คณบดี<b>ตีกลับ</b>หนังสือขอความอนุเคราะห์ที่ยังไม่ลงนาม คำร้องกลับมารอรับใหม่ในคิว "คำร้องรอรับ"</p>
+      <p style="color: #d93025; font-weight: bold;">เหตุผล: ${esc(info.reason)}</p>
+    `;
+    const highlightBox = `
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr><td style="width: 35%; font-weight: bold; padding: 5px 0;">นักศึกษา:</td><td>${esc(info.studentName)}</td></tr>
+        <tr><td style="font-weight: bold; padding: 5px 0;">สถานประกอบการ:</td><td>${esc(info.companyName)}</td></tr>
+        <tr><td style="font-weight: bold; padding: 5px 0;">เลขที่หนังสือเดิม:</td><td>${esc(info.documentNo ?? '-')}</td></tr>
+      </table>
+    `;
+    await transporter.sendMail({
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: toEmail,
+      subject: 'คณบดีตีกลับหนังสือขอความอนุเคราะห์ - ระบบสหกิจศึกษาออนไลน์',
+      html: renderEmailHtml({ title: 'คณบดีตีกลับหนังสือขอความอนุเคราะห์', themeColor: '#d93025', content, highlightBox }),
+    });
+    console.log(`[Email] Letter-returned notice sent to officer: ${toEmail}`);
+  } catch (error) {
+    console.error(`[Email] FAILED to notify officer ${officerUserId} of returned letter:`, error);
+  }
+};
+
+/**
+ * แจ้งคณบดีว่ามีหนังสือรอลงนามในคิว — ส่งหนึ่งฉบับต่อรอบ (ผู้เรียก `utils/signQueueNotice.ts` จองสิทธิ์ส่งก่อน)
+ * คืน true เมื่อส่งสำเร็จ · ไม่ส่งข้อความอิสระของใคร มีแต่จำนวนกับลิงก์ที่ระบบประกอบเอง
+ */
+export const sendDeanSignQueueEmail = async (
+  toEmail: string,
+  pendingCount: number,
+  queueUrl: string
+): Promise<boolean> => {
+  const content = `
+    <p>มีหนังสือรอลงนามในคิวของท่าน <b>${esc(String(pendingCount))} ฉบับ</b></p>
+    <div style="text-align: center; margin: 24px 0;">
+      <a href="${esc(queueUrl)}"
+         style="display: inline-block; padding: 12px 32px; background-color: #1a73e8; color: #ffffff; font-weight: bold; font-size: 14px; text-decoration: none; border-radius: 8px;">
+        เปิดคิวลงนามหนังสือ
+      </a>
+    </div>
+  `;
+  try {
+    await transporter.sendMail({
+      from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
+      to: toEmail,
+      subject: 'มีหนังสือรอลงนามในคิว - ระบบสหกิจศึกษาออนไลน์',
+      html: renderEmailHtml({ title: 'มีหนังสือรอลงนามในคิว', themeColor: '#1a73e8', content }),
+    });
+    console.log(`[Email] Dean sign-queue notice sent to: ${toEmail}`);
+    return true;
+  } catch (error) {
+    console.error(`[Email] FAILED to send dean sign-queue notice to ${toEmail}:`, error);
+    return false;
+  }
+};

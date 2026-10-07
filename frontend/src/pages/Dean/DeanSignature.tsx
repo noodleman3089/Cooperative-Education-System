@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import { Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 
 interface DeanSignatureProps {
@@ -15,6 +16,8 @@ interface UserProfile {
   first_name?: string | null;
   last_name?: string | null;
   e_signature_file?: string | null;
+  academic_title?: string | null;
+  signing_position?: string | null;
 }
 
 const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
@@ -26,6 +29,10 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
   const [success, setSuccess] = useState<string | null>(null);
   const [isSavingSig, setIsSavingSig] = useState(false);
   const [confirmReplaceSigOpen, setConfirmReplaceSigOpen] = useState(false);
+  // ตำแหน่งใต้ลายมือชื่อ — ช่องพิมพ์อิสระ ว่าง = "คณบดี…" (ถ้อยคำทางการผู้ลงนามพิมพ์เอง ไม่มีชุดสำเร็จรูป)
+  const [positionDraft, setPositionDraft] = useState('');
+  const positionTouchedRef = useRef(false);
+  const [isSavingPosition, setIsSavingPosition] = useState(false);
 
   // Canvas drawing state
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -54,6 +61,8 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
           if (prof.e_signature_file) {
             setSavedSigPath(prof.e_signature_file);
           }
+          // poll เบื้องหลังต้องไม่ทับสิ่งที่กำลังพิมพ์อยู่
+          setPositionDraft((prev) => (positionTouchedRef.current ? prev : prof.signing_position || ''));
         }
       } else {
         console.error('Failed to load profile for dean signature:', profileRes.reason);
@@ -204,8 +213,34 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
     }
   };
 
+  const handleSavePosition = async () => {
+    setIsSavingPosition(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const formData = new FormData();
+      // ส่งแม้ว่าง = ล้างกลับเป็น "คณบดี…" · ⛔ ไม่ส่งช่องอื่น (ชื่อ/สาขา) — หน้านี้ไม่เกี่ยว
+      formData.append('signing_position', positionDraft);
+      const res = await api.put('/profile/personnel', formData);
+      positionTouchedRef.current = false;
+      const saved: string = res?.profile?.signing_position || '';
+      setPositionDraft(saved);
+      setProfile((prev) => (prev ? { ...prev, signing_position: saved || null } : prev));
+      setSuccess(
+        saved
+          ? 'บันทึกตำแหน่งใต้ลายมือชื่อแล้ว · หนังสือที่ท่านลงนามนับจากนี้จะพิมพ์ตำแหน่งนี้'
+          : 'ล้างตำแหน่งแล้ว · หนังสือจะพิมพ์ “คณบดี” ตามชื่อคณะ'
+      );
+    } catch (err) {
+      setError(getErrorMessage(err, 'บันทึกตำแหน่งไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
+    } finally {
+      setIsSavingPosition(false);
+    }
+  };
+
   const hasName = Boolean(profile?.first_name && profile?.last_name);
-  const fullName = hasName ? `${profile?.first_name} ${profile?.last_name}` : '';
+  const fullName = hasName ? `${profile?.academic_title ?? ''}${profile?.first_name} ${profile?.last_name}` : '';
+  const savedPosition = profile?.signing_position || '';
 
   if (loading) {
     return <PageSkeleton variant={skeletonFor('dean', 'signature')} />;
@@ -360,9 +395,17 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
               <span className="text-sm font-semibold text-gray-900 dark:text-white mt-1">
                 ({fullName || 'ยังไม่ได้ระบุชื่อ'})
               </span>
-              <span className="text-xs text-gray-600 dark:text-gray-400">
-                คณบดี{facultyName}
-              </span>
+              {savedPosition ? (
+                savedPosition.split('\n').map((line, i) => (
+                  <span key={i} data-testid="dean-signature-position" className="text-xs text-gray-600 dark:text-gray-400">
+                    {line}
+                  </span>
+                ))
+              ) : (
+                <span data-testid="dean-signature-position" className="text-xs text-gray-600 dark:text-gray-400">
+                  คณบดี{facultyName}
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
@@ -374,8 +417,43 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
               >
                 การตั้งค่าโปรไฟล์
               </button>{' '}
-              · บรรทัดตำแหน่งพิมพ์ “คณบดี” ต่อด้วยชื่อคณะในระบบ
+              · เว้นตำแหน่งด้านล่างว่างไว้ = พิมพ์ “คณบดี” ต่อด้วยชื่อคณะในระบบ
             </p>
+          </div>
+
+          {/* Card: ตำแหน่งใต้ลายมือชื่อ — ผู้รักษาการแทน/ปฏิบัติราชการแทนพิมพ์เองด้วยบัญชีของตัวเอง */}
+          <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 flex flex-col gap-3 shadow-sm">
+            <label htmlFor="dean-position-input" className="text-base font-bold text-gray-900 dark:text-white">
+              ตำแหน่งใต้ลายมือชื่อ
+            </label>
+            <Textarea
+              id="dean-position-input"
+              data-testid="dean-position-input"
+              rows={2}
+              maxLength={255}
+              value={positionDraft}
+              onChange={(e) => {
+                positionTouchedRef.current = true;
+                setPositionDraft(e.target.value);
+              }}
+            />
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+              <strong>ถ้าท่านเป็นคณบดี เว้นว่างไว้</strong> — ระบบพิมพ์ “คณบดี{facultyName}” ให้เอง ·
+              ถ้าท่านลงนามในฐานะอื่น (เช่น ผู้รักษาราชการแทน) พิมพ์ถ้อยคำตำแหน่งของท่านเองลงที่นี่
+              ขึ้นบรรทัดใหม่ได้ · ระบบไม่มีถ้อยคำสำเร็จรูปให้เลือก
+            </p>
+            <div>
+              <Button
+                size="sm"
+                data-testid="dean-position-save"
+                onClick={handleSavePosition}
+                loading={isSavingPosition}
+                loadingLabel="กำลังบันทึก..."
+                disabled={positionDraft === savedPosition}
+              >
+                บันทึกตำแหน่ง
+              </Button>
+            </div>
           </div>
 
           {/* Card 2: แทนที่ลายมือชื่อเดิม ต้องยืนยันก่อน (แสดงเมื่อมีลายมือชื่อเดิมแล้ว) */}

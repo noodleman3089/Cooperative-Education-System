@@ -25,6 +25,13 @@ import type { RequestFormRow } from './RequestQueue';
 interface OfficerReview {
   submission_no: number;
   last_return: { returned_at: string; by_name: string | null; reason: string } | null;
+  /** หนังสือที่ถูกถอนกลับล่าสุด (ใหม่กว่าการตีกลับถึงนักศึกษา) — คณบดีตีกลับ หรือเจ้าหน้าที่ดึงกลับ */
+  last_letter_recall: {
+    by: 'dean' | 'staff';
+    recalled_at: string;
+    by_name: string | null;
+    reason: string | null;
+  } | null;
   late_memo: { memo_id: number; created_at: string } | null;
 }
 
@@ -84,7 +91,8 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
   /** รับคำร้องสำเร็จแต่หนังสือไม่ออก — แผงค้างไว้ให้กดสร้างอีกครั้ง */
   const [letterFailed, setLetterFailed] = useState<{ documentNo: string; reason: string } | null>(null);
 
-  const [documentNo, setDocumentNo] = useState('');
+  // ใบที่หนังสือถูกถอนกลับยังคงเลขเดิม (มักใช้เลขเดิมรับใหม่) — เติมให้ แก้ได้ · ใบที่ยังไม่เคยรับ = ว่าง
+  const [documentNo, setDocumentNo] = useState(row.officer_document_no ?? '');
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [confirming, setConfirming] = useState(false);
@@ -404,7 +412,7 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
 
             {/* ══ ขวา: ของที่ใช้ตัดสิน ══ */}
             <div className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] p-5">
-              {(submittedLate || review?.last_return) && (
+              {(submittedLate || review?.last_return || review?.last_letter_recall) && (
                 <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
                   {submittedLate && (
                     <div className="flex flex-col gap-1">
@@ -435,6 +443,18 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
                           )}
                         </p>
                       )}
+                    </div>
+                  )}
+                  {review?.last_letter_recall && (
+                    <div data-testid="request-letter-recall" className="flex flex-col gap-1">
+                      <span className={LABEL}>
+                        {review.last_letter_recall.by === 'dean' ? 'คณบดีตีกลับหนังสือ' : 'เจ้าหน้าที่ดึงหนังสือกลับ'} ·{' '}
+                        {formatThaiDateTime(review.last_letter_recall.recalled_at)}
+                        {review.last_letter_recall.by_name ? ` โดย ${review.last_letter_recall.by_name}` : ''}
+                      </span>
+                      <p className="whitespace-pre-line text-sm text-gray-900 dark:text-gray-100">
+                        {review.last_letter_recall.reason || 'ไม่ได้ระบุเหตุผล'}
+                      </p>
                     </div>
                   )}
                   {review?.last_return && (

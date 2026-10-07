@@ -54,6 +54,9 @@ export const AuditAction = {
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',
+  // หนังสือขอความอนุเคราะห์ที่ยังไม่ลงนามถูกถอนกลับ (คณบดีตีกลับ / เจ้าหน้าที่ดึงกลับ) — แถวหนังสือถูกลบ
+  // บรรทัดนี้คือร่องรอยเดียวของตัวหนังสือที่หายไป · detail: เลขที่หนังสือ + by ('dean' | 'staff') + เหตุผล
+  DOCUMENT_COVER_LETTER_RETURNED: 'document.cover_letter_returned',
   // ⛔ APPLICATION_EVALUATED / APPLICATION_DECIDED (สหกิจ 01) ถูกลบ 2026-09-14 พร้อมทั้งชุด
   //    แถวเก่าใน audit_log ยังอยู่เป็นประวัติ ห้ามเอาชื่อ action สองอันนั้นไปใช้กับเรื่องอื่น
   // ⛔ ELIGIBILITY_CHANGED ('student.eligibility_changed') ถูกลบ 2026-09-14 พร้อม verify-eligibility

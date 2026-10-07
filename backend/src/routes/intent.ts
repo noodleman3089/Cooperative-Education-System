@@ -143,6 +143,14 @@ router.post(
   IntentFormController.reissueCoverLetter
 );
 
+// Route: POST /api/intents/:id/cover-letter/recall
+// เจ้าหน้าที่ดึงหนังสือที่ยังไม่ลงนามกลับ (บริษัทหรือนักศึกษาแจ้งเปลี่ยนข้อมูลหลังรับคำร้อง) — ใบถอยไป pending_officer_request
+router.post(
+  '/:id/cover-letter/recall',
+  authorizeRoles('staff'),
+  IntentFormController.recallCoverLetter
+);
+
 // Route: POST /api/intents/:id/dispatch-letter (เจ้าหน้าที่สั่งออกหนังสือส่งตัว)
 // ⛔ ออกได้เมื่อใบอยู่สถานะ `accepted` แล้วเท่านั้น — ด่านอยู่ใน controller
 router.post(

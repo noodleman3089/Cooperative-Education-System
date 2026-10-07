@@ -7,6 +7,7 @@ import { CheckCircle2, AlertCircle, Eye, ExternalLink, X, FileText } from 'lucid
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ReasonModal from '../../components/ui/ReasonModal';
 import { getErrorMessage } from '../../utils/errors';
 
 interface DeanSignQueueProps {
@@ -53,10 +54,15 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
   const [hasName, setHasName] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [deanFullName, setDeanFullName] = useState<string>('');
+  // ตำแหน่งทางวิชาการ + ตำแหน่งใต้ชื่อ ที่จะถูกพิมพ์ลงหนังสือ (ว่าง = "คณบดี…" ตามเดิม) — ต้องเห็นก่อนกดลงนาม
+  const [deanTitle, setDeanTitle] = useState<string>('');
+  const [deanPosition, setDeanPosition] = useState<string>('');
 
   // Selection state
   const [selectedDocIds, setSelectedDocIds] = useState<number[]>([]);
   const [confirmSignOpen, setConfirmSignOpen] = useState(false);
+  // ตีกลับหนังสือให้เจ้าหน้าที่ — เก็บทั้งแถวไว้ให้กล่องบอกได้ว่ากำลังตีกลับของใคร
+  const [returningDoc, setReturningDoc] = useState<OfficialDocument | null>(null);
 
   const loadDashboardData = useCallback(async (isBackground = false) => {
     try {
@@ -86,6 +92,8 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
         setHasSignature(sigOk);
         setHasName(nameOk);
         setDeanFullName(nameOk ? `${prof.first_name} ${prof.last_name}` : '');
+        setDeanTitle(prof?.academic_title || '');
+        setDeanPosition(prof?.signing_position || '');
       } else {
         // โหลดโปรไฟล์ไม่ได้ ≠ ขาดลายมือชื่อ — บอกความจริง และไม่ปล่อยให้แถบ "ขาดลายมือชื่อ" ขึ้นแทน
         console.error('Failed to load profile:', profileRes.reason);
@@ -196,6 +204,28 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
     }
   };
 
+  const handleReturn = async (reason: string) => {
+    if (!returningDoc) return;
+    // โยน error ต่อ → กล่องแสดงในตัวเองและไม่ปิด
+    await api.post(`/documents/${returningDoc.doc_id}/return`, { reason });
+    const returned = returningDoc;
+    setReturningDoc(null);
+    setError(null);
+    setSuccess(
+      `ตีกลับหนังสือของ ${docStudentName(returned)} (${returned.document_number || `#DOC-${returned.doc_id}`}) ให้เจ้าหน้าที่แล้ว`
+    );
+    setSelectedDocIds((prev) => prev.filter((id) => id !== returned.doc_id));
+    if (previewDocIdParam === String(returned.doc_id)) handleSetPreviewDoc(null);
+    window.dispatchEvent(new CustomEvent('intent-updated'));
+    await loadDashboardData(true);
+  };
+
+  // ชื่อ-ตำแหน่งที่จะถูกพิมพ์ใต้ลายมือชื่อ (ค่าเดียวกับที่เซิร์ฟเวอร์ใช้ตอนลงนาม: โปรไฟล์ของผู้กด)
+  const signerPrintedName = `${deanTitle}${deanFullName}`;
+  const signerPrintedPosition = deanPosition
+    ? deanPosition.split('\n').join(' / ')
+    : 'คณบดี… (ตามชื่อคณะ)';
+
   const getDocTypeLabel = (type: string) => {
     if (type === 'cover_letter') return 'หนังสือขอความอนุเคราะห์';
     if (type === 'send_letter') return 'หนังสือส่งตัวนักศึกษา';
@@ -288,7 +318,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
       </div>
 
       <AlertBanner variant="error" message={error} />
-      <AlertBanner variant="success" message={success} />
+      <AlertBanner variant="success" message={success} scrollOnShow />
 
       {/* ══ แถบความพร้อมก่อนลงนาม (Spec H ข้อ 2) ══ */}
       {profileLoaded && (
@@ -341,9 +371,14 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               )}
               <span>
                 {hasName
-                  ? `ชื่อที่พิมพ์ใต้ลายมือชื่อ: ${deanFullName}`
+                  ? `ชื่อที่พิมพ์ใต้ลายมือชื่อ: ${signerPrintedName}`
                   : 'ยังไม่มีชื่อ-นามสกุลในโปรไฟล์'}
               </span>
+              {hasName && (
+                <span data-testid="dean-ready-position" className="text-gray-700 dark:text-gray-300">
+                  · ตำแหน่ง: {signerPrintedPosition}
+                </span>
+              )}
             </div>
           </div>
 
@@ -649,6 +684,21 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               <span>{getDocTypeLabel(previewDoc.type)}</span>
             </div>
 
+            {/* ตีกลับหนังสือที่ยังไม่ลงนามให้เจ้าหน้าที่ — เฉพาะหนังสือขอความอนุเคราะห์
+                (หนังสือส่งตัวยังตีกลับในระบบไม่ได้ · ดู known_issues.md) */}
+            {previewDoc.type === 'cover_letter' && previewDoc.status === 'pending_sign' && (
+              <div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  data-testid="dean-return-open"
+                  onClick={() => setReturningDoc(previewDoc)}
+                >
+                  ตีกลับให้เจ้าหน้าที่
+                </Button>
+              </div>
+            )}
+
             {/* Embedded PDF iframe per spec H ข้อ 2 */}
             <div className="h-[520px] rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 relative">
               <iframe
@@ -665,12 +715,33 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
       <ConfirmDialog
         open={confirmSignOpen}
         title="ยืนยันการลงนามเอกสารราชการ"
-        message={`ลงนามเอกสาร ${selectedDocIds.length} ฉบับด้วยลายมือชื่อของท่าน: ${selectedDocsDetailText} — ระบบจะประทับลายเซ็นลงบนไฟล์ PDF และแจ้งนักศึกษาให้มารับหนังสือ การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้`}
+        message={`ลงนามเอกสาร ${selectedDocIds.length} ฉบับด้วยลายมือชื่อของท่าน: ${selectedDocsDetailText} — ระบบจะพิมพ์ชื่อ "${signerPrintedName}" ตำแหน่ง "${signerPrintedPosition}" ใต้ลายมือชื่อ ประทับลายเซ็นลงบนไฟล์ PDF และแจ้งนักศึกษาให้มารับหนังสือ การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้`}
         confirmLabel={`ลงนาม ${selectedDocIds.length} ฉบับ`}
         busy={signingInProgress}
         onConfirm={handleBatchSign}
         onCancel={() => setConfirmSignOpen(false)}
       />
+
+      {/* ══ ตีกลับหนังสือให้เจ้าหน้าที่ — เหตุผลบังคับ ══ */}
+      {returningDoc && (
+        <ReasonModal
+          title="ตีกลับหนังสือให้เจ้าหน้าที่"
+          testIdPrefix="dean-return"
+          submitLabel="ตีกลับหนังสือ"
+          intro={
+            <>
+              กำลังตีกลับหนังสือขอความอนุเคราะห์ของ <strong>{docStudentName(returningDoc)}</strong> (
+              {returningDoc.student_code}) · {returningDoc.company_name_th} · เลขที่{' '}
+              {returningDoc.document_number || `#DOC-${returningDoc.doc_id}`}
+              <br />
+              หนังสือฉบับนี้จะถูกลบออกจากคิว และคำร้องกลับไปรอเจ้าหน้าที่รับใหม่
+            </>
+          }
+          hint="เจ้าหน้าที่ที่รับคำร้องใบนี้จะได้รับอีเมลพร้อมเหตุผล · นักศึกษาไม่เห็นเหตุผลนี้"
+          onSubmit={handleReturn}
+          onClose={() => setReturningDoc(null)}
+        />
+      )}
     </div>
   );
 };

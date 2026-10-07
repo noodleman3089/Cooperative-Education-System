@@ -12,7 +12,7 @@ import {
 import { CompanyModel } from '../models/company';
 import { isLateWindow } from '../middlewares/calendarGate';
 import pool, { query } from '../config/database';
-import { notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
+import { notifyOfficerLetterReturned, notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
 import {
   assertCanAccessStudent,
   assertCanReviewStudentWork,
@@ -48,6 +48,7 @@ import {
 } from '../utils/acceptanceLinkToken';
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
+import { notifyDeansOfPendingLetter } from '../utils/signQueueNotice';
 
 
 /** ความกว้างของ `intent_forms.officer_document_no` และ `official_documents.document_number` (migration 051) */
@@ -75,7 +76,7 @@ function parseDocumentNo(raw: unknown, res: Response): string | null {
  * การตีกลับก่อน migration 051 ไม่มีเหตุผลเก็บไว้ = `last_return` เป็น null (หน้าจอไม่แสดง ห้ามแต่งข้อความ)
  */
 async function loadOfficerReview(formId: number) {
-  const [returns, memo] = await Promise.all([
+  const [returns, recalls, memo] = await Promise.all([
     query(
       `SELECT e.entered_at, e.note,
               NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS actor_name,
@@ -83,6 +84,17 @@ async function loadOfficerReview(formId: number) {
          FROM intent_stage_events e
          LEFT JOIN personnel p ON p.personnel_id = e.actor_id
         WHERE e.form_id = $1 AND e.stage = 'request_returned'
+        ORDER BY e.entered_at DESC, e.event_id DESC
+        LIMIT 1`,
+      [formId]
+    ),
+    // หนังสือที่ถูกถอนกลับล่าสุด (คณบดีตีกลับ / เจ้าหน้าที่ดึงกลับ) — ไม่นับ "ส่งครั้งที่ N"
+    query(
+      `SELECT e.stage, e.entered_at, e.note,
+              NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS actor_name
+         FROM intent_stage_events e
+         LEFT JOIN personnel p ON p.personnel_id = e.actor_id
+        WHERE e.form_id = $1 AND e.stage IN ('dean_returned', 'staff_recalled')
         ORDER BY e.entered_at DESC, e.event_id DESC
         LIMIT 1`,
       [formId]
@@ -97,11 +109,25 @@ async function loadOfficerReview(formId: number) {
   const last = returns.rows[0] as
     | { entered_at: string; note: string | null; actor_name: string | null; return_count: number }
     | undefined;
+  const recall = recalls.rows[0] as
+    | { stage: 'dean_returned' | 'staff_recalled'; entered_at: string; note: string | null; actor_name: string | null }
+    | undefined;
+  // แสดงเฉพาะเมื่อใหม่กว่าการตีกลับถึงนักศึกษาครั้งล่าสุด — ถ้านักศึกษาถูกตีกลับหลังจากนั้นแล้ว เรื่องหนังสือจบไปแล้ว
+  const recallIsCurrent = recall && (!last || new Date(recall.entered_at) > new Date(last.entered_at));
   return {
     submission_no: (last?.return_count ?? 0) + 1,
     last_return:
       last && last.note
         ? { returned_at: last.entered_at, by_name: last.actor_name, reason: last.note }
+        : null,
+    last_letter_recall:
+      recall && recallIsCurrent
+        ? {
+            by: recall.stage === 'dean_returned' ? 'dean' : 'staff',
+            recalled_at: recall.entered_at,
+            by_name: recall.actor_name,
+            reason: recall.note,
+          }
         : null,
     late_memo: (memo.rows[0] as { memo_id: number; created_at: string } | undefined) ?? null,
   };
@@ -112,6 +138,86 @@ function sendIntentConflict(res: Response, error: unknown): boolean {
   if (!(error instanceof IntentConflictError)) return false;
   res.status(409).json({ message: error.message, code: error.code, ...error.extra });
   return true;
+}
+
+/**
+ * ถอนหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนามแล้วตอบ HTTP เอง — ใช้ร่วมกันสองเส้น
+ *   `POST /api/documents/:id/return` (คณบดีตีกลับ) · `POST /api/intents/:id/cover-letter/recall` (เจ้าหน้าที่ดึงกลับ)
+ * ตัวงานจริงอยู่ที่ `IntentFormModel.returnCoverLetter` (ทรานแซกชันเดียว) · เหตุผลบังคับ ใช้กติกาเดียวกับ `officer-reject` (ไม่ว่าง)
+ */
+export async function handleLetterReturn(
+  req: Request,
+  res: Response,
+  args: { formId: number; by: 'dean' | 'staff'; docId?: number }
+): Promise<void> {
+  try {
+    if (!req.user) {
+      res.status(401).json({ message: 'Unauthorized. Please log in.' });
+      return;
+    }
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+    if (!reason) {
+      res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ตีกลับหนังสือ เพื่อให้เจ้าหน้าที่แก้ไขได้ถูกจุด' });
+      return;
+    }
+
+    const { studentId, documentNo, draftPath, officerId } = await IntentFormModel.returnCoverLetter(args.formId, {
+      reason,
+      actorUserId: req.user.userId,
+      by: args.by,
+      docId: args.docId,
+    });
+
+    // ไฟล์ฉบับร่างไม่มีแถวไหนชี้ถึงแล้ว — ลบไม่สำเร็จไม่ถือว่าล้ม · ลบเฉพาะใต้โฟลเดอร์เอกสารของระบบ
+    if (draftPath) {
+      const documentsDir = path.resolve(process.cwd(), 'secure_private', 'documents');
+      const abs = path.resolve(process.cwd(), draftPath);
+      if (abs.startsWith(documentsDir + path.sep)) fs.promises.unlink(abs).catch(() => undefined);
+    }
+
+    writeAudit(
+      {
+        action: AuditAction.DOCUMENT_COVER_LETTER_RETURNED,
+        entityType: 'intent_form',
+        entityId: args.formId,
+        subjectId: studentId,
+        detail: { document_no: documentNo, by: args.by, reason },
+      },
+      req
+    ).catch(() => undefined);
+
+    // คณบดีตีกลับ = แจ้งเจ้าหน้าที่ที่รับใบนี้ (ไม่รอ) · ไม่ส่งอะไรถึงนักศึกษา
+    if (args.by === 'dean' && officerId !== null) {
+      query(
+        `SELECT s.first_name, s.last_name, c.name_th AS company_name
+           FROM intent_forms i JOIN students s ON s.student_id = i.student_id
+           JOIN companies c ON c.company_id = i.company_id WHERE i.form_id = $1`,
+        [args.formId]
+      )
+        .then((r) => {
+          const row = r.rows[0] as { first_name: string | null; last_name: string | null; company_name: string } | undefined;
+          if (!row) return;
+          return notifyOfficerLetterReturned(officerId, {
+            studentName: [row.first_name, row.last_name].filter(Boolean).join(' ').trim() || 'นักศึกษา',
+            companyName: row.company_name,
+            documentNo,
+            reason,
+          });
+        })
+        .catch(console.error);
+    }
+
+    res.status(200).json({
+      message:
+        args.by === 'dean'
+          ? 'ตีกลับหนังสือให้เจ้าหน้าที่แล้ว'
+          : 'ดึงหนังสือกลับแล้ว คำร้องกลับไปรอรับในคิวคำร้อง',
+      form_id: args.formId,
+    });
+  } catch (error) {
+    if (sendIntentConflict(res, error)) return;
+    res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถถอนหนังสือได้') });
+  }
 }
 
 /** อีเมลหนึ่งที่อยู่ล้วน — ไม่รับรูปแบบ "ชื่อ <a@b.c>" หรืออักขระที่ใช้ต่อหลายที่อยู่ */
@@ -423,7 +529,17 @@ export class IntentFormController {
                u_men.email AS mentor_email,
                -- ที่มาของคำตอบรับ (ลิงก์ของบริษัท / นักศึกษาอัปโหลดเอง)
                i.acceptance_source,
-               doc.status AS cover_letter_status
+               doc.status AS cover_letter_status,
+               -- ป้ายในคิว "คำร้องรอรับ": หนังสือถูกถอนกลับมาและยังไม่ถูกตีกลับถึงนักศึกษาหลังจากนั้น
+               -- (dean_returned / staff_recalled) · เจ้าหน้าที่เท่านั้นที่ได้ค่านี้ — ตัดตามบทบาทที่ปลายทาง
+               CASE WHEN i.status = 'pending_officer_request' THEN
+                 (SELECT e.stage FROM intent_stage_events e
+                   WHERE e.form_id = i.form_id AND e.stage IN ('dean_returned', 'staff_recalled')
+                     AND e.entered_at > COALESCE(
+                           (SELECT MAX(r.entered_at) FROM intent_stage_events r
+                             WHERE r.form_id = i.form_id AND r.stage = 'request_returned'), '-infinity'::timestamptz)
+                   ORDER BY e.entered_at DESC, e.event_id DESC LIMIT 1)
+               END AS letter_recall
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
@@ -475,6 +591,11 @@ export class IntentFormController {
       queryStr += ` ORDER BY i.form_id DESC`;
 
       const result = await query(queryStr, queryParams);
+
+      // ⛔ ป้ายหนังสือถูกถอนกลับให้เจ้าหน้าที่เท่านั้น (หลักการ SEC-10) — เส้นนี้หลายบทบาทใช้ร่วม
+      if (!roles.includes('staff')) {
+        for (const row of result.rows) delete (row as Record<string, unknown>).letter_recall;
+      }
 
       res.status(200).json(result.rows);
     } catch (error) {
@@ -876,6 +997,20 @@ export class IntentFormController {
   }
 
   /**
+   * เจ้าหน้าที่ดึงหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนามกลับ — ใบถอยไปรอรับคำร้องใหม่
+   * Route: POST /api/intents/:id/cover-letter/recall
+   * Access: staff · body { reason }
+   */
+  static async recallCoverLetter(req: Request, res: Response): Promise<void> {
+    const formId = parseInt(req.params.id, 10);
+    if (isNaN(formId)) {
+      res.status(400).json({ message: 'Invalid intent form ID format.' });
+      return;
+    }
+    await handleLetterReturn(req, res, { formId, by: 'staff' });
+  }
+
+  /**
    * เจ้าหน้าที่แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม
    * Route: PATCH /api/intents/:id/document-no
    * Access: staff
@@ -1214,6 +1349,9 @@ export class IntentFormController {
         generated_file_path: relativePath,
         status: 'pending_sign',
       });
+
+      // หนังสือใหม่เข้าคิวคณบดี — แจ้งคณบดีที่ไม่อยู่ (ไม่รอ · ล้มก็ไม่กระทบการออกหนังสือ)
+      notifyDeansOfPendingLetter().catch(console.error);
 
       writeAudit(
         {

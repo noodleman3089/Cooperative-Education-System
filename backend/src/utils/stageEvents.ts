@@ -12,7 +12,9 @@
  *   request_uploaded     อัปโหลดกระดาษแล้ว → รอเจ้าหน้าที่รับคำร้อง
  *   request_returned     เจ้าหน้าที่ตีกลับคำร้อง → กลับไปรอนักศึกษาอัปโหลดใหม่
  *   officer_approved     เจ้าหน้าที่รับคำร้อง → รอคณบดีลงนามหนังสือ
- *   dean_signed          คณบดีลงนามแล้ว → รอนักศึกษาส่งหนังสือให้บริษัท
+ *   dean_returned        คณบดีตีกลับหนังสือที่ยังไม่ลงนาม → กลับไปรอเจ้าหน้าที่รับคำร้อง (หนังสือถูกลบ)
+ *   staff_recalled       เจ้าหน้าที่ดึงหนังสือที่ยังไม่ลงนามกลับ → กลับไปรอเจ้าหน้าที่รับคำร้อง (หนังสือถูกลบ)
+ *   dean_signed         คณบดีลงนามแล้ว → รอนักศึกษาส่งหนังสือให้บริษัท
  *   mail_sent            ส่งหนังสือถึงบริษัท → รอบริษัทตอบรับ
  *   acceptance_submitted ได้แบบตอบรับ (นักศึกษาอัปโหลด/บริษัทตอบทางลิงก์) → รอพี่เลี้ยง/เจ้าหน้าที่
  *   acceptance_returned  เจ้าหน้าที่ตีกลับแบบตอบรับ → กลับไปรอส่งใหม่
@@ -26,6 +28,8 @@ export type StageEvent =
   | 'request_uploaded'
   | 'request_returned'
   | 'officer_approved'
+  | 'dean_returned'
+  | 'staff_recalled'
   | 'dean_signed'
   | 'mail_sent'
   | 'acceptance_submitted'
@@ -40,7 +44,7 @@ interface Db {
 }
 
 /**
- * `extra` ใช้กับ `request_returned` เท่านั้น — เหตุผลที่ตีกลับและเจ้าหน้าที่ที่กด (migration 051)
+ * `extra` ใช้กับ `request_returned` · `dean_returned` · `staff_recalled` เท่านั้น — เหตุผลและผู้กด (migration 051)
  * เก็บที่นี่เพราะ `intent_forms.reject_reason` ถูกล้างเมื่อนักศึกษาส่งใหม่ และ audit_log ไม่มี read API (SEC-07)
  * ⛔ สองค่านี้ให้เจ้าหน้าที่เห็นเท่านั้น (`GET /intents/:id` ตัดตามบทบาท)
  */
@@ -56,16 +60,20 @@ export async function recordStageEvent(
   );
 }
 
+/** เหตุการณ์ที่ทำให้ใบ "เข้า" คิวรอเจ้าหน้าที่รับคำร้อง — อัปโหลดกระดาษ · หนังสือถูกถอนกลับมา (คณบดี/เจ้าหน้าที่) */
+export const REQUEST_QUEUE_ENTRY_STAGES_SQL = `'request_uploaded', 'dean_returned', 'staff_recalled'`;
+
 /**
- * เวลาที่ใบเข้าคิว "รอเจ้าหน้าที่รับคำร้อง" = อัปโหลดกระดาษครั้งล่าสุด
+ * เวลาที่ใบเข้าคิว "รอเจ้าหน้าที่รับคำร้อง" = เหตุการณ์เข้าคิวครั้งล่าสุด (อัปโหลดกระดาษ หรือหนังสือถูกถอนกลับ)
  * ใบเก่าที่ไม่มีเหตุการณ์ (ก่อน migration 049) ถอยไปใช้วันที่สร้างใบ · ไม่มีทั้งคู่ = NULL = ไม่ทราบ ห้ามเดา
+ * ⛔ ต้องนับการถอนกลับด้วย ไม่งั้นใบที่กลับเข้าคิวจะแดง "เลยกำหนด" ทันทีจากวันอัปโหลดเดิม
  *
  * ⛔ ที่มาเดียวของ "รอมากี่วัน" และ "เลยกำหนด" ของคิวคำร้อง — หน้าแรกเจ้าหน้าที่ · รายการคิว (`GET /intents`)
  *    · `staffPipeline.ts` (`age_request ?? age_created`) ต้องตอบตรงกัน
  */
 export const requestQueuedAtSql = (alias: string): string =>
   `COALESCE((SELECT MAX(e.entered_at) FROM intent_stage_events e
-              WHERE e.form_id = ${alias}.form_id AND e.stage = 'request_uploaded'), ${alias}.created_at)`;
+              WHERE e.form_id = ${alias}.form_id AND e.stage IN (${REQUEST_QUEUE_ENTRY_STAGES_SQL})), ${alias}.created_at)`;
 
 /** คำร้องที่รอเจ้าหน้าที่เกินกี่วันนับเป็นเลยกำหนด */
 export const REQUEST_OVERDUE_DAYS = 7;

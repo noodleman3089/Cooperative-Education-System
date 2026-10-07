@@ -384,7 +384,12 @@ test.describe('ขั้น 2 — เจ้าหน้าที่รับ/ต
 
     await apiLoginAs(request, 'staff1');
     const first = await (await request.get(`${API_URL}/intents/${formId}`)).json();
-    expect(first.officer_review).toEqual({ submission_no: 1, last_return: null, late_memo: null });
+    expect(first.officer_review).toEqual({
+      submission_no: 1,
+      last_return: null,
+      last_letter_recall: null,
+      late_memo: null,
+    });
 
     const reason = 'ลายเซ็นหัวหน้าสาขาวิชายังไม่ครบ';
     expect(

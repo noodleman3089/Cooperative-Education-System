@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import pool from '../config/database';
 import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from './coverLetterPdf';
+import { notifyDeansOfPendingLetter } from './signQueueNotice';
 
 /** ออกหนังสือไม่ได้เพราะ "สภาพของใบ" ไม่ใช่เพราะระบบล้ม — controller ตอบด้วย `status` นี้ */
 export class CoverLetterConflictError extends Error {
@@ -100,6 +101,8 @@ export async function issueCoverLetter(
     }
 
     await client.query('COMMIT');
+    // หนังสือ **ใหม่** เข้าคิวคณบดี (ไม่ใช่วาดไฟล์เดิมซ้ำ) — แจ้งคณบดีที่ไม่อยู่ ไม่รอ · ล้มก็ไม่กระทบการออกหนังสือ
+    if (!existing) notifyDeansOfPendingLetter().catch(console.error);
     return { docId };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => undefined);

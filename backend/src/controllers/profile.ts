@@ -503,7 +503,7 @@ export class ProfileController {
       // `resolveMajorScope` reads it to decide whose students an advisor or
       // department head can see, so letting people pick it here let them widen
       // their own access. Staff change it at PUT /users/:id.
-      const { first_name, last_name, birth_date, academic_title } = req.body;
+      const { first_name, last_name, birth_date, academic_title, signing_position } = req.body;
 
       const existingProfile = await PersonnelModel.findByPersonnelId(userId);
       if (!existingProfile) {
@@ -546,6 +546,18 @@ export class ProfileController {
       // (หน้าตั้งค่าลายมือชื่อของคณบดีเรียกเส้นนี้โดยไม่รู้จักช่องนี้ ต้องไม่ล้างมัน)
       if (typeof academic_title === 'string') {
         await PersonnelModel.setAcademicTitle(userId, academic_title.trim().slice(0, 100) || null);
+      }
+
+      // ตำแหน่งใต้ลายมือชื่อ — รับเฉพาะ role dean (เป็นถ้อยคำที่ถูกพิมพ์ลงหนังสือราชการ) · คนอื่นส่งมาก็เมิน
+      // ส่งมา (แม้ว่าง) = ตั้งตามนั้น จึงล้างได้ · ไม่ส่งมา = ไม่แตะ · ขึ้นบรรทัดใหม่ได้
+      if (typeof signing_position === 'string' && req.user.roles.includes('dean')) {
+        const cleaned = signing_position
+          .split('\n')
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .join('\n')
+          .slice(0, 255);
+        await PersonnelModel.setSigningPosition(userId, cleaned || null);
       }
 
       res.status(200).json({

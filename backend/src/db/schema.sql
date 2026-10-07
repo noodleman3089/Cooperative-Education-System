@@ -163,7 +163,12 @@ CREATE TABLE IF NOT EXISTS personnel (
     birth_date DATE,
     -- ตำแหน่งทางวิชาการ เช่น "ผู้ช่วยศาสตราจารย์" · "รองศาสตราจารย์ ดร." (migration 052)
     -- พิมพ์ติดหน้าชื่อใต้ลายมือชื่อคณบดีในหนังสือขอความอนุเคราะห์ · เจ้าตัวกรอกเองที่หน้าโปรไฟล์
-    academic_title VARCHAR(100)
+    academic_title VARCHAR(100),
+    -- ตำแหน่งใต้ลายมือชื่อ (migration 053) · ว่าง = "คณบดี…" · มีค่า = พิมพ์ค่านั้นแทนทั้งบรรทัด (ผู้รักษาการแทนพิมพ์เอง)
+    signing_position VARCHAR(255),
+    -- ตัวแจ้งคณบดีว่ามีหนังสือเข้าคิวลงนาม (migration 053): เปิดคิวล่าสุด · อีเมลเตือนล่าสุด
+    sign_queue_seen_at TIMESTAMPTZ,
+    sign_queue_notified_at TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS students (
@@ -634,7 +639,7 @@ CREATE TABLE IF NOT EXISTS intent_stage_events (
     form_id INT NOT NULL REFERENCES intent_forms(form_id) ON DELETE CASCADE,
     stage VARCHAR(30) NOT NULL,
     entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    -- ใช้กับ `request_returned` เท่านั้น (migration 051): เหตุผลที่ตีกลับ + เจ้าหน้าที่ที่กด
+    -- ใช้กับ `request_returned` · `dean_returned` · `staff_recalled` เท่านั้น (migration 051): เหตุผล + ผู้กด
     -- ว่างได้ทั้งคู่ — เหตุการณ์อื่นไม่ใช้ และแถวเก่าไม่มีข้อมูล (หน้าจอไม่แสดง ห้ามแต่ง)
     note TEXT,
     actor_id INT REFERENCES users(user_id) ON DELETE SET NULL

@@ -5,6 +5,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
+import ReasonModal from '../../components/ui/ReasonModal';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorCode, getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
@@ -230,6 +231,8 @@ export const StaffHome: React.FC = () => {
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  // ดึงหนังสือที่ยังไม่ลงนามกลับ — ใบถอยไปรอรับคำร้องใหม่ · เก็บทั้งแถวไว้ให้กล่องบอกได้ว่ากำลังดึงของใคร
+  const [recallingDoc, setRecallingDoc] = useState<GeneratedDocument | null>(null);
 
   const loadHome = useCallback(async (isBackground = false) => {
     try {
@@ -328,6 +331,22 @@ export const StaffHome: React.FC = () => {
     } finally {
       setEditBusy(false);
     }
+  };
+
+  const recallLetter = async (reason: string) => {
+    if (!recallingDoc?.form_id) return;
+    try {
+      await api.post(`/intents/${recallingDoc.form_id}/cover-letter/recall`, { reason });
+    } catch (err) {
+      // คณบดีลงนามไปแล้วระหว่างที่กล่องเปิดอยู่ = แถวในตารางต้องเปลี่ยนตาม (ข้อความ error ยังขึ้นในกล่อง)
+      await loadDocuments();
+      throw err;
+    }
+    setSuccess(
+      `ดึงหนังสือของ ${recallingDoc.student_code} กลับแล้ว · คำร้องกลับไปรอรับในคิว "คำร้องรอรับ"`
+    );
+    setRecallingDoc(null);
+    await Promise.all([loadHome(true), loadDocuments(), loadPipeline()]);
   };
 
   if (loading) return <PageSkeleton variant="stats" />;
@@ -673,6 +692,17 @@ export const StaffHome: React.FC = () => {
                           แก้เลขที่หนังสือ
                         </button>
                       )}
+                      {/* ดึงกลับเมื่อบริษัท/นักศึกษาแจ้งเปลี่ยนข้อมูลหลังรับคำร้อง — แถวเดียวกัน เงื่อนไขเดียวกับปุ่มแก้เลข */}
+                      {doc.type === 'cover_letter' && doc.status === 'pending_sign' && doc.form_id && (
+                        <button
+                          type="button"
+                          data-testid={`recall-letter-${doc.doc_id}`}
+                          onClick={() => setRecallingDoc(doc)}
+                          className="-mb-2 ml-3 py-2 text-xs font-semibold text-red-700 hover:underline dark:text-red-400"
+                        >
+                          ดึงหนังสือกลับ
+                        </button>
+                      )}
                     </td>
                     <td className="p-4 text-gray-600 dark:text-gray-400">
                       {docTypeLabel(doc.type)}
@@ -729,6 +759,30 @@ export const StaffHome: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ══ ดึงหนังสือที่ยังไม่ลงนามกลับ — เหตุผลบังคับ ══ */}
+      {recallingDoc && (
+        <ReasonModal
+          title="ดึงหนังสือกลับ"
+          testIdPrefix="recall-letter"
+          submitLabel="ดึงหนังสือกลับ"
+          intro={
+            <>
+              กำลังดึงหนังสือขอความอนุเคราะห์ของ{' '}
+              <strong>
+                {[recallingDoc.first_name, recallingDoc.last_name].filter(Boolean).join(' ') || recallingDoc.student_code}
+              </strong>{' '}
+              ({recallingDoc.student_code}) · {recallingDoc.company_name_th} · เลขที่{' '}
+              {recallingDoc.document_number || `#DOC-${recallingDoc.doc_id}`}
+              <br />
+              หนังสือฉบับนี้จะถูกลบออกจากคิวคณบดี และคำร้องกลับไปรอรับในคิว “คำร้องรอรับ” — รับใหม่ด้วยเลขเดิมหรือตีกลับนักศึกษาได้จากที่นั่น
+            </>
+          }
+          hint="เหตุผลนี้เจ้าหน้าที่เห็นเท่านั้น (ในแผงรับคำร้อง) — นักศึกษาไม่เห็น"
+          onSubmit={recallLetter}
+          onClose={() => setRecallingDoc(null)}
+        />
+      )}
 
       {/* ══ แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม ══ */}
       {editingDoc && (

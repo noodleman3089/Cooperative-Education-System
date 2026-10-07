@@ -36,6 +36,10 @@ export interface RequestFormRow {
   /** รอเจ้าหน้าที่มากี่วัน นับจากอัปโหลดกระดาษล่าสุด — เซิร์ฟเวอร์นับให้ · null = ไม่ทราบ (ห้ามนับเองที่หน้าจอ) */
   request_wait_days?: number | null;
   request_overdue?: boolean;
+  /** เลขที่หนังสือที่เจ้าหน้าที่ออกไว้ — ใบที่หนังสือถูกถอนกลับยังคงเลขเดิม ช่องเลขในแผงเติมให้ */
+  officer_document_no?: string | null;
+  /** หนังสือถูกถอนกลับมาและยังไม่ถูกตีกลับถึงนักศึกษาหลังจากนั้น — เจ้าหน้าที่เท่านั้นที่ได้ค่านี้ */
+  letter_recall?: 'dean_returned' | 'staff_recalled' | null;
 }
 
 export interface AcceptanceRow {
@@ -459,6 +463,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               }`}
             >
               <QueueWho row={row} />
+              {row.letter_recall && (
+                <span
+                  data-testid={`letter-recall-badge-${row.form_id}`}
+                  className="rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-900 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200"
+                >
+                  {row.letter_recall === 'dean_returned' ? 'คณบดีตีกลับ' : 'ดึงกลับ'}
+                </span>
+              )}
               <span
                 className={`text-[13px] ${
                   row.request_overdue

@@ -3,6 +3,7 @@ import path from 'path';
 import { ThaiPdf } from './thaiPdf';
 import { formatThaiDate } from './thaiDate';
 import { query } from '../config/database';
+import { signingPositionLines } from './coverLetterPdf';
 
 /**
  * หนังสือส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา — เอกสาร **ขาออก** ใบที่สอง
@@ -47,6 +48,9 @@ export interface DispatchLetterData {
   academic_year: number | null;
   semester: string | null;
   dean_name?: string | null;
+  /** ตำแหน่งทางวิชาการหน้าชื่อ และตำแหน่งใต้ชื่อ (ว่าง = "คณบดี…") — เหมือนหนังสือขอความอนุเคราะห์ */
+  dean_title?: string | null;
+  dean_position?: string | null;
 }
 
 /** ตัดคำว่า "สาขาวิชา" ที่ติดมากับค่าในฐาน — เหตุผลเดียวกับใน `coverLetterPdf.ts` */
@@ -161,7 +165,8 @@ export async function buildDispatchLetterPdf(
   // ── บล็อกลงนาม ─────────────────────────────────────────────────────────
   // ⛔ ทุกตำแหน่งอ้างอิง `cursorY` ปัจจุบัน ไม่ใช่พิกัดคงที่ — เนื้อหายาวขึ้นแล้ว
   //    บล็อกนี้เลื่อนลงทั้งก้อน และขึ้นหน้าใหม่เองถ้าที่ไม่พอ
-  pdf.ensureSpace(150);
+  const positionLines = signingPositionLines(d.dean_position, `คณบดี${faculty}`);
+  pdf.ensureSpace(150 + 18 * (positionLines.length - 1));
   pdf.space(20);
 
   const signX = 330;
@@ -189,11 +194,11 @@ export async function buildDispatchLetterPdf(
     pdf.space(48);
   }
 
-  pdf.line(`( ${d.dean_name?.trim() || '.....................................................'} )`, {
-    size: 16,
-    x: signX,
-  });
-  pdf.line(`คณบดี${faculty}`, { size: 16, x: signX });
+  const deanName = d.dean_name?.trim()
+    ? `${d.dean_title?.trim() ?? ''}${d.dean_name.trim()}`
+    : '.....................................................';
+  pdf.line(`( ${deanName} )`, { size: 16, x: signX });
+  positionLines.forEach((text) => pdf.line(text, { size: 16, x: signX }));
 
   return pdf.save();
 }
@@ -217,7 +222,8 @@ const DISPATCH_LETTER_SELECT = `
          c.contact_person, c.contact_position,
          men.name AS mentor_name, men.position AS mentor_position,
          sem.academic_year, sem.semester,
-         dean.first_name AS dean_first_name, dean.last_name AS dean_last_name
+         dean.first_name AS dean_first_name, dean.last_name AS dean_last_name,
+         dean.academic_title AS dean_title, dean.signing_position AS dean_position
     FROM intent_forms i
     JOIN students s         ON i.student_id = s.student_id
     JOIN master_major mj    ON s.major_id = mj.major_id
@@ -226,9 +232,10 @@ const DISPATCH_LETTER_SELECT = `
     JOIN coop_semesters sem ON i.semester_id = sem.semester_id
     LEFT JOIN mentors men   ON i.mentor_id = men.mentor_id
     LEFT JOIN LATERAL (
-      SELECT p.first_name, p.last_name
+      SELECT p.first_name, p.last_name, p.academic_title, p.signing_position
         FROM personnel p
         JOIN user_roles ur ON ur.user_id = p.personnel_id AND ur.role_name = 'dean'
+       ORDER BY p.personnel_id
        LIMIT 1
     ) dean ON TRUE
 `;
@@ -290,5 +297,7 @@ export function toDispatchLetterData(row: Record<string, unknown>): DispatchLett
     academic_year: (row.academic_year as number) ?? null,
     semester: (row.semester as string) ?? null,
     dean_name: [row.dean_first_name, row.dean_last_name].filter(Boolean).join(' ').trim() || null,
+    dean_title: (row.dean_title as string) ?? null,
+    dean_position: (row.dean_position as string) ?? null,
   };
 }

@@ -69,6 +69,8 @@ export interface Personnel {
   birth_date: Date | string | null;
   /** ตำแหน่งทางวิชาการ เช่น "ผู้ช่วยศาสตราจารย์" — พิมพ์หน้าชื่อผู้ลงนามในหนังสือ */
   academic_title?: string | null;
+  /** ตำแหน่งใต้ลายมือชื่อ (ว่าง = "คณบดี…") — ตั้งเฉพาะบัญชี role dean (migration 053) */
+  signing_position?: string | null;
   email?: string;
   major_name_th?: string | null;
   faculty_name_th?: string | null;

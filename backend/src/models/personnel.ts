@@ -7,7 +7,7 @@ export class PersonnelModel {
     // read-only — the major decides whose students this person can see.
     const res = await query(
       `SELECT p.personnel_id, p.major_id, p.e_signature_file, p.status, p.first_name, p.last_name, p.birth_date,
-              p.academic_title,
+              p.academic_title, p.signing_position,
               u.email, m.major_name_th, f.faculty_name_th
        FROM personnel p
        JOIN users u ON u.user_id = p.personnel_id
@@ -49,6 +49,11 @@ export class PersonnelModel {
   /** ตำแหน่งทางวิชาการ (พิมพ์หน้าชื่อผู้ลงนามในหนังสือ) — null = ล้าง */
   static async setAcademicTitle(personnelId: number, title: string | null): Promise<void> {
     await query('UPDATE personnel SET academic_title = $2 WHERE personnel_id = $1', [personnelId, title]);
+  }
+
+  /** ตำแหน่งใต้ลายมือชื่อที่พิมพ์ลงหนังสือ (ขึ้นบรรทัดใหม่ได้) — null = ล้างกลับเป็น "คณบดี…" */
+  static async setSigningPosition(personnelId: number, position: string | null): Promise<void> {
+    await query('UPDATE personnel SET signing_position = $2 WHERE personnel_id = $1', [personnelId, position]);
   }
 
   /**

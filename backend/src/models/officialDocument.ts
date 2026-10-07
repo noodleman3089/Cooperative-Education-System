@@ -47,30 +47,18 @@ export class OfficialDocumentModel {
   }
 
   /**
-   * Update document status and signature timestamp.
+   * ลงนาม **เฉพาะเอกสารที่ยังรอลงนาม** — เปลี่ยนไฟล์ + สถานะ + วันลงนามในคำสั่งเดียว
+   * ไฟล์ฉบับลงนามเป็นคนละไฟล์กับต้นฉบับ (ของเดิมเขียนทับ กดซ้ำแล้วลายเซ็นซ้อน)
+   * คืน false = ไม่มีแถวที่ `pending_sign` แล้ว (ถูกถอนกลับหรือถูกลงนามไปก่อนระหว่างวาด)
+   * ผู้เรียกต้องไม่ถือว่าลงนามสำเร็จ (ไม่ปั๊มกำหนดตอบรับ ไม่ส่งอีเมล)
    */
-  /**
-   * ชี้เอกสารไปที่ไฟล์ใหม่ — ใช้ตอนคณบดีลงนาม ซึ่งวาดหนังสือใหม่ทั้งใบพร้อมลายเซ็น
-   * เป็นคนละไฟล์กับต้นฉบับ (ของเดิมเขียนทับไฟล์เดิม กดซ้ำแล้วลายเซ็นซ้อน)
-   */
-  static async updateFilePath(docId: number, filePath: string): Promise<boolean> {
+  static async signIfPending(docId: number, filePath: string, signatureDate: Date): Promise<boolean> {
     const res = await query(
-      'UPDATE official_documents SET generated_file_path = $1 WHERE doc_id = $2',
-      [filePath, docId]
-    );
-    return (res.rowCount ?? 0) > 0;
-  }
-
-  static async updateStatusAndSignature(
-    docId: number,
-    status: 'created' | 'pending_sign' | 'signed' | 'rejected',
-    signatureDate: Date | null
-  ): Promise<boolean> {
-    const res = await query(
-      `UPDATE official_documents 
-       SET status = $1, dean_signature_date = $2 
-       WHERE doc_id = $3`,
-      [status, signatureDate, docId]
+      `UPDATE official_documents
+          SET generated_file_path = $2, status = 'signed', dean_signature_date = $3
+        WHERE doc_id = $1 AND status = 'pending_sign'
+       RETURNING doc_id`,
+      [docId, filePath, signatureDate]
     );
     return (res.rowCount ?? 0) > 0;
   }

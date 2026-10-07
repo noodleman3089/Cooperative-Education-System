@@ -31,4 +31,11 @@ router.post(
   DocumentController.batchSignDocuments
 );
 
+// Route: POST /api/documents/:id/return (Dean only) — ตีกลับหนังสือที่ยังไม่ลงนามให้เจ้าหน้าที่ · body { reason }
+router.post(
+  '/:id/return',
+  authorizeRoles('dean'),
+  DocumentController.returnDocument
+);
+
 export default router;

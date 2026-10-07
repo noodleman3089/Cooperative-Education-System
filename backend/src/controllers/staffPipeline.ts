@@ -219,7 +219,7 @@ const ROW_SQL = `
     LEFT JOIN LATERAL (
       SELECT
         MAX(e.entered_at) FILTER (WHERE e.stage IN ('form_created', 'request_returned')) AS t_upload,
-        MAX(e.entered_at) FILTER (WHERE e.stage = 'request_uploaded') AS t_request,
+        MAX(e.entered_at) FILTER (WHERE e.stage IN ('request_uploaded', 'dean_returned', 'staff_recalled')) AS t_request,
         MAX(e.entered_at) FILTER (WHERE e.stage = 'acceptance_submitted') AS t_submitted,
         MAX(e.entered_at) FILTER (WHERE e.stage = 'mentor_set') AS t_mentor,
         MAX(e.entered_at) FILTER (WHERE e.stage = 'accepted') AS t_accepted

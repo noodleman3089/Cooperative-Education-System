@@ -22,6 +22,7 @@ import { CoopCalendarModel } from '../models/coopCalendar';
 import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from '../utils/workingDays';
 import { recordStageEvent } from '../utils/stageEvents';
 import { sendUnexpectedError } from '../utils/httpError';
+import { handleLetterReturn } from './intent';
 
 // Fix Task 1.2: Enforce JWT_SECRET and exit if missing to eliminate hardcoded fallback secret
 const JWT_SECRET = process.env.JWT_SECRET;
@@ -107,9 +108,16 @@ export class DocumentController {
             continue;
           }
 
-          // กันเซ็นซ้ำที่ **สถานะ** ไม่ใช่ที่ไฟล์ — กดสองครั้งติดกันต้องได้ผลเดียว
-          if (doc.status === 'signed') {
-            failedDocs.push({ doc_id: parsedDocId, error: 'เอกสารนี้ลงนามไปแล้ว' });
+          // ลงนามได้เฉพาะ `pending_sign` — กันเซ็นซ้ำที่ **สถานะ** ไม่ใช่ที่ไฟล์
+          // (ด่านจริงอยู่ที่ UPDATE ด้านล่างซึ่งมีเงื่อนไขเดียวกัน: ถอนกลับ/ลงนามซ้อนระหว่างวาดก็ชน)
+          if (doc.status !== 'pending_sign') {
+            failedDocs.push({
+              doc_id: parsedDocId,
+              error:
+                doc.status === 'signed'
+                  ? 'เอกสารนี้ลงนามไปแล้ว'
+                  : 'เอกสารนี้ไม่ได้อยู่ในสถานะรอลงนาม จึงลงนามไม่ได้',
+            });
             continue;
           }
 
@@ -131,9 +139,29 @@ export class DocumentController {
             continue;
           }
 
+          // ⛔ ชื่อ-ตำแหน่งใต้ลายเซ็นเป็นของ **คนที่กดลงนาม** ไม่ใช่บัญชี role dean ใบแรกที่ฐานหยิบได้
+          //    (ลายเซ็นคนหนึ่งเคยออกคู่ชื่ออีกคนได้เมื่อมีบัญชีคณบดีสองใบ)
+          const signerName = (sep: string) =>
+            [deanProfile.first_name, deanProfile.last_name].filter(Boolean).join(sep).trim() || null;
           const signedBytes = isDispatch
-            ? await buildDispatchLetterPdf(toDispatchLetterData(letterRow), signOptions)
-            : await buildCoverLetterPdf(toCoverLetterData(letterRow), signOptions);
+            ? await buildDispatchLetterPdf(
+                {
+                  ...toDispatchLetterData(letterRow),
+                  dean_name: signerName(' '),
+                  dean_title: deanProfile.academic_title ?? null,
+                  dean_position: deanProfile.signing_position ?? null,
+                },
+                signOptions
+              )
+            : await buildCoverLetterPdf(
+                {
+                  ...toCoverLetterData(letterRow),
+                  dean_name: signerName('  '),
+                  dean_title: deanProfile.academic_title ?? null,
+                  dean_position: deanProfile.signing_position ?? null,
+                },
+                signOptions
+              );
 
           const fileName = `${
             isDispatch ? 'dispatch_letter' : 'cover_letter'
@@ -143,8 +171,17 @@ export class DocumentController {
           fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
           fs.writeFileSync(absolutePath, signedBytes);
 
-          await OfficialDocumentModel.updateFilePath(parsedDocId, relativePath);
-          await OfficialDocumentModel.updateStatusAndSignature(parsedDocId, 'signed', new Date());
+          const signed = await OfficialDocumentModel.signIfPending(parsedDocId, relativePath, new Date());
+          if (!signed) {
+            // ถูกถอนกลับหรือลงนามไปแล้วระหว่างวาด — ไฟล์ที่เพิ่งเขียนไม่มีแถวไหนชี้ถึง ลบทิ้ง
+            // ⛔ ไม่ปั๊มกำหนดตอบรับ ไม่ส่งอีเมล ไม่ลง audit ว่าลงนาม
+            fs.promises.unlink(absolutePath).catch(() => undefined);
+            failedDocs.push({
+              doc_id: parsedDocId,
+              error: 'เอกสารนี้ถูกถอนกลับหรือลงนามไปแล้ว จึงลงนามไม่ได้',
+            });
+            continue;
+          }
 
           // นาทีที่คณบดีลงนามคือนาทีที่นักศึกษาได้หนังสือไปยื่น — ฟอร์มแบบตอบรับ
           // เขียนว่าบริษัทต้องตอบ "ภายใน ๑๕ วันทำการ หลังจากได้รับหนังสือฯ"
@@ -159,6 +196,7 @@ export class DocumentController {
                   SET acceptance_due_date = $1
                 WHERE student_id = $2 AND company_id = $3
                   AND acceptance_due_date IS NULL
+                  AND status = 'approved_by_dept_head'
                RETURNING form_id`,
               [
                 addWorkingDays(today, ACCEPTANCE_WORKING_DAYS),
@@ -236,6 +274,63 @@ export class DocumentController {
     return found;
   }
 
+  /**
+   * คณบดีตีกลับหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนาม — ใบถอยไปรอเจ้าหน้าที่รับคำร้องใหม่
+   * Route: POST /api/documents/:id/return
+   * Access: dean เท่านั้น · body { reason }
+   *
+   * หนังสือส่งตัว (`send_letter`) ยังตีกลับไม่ได้ = 409 (รอขั้น 6 — ดู known_issues.md)
+   */
+  static async returnDocument(req: Request, res: Response): Promise<void> {
+    try {
+      const docId = parseInt(req.params.id, 10);
+      if (isNaN(docId)) {
+        res.status(400).json({ message: 'Invalid document ID format.' });
+        return;
+      }
+
+      const doc = await OfficialDocumentModel.findById(docId);
+      if (!doc) {
+        res.status(404).json({ message: 'Official document not found.' });
+        return;
+      }
+      if (doc.type !== 'cover_letter') {
+        res.status(409).json({
+          message: 'ยังตีกลับหนังสือส่งตัวในระบบไม่ได้ — หากข้อมูลผิด กรุณาแจ้งเจ้าหน้าที่',
+          code: 'send_letter_not_returnable',
+        });
+        return;
+      }
+      if (doc.status !== 'pending_sign') {
+        res.status(409).json({
+          message: 'หนังสือฉบับนี้ไม่ได้อยู่ในสถานะรอลงนาม จึงตีกลับไม่ได้',
+          code: 'letter_signed',
+        });
+        return;
+      }
+
+      // หาใบที่หนังสือฉบับนี้เป็นของมัน — เงื่อนไขเดียวกับ LATERAL ทั้งระบบ (นักศึกษา + สถานประกอบการ + เลขที่หนังสือ)
+      const formRes = await query(
+        `SELECT form_id FROM intent_forms
+          WHERE student_id = $1 AND company_id = $2 AND officer_document_no IS NOT DISTINCT FROM $3
+          ORDER BY form_id DESC LIMIT 1`,
+        [doc.student_id, doc.company_id, doc.document_number]
+      );
+      if ((formRes.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบคำร้องของหนังสือฉบับนี้' });
+        return;
+      }
+
+      await handleLetterReturn(req, res, {
+        formId: formRes.rows[0].form_id as number,
+        by: 'dean',
+        docId,
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Return Document Error', 'เกิดข้อผิดพลาดขณะตีกลับหนังสือ');
+    }
+  }
+
   // ⛔ signingComplete (DocuSign callback) ถูกลบเมื่อ 2026-08-26 — คณบดีกดยืนยัน
   //    ในระบบแล้วระบบวาดหนังสือพร้อมลายเซ็นให้เลย ไม่มีเส้นทางเซ็นภายนอกอีก
 
@@ -243,8 +338,19 @@ export class DocumentController {
    * List all official documents in the system.
    * Route: GET /api/documents
    */
-  static async listDocuments(_req: Request, res: Response): Promise<void> {
+  static async listDocuments(req: Request, res: Response): Promise<void> {
     try {
+      // คณบดีเปิดคิว = "เห็นคิวแล้ว" (ตัวแจ้งอีเมล `utils/signQueueNotice.ts` อ่านค่านี้) — เขียนเฉพาะเมื่อค่าเดิมเก่ากว่า 1 นาที
+      // เพราะหน้าคิวรีเฟรชเองทุกไม่กี่วินาที · ⛔ ไม่ทำ middleware ครอบทุก API · ล้มก็ไม่ขวางการดูรายการ
+      if (req.user?.roles.includes('dean')) {
+        await query(
+          `UPDATE personnel SET sign_queue_seen_at = NOW()
+            WHERE personnel_id = $1
+              AND (sign_queue_seen_at IS NULL OR sign_queue_seen_at < NOW() - INTERVAL '1 minute')`,
+          [req.user.userId]
+        ).catch((err) => console.error('Failed to stamp sign_queue_seen_at:', err));
+      }
+
       const documents = await OfficialDocumentModel.listAll();
       res.status(200).json(documents);
     } catch (error) {

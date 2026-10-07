@@ -61,6 +61,11 @@ export const STUDENT_FAIL_FROM = [
 export const OFFICER_RECEIVE_FROM = ['pending_advisor', 'pending_officer_request'];
 export const OFFICER_DECISION_FROM = ['pending_officer_request'];
 /**
+ * ถอนหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนามได้ **เฉพาะใบที่เจ้าหน้าที่รับแล้วและยังรอคณบดีลงนาม** (SEC-04)
+ * ใบถอยกลับไป `pending_officer_request` — ถอยได้ทางเดียวนี้ ไม่ใช่ทางลัดข้ามขั้นไปที่อื่น
+ */
+export const LETTER_RETURN_FROM = ['approved_by_dept_head'];
+/**
  * นักศึกษายกเลิกคำร้องเองได้ **ก่อนเจ้าหน้าที่รับเท่านั้น** (เจ้าของสั่ง 2026-10-06)
  * หลังเจ้าหน้าที่รับ = บริษัทถูกรับรองและเลขที่หนังสือออกไปแล้ว ย้อนด้วยปุ่มของนักศึกษาไม่ได้
  */
@@ -591,6 +596,75 @@ export class IntentFormModel {
       return {
         studentId: row.student_id as number,
         previousPath: row.request_form_path as string | null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * ถอนหนังสือขอความอนุเคราะห์ที่ **ยังไม่ลงนาม** — คณบดีตีกลับ (`by = 'dean'`) หรือเจ้าหน้าที่ดึงกลับ (`'staff'`)
+   *
+   * หนังสือถูก **ลบทิ้ง** ใบถอยไป `pending_officer_request` แล้วเจ้าหน้าที่ใช้ปุ่มเดิม: รับใหม่ (ออกหนังสือฉบับใหม่) หรือตีกลับนักศึกษา
+   *
+   * ⛔ ลบแถว **ไม่ตั้งเป็น `rejected`** — `issueCoverLetter` เจอแถวที่ไม่ใช่ `pending_sign` แล้วตอบ 409 รับใหม่ด้วยเลขเดิมไม่ได้
+   * ⛔ คง `officer_document_no` ไว้ (เจ้าหน้าที่มักใช้เลขเดิม) · ไม่เขียน `reject_reason` — หน้านักศึกษาอ่านช่องนั้นเป็น "เจ้าหน้าที่ตีกลับ"
+   * ⛔ ล็อกแถวใบก่อนแถวหนังสือ (ลำดับเดียวกับ `issueCoverLetter` กัน deadlock) · ลงนามแล้ว = 409 `letter_signed`
+   * ไม่มีแถวหนังสือ (รับแล้วแต่วาดพัง) = ถอนได้ — เจ้าหน้าที่อาจอยากดึงกลับแทนออกใหม่
+   * ผู้เรียกลบไฟล์ PDF ฉบับร่างหลัง COMMIT (`draftPath`)
+   */
+  static async returnCoverLetter(
+    formId: number,
+    input: { reason: string; actorUserId: number; by: 'dean' | 'staff'; docId?: number }
+  ): Promise<{ studentId: number; documentNo: string | null; draftPath: string | null; officerId: number | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status, officer_document_no, officer_approved_by
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+      const row = current.rows[0];
+      assertAllowedTransition('letter_return', row.status, LETTER_RETURN_FROM);
+
+      const doc = await client.query(
+        `SELECT doc_id, status, generated_file_path FROM official_documents
+          WHERE student_id = $1 AND company_id = $2 AND type = 'cover_letter'
+            AND document_number IS NOT DISTINCT FROM $3
+          ORDER BY doc_id DESC LIMIT 1
+            FOR UPDATE`,
+        [row.student_id, row.company_id, row.officer_document_no]
+      );
+      const letter = doc.rows[0] as { doc_id: number; status: string; generated_file_path: string | null } | undefined;
+      if (letter && letter.status !== 'pending_sign') {
+        throw new IntentConflictError('คณบดีลงนามหนังสือฉบับนี้แล้ว จึงถอนกลับไม่ได้', 'letter_signed');
+      }
+      if (letter && input.docId !== undefined && letter.doc_id !== input.docId) {
+        throw new IntentConflictError(
+          'หนังสือฉบับนี้ไม่ใช่ฉบับล่าสุดของคำร้อง (อาจถูกออกใหม่แล้ว) กรุณารีเฟรชรายการ',
+          'letter_missing'
+        );
+      }
+
+      if (letter) await client.query('DELETE FROM official_documents WHERE doc_id = $1', [letter.doc_id]);
+      await client.query(`UPDATE intent_forms SET status = 'pending_officer_request' WHERE form_id = $1`, [formId]);
+      await recordStageEvent(client, formId, input.by === 'dean' ? 'dean_returned' : 'staff_recalled', {
+        note: input.reason,
+        actorId: input.actorUserId,
+      });
+
+      await client.query('COMMIT');
+      return {
+        studentId: row.student_id as number,
+        documentNo: (row.officer_document_no as string | null) ?? null,
+        draftPath: letter?.generated_file_path ?? null,
+        officerId: (row.officer_approved_by as number | null) ?? null,
       };
     } catch (error) {
       await client.query('ROLLBACK');
