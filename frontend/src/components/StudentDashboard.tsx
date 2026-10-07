@@ -355,6 +355,8 @@ const StudentDashboard: React.FC = () => {
                 company_mail_sent_at: res.company_mail_sent_at,
                 company_mail_count: res.company_mail_count,
                 company_mail_limit: res.company_mail_limit,
+                // ส่งครั้งแรก (หรือครั้งแรกหลังถูกตีกลับ) เซิร์ฟเวอร์ตั้งกำหนด 15 วันทำการใหม่ — ใช้ค่าที่ตอบมา
+                acceptance_due_date: res.acceptance_due_date ?? prev.activeIntent.acceptance_due_date,
                 // backend ล้าง reject_reason เมื่อส่งสำเร็จ — ล้างตามให้การ์ดออกจาก "ตีกลับ" ทันที ไม่ต้องรอ poll
                 reject_reason: null,
               },
@@ -643,7 +645,8 @@ const StudentDashboard: React.FC = () => {
   /**
    * กำหนดตอบกลับของแบบตอบรับ (เอกสารหมายเลข 2)
    *
-   * วันครบกำหนดคิดที่เซิร์ฟเวอร์ตอนคณบดีลงนาม (๑๕ วันทำการ) ฝั่งนี้แค่เอามาแสดงและ
+   * วันครบกำหนดคิดที่เซิร์ฟเวอร์ (๑๕ วันทำการ — ตั้งตอนคณบดีลงนาม แล้วตั้งใหม่เมื่ออีเมลถึงบริษัทครั้งแรก
+   * เพราะบริษัท "ได้รับหนังสือ" วันนั้น · ลิงก์ตอบรับหมดอายุวันเดียวกัน) ฝั่งนี้แค่เอามาแสดงและ
    * นับถอยหลังเป็นวันปฏิทิน — **ไม่คำนวณวันทำการซ้ำ** เพราะจะกลายเป็นแหล่งความจริงที่สอง
    * ที่วันหนึ่งจะไม่ตรงกับเซิร์ฟเวอร์ · ตัวตัดสินว่า "ส่งช้าไหม" อยู่ที่เซิร์ฟเวอร์เสมอ
    */
@@ -838,7 +841,7 @@ const StudentDashboard: React.FC = () => {
       }`}
     >
       {acceptanceDue.overdue
-        ? `เลยกำหนดตอบกลับมาแล้ว ${-acceptanceDue.daysLeft} วัน (ครบกำหนด ${formatThaiDate(acceptanceDue.due)}) — ยังส่งได้ แต่ระบบจะบันทึกว่าส่งช้า และควรยื่นบันทึกข้อความชี้แจง`
+        ? `เลยกำหนดตอบกลับมาแล้ว ${-acceptanceDue.daysLeft} วัน (ครบกำหนด ${formatThaiDate(acceptanceDue.due)}) — ยังแนบแบบตอบรับเองได้ แต่ระบบจะบันทึกว่าส่งช้า และควรยื่นบันทึกข้อความชี้แจง`
         : `ครบกำหนดตอบกลับโดยประมาณวันที่ ${formatThaiDate(acceptanceDue.due)} — เหลืออีก ${acceptanceDue.daysLeft} วัน`}
     </p>
   ) : null;
@@ -1127,7 +1130,7 @@ const StudentDashboard: React.FC = () => {
 
         {companyMailLeft === 0 && (
           <p data-testid="company-mail-limit" className="mt-2 text-amber-700 dark:text-amber-400">
-            ส่งครบ {companyMailLimit} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — หากต้องส่งอีกครั้ง โปรดติดต่อเจ้าหน้าที่ หรือเปิด PDF ไปยื่นด้วยตนเอง
+            ส่งครบ {companyMailLimit} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — ให้บริษัทส่งแบบตอบรับกลับมาที่คุณ แล้วแนบเองที่ "บริษัทคืนเอกสารตอบรับมาที่ฉัน" หรือดาวน์โหลดเอกสารไปยื่นเอง
           </p>
         )}
 
@@ -1141,7 +1144,8 @@ const StudentDashboard: React.FC = () => {
           <p className="mt-2 text-gray-600 dark:text-gray-400">ส่งได้ {companyMailLeft} ครั้ง</p>
         )}
 
-        {collapsed && companyMailLeft > 0 && (
+        {/* เลยกำหนดตอบกลับแล้ว = ส่งซ้ำไม่ได้ (เซิร์ฟเวอร์ตอบ 409) จึงไม่แสดงปุ่มให้กดแล้วเจอ error */}
+        {collapsed && companyMailLeft > 0 && !acceptanceDue?.overdue && (
           <Button
             variant="secondary"
             size="sm"
@@ -1454,6 +1458,7 @@ const StudentDashboard: React.FC = () => {
           state={statusState}
           intent={statusIntent}
           dueNote={dueNote}
+          overdue={!!acceptanceDue?.overdue}
           evidenceHref={
             activeIntent?.acceptance_evidence_path
               ? `${API_BASE_URL}/files/${activeIntent.acceptance_evidence_path}`

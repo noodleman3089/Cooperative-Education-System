@@ -6,7 +6,8 @@ import pool, { query } from '../config/database';
 import { IntentFormModel } from '../models/intent';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { validateAcceptanceInput } from '../utils/acceptanceInput';
-import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
+import { AcceptanceFormFill, buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
+import { isCalendarClosed } from '../middlewares/calendarGate';
 import { notifyStudentStatusChange } from '../utils/email';
 import { getErrorMessage, sendUnexpectedError } from '../utils/httpError';
 import { semesterLabel } from '../utils/semesterLabel';
@@ -17,7 +18,8 @@ import { semesterLabel } from '../utils/semesterLabel';
  *
  * กติกาที่ผิดไม่ได้ในไฟล์นี้:
  *   ⛔ ทุก endpoint ผ่าน `acceptanceTokenGate` ก่อน (ที่ router ก่อน multer) — token ไม่รู้จัก 404 ·
- *      ใช้แล้ว/ยกเลิก/หมดอายุ 410 · ใบไม่อยู่ขั้นรอตอบรับหรือหนังสือไม่ signed 410
+ *      ใช้แล้ว/ยกเลิก/หมดอายุ 410 · ใบไม่อยู่ขั้นรอตอบรับหรือหนังสือไม่ signed 410 ·
+ *      พ้นปฏิทิน `acceptance_form` ของภาคของใบ 410 (`calendar_closed`)
  *   ⛔ payload ของ GET เป็น allow-list ชัดเจน (แนว SEC-10) — ไม่มีเกรด เลขบัตร ที่อยู่ ข้อมูล SEC-12
  *      และ **ไม่มีสหกิจ 03** (เป็นของช่วงประกอบแฟ้มประเมินหลังตอบรับ)
  *   ⛔ token ใช้ได้ครั้งเดียว — burn ด้วย UPDATE เดียวที่มีเงื่อนไขในทรานแซกชันเดียวกับคำตอบ
@@ -107,6 +109,17 @@ export async function acceptanceTokenGate(req: Request, res: Response, next: Nex
     }
     if (row.status !== 'approved_by_dept_head' || row.cover_letter_status !== 'signed' || !row.cover_letter_path) {
       res.status(410).json({ code: 'closed', message: CLOSED_MESSAGE });
+      return;
+    }
+    // ด่านสุดท้าย: พ้นกำหนดรับแบบตอบรับตามปฏิทินคณะของภาคของใบ (พ้นช่วงผ่อนผันด้วย) — บอกบริษัทตั้งแต่เปิดหน้า
+    // ไม่ใช่ให้กรอกครบ แนบไฟล์ แล้วเจอ 403 ที่เขียนถึงนักศึกษา · ⚠️ ยังไม่ตั้งปฏิทิน/ช่วงผ่อนผัน = ผ่าน (fail-open
+    // ตามกฎปฏิทิน ห้ามทำให้เหมือน SEC-06)
+    if (await isCalendarClosed('acceptance_form', row.semester_id)) {
+      res.status(410).json({
+        code: 'calendar_closed',
+        message:
+          'พ้นกำหนดรับแบบตอบรับของคณะสำหรับภาคเรียนนี้แล้ว จึงตอบผ่านลิงก์นี้ไม่ได้ กรุณาติดต่อนักศึกษาหรืองานสหกิจศึกษาของคณะ',
+      });
       return;
     }
 
@@ -200,11 +213,24 @@ export class PublicAcceptanceController {
 
   /**
    * แบบตอบรับ (เอกสารหมายเลข 2) วาดสดจากข้อมูลใบ — ช่องเลขหนังสือส่งตัวเว้นว่าง (ยังไม่ออก)
-   * Route: GET /api/public/acceptance/acceptance-form?token=...
+   * Route: GET  /api/public/acceptance/acceptance-form?token=...   ฟอร์มเปล่า
+   *        POST /api/public/acceptance/acceptance-form?token=...   (JSON) พิมพ์ค่าที่บริษัทกรอกบนหน้าลิงก์ลงฟอร์ม
+   *
+   * ⛔ POST **ไม่เขียนฐานเลย · ไม่เผา token · ไม่เขียน `companies`** (SEC-14 ข้อ 5) — ค่าที่กรอกลงกระดาษอย่างเดียว
+   *    บริษัทพิมพ์ ลงนาม ประทับตราด้วยมือ แล้วแนบไฟล์กลับที่ `POST /accept` (สัญญาของเส้นนั้นไม่เปลี่ยน)
    */
-  static async getAcceptanceForm(_req: Request, res: Response): Promise<void> {
+  static async getAcceptanceForm(req: Request, res: Response): Promise<void> {
     try {
       const gate = gateOf(res);
+      let filled: AcceptanceFormFill | undefined;
+      if (req.method === 'POST') {
+        const parsed = parseAcceptanceFormFill(req.body);
+        if (typeof parsed === 'string') {
+          res.status(400).json({ message: parsed });
+          return;
+        }
+        filled = parsed;
+      }
       const result = await query(
         `SELECT s.first_name, s.last_name, mj.major_name_th, f.faculty_name_th, c.name_th AS company_name
            FROM students s
@@ -227,6 +253,7 @@ export class PublicAcceptanceController {
         last_name: row.last_name,
         major_name_th: row.major_name_th,
         dispatch_document_no: null,
+        filled,
       });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="acceptance-form-${gate.form_id}.pdf"`);
@@ -400,7 +427,8 @@ export class PublicAcceptanceController {
 
       await client.query('COMMIT');
 
-      notifyStudentStatusChange(gate.form_id, 'pending_officer_approval').catch(console.error);
+      // คีย์แยกจากทางนักศึกษาอัปโหลดเอง — ทางนี้นักศึกษายังต้องเข้าระบบระบุพี่เลี้ยงก่อนเจ้าหน้าที่จะรับได้
+      notifyStudentStatusChange(gate.form_id, 'accepted_via_link').catch(console.error);
 
       res.status(200).json({
         message: 'ส่งแบบตอบรับเรียบร้อยแล้ว ขอบคุณที่ให้ความอนุเคราะห์ เจ้าหน้าที่คณะจะตรวจสอบและแจ้งนักศึกษาต่อไป',
@@ -420,6 +448,40 @@ export class PublicAcceptanceController {
       client?.release();
     }
   }
+}
+
+/** ช่องที่บริษัทกรอกลงเอกสาร 2 ได้ และความยาวสูงสุดของแต่ละช่อง — คีย์อื่นใน body ถูกเมิน */
+const FILL_MAX_LENGTH: Record<keyof AcceptanceFormFill, number> = {
+  coordinator_name: 255,
+  coordinator_position: 255,
+  office_phone: 255,
+  mobile_phone: 255,
+  fax: 255,
+  email: 255,
+  additional_info: 500,
+  approver_name: 255,
+  approver_position: 255,
+  approved_date: 10,
+};
+
+/** คืนค่าที่กรอก (เฉพาะคีย์ที่รู้จัก · ตัดขึ้นบรรทัดใหม่) หรือข้อความ error สำหรับ 400 */
+function parseAcceptanceFormFill(body: unknown): AcceptanceFormFill | string {
+  const raw = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const filled: AcceptanceFormFill = {};
+  for (const key of Object.keys(FILL_MAX_LENGTH) as (keyof AcceptanceFormFill)[]) {
+    const value = raw[key];
+    if (value === undefined || value === null) continue;
+    if (typeof value !== 'string') return 'ข้อมูลที่กรอกลงแบบตอบรับต้องเป็นข้อความ';
+    const text = value.replace(/\s+/g, ' ').trim();
+    if (text.length > FILL_MAX_LENGTH[key]) {
+      return `ข้อมูลที่กรอกยาวเกินกำหนด (ไม่เกิน ${FILL_MAX_LENGTH[key]} ตัวอักษรต่อช่อง) กรุณาย่อให้สั้นลง`;
+    }
+    if (text) filled[key] = text;
+  }
+  if (filled.approved_date && !/^\d{4}-\d{2}-\d{2}$/.test(filled.approved_date)) {
+    return 'รูปแบบวันที่ของผู้อนุมัติไม่ถูกต้อง';
+  }
+  return filled;
 }
 
 /** เผา token — 0 แถว = ถูกใช้/ยกเลิก/หมดอายุไปแล้วระหว่างทาง (มีคำขออื่นชนะก่อน) */

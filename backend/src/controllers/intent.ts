@@ -10,7 +10,8 @@ import {
   TypedCompanyInput,
 } from '../models/intent';
 import { CompanyModel } from '../models/company';
-import { isLateWindow } from '../middlewares/calendarGate';
+import { isCalendarClosed, isLateWindow } from '../middlewares/calendarGate';
+import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from '../utils/workingDays';
 import pool, { query } from '../config/database';
 import { notifyOfficerLetterReturned, notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
 import {
@@ -1500,7 +1501,9 @@ export class IntentFormController {
    * ⛔ นี่คือช่องที่ให้ผู้ใช้สั่งระบบส่งเอกสารที่คณบดีลงนามจากโดเมนมหาวิทยาลัยไปที่อยู่ใดก็ได้
    *    จึงต้องมีด่านครบตามลำดับ: เจ้าของใบ → หนังสือ signed → สถานะใบ → ที่อยู่เดียวที่รูปแบบถูก
    *    → เพดาน COMPANY_MAIL_LIMIT ครั้งต่อใบ
-   * ⛔ ไม่ตรวจว่าอีเมลเป็นของบริษัทจริง (ระบบไม่มีทางรู้) · ไม่ผูกปฏิทินกิจกรรม (ไม่ใช่การยื่นเอกสาร)
+   * ⛔ ไม่ตรวจว่าอีเมลเป็นของบริษัทจริง (ระบบไม่มีทางรู้)
+   * ⛔ ก่อนจองโควตา: ปฏิทิน `acceptance_form` ของภาคของใบปิดแล้ว หรือกำหนด ๑๕ วันทำการพ้นแล้วและการส่งครั้งนี้
+   *    ไม่ได้ตั้งกำหนดใหม่ → 409 (ไม่ส่งลิงก์ที่ตายตั้งแต่เกิด) · อายุลิงก์ = สิ้นวันของ `acceptance_due_date`
    * ⛔ เพดานจองที่ก่อนส่ง (นับ +1 ด้วย UPDATE เดียวที่มีเงื่อนไข `< limit` — แถวถูกล็อกจึงกันกดรัว
    *    สองแท็บได้เทียบเท่า SELECT … FOR UPDATE) แล้วไม่ถือล็อกระหว่างรอ SMTP · ส่งล้ม = คืนที่ (−1)
    *    และไม่ตั้ง sent_at/to
@@ -1519,7 +1522,9 @@ export class IntentFormController {
       }
 
       const result = await query(
-        `SELECT i.student_id, i.status, i.officer_document_no,
+        `SELECT i.student_id, i.status, i.officer_document_no, i.semester_id,
+                i.acceptance_due_date::text AS due, i.company_mail_sent_at, i.reject_reason,
+                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
                 s.first_name, s.last_name, s.student_code,
                 u.email AS student_email,
                 mj.major_name_th, f.faculty_name_th,
@@ -1574,6 +1579,29 @@ export class IntentFormController {
         return;
       }
 
+      // พ้นกำหนดรับแบบตอบรับตามปฏิทินคณะแล้ว = บริษัทเปิดลิงก์ก็ตอบไม่ได้ (ด่านลิงก์ตอบ 410) จึงไม่ส่ง
+      if (await isCalendarClosed('acceptance_form', row.semester_id)) {
+        res.status(409).json({
+          message:
+            'พ้นกำหนดส่งแบบตอบรับตามปฏิทินสหกิจศึกษาแล้ว จึงส่งลิงก์ให้สถานประกอบการไม่ได้ — หากสถานประกอบการยังไม่ตอบรับ ให้แจ้งว่าไม่ได้ที่ฝึกงานที่นี่ แล้วยื่นคำร้องที่ใหม่',
+        });
+        return;
+      }
+
+      // กำหนด ๑๕ วันทำการเริ่มนับเมื่ออีเมลส่งสำเร็จครั้งแรก (บริษัท "ได้รับหนังสือ" วันนั้น) — และนับใหม่
+      // เมื่อเป็นการส่งครั้งแรกหลังเจ้าหน้าที่ตีกลับแบบตอบรับ (`reject_reason`) · ความหมายเดียวกับขั้น
+      // `await_send` ใน `staffPipeline.deriveStage` · ⛔ ส่งซ้ำครั้งอื่นไม่ยืดกำหนด
+      // เทียบวันเป็นสตริง YYYY-MM-DD · "วันนี้" มาจาก Postgres
+      const startsClock = row.company_mail_sent_at === null || !!row.reject_reason || !row.due;
+      const dueDate: string = startsClock ? addWorkingDays(row.today, ACCEPTANCE_WORKING_DAYS) : row.due;
+      if (row.today > dueDate) {
+        res.status(409).json({
+          message:
+            'เลยกำหนดตอบกลับ ๑๕ วันทำการแล้ว ลิงก์ที่ส่งไปจะใช้ไม่ได้ จึงส่งซ้ำไม่ได้ — ให้สถานประกอบการส่งแบบตอบรับกลับมาที่คุณ แล้วแนบเองที่ "บริษัทคืนเอกสารตอบรับมาที่ฉัน" หรือแจ้งว่าไม่ได้ที่ฝึกงานที่นี่',
+        });
+        return;
+      }
+
       // ที่อยู่เดียวเท่านั้น — ห้าม , ; ช่องว่าง ขึ้นบรรทัดใหม่ (กัน header injection และกันส่งเป็นชุด)
       const companyEmail =
         typeof req.body?.company_email === 'string' ? req.body.company_email.trim() : '';
@@ -1600,17 +1628,17 @@ export class IntentFormController {
       );
       if ((reserved.rowCount ?? 0) === 0) {
         res.status(429).json({
-          message: `ส่งหนังสือให้สถานประกอบการครบ ${COMPANY_MAIL_LIMIT} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ หากที่อยู่ไม่ถูกต้องให้ติดต่อเจ้าหน้าที่`,
+          message: `ส่งหนังสือให้สถานประกอบการครบ ${COMPANY_MAIL_LIMIT} ครั้งแล้ว ไม่สามารถส่งเพิ่มได้ — ให้สถานประกอบการส่งแบบตอบรับกลับมาที่คุณ แล้วแนบเองที่ "บริษัทคืนเอกสารตอบรับมาที่ฉัน" หรือดาวน์โหลดเอกสารไปยื่นเอง`,
         });
         return;
       }
 
-      // ลิงก์ตอบรับออนไลน์ (ใช้ครั้งเดียว · หมดอายุ ๑๕ วันทำการ) — สร้างหลังจองโควตา ก่อนส่งเมล
+      // ลิงก์ตอบรับออนไลน์ (ใช้ครั้งเดียว · หมดอายุสิ้นวันของกำหนดของใบ) — สร้างหลังจองโควตา ก่อนส่งเมล
       // ⛔ ยังไม่ยกเลิกลิงก์เก่าตรงนี้ — ทำหลังส่งสำเร็จเท่านั้น เพื่อให้ส่งล้มไม่ฆ่าลิงก์ที่บริษัทถืออยู่แล้ว
       //    และไม่ถือทรานแซกชันค้างระหว่างรอ SMTP
       let link: IssuedAcceptanceLink | null = null;
       try {
-        link = await createAcceptanceLinkToken(formId, companyEmail);
+        link = await createAcceptanceLinkToken(formId, companyEmail, dueDate);
         await sendCoverLetterToCompany({
           toEmail: companyEmail,
           replyTo: row.student_email,
@@ -1654,12 +1682,14 @@ export class IntentFormController {
       }
 
       // reject_reason = NULL: นักศึกษาลงมือตามที่ถูกตีกลับแล้ว (ส่งใหม่สำเร็จ) — เหตุผลยังอยู่ใน audit_log จากการตัดสินของเจ้าหน้าที่
+      // acceptance_due_date: กำหนดเขียนลงใบหลัง SMTP สำเร็จเท่านั้น (ส่งล้ม = นาฬิกายังไม่เดิน) · ส่งซ้ำ = ค่าเดิม
       const sent = await query(
         `UPDATE intent_forms
-            SET company_mail_to = $2, company_mail_sent_at = NOW(), reject_reason = NULL
+            SET company_mail_to = $2, company_mail_sent_at = NOW(), reject_reason = NULL,
+                acceptance_due_date = $3::date
           WHERE form_id = $1
           RETURNING company_mail_to, company_mail_sent_at, company_mail_count`,
-        [formId, companyEmail]
+        [formId, companyEmail, dueDate]
       );
       const saved = sent.rows[0];
       await recordStageEvent({ query }, formId, 'mail_sent');
@@ -1684,6 +1714,7 @@ export class IntentFormController {
         company_mail_sent_at: saved.company_mail_sent_at,
         company_mail_count: saved.company_mail_count,
         company_mail_limit: COMPANY_MAIL_LIMIT,
+        acceptance_due_date: dueDate,
       });
     } catch (error) {
       sendUnexpectedError(

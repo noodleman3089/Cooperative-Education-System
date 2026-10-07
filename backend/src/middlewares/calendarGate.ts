@@ -69,6 +69,23 @@ async function resolveSemesterId(
   return null;
 }
 
+/**
+ * พ้นช่วงของกิจกรรมในภาคนั้นแล้วหรือยัง (พ้นช่วงผ่อนผันด้วย) — สำหรับจุดที่ไม่ได้เป็น middleware
+ * (ด่านลิงก์ตอบรับของบริษัท · นักศึกษากดส่งหนังสือ · งานปิดใบอัตโนมัติ)
+ *
+ * ⚠️ fail-open เหมือนด่านข้างล่าง: ไม่มีภาค · ยังไม่ตั้งวัน · ช่วงผ่อนผัน = `false` ทั้งหมด
+ */
+export async function isCalendarClosed(
+  activityKey: CoopActivityKey,
+  semesterId: number | null
+): Promise<boolean> {
+  const window = await CoopCalendarModel.findWindow(activityKey, semesterId);
+  if (!window) return false;
+  return (
+    calendarStatus(window.today, window.start_date, window.end_date, window.late_end_date) === 'closed'
+  );
+}
+
 export const requireCalendarWindow =
   (activityKey: CoopActivityKey, scope: CalendarScope = 'active') =>
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {

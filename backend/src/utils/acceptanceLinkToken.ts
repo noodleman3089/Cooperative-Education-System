@@ -1,6 +1,5 @@
 import crypto from 'crypto';
 import { query } from '../config/database';
-import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from './workingDays';
 
 /**
  * ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2 + สหกิจ 07) — ออกตอนนักศึกษากดส่งหนังสือถึงบริษัท
@@ -29,17 +28,17 @@ export interface IssuedAcceptanceLink {
 }
 
 /**
- * ออก token ใหม่ให้ใบหนึ่งใบ — หมดอายุสิ้นวัน (เวลาไทย) ของวันทำการที่ ๑๕ นับจากวันที่ส่ง
+ * ออก token ใหม่ให้ใบหนึ่งใบ — หมดอายุสิ้นวัน (เวลาไทย) ของ `lastDay`
  *
- * "วันนี้" มาจาก Postgres เสมอ (กฎเดียวกับ calendarGate) · ไม่แตะความหมายของ `acceptance_due_date`
- * ซึ่งนับจากวันที่คณบดีลงนามและยังใช้ตัดสินธง "ส่งช้า"
+ * `lastDay` (YYYY-MM-DD) = `acceptance_due_date` ของใบที่จะมีผลหลังการส่งครั้งนี้ — ผู้เรียกเป็นคนคิด
+ * (`IntentFormController.sendCoverLetterToCompany`) ฟังก์ชันนี้ไม่บวกวันเอง ลิงก์ทุกใบของคำร้องเดียวกัน
+ * จึงหมดอายุวันเดียวกับกำหนดของใบ และการส่งซ้ำไม่ยืดอายุ
  */
 export const createAcceptanceLinkToken = async (
   formId: number,
-  sentTo: string
+  sentTo: string,
+  lastDay: string
 ): Promise<IssuedAcceptanceLink> => {
-  const today = await query(`SELECT (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today`);
-  const lastDay = addWorkingDays(today.rows[0].today as string, ACCEPTANCE_WORKING_DAYS);
   const expiresAt = new Date(`${lastDay}T23:59:59.999+07:00`);
 
   const token = crypto.randomUUID();

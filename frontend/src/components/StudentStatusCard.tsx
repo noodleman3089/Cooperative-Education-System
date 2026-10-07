@@ -94,7 +94,7 @@ const STEPS = [
   'เจ้าหน้าที่ยืนยัน',
 ];
 
-function headerLabel(state: StatusCardState): string {
+function headerLabel(state: StatusCardState, tone: Tone): string {
   const step = ACTIVE_STEP[state] + 1;
   switch (state) {
     case 'returned':
@@ -103,7 +103,7 @@ function headerLabel(state: StatusCardState): string {
     case 'rejected':
       return 'สิ่งที่ต้องทำตอนนี้ · เริ่มขั้น 1 ใหม่';
     default:
-      return TONE[state] === 'act'
+      return tone === 'act'
         ? `สิ่งที่ต้องทำตอนนี้ · ขั้น ${step} จาก ${STEPS.length}`
         : `กำลังรอ · ขั้น ${step} จาก ${STEPS.length}`;
   }
@@ -147,6 +147,8 @@ interface StudentStatusCardProps {
   intent: StatusIntent;
   /** ย่อหน้านับถอยหลังกำหนดตอบกลับ (`acceptance-due`) — ส่งมาจากหน้าจอ ไม่คำนวณซ้ำในนี้ */
   dueNote: ReactNode;
+  /** เลยกำหนดตอบกลับ (`acceptance_due_date`) แล้ว — ลิงก์ของบริษัทหมดอายุวันเดียวกัน จึงเลิกเป็นการ์ด "รอ" */
+  overdue: boolean;
   /** ไฟล์เอกสาร 2 ที่บริษัทแนบ (path ใต้ `/files/`) — ลิงก์ขึ้นเฉพาะ wait-confirm และเมื่อมีไฟล์ */
   evidenceHref: string | null;
   /** บล็อกเอกสารหมายเลข 1: พิมพ์ · อัปโหลดกระดาษที่ลงนามแล้ว · เหตุผลที่เจ้าหน้าที่ตีกลับ */
@@ -170,6 +172,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   state,
   intent,
   dueNote,
+  overdue,
   evidenceHref,
   requestForm,
   mailBox,
@@ -182,7 +185,10 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   failBusy,
   onFindPlacement,
 }) => {
-  const tone = TONE_STYLE[TONE[state]];
+  // รอบริษัทจนเลยกำหนด = ลิงก์ตายแล้ว ไม่มีอะไรให้รออีก นักศึกษาต้องเลือกทางเอง → การ์ดเป็น "ต้องทำ"
+  const linkExpired = state === 'wait-company' && overdue;
+  const toneKey: Tone = linkExpired ? 'act' : TONE[state];
+  const tone = TONE_STYLE[toneKey];
   const company = intent.company_name_th ?? 'สถานประกอบการ';
 
   // ทางสำรองของนักศึกษา — โผล่เฉพาะสามสถานะที่หนังสือถึงมือบริษัทแล้ว (ตรงกับที่ฟอร์มรายงานผลโผล่)
@@ -253,6 +259,9 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
               ระบบจะส่งหนังสือขอความอนุเคราะห์ + แบบตอบรับ (เอกสาร 2) พร้อมลิงก์ให้บริษัทตอบรับออนไลน์ ถึง {company}
             </p>
             {dueNote}
+            <p data-testid="due-clock-note" className="text-sm text-gray-600 dark:text-gray-400">
+              กำหนด 15 วันทำการของบริษัทเริ่มนับเมื่อคุณส่งอีเมล — วันที่ข้างบนคือกำหนดของกรณีถือกระดาษไปยื่นเอง
+            </p>
             {mailBox}
             <p className="text-sm text-gray-600 dark:text-gray-400">
               บริษัทอยากได้กระดาษ?{' '}
@@ -263,6 +272,21 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
           </>
         );
       case 'wait-company':
+        if (linkExpired) {
+          return (
+            <>
+              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                {company} ยังไม่ตอบ และลิงก์ตอบรับหมดอายุแล้ว
+              </h2>
+              <p data-testid="link-expired-note" className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                ส่งหนังสือถึงบริษัทแล้วแต่เลยกำหนดตอบกลับ ลิงก์ในอีเมลจึงใช้ไม่ได้และส่งซ้ำไม่ได้ · เลือกทางใดทางหนึ่งด้านล่าง:
+                ถ้าบริษัทคืนแบบตอบรับที่ลงนามแล้วมาที่คุณ ให้แนบเอง · ถ้าบริษัทไม่รับหรือไม่ตอบ ให้แจ้งว่าไม่ได้ที่ฝึกงานเพื่อยื่นที่ใหม่
+              </p>
+              {dueNote}
+              {mailBox}
+            </>
+          );
+        }
         return (
           <>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">รอบริษัทตอบรับ</h2>
@@ -364,8 +388,9 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'rejected':
         return (
           <>
+            {/* หัวข้อเป็นกลาง — ใบปิดได้สองทาง: นักศึกษาแจ้งเอง (ไม่มีเหตุผล) · ระบบปิดเมื่อพ้นปฏิทิน (มีเหตุผล) */}
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-              คุณแจ้งว่าไม่ได้ที่ฝึกงานที่ {company} เลือกที่ใหม่ได้เลย
+              คำร้องที่ {company} ปิดแล้ว เลือกที่ฝึกงานใหม่ได้เลย
             </h2>
             {intent.reject_reason && <ReasonBox tone="plain">เหตุผล: {intent.reject_reason}</ReasonBox>}
             <div className="flex flex-wrap items-center gap-3">
@@ -386,7 +411,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       className={`flex flex-col gap-3.5 rounded-2xl border-2 bg-white p-6 shadow-sm dark:bg-gray-900 md:p-7 ${tone.box}`}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className={`text-sm font-semibold ${tone.label}`}>{headerLabel(state)}</span>
+        <span className={`text-sm font-semibold ${tone.label}`}>{headerLabel(state, toneKey)}</span>
         {badge}
       </div>
 

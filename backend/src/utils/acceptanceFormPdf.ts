@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { rgb } from 'pdf-lib';
 import { ThaiPdf } from './thaiPdf';
+import { formatThaiDateLong } from './thaiDate';
 
 /**
  * เอกสารหมายเลข ๒ — แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา
@@ -41,6 +42,26 @@ export interface AcceptanceFormData {
   major_name_th: string | null;
   /** เลขที่หนังสือส่งตัว — มีค่าเมื่อเจ้าหน้าที่ออกหนังสือส่งตัวไปแล้วเท่านั้น */
   dispatch_document_no?: string | null;
+  /**
+   * ค่าที่สถานประกอบการพิมพ์บนหน้าลิงก์ตอบรับ — ส่งมา (แม้ว่างทุกช่อง) = ทำเครื่องหมาย √ ช่อง "รับ" แถว ๑ ด้วย
+   * ⛔ ลงกระดาษอย่างเดียว ไม่มีที่ไหนเก็บ · ช่อง "ลงชื่อ" กล่องตราประทับ และส่วนของเจ้าหน้าที่ยังว่างเสมอ
+   */
+  filled?: AcceptanceFormFill;
+}
+
+/** ทุกช่องไม่บังคับ — ช่องที่ไม่ส่งมายังเป็นเส้นประให้เขียนมือ */
+export interface AcceptanceFormFill {
+  coordinator_name?: string;
+  coordinator_position?: string;
+  office_phone?: string;
+  mobile_phone?: string;
+  fax?: string;
+  email?: string;
+  additional_info?: string;
+  approver_name?: string;
+  approver_position?: string;
+  /** YYYY-MM-DD */
+  approved_date?: string;
 }
 
 /** ตัดคำว่า "สาขาวิชา" ที่ติดมากับค่าในฐาน — เหตุผลเดียวกับใน `coverLetterPdf.ts` */
@@ -70,6 +91,14 @@ const dotsTo = (
   const remaining = toX - fromX - pdf.textWidth(label, size);
   const count = Math.max(0, Math.floor(remaining / dotWidth));
   return label + '.'.repeat(count);
+};
+
+/** ตัดข้อความให้พอดีความกว้างของช่อง (ต่อท้าย ... เมื่อถูกตัด) — ช่องบนฟอร์มกว้างตายตัว ข้อความล้นจะทับช่องข้างๆ */
+const fitText = (pdf: ThaiPdf, text: string, maxWidth: number, size: number): string => {
+  if (pdf.textWidth(text, size) <= maxWidth) return text;
+  let cut = text;
+  while (cut && pdf.textWidth(`${cut}...`, size) > maxWidth) cut = cut.slice(0, -1);
+  return `${cut}...`;
 };
 
 export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buffer> {
@@ -131,14 +160,20 @@ export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buf
   const F = 14;
   const MID = 300;
   const fill = (label: string, fromX: number, toX: number) => dotsTo(pdf, label, fromX, toX, F);
+  // ช่องที่บริษัทพิมพ์มาจากหน้าลิงก์: ป้าย + ค่า (ตัดให้พอดีช่อง) แล้วต่อเส้นประจนสุด · ไม่มีค่า = เส้นประล้วนเหมือนเดิม
+  const v = d.filled ?? {};
+  const field = (label: string, value: string | undefined, fromX: number, toX: number) =>
+    value
+      ? fill(`${label} ${fitText(pdf, value, toX - fromX - pdf.textWidth(`${label}  `, F), F)} `, fromX, toX)
+      : fill(label, fromX, toX);
 
   pdf.line(fill(`ชื่อสถานประกอบการ  ${d.company_name ?? ''} `, LEFT, RIGHT), { size: F, gap: 19 });
-  pdf.line(fill('ชื่อผู้ประสานงาน ', LEFT, RIGHT), { size: F, gap: 19 });
-  pdf.line(fill('ตำแหน่ง ', LEFT, MID - 12), { size: F, gap: 0 });
-  pdf.line(fill('โทรศัพท์ที่ทำงาน ', MID, RIGHT), { size: F, x: MID, gap: 19 });
-  pdf.line(fill('โทรศัพท์มือถือ ', LEFT, MID - 12), { size: F, gap: 0 });
-  pdf.line(fill('โทรสาร ', MID, RIGHT), { size: F, x: MID, gap: 19 });
-  pdf.line(fill('E-mail ', LEFT, RIGHT), { size: F, gap: 22 });
+  pdf.line(field('ชื่อผู้ประสานงาน ', v.coordinator_name, LEFT, RIGHT), { size: F, gap: 19 });
+  pdf.line(field('ตำแหน่ง ', v.coordinator_position, LEFT, MID - 12), { size: F, gap: 0 });
+  pdf.line(field('โทรศัพท์ที่ทำงาน ', v.office_phone, MID, RIGHT), { size: F, x: MID, gap: 19 });
+  pdf.line(field('โทรศัพท์มือถือ ', v.mobile_phone, LEFT, MID - 12), { size: F, gap: 0 });
+  pdf.line(field('โทรสาร ', v.fax, MID, RIGHT), { size: F, x: MID, gap: 19 });
+  pdf.line(field('E-mail ', v.email, LEFT, RIGHT), { size: F, gap: 22 });
 
   // ── ตารางรายชื่อนักศึกษา ────────────────────────────────────────────────────
   pdf.line('รายชื่อนักศึกษาสหกิจศึกษา', { size: 15, align: 'center', gap: 18 });
@@ -178,13 +213,28 @@ export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buf
   drawCell(fullName(d), 1, 1);
   drawCell(stripMajorPrefix(d.major_name_th), 2, 1);
   drawCell('๒', 0, 2);
+  // บริษัทกรอกมาจากทาง "รับ" ของหน้าลิงก์ — ทำเครื่องหมายช่อง "รับ" ของนักศึกษาแถว ๑ ให้ (กลางช่อง)
+  if (d.filled) {
+    pdf.drawAt('√', (COLS[3] + COLS[4] - pdf.textWidth('√', 14)) / 2, tableTop - ROW_H - 18, 14);
+  }
 
   pdf.space(rowCount * ROW_H + 20);
 
   // ── ข้อมูลเพิ่มเติม ─────────────────────────────────────────────────────────
-  pdf.line(fill('ข้อมูลเพิ่มเติม  ', LEFT + 40, RIGHT), { size: F, x: LEFT + 40, gap: 18 });
-  pdf.line(fill('', LEFT, RIGHT), { size: F, gap: 18 });
-  pdf.line(fill('', LEFT, RIGHT), { size: F, gap: 26 });
+  // สามบรรทัดตายตัวตามฟอร์ม (ใบต้องจบหน้าเดียว) — ข้อความที่กรอกตัดบรรทัดตามคำไทย เกินสามบรรทัดถูกตัดท้าย
+  const INFO_LABEL = 'ข้อมูลเพิ่มเติม  ';
+  const infoWidths = [RIGHT - (LEFT + 40) - pdf.textWidth(`${INFO_LABEL} `, F), RIGHT - LEFT, RIGHT - LEFT];
+  const infoLines = v.additional_info
+    ? pdf.wrapThai(v.additional_info, F, (i) => infoWidths[Math.min(i, 2)] - pdf.textWidth('  ', F))
+    : [];
+  const info = (i: number): string => {
+    if (!infoLines[i]) return '';
+    const text = i === 2 && infoLines.length > 3 ? `${infoLines[2]}...` : infoLines[i];
+    return `${fitText(pdf, text, infoWidths[i] - pdf.textWidth('  ', F), F)} `;
+  };
+  pdf.line(fill(INFO_LABEL + info(0), LEFT + 40, RIGHT), { size: F, x: LEFT + 40, gap: 18 });
+  pdf.line(fill(info(1), LEFT, RIGHT), { size: F, gap: 18 });
+  pdf.line(fill(info(2), LEFT, RIGHT), { size: F, gap: 26 });
 
   // ── กล่องตราประทับ + บล็อกลงนามของบริษัท ────────────────────────────────────
   const stampTop = pdf.cursorY;
@@ -209,9 +259,16 @@ export async function buildAcceptanceFormPdf(d: AcceptanceFormData): Promise<Buf
     stampTop - 16,
     F
   );
-  pdf.drawAt(fill('( ', signX + 26, RIGHT - pdf.textWidth(' )', F)) + ' )', signX + 26, stampTop - 38, F);
-  pdf.drawAt(fill('ตำแหน่ง ', signX, RIGHT), signX, stampTop - 60, F);
-  pdf.drawAt(fill('วันที่ ', signX, RIGHT), signX, stampTop - 82, F);
+  // ⛔ บรรทัด "ลงชื่อ" ข้างบนเว้นเสมอ — ลายมือชื่อและตราต้องเป็นของจริงบนกระดาษ · ชื่อในวงเล็บ ตำแหน่ง วันที่ พิมพ์ให้ได้
+  const parenRight = RIGHT - pdf.textWidth(' )', F);
+  pdf.drawAt(field('( ', v.approver_name, signX + 26, parenRight) + ' )', signX + 26, stampTop - 38, F);
+  pdf.drawAt(field('ตำแหน่ง ', v.approver_position, signX, RIGHT), signX, stampTop - 60, F);
+  pdf.drawAt(
+    field('วันที่ ', formatThaiDateLong(v.approved_date) ?? undefined, signX, RIGHT),
+    signX,
+    stampTop - 82,
+    F
+  );
 
   pdf.space(STAMP_H + 26);
 

@@ -1,5 +1,6 @@
 import { query } from '../config/database';
 import { AuditAction, writeAudit } from './audit';
+import { runAcceptanceAutoClose } from './acceptanceAutoClose';
 
 export async function runAutoDeactivation(): Promise<void> {
   console.log('[DeactivationScheduler] Running automatic deactivation check...');
@@ -138,6 +139,10 @@ export async function runAutoDeactivation(): Promise<void> {
     } else {
       console.log('[DeactivationScheduler] No sensitive data ready for retention purge.');
     }
+
+    // 4. ปิดใบคำร้องที่พ้นปฏิทิน `acceptance_form` โดยยังไม่มีแบบตอบรับ — กติกาทั้งหมดอยู่ที่ `acceptanceAutoClose.ts`
+    const autoClosed = await runAcceptanceAutoClose();
+    console.log(`[DeactivationScheduler] Auto-closed ${autoClosed} intent form(s) past the acceptance calendar.`);
 
     console.log('[DeactivationScheduler] Automatic deactivation check complete.');
   } catch (error) {

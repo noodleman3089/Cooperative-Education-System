@@ -437,7 +437,10 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
       // ฟอนต์ไทยหาจาก cwd — รันนอกโฟลเดอร์ backend (เช่น E2E) จะวาดไม่ได้ · ลิงก์ยังเปิดหน้าตอบรับได้ แค่ปุ่มดูหนังสือ 404
       log(`ข้ามไฟล์หนังสือของ ${f.studentCode}: ${(err as Error).message}`);
     }
-    acceptUrls.push((await createAcceptanceLinkToken(f.formId, ctx.companyEmail)).url);
+    // อายุลิงก์ = กำหนดตอบกลับของใบ (กติกาเดียวกับ sendCoverLetterToCompany)
+    const due = (await pool.query(`SELECT acceptance_due_date::text AS due FROM intent_forms WHERE form_id = $1`, [f.formId]))
+      .rows[0].due as string;
+    acceptUrls.push((await createAcceptanceLinkToken(f.formId, ctx.companyEmail, due)).url);
   }
 
   // พี่เลี้ยง: ลิงก์เข้าระบบใช้ครั้งเดียว ออกผ่านฟังก์ชันจริง (ไม่ส่งอีเมล · พี่เลี้ยงไม่มีรหัสผ่าน)

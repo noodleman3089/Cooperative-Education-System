@@ -1282,8 +1282,10 @@ export class IntentFormModel {
 
       assertAllowedTransition('student_fail', intent.status, STUDENT_FAIL_FROM);
 
+      // reject_reason = NULL: เหตุผลตีกลับแบบตอบรับของเจ้าหน้าที่ที่ค้างอยู่ไม่ใช่เหตุผลที่ใบนี้ปิด
+      // (`rejected` + ไม่มีเหตุผล = นักศึกษาแจ้งเอง · มีเหตุผล = ระบบปิดเอง `utils/acceptanceAutoClose.ts`)
       const updateRes = await client.query(
-        `UPDATE intent_forms SET status = 'rejected' WHERE form_id = $1`,
+        `UPDATE intent_forms SET status = 'rejected', reject_reason = NULL WHERE form_id = $1`,
         [intentId]
       );
       await recordStageEvent(client, intentId, 'exited');

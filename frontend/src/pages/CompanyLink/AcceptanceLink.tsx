@@ -18,6 +18,10 @@ import { formatThaiDate } from '../../utils/thaiDate';
  * จอแคบ = ทีละขั้น แผงเอกสารกลายเป็นลิงก์เปิดไฟล์ (แบบ B)
  *
  * ⛔ ไม่มีสหกิจ 03 บนหน้านี้ (ใบสั่งงาน D3) · ⛔ ไม่มีปุ่ม "ขอลิงก์ใหม่" — ลิงก์ต้องมาจากนักศึกษา
+ *
+ * ทาง "รับ" (2026-10-07): กรอกผู้ประสานงาน + ผู้อนุมัติบนหน้าเว็บ → กดสร้างเอกสาร 2 ที่กรอกแล้ว → พิมพ์
+ * → **ลงนามและประทับตราด้วยมือ** → แนบไฟล์ + วันเริ่มงาน → ส่ง · ค่าที่กรอกลงกระดาษอย่างเดียว เซิร์ฟเวอร์ไม่เก็บ
+ * (สิ่งที่บันทึกจริงยังเป็นชุดเดิมของ `POST /accept`: ผู้ลงนาม · วันเริ่มงาน · ไฟล์)
  */
 
 interface StudentCard {
@@ -35,6 +39,51 @@ type Decision = '' | 'accept' | 'decline';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 const asText = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+
+/** ช่องผู้ประสานงานบนเอกสาร 2 — ชื่อคีย์ตรงกับ body ของ `POST /public/acceptance/acceptance-form` */
+const CONTACT_FIELDS = [
+  { key: 'coordinator_name', label: 'ชื่อผู้ประสานงาน', required: true, wide: true, type: 'text' },
+  { key: 'coordinator_position', label: 'ตำแหน่ง', required: false, wide: false, type: 'text' },
+  { key: 'office_phone', label: 'โทรศัพท์ที่ทำงาน', required: false, wide: false, type: 'tel' },
+  { key: 'mobile_phone', label: 'โทรศัพท์มือถือ', required: false, wide: false, type: 'tel' },
+  { key: 'fax', label: 'โทรสาร', required: false, wide: false, type: 'tel' },
+  { key: 'email', label: 'E-mail', required: false, wide: true, type: 'email' },
+] as const;
+type ContactKey = (typeof CONTACT_FIELDS)[number]['key'];
+type Contact = Record<ContactKey, string>;
+
+/**
+ * จำช่องผู้ประสานงาน + ชื่อ/ตำแหน่งผู้อนุมัติไว้ในเบราว์เซอร์เครื่องนี้ — บริษัทที่รับหลายคนเปิดลิงก์ของคนถัดไปแล้วไม่ต้องพิมพ์ซ้ำ
+ * คีย์เดียว ไม่ผูก token · ⛔ ไม่เก็บวันที่ ไฟล์ หรือข้อมูลนักศึกษา · อ่าน/เขียนไม่ได้ (โหมดส่วนตัว) = หน้ายังทำงานปกติ
+ */
+const REMEMBER_KEY = 'accept_company_contact';
+type Remembered = Contact & { approver_name: string; approver_position: string };
+
+const loadRemembered = (): Remembered => {
+  const empty: Remembered = {
+    coordinator_name: '', coordinator_position: '', office_phone: '', mobile_phone: '', fax: '', email: '',
+    approver_name: '', approver_position: '',
+  };
+  try {
+    const saved: unknown = JSON.parse(localStorage.getItem(REMEMBER_KEY) ?? '{}');
+    if (!saved || typeof saved !== 'object') return empty;
+    for (const key of Object.keys(empty) as (keyof Remembered)[]) {
+      const value = (saved as Record<string, unknown>)[key];
+      if (typeof value === 'string') empty[key] = value;
+    }
+    return empty;
+  } catch {
+    return empty;
+  }
+};
+
+const saveRemembered = (value: Remembered): void => {
+  try {
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify(value));
+  } catch {
+    // เก็บไม่ได้ = ครั้งหน้าต้องพิมพ์ใหม่เท่านั้น ไม่ใช่ข้อผิดพลาดที่ต้องบอกผู้ใช้
+  }
+};
 
 const formatThaiDateTime = (d: Date): string =>
   new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Bangkok' }).format(d);
@@ -85,9 +134,19 @@ const AcceptanceLink: React.FC = () => {
 
   const [decision, setDecision] = useState<Decision>('');
   const [declineReason, setDeclineReason] = useState('');
-  const [signerName, setSignerName] = useState('');
-  const [signerPosition, setSignerPosition] = useState('');
+  // อ่านค่าที่จำไว้ครั้งเดียวตอนเปิดหน้า (ลิงก์ของนักศึกษาคนก่อนของบริษัทเดียวกัน)
+  const [remembered] = useState(loadRemembered);
+  const [contact, setContact] = useState<Contact>(() => {
+    const { approver_name: _n, approver_position: _p, ...rest } = remembered;
+    return rest;
+  });
+  const [additionalInfo, setAdditionalInfo] = useState('');
+  const [signerName, setSignerName] = useState(remembered.approver_name);
+  const [signerPosition, setSignerPosition] = useState(remembered.approver_position);
   const [signedDate, setSignedDate] = useState('');
+  /** เอกสาร 2 ที่ระบบพิมพ์ค่าที่กรอกลงไปแล้ว (blob URL) — ยังไม่กดสร้าง = null */
+  const [filledUrl, setFilledUrl] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
   const [startDate, setStartDate] = useState('');
   const [evidence, setEvidence] = useState<File | null>(null);
 
@@ -152,12 +211,78 @@ const AcceptanceLink: React.FC = () => {
 
   const fail = useCallback((msg: string) => setError(msg), []);
 
-  const validate = (): string | null => {
-    if (decision === '') return 'กรุณาเลือกว่าจะรับหรือไม่รับนักศึกษาคนนี้';
-    if (decision === 'decline') return declineReason.trim() ? null : 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษา';
+  // blob URL ของเอกสารที่สร้างไว้ต้องคืนเมื่อถูกแทนที่หรือออกจากหน้า
+  useEffect(() => {
+    return () => {
+      if (filledUrl) URL.revokeObjectURL(filledUrl);
+    };
+  }, [filledUrl]);
+
+  const remember = () =>
+    saveRemembered({
+      ...contact,
+      approver_name: signerName.trim(),
+      approver_position: signerPosition.trim(),
+    });
+
+  /** ผู้อนุมัติ — ใช้ทั้งตอนพิมพ์ลงเอกสาร 2 และตอนส่งคำตอบ (กรอกชุดเดียว) */
+  const approverProblem = (): string | null => {
     if (!signerName.trim()) return 'กรุณากรอกชื่อผู้ลงนาม';
     if (!signerPosition.trim()) return 'กรุณากรอกตำแหน่งผู้ลงนาม';
     if (!signedDate) return 'กรุณาเลือกวันที่ลงนาม';
+    return null;
+  };
+
+  /**
+   * ขอเอกสาร 2 ที่พิมพ์ค่าที่กรอกลงไปแล้ว — เซิร์ฟเวอร์ไม่บันทึกอะไร (ลงกระดาษอย่างเดียว) ลิงก์ยังใช้ตอบได้ตามเดิม
+   * ใช้ fetch ตรงเพราะคำตอบเป็น PDF (`api` อ่านคำตอบเป็น JSON เสมอ)
+   */
+  const generateForm = async () => {
+    const problem = !contact.coordinator_name.trim() ? 'กรุณากรอกชื่อผู้ประสานงาน' : approverProblem();
+    if (problem) return fail(problem);
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/public/acceptance/acceptance-form?${q}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...contact,
+          additional_info: additionalInfo,
+          approver_name: signerName,
+          approver_position: signerPosition,
+          approved_date: signedDate,
+        }),
+      });
+      if (!res.ok) {
+        let message = '';
+        try {
+          message = asText(((await res.json()) as { message?: unknown } | null)?.message);
+        } catch {
+          // คำตอบไม่ใช่ JSON — ใช้ข้อความสำรองข้างล่าง
+        }
+        if (res.status === 404) return setPhase('notfound');
+        if (res.status === 410) {
+          setServerMessage(message);
+          return setPhase('gone');
+        }
+        return fail(message || 'สร้างเอกสารไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+      }
+      setFilledUrl(URL.createObjectURL(await res.blob()));
+      setDocTab('form');
+      remember();
+    } catch {
+      fail('เชื่อมต่อกับเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const validate = (): string | null => {
+    if (decision === '') return 'กรุณาเลือกว่าจะรับหรือไม่รับนักศึกษาคนนี้';
+    if (decision === 'decline') return declineReason.trim() ? null : 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษา';
+    const approver = approverProblem();
+    if (approver) return approver;
     if (!startDate) return 'กรุณาเลือกวันเริ่มปฏิบัติงาน';
     if (!evidence) return 'กรุณาแนบเอกสาร 2 ที่ลงนามและประทับตราแล้ว';
     if (evidence.size > MAX_FILE_BYTES) return 'ไฟล์ใหญ่เกิน 10 MB กรุณาลดขนาดไฟล์แล้วแนบใหม่';
@@ -186,6 +311,7 @@ const AcceptanceLink: React.FC = () => {
         fd.append('signed_date', signedDate);
         fd.append('start_date', startDate);
         const res = await api.post(`/public/acceptance/accept?${q}`, fd);
+        remember();
         setSentInfo({
           decision,
           at: formatThaiDateTime(new Date()),
@@ -329,7 +455,7 @@ const AcceptanceLink: React.FC = () => {
     <div className="flex flex-col gap-2 text-sm">
       {[
         { href: fileUrl('cover-letter'), label: 'หนังสือขอความอนุเคราะห์' },
-        { href: fileUrl('acceptance-form'), label: 'แบบตอบรับ (เอกสาร 2) — พิมพ์ ลงนาม ประทับตรา' },
+        { href: fileUrl('acceptance-form'), label: 'แบบตอบรับ (เอกสาร 2) ฉบับเปล่า' },
         ...(hasResume ? [{ href: fileUrl('resume'), label: 'Resume ของนักศึกษา' }] : []),
       ].map((l) => (
         <a
@@ -386,11 +512,16 @@ const AcceptanceLink: React.FC = () => {
           </div>
           <div className="flex min-h-0 flex-1 flex-col overflow-auto rounded-2xl border border-gray-200 bg-white p-2 dark:border-gray-700 dark:bg-gray-800">
             {docTab === 'cover' && <iframe title="หนังสือขอความอนุเคราะห์" src={fileUrl('cover-letter')} className="h-full w-full rounded-xl" />}
-            {docTab === 'form' && <iframe title="แบบตอบรับ (เอกสาร 2)" src={fileUrl('acceptance-form')} className="h-full w-full rounded-xl" />}
+            {/* กดสร้างแล้ว = แสดงฉบับที่พิมพ์ค่าที่กรอกลงไป · ยังไม่กด = ฉบับเปล่า */}
+            {docTab === 'form' && <iframe title="แบบตอบรับ (เอกสาร 2)" src={filledUrl ?? fileUrl('acceptance-form')} className="h-full w-full rounded-xl" />}
             {docTab === 'student' && <div className="p-4">{studentPanel}</div>}
           </div>
           <a
-            href={fileUrl(docTab === 'form' ? 'acceptance-form' : docTab === 'student' && hasResume ? 'resume' : 'cover-letter')}
+            href={
+              docTab === 'form'
+                ? (filledUrl ?? fileUrl('acceptance-form'))
+                : fileUrl(docTab === 'student' && hasResume ? 'resume' : 'cover-letter')
+            }
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-blue hover:text-brand-navy dark:text-blue-400 dark:hover:text-blue-300"
@@ -461,16 +592,81 @@ const AcceptanceLink: React.FC = () => {
 
               {decision === 'accept' && (
                 <>
+                  {/* ขั้น 1 — กรอกบนหน้าเว็บ ระบบพิมพ์ลงเอกสาร 2 ให้ (ลายมือชื่อและตราต้องลงเองบนกระดาษ) */}
+                  <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">1. กรอกข้อมูลลงเอกสาร 2</h3>
+                    <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-400">
+                      ระบบจะพิมพ์ข้อมูลนี้ลงแบบยืนยันแบบตอบรับ (เอกสาร 2) ให้ ท่านพิมพ์ออกมาลงนามและประทับตราเท่านั้น
+                    </p>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {CONTACT_FIELDS.map((f) => (
+                      <Field key={f.key} id={`al-${f.key}`} label={f.label} required={f.required} className={f.wide ? 'sm:col-span-2' : ''}>
+                        <Input
+                          id={`al-${f.key}`}
+                          type={f.type}
+                          maxLength={255}
+                          data-testid={`al-${f.key}`}
+                          value={contact[f.key]}
+                          onChange={(e) => setContact((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                        />
+                      </Field>
+                    ))}
+                    <Field id="al-additional-info" label="ข้อมูลเพิ่มเติม (ถ้ามี · ไม่เกิน 3 บรรทัดบนเอกสาร)" className="sm:col-span-2">
+                      <Textarea
+                        id="al-additional-info"
+                        rows={2}
+                        maxLength={250}
+                        data-testid="al-additional-info"
+                        value={additionalInfo}
+                        onChange={(e) => setAdditionalInfo(e.target.value)}
+                      />
+                    </Field>
+                  </div>
                   <Field id="al-signer-name" label="ผู้อนุมัตินักศึกษา (ผู้ลงนาม)" required>
-                    <Input id="al-signer-name" data-testid="al-signer-name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
+                    <Input id="al-signer-name" maxLength={255} data-testid="al-signer-name" value={signerName} onChange={(e) => setSignerName(e.target.value)} />
                   </Field>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <Field id="al-signer-position" label="ตำแหน่ง" required>
-                      <Input id="al-signer-position" data-testid="al-signer-position" value={signerPosition} onChange={(e) => setSignerPosition(e.target.value)} />
+                      <Input id="al-signer-position" maxLength={255} data-testid="al-signer-position" value={signerPosition} onChange={(e) => setSignerPosition(e.target.value)} />
                     </Field>
                     <Field id="al-signed-date" label="วันที่ลงนาม" required>
                       <Input id="al-signed-date" type="date" data-testid="al-signed-date" value={signedDate} onChange={(e) => setSignedDate(e.target.value)} />
                     </Field>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Button data-testid="al-generate" loading={generating} loadingLabel="กำลังสร้างเอกสาร" onClick={generateForm}>
+                      {filledUrl ? 'สร้างเอกสาร 2 ใหม่ตามที่แก้' : 'สร้างเอกสาร 2 ที่กรอกแล้ว'}
+                    </Button>
+                    <a
+                      href={fileUrl('acceptance-form')}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="al-blank-form"
+                      className="text-sm font-medium text-brand-blue underline hover:text-brand-navy dark:text-blue-400 dark:hover:text-blue-300"
+                    >
+                      หรือใช้ฟอร์มเปล่าเขียนมือ
+                    </a>
+                  </div>
+                  {filledUrl && (
+                    <a
+                      href={filledUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid="al-filled-open"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-green-300 bg-green-50 px-3.5 py-3 text-sm font-semibold text-green-900 hover:bg-green-100 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200 dark:hover:bg-green-950/60"
+                    >
+                      <span className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 shrink-0" aria-hidden="true" />
+                        สร้างแล้ว — เปิดเอกสาร 2 ที่กรอกแล้วเพื่อพิมพ์ ลงนาม และประทับตรา
+                      </span>
+                      <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />
+                    </a>
+                  )}
+
+                  {/* ขั้น 2 — แนบฉบับที่ลงนามแล้วกลับมา · ผู้อนุมัติใช้ค่าที่กรอกในขั้น 1 ไม่ต้องพิมพ์ซ้ำ */}
+                  <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">2. แนบเอกสาร 2 ที่ลงนามแล้ว แล้วส่งคำตอบ</h3>
                   </div>
                   <Field id="al-start-date" label="วันเริ่มปฏิบัติงาน" required>
                     <Input id="al-start-date" type="date" data-testid="al-start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
@@ -478,7 +674,7 @@ const AcceptanceLink: React.FC = () => {
                   <div className="flex flex-col gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-gray-50 p-4 dark:border-blue-800 dark:bg-gray-900/50">
                     <span className="text-sm font-semibold">แนบเอกสาร 2 ที่ลงนามและประทับตรา <span className="text-red-600 dark:text-red-400">*</span></span>
                     <span className="text-xs text-gray-600 dark:text-gray-400">
-                      พิมพ์เอกสาร 2 (เปิดได้จากแผงเอกสาร) ลงนาม ประทับตรา แล้วสแกนหรือถ่ายรูปแนบ · PDF หรือรูปภาพ ไม่เกิน 10 MB
+                      พิมพ์เอกสาร 2 จากขั้น 1 ลงนาม ประทับตรา แล้วสแกนหรือถ่ายรูปแนบ · PDF หรือรูปภาพ ไม่เกิน 10 MB
                     </span>
                     <label className="self-start">
                       <input

@@ -38,6 +38,10 @@ router.get('/cover-letter', PublicAcceptanceController.getCoverLetter);
 router.get('/acceptance-form', PublicAcceptanceController.getAcceptanceForm);
 router.get('/resume', PublicAcceptanceController.getResume);
 
+// POST /acceptance-form?token=... (JSON) — เอกสาร 2 ที่พิมพ์ค่าที่บริษัทกรอกบนหน้าลิงก์ลงไปแล้ว
+// ⛔ ไม่เขียนฐาน ไม่เผา token ไม่เขียน `companies` — ค่าที่กรอกลงกระดาษอย่างเดียว (SEC-14 ข้อ 5)
+router.post('/acceptance-form', PublicAcceptanceController.getAcceptanceForm);
+
 // POST /decline?token=... — ไม่รับ (มีผลทันที เผา token)
 router.post('/decline', PublicAcceptanceController.decline);
 

@@ -51,6 +51,9 @@ export const AuditAction = {
   INTENT_DECLINED_VIA_LINK: 'intent.declined_via_link',
   // นักศึกษาระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ (ยังไม่เปิดบัญชี — เปิดตอนเจ้าหน้าที่กดรับ)
   INTENT_MENTOR_SET: 'intent.mentor_set',
+  // ระบบปิดใบเองเมื่อพ้นปฏิทิน `acceptance_form` โดยยังไม่มีแบบตอบรับ (`utils/acceptanceAutoClose.ts`) — ไม่มีคนกด
+  // บรรทัดนี้จึงเป็นหลักฐานเดียวว่าใบถูกปิดด้วยกติกา ไม่ใช่ด้วยมือใคร
+  INTENT_AUTO_CLOSED: 'intent.auto_closed',
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',

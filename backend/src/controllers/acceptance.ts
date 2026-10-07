@@ -180,7 +180,7 @@ export class AcceptanceController {
       }
 
       // Send email notification to student
-      notifyStudentStatusChange(intentId, 'rejected').catch(console.error);
+      notifyStudentStatusChange(intentId, 'student_reported_fail').catch(console.error);
 
       res.status(200).json({
         message: 'Student application reported as failed. Student is unlocked to apply again.',

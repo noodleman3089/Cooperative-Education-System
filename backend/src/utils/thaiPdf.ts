@@ -264,8 +264,9 @@ export class ThaiPdf {
   /**
    * แบ่งข้อความเป็นบรรทัดตามขอบคำไทย · `widthOf(i)` = ความกว้างที่บรรทัดที่ i ใช้ได้
    * `preferSpaces` = ตัดที่ช่องว่างก่อน ใช้ขอบคำไทยเฉพาะก้อนที่ยาวเกินบรรทัดเอง
+   * (public เพราะแบบฟอร์มที่วางข้อความตามพิกัดเอง — เอกสารหมายเลข ๒ — ต้องตัดบรรทัดลงช่องเส้นประ)
    */
-  private wrapThai(
+  wrapThai(
     text: string,
     size: number,
     widthOf: (lineIndex: number) => number,
