@@ -215,6 +215,84 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     ).toEqual({ status: 'pending_sign', document_number: 'อว 0656.10/44' });
   });
 
+  test('P6: หน้าแรกขึ้นแถวแดงของใบที่รับแล้วไม่มีหนังสือ → กดสร้างอีกครั้ง → แถวหาย หนังสือเข้าตาราง', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const formId = await seedIntent();
+    const shown = await upload(request, formId);
+    await apiLoginAs(request, 'staff1');
+    expect(
+      (
+        await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
+          data: { document_no: 'อว 0656.10/66', request_form_path: shown },
+        })
+      ).status()
+    ).toBe(200);
+    // สภาพ "รับแล้วแต่หนังสือไม่ออก" — เหมือนการสร้างหนังสือล้มหลังรับ
+    await dbExec(`DELETE FROM official_documents WHERE type = 'cover_letter'`);
+
+    await loginAs(page, 'staff1');
+    const row = page.getByTestId(`staff-home-missing-letter-${formId}`);
+    await expect(row).toBeVisible();
+    await expect(row).toContainText('รับคำร้องแล้ว แต่ยังไม่มีหนังสือเข้าคิวคณบดี');
+    await expect(row).toContainText('อว 0656.10/66');
+
+    await page.getByTestId(`staff-home-reissue-${formId}`).click();
+    await expect(page.getByText(/สร้างหนังสือขอความอนุเคราะห์ของ .* แล้ว/)).toBeVisible();
+    await expect(page.getByTestId('staff-home-missing-letters')).toHaveCount(0);
+    expect(
+      await dbRow("SELECT status, document_number FROM official_documents WHERE type = 'cover_letter'")
+    ).toEqual({ status: 'pending_sign', document_number: 'อว 0656.10/66' });
+  });
+
+  test('P7: แก้เลขที่หนังสือจากตารางหนังสือบนหน้าแรก — ได้จนกว่าคณบดีลงนาม แล้วปุ่มหายไป', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const formId = await seedIntent();
+    const shown = await upload(request, formId);
+    await apiLoginAs(request, 'staff1');
+    expect(
+      (
+        await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
+          data: { document_no: 'อว 0656.10/ผิด', request_form_path: shown },
+        })
+      ).status()
+    ).toBe(200);
+    const docId = (await dbValue<number>("SELECT doc_id FROM official_documents WHERE type = 'cover_letter'"))!;
+
+    await loginAs(page, 'staff1');
+    await page.getByTestId(`edit-document-no-${docId}`).click();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'แก้เลขที่หนังสือออก' });
+    await expect(dialog.getByTestId('edit-document-no-input')).toHaveValue('อว 0656.10/ผิด');
+    // เลขเดิม = ไม่มีอะไรให้บันทึก
+    await expect(dialog.getByTestId('edit-document-no-save')).toBeDisabled();
+
+    await dialog.getByTestId('edit-document-no-input').fill('อว 0656.10/ถูก');
+    await dialog.getByTestId('edit-document-no-save').click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText('แก้เลขที่หนังสือแล้ว')).toBeVisible();
+    await expect(page.getByRole('cell', { name: /อว 0656\.10\/ถูก/ })).toBeVisible();
+    expect(await dbValue('SELECT officer_document_no FROM intent_forms WHERE form_id = $1', [formId])).toBe(
+      'อว 0656.10/ถูก'
+    );
+    expect(await dbValue('SELECT document_number FROM official_documents WHERE doc_id = $1', [docId])).toBe(
+      'อว 0656.10/ถูก'
+    );
+
+    // คณบดีลงนามแล้ว = ไม่มีปุ่มแก้เลขอีก
+    await apiLoginAs(request, 'dean1');
+    expect(
+      (await request.post(`${API_URL}/documents/batch-sign`, { data: { doc_ids: [docId] } })).status()
+    ).toBe(200);
+    await page.reload();
+    await expect(page.getByRole('cell', { name: /อว 0656\.10\/ถูก/ })).toBeVisible();
+    await expect(page.getByTestId(`edit-document-no-${docId}`)).toHaveCount(0);
+  });
+
   test('P5: เลขที่หนังสือซ้ำกับคำร้องใบอื่น → ถามยืนยันพร้อมชื่อ · กลับไปแก้ได้ · ยืนยันแล้วรับได้', async ({
     page,
     request,

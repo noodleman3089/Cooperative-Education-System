@@ -2,8 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
+import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
+import { Input } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
-import { getErrorMessage } from '../../utils/errors';
+import { getErrorCode, getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
 import RequestQueue from './RequestQueue';
 
@@ -70,6 +73,14 @@ interface StaffHomePayload {
     days_left: number | null;
     secondary_count: number;
   };
+  /** คำร้องที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี (การสร้างหนังสือล้มหลังรับ) — ต้องกดสร้างอีกครั้ง */
+  missing_cover_letters: {
+    form_id: number;
+    student_code: string;
+    student_name: string | null;
+    company_name: string;
+    document_no: string | null;
+  }[];
   tiles: Record<TileKind, Tile>;
   timeline: TimelineEntry[];
   calendar_warnings: { activity_key: string | null; label: string }[];
@@ -77,6 +88,8 @@ interface StaffHomePayload {
 
 interface GeneratedDocument {
   doc_id: number;
+  /** คำร้องเจ้าของหนังสือขอความอนุเคราะห์ฉบับนี้ — ใช้เปิดช่องแก้เลขที่หนังสือ (หนังสือส่งตัวไม่มี) */
+  form_id?: number | null;
   document_number?: string | null;
   type: string;
   student_id: number;
@@ -140,6 +153,14 @@ export const StaffHome: React.FC = () => {
   const [documents, setDocuments] = useState<GeneratedDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [reissuingForm, setReissuingForm] = useState<number | null>(null);
+  // แก้เลขที่หนังสือ (ได้จนกว่าคณบดีจะลงนาม) — เก็บทั้งแถวไว้ให้กล่องบอกได้ว่ากำลังแก้ของใคร
+  const [editingDoc, setEditingDoc] = useState<GeneratedDocument | null>(null);
+  const [newDocumentNo, setNewDocumentNo] = useState('');
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   const loadHome = useCallback(async (isBackground = false) => {
     try {
@@ -177,6 +198,56 @@ export const StaffHome: React.FC = () => {
     const next = new URLSearchParams();
     Object.entries(dest).forEach(([k, v]) => next.set(k, v));
     navigate({ pathname: '/dashboard', search: next.toString() });
+  };
+
+  /** รับคำร้องแล้วแต่หนังสือไม่ออก — สั่งสร้างอีกครั้ง (เซิร์ฟเวอร์ปฏิเสธถ้ามีหนังสืออยู่แล้ว) */
+  const reissueCoverLetter = async (formId: number, studentCode: string) => {
+    setReissuingForm(formId);
+    setError(null);
+    setSuccess(null);
+    try {
+      await api.post(`/intents/${formId}/cover-letter/reissue`);
+      setSuccess(`สร้างหนังสือขอความอนุเคราะห์ของ ${studentCode} แล้ว · รอคณบดีลงนาม`);
+    } catch (err) {
+      setError(getErrorMessage(err, 'สร้างหนังสือไม่สำเร็จ'));
+    } finally {
+      setReissuingForm(null);
+      await Promise.all([loadHome(true), loadDocuments()]);
+    }
+  };
+
+  const openEditDocumentNo = (doc: GeneratedDocument) => {
+    setEditingDoc(doc);
+    setNewDocumentNo(doc.document_number || '');
+    setDuplicateWarning(null);
+    setEditError(null);
+  };
+
+  const saveDocumentNo = async (allowDuplicate: boolean) => {
+    if (!editingDoc?.form_id) return;
+    const no = newDocumentNo.trim();
+    setEditBusy(true);
+    setEditError(null);
+    try {
+      const res = (await api.patch(`/intents/${editingDoc.form_id}/document-no`, {
+        document_no: no,
+        ...(allowDuplicate ? { allow_duplicate_no: true } : {}),
+      })) as { message?: string };
+      setSuccess(res.message || `แก้เลขที่หนังสือเป็น ${no} แล้ว`);
+      setEditingDoc(null);
+      await loadDocuments();
+    } catch (err) {
+      if (getErrorCode(err) === 'duplicate_document_no') {
+        setDuplicateWarning(getErrorMessage(err));
+      } else {
+        setDuplicateWarning(null);
+        setEditError(getErrorMessage(err, 'ไม่สามารถแก้เลขที่หนังสือได้'));
+        // คณบดีลงนามไปแล้วระหว่างที่กล่องเปิดอยู่ = แถวในตารางต้องเปลี่ยนตาม
+        await loadDocuments();
+      }
+    } finally {
+      setEditBusy(false);
+    }
   };
 
   if (loading) return <PageSkeleton variant="stats" />;
@@ -227,6 +298,44 @@ export const StaffHome: React.FC = () => {
       </div>
 
       <AlertBanner variant="error" message={error} />
+      <AlertBanner variant="success" message={success} />
+
+      {/*
+        ── รับคำร้องแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี ──
+        ใบแบบนี้ไม่อยู่ในคิวไหนเลย (ไม่ใช่คิวเจ้าหน้าที่แล้ว และคณบดีไม่มีอะไรให้ลงนาม) — ไม่ขึ้นตรงนี้คือค้างถาวร
+        อยู่บนสุดของหน้าเสมอ และไม่มีทางซ่อน
+      */}
+      {home.missing_cover_letters.length > 0 && (
+        <section data-testid="staff-home-missing-letters" className="space-y-2">
+          {home.missing_cover_letters.map((m) => (
+            <div
+              key={m.form_id}
+              data-testid={`staff-home-missing-letter-${m.form_id}`}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 dark:border-red-900 dark:bg-red-950/40"
+            >
+              <div className="min-w-0 flex-[1_1_280px]">
+                <p className="text-[15px] font-bold text-red-900 dark:text-red-200">
+                  รับคำร้องแล้ว แต่ยังไม่มีหนังสือเข้าคิวคณบดี
+                </p>
+                <p className="text-sm text-red-900 dark:text-red-200">
+                  {[m.student_name, m.student_code].filter(Boolean).join(' · ')} · {m.company_name}
+                  {m.document_no ? ` · เลขที่ ${m.document_no}` : ''}
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                className="min-h-11 bg-red-700 hover:bg-red-800"
+                loading={reissuingForm === m.form_id}
+                disabled={reissuingForm !== null}
+                data-testid={`staff-home-reissue-${m.form_id}`}
+                onClick={() => reissueCoverLetter(m.form_id, m.student_code)}
+              >
+                สร้างหนังสืออีกครั้ง
+              </Button>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* ── แถบฤดูกาล 5 ช่วง — ชูช่วงที่วันนี้อยู่ ── */}
       <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-4 shadow-sm">
@@ -470,7 +579,13 @@ export const StaffHome: React.FC = () => {
       </div>
 
       {/* ── ตารางคิวงานสามกอง (E1) ── */}
-      <RequestQueue onDataChanged={() => loadHome(true)} />
+      <RequestQueue
+        onDataChanged={() => {
+          void loadHome(true);
+          // รับคำร้อง/ออกหนังสือส่งตัว = มีหนังสือใบใหม่ในตารางด้านล่าง
+          void loadDocuments();
+        }}
+      />
 
       {/* ── ประวัติหนังสือราชการ & สถานะการลงนามของคณบดี ── */}
       <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800">
@@ -503,8 +618,19 @@ export const StaffHome: React.FC = () => {
                     <td className="p-4 font-bold text-gray-800 dark:text-gray-300">
                       #DOC-{doc.doc_id}
                     </td>
-                    <td className="p-4 font-mono text-gray-700 dark:text-gray-300">
-                      {doc.document_number || '-'}
+                    <td className="p-4 text-gray-700 dark:text-gray-300">
+                      <span className="block">{doc.document_number || '-'}</span>
+                      {/* แก้ได้จนกว่าคณบดีจะลงนาม — ลงนามแล้วปุ่มหายไปเอง (เซิร์ฟเวอร์ปฏิเสธด้วย) */}
+                      {doc.type === 'cover_letter' && doc.status === 'pending_sign' && doc.form_id && (
+                        <button
+                          type="button"
+                          data-testid={`edit-document-no-${doc.doc_id}`}
+                          onClick={() => openEditDocumentNo(doc)}
+                          className="-mb-2 py-2 text-xs font-semibold text-blue-700 hover:underline dark:text-blue-400"
+                        >
+                          แก้เลขที่หนังสือ
+                        </button>
+                      )}
                     </td>
                     <td className="p-4 text-gray-600 dark:text-gray-400">
                       {docTypeLabel(doc.type)}
@@ -561,6 +687,63 @@ export const StaffHome: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* ══ แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม ══ */}
+      {editingDoc && (
+        <Modal onClose={() => setEditingDoc(null)} size="md" title="แก้เลขที่หนังสือออก" closeOnBackdrop={false}>
+          <ModalBody>
+            <div className="space-y-3">
+              <AlertBanner variant="error" message={editError} />
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                หนังสือขอความอนุเคราะห์ของ{' '}
+                <strong>
+                  {[editingDoc.first_name, editingDoc.last_name].filter(Boolean).join(' ') || editingDoc.student_code}
+                </strong>{' '}
+                ({editingDoc.student_code}) · {editingDoc.company_name_th}
+              </p>
+              <div>
+                <label htmlFor="edit-document-no" className="mb-1 block text-sm font-bold text-gray-900 dark:text-gray-100">
+                  เลขที่หนังสือออก
+                </label>
+                <Input
+                  id="edit-document-no"
+                  data-testid="edit-document-no-input"
+                  value={newDocumentNo}
+                  maxLength={100}
+                  onChange={(e) => {
+                    setNewDocumentNo(e.target.value);
+                    setDuplicateWarning(null);
+                  }}
+                />
+                <p className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">
+                  เลขเดิม {editingDoc.document_number || '-'} · ระบบจะสร้างไฟล์หนังสือฉบับรอลงนามใหม่ด้วยเลขนี้
+                </p>
+              </div>
+              {duplicateWarning && (
+                <div
+                  data-testid="edit-document-no-duplicate"
+                  className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  {duplicateWarning} — ต้องการใช้เลขนี้ซ้ำหรือไม่
+                </div>
+              )}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="secondary" onClick={() => setEditingDoc(null)}>
+              ยกเลิก
+            </Button>
+            <Button
+              loading={editBusy}
+              disabled={!newDocumentNo.trim() || newDocumentNo.trim() === (editingDoc.document_number || '')}
+              data-testid="edit-document-no-save"
+              onClick={() => saveDocumentNo(duplicateWarning !== null)}
+            >
+              {duplicateWarning ? 'ใช้เลขนี้ซ้ำ' : 'บันทึกเลขใหม่'}
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
     </div>
   );
 };
