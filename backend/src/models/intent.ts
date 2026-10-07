@@ -137,6 +137,48 @@ export function assertAllowedTransition(action: string, currentStatus: string, a
 }
 
 /**
+ * คำขอถูกรูปแบบ แต่ชนกับสภาพปัจจุบันของใบ — controller ตอบ 409 พร้อม `code` ให้หน้าจอแยกกรณีได้
+ * (ไฟล์ที่ดูอยู่เป็นไฟล์เก่า · เลขที่หนังสือซ้ำ · คณบดีลงนามไปแล้ว)
+ */
+export class IntentConflictError extends Error {
+  constructor(
+    message: string,
+    readonly code:
+      | 'stale_request_file'
+      | 'duplicate_document_no'
+      | 'not_awaiting_dean'
+      | 'letter_missing'
+      | 'letter_signed',
+    readonly extra: Record<string, unknown> = {}
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * เลขที่หนังสือออกนี้อยู่บนคำร้องใบอื่นแล้วหรือไม่ — เจอ = 409 พร้อมชื่อนักศึกษาของใบนั้น
+ *
+ * ⛔ **เตือน ไม่บล็อก**: หน้าจอถามยืนยันแล้วส่งซ้ำพร้อมธงยอมรับ · ยังไม่รู้ว่าของจริงหนังสือฉบับเดียว
+ *    ครอบนักศึกษาหลายคนได้หรือไม่ จึงไม่ทำ UNIQUE ที่ฐาน
+ */
+async function assertDocumentNoUnused(client: PoolClient, formId: number, documentNo: string): Promise<void> {
+  const other = await client.query(
+    `SELECT s.student_code, NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), '') AS name
+       FROM intent_forms o JOIN students s ON s.student_id = o.student_id
+      WHERE o.officer_document_no = $1 AND o.form_id <> $2
+      ORDER BY o.form_id DESC LIMIT 1`,
+    [documentNo, formId]
+  );
+  if ((other.rowCount ?? 0) === 0) return;
+  const who = [other.rows[0].name, other.rows[0].student_code].filter(Boolean).join(' · ');
+  throw new IntentConflictError(
+    `เลขที่หนังสือ ${documentNo} ถูกใช้กับคำร้องของ ${who} แล้ว`,
+    'duplicate_document_no',
+    { duplicate_student: who }
+  );
+}
+
+/**
  * ตราประทับว่าใบนี้ยื่นในช่วงผ่อนผัน (ส่งช้า) หรือไม่
  *
  * ค่ามาจาก `isLateWindow(res)` ซึ่งอ่านผลของด่านปฏิทินเท่านั้น — **ไม่ใช่ค่าที่
@@ -452,7 +494,7 @@ export class IntentFormModel {
   static async officerApproveRequest(
     formId: number,
     officerUserId: number,
-    input: { documentNo: string }
+    input: { documentNo: string; shownRequestFormPath: string; allowDuplicateNo: boolean }
   ): Promise<{ studentId: number; companyId: number }> {
     const client = await pool.connect();
     try {
@@ -469,6 +511,17 @@ export class IntentFormModel {
       assertAllowedTransition('officer_approve', row.status, OFFICER_DECISION_FROM);
       if (!row.request_form_path) {
         throw new Error('ยังไม่มีไฟล์แบบคำร้องที่ลงนามแล้วในระบบ');
+      }
+      // ด่านมนุษย์ของ SEC-04 คือ "เจ้าหน้าที่อ่านกระดาษใบนี้แล้ว" — นักศึกษาเปลี่ยนไฟล์ได้ระหว่างรอ
+      // จึงต้องรับได้เฉพาะไฟล์ที่หน้าจอแสดงอยู่จริง · เทียบภายใต้ FOR UPDATE การอัปโหลดซ้อนจึงแทรกไม่ได้
+      if (row.request_form_path !== input.shownRequestFormPath) {
+        throw new IntentConflictError(
+          'นักศึกษาส่งไฟล์ใหม่แล้ว กรุณาตรวจไฟล์ล่าสุดก่อนรับ',
+          'stale_request_file'
+        );
+      }
+      if (!input.allowDuplicateNo) {
+        await assertDocumentNoUnused(client, formId, input.documentNo);
       }
 
       // ใบที่อัปโหลดก่อนเปลี่ยนวิธี (ยังไม่มีชื่อบนแถว) เติมจากระบบให้ ไม่มีก็ปล่อย null
@@ -509,7 +562,8 @@ export class IntentFormModel {
    */
   static async officerRejectRequest(
     formId: number,
-    reason: string
+    reason: string,
+    officerUserId: number
   ): Promise<{ studentId: number; previousPath: string | null }> {
     const client = await pool.connect();
     try {
@@ -530,12 +584,89 @@ export class IntentFormModel {
           WHERE form_id = $2`,
         [reason, formId]
       );
-      await recordStageEvent(client, formId, 'request_returned');
+      // เหตุผลบนแถวใบถูกล้างเมื่อนักศึกษาส่งใหม่ — เก็บสำเนากับเหตุการณ์ไว้ให้เจ้าหน้าที่คนถัดไปเห็นว่าเคยตีกลับเพราะอะไร
+      await recordStageEvent(client, formId, 'request_returned', { note: reason, actorId: officerUserId });
 
       await client.query('COMMIT');
       return {
         studentId: row.student_id as number,
         previousPath: row.request_form_path as string | null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่แก้เลขที่หนังสือออกหลังรับคำร้อง — ได้จนกว่าคณบดีจะลงนาม
+   *
+   * ⛔ ต้องแก้ **สองที่ในทรานแซกชันเดียว**: `intent_forms.officer_document_no` และ
+   *    `official_documents.document_number` — ทั้งระบบจับคู่หนังสือกับใบด้วยเลขนี้
+   *    (LATERAL `document_number IS NOT DISTINCT FROM officer_document_no`) แก้ที่เดียว = หนังสือหลุดจากใบ
+   * ผู้เรียกวาดไฟล์หนังสือใหม่หลัง COMMIT (`issueCoverLetter`)
+   */
+  static async changeOfficerDocumentNo(
+    formId: number,
+    input: { documentNo: string; allowDuplicateNo: boolean }
+  ): Promise<{ studentId: number; previousNo: string | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status, officer_document_no
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+      const row = current.rows[0];
+      if (row.status !== 'approved_by_dept_head') {
+        throw new IntentConflictError(
+          'แก้เลขที่หนังสือได้เฉพาะคำร้องที่รับแล้วและยังรอคณบดีลงนาม',
+          'not_awaiting_dean'
+        );
+      }
+
+      const doc = await client.query(
+        `SELECT doc_id, status FROM official_documents
+          WHERE student_id = $1 AND company_id = $2 AND type = 'cover_letter'
+            AND document_number IS NOT DISTINCT FROM $3
+          ORDER BY doc_id DESC LIMIT 1
+            FOR UPDATE`,
+        [row.student_id, row.company_id, row.officer_document_no]
+      );
+      if ((doc.rowCount ?? 0) === 0) {
+        throw new IntentConflictError(
+          'คำร้องนี้ยังไม่มีหนังสือขอความอนุเคราะห์ กรุณาสร้างหนังสือก่อนแล้วจึงแก้เลข',
+          'letter_missing'
+        );
+      }
+      if (doc.rows[0].status !== 'pending_sign') {
+        throw new IntentConflictError(
+          'คณบดีลงนามหนังสือฉบับนี้แล้ว จึงแก้เลขที่หนังสือไม่ได้',
+          'letter_signed'
+        );
+      }
+      if (!input.allowDuplicateNo) {
+        await assertDocumentNoUnused(client, formId, input.documentNo);
+      }
+
+      await client.query('UPDATE intent_forms SET officer_document_no = $1 WHERE form_id = $2', [
+        input.documentNo,
+        formId,
+      ]);
+      await client.query('UPDATE official_documents SET document_number = $1 WHERE doc_id = $2', [
+        input.documentNo,
+        doc.rows[0].doc_id,
+      ]);
+
+      await client.query('COMMIT');
+      return {
+        studentId: row.student_id as number,
+        previousNo: row.officer_document_no as string | null,
       };
     } catch (error) {
       await client.query('ROLLBACK');

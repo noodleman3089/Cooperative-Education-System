@@ -6,7 +6,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { approveIntentThroughOfficer } from '../helpers/intent';
+import { approveIntentThroughOfficer, officerApprove } from '../helpers/intent';
 import { PDFParse } from 'pdf-parse';
 
 /**
@@ -456,9 +456,10 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     ).toBe(false);
 
     await apiLoginAs(request, 'staff1');
-    const res = await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
-      // ชื่อที่เจ้าหน้าที่ส่งมาถูกเมิน — ต้องไม่ทับชื่อที่ได้ตอนอัปโหลด
-      data: { document_no: 'อว 0656.10/123', advisor_signer_name: 'ชื่อจากเจ้าหน้าที่' },
+    // ชื่อที่เจ้าหน้าที่ส่งมาถูกเมิน — ต้องไม่ทับชื่อที่ได้ตอนอัปโหลด
+    const res = await officerApprove(request, formId, {
+      document_no: 'อว 0656.10/123',
+      advisor_signer_name: 'ชื่อจากเจ้าหน้าที่',
     });
     expect(res.status(), await res.text()).toBe(200);
 
@@ -484,10 +485,9 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     ).toBe(true);
 
     // กดผ่านซ้ำต้องไม่ได้ — สถานะออกจาก allow-list ไปแล้ว และเลขเดิมต้องไม่ถูกทับ
-    const again = await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
-      data: { document_no: 'อว 0656.10/999' },
-    });
+    const again = await officerApprove(request, formId, { document_no: 'อว 0656.10/999' });
     expect(again.status()).toBe(400);
+    expect((await again.json()).message).toContain('ทำรายการนี้ไม่ได้');
     expect(
       await dbValue<string>('SELECT officer_document_no FROM intent_forms WHERE form_id = $1', [formId])
     ).toBe('อว 0656.10/123');

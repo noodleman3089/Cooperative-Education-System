@@ -128,6 +128,21 @@ router.patch(
   IntentFormController.officerRejectRequest
 );
 
+// Route: PATCH /api/intents/:id/document-no (เจ้าหน้าที่แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม)
+router.patch(
+  '/:id/document-no',
+  authorizeRoles('staff'),
+  IntentFormController.changeOfficerDocumentNo
+);
+
+// Route: POST /api/intents/:id/cover-letter/reissue
+// สร้างหนังสือขอความอนุเคราะห์อีกครั้ง เมื่อรับคำร้องแล้วแต่การวาด/บันทึกหนังสือล้ม (ใบจะค้างถาวรถ้าไม่มีทางนี้)
+router.post(
+  '/:id/cover-letter/reissue',
+  authorizeRoles('staff'),
+  IntentFormController.reissueCoverLetter
+);
+
 // Route: POST /api/intents/:id/dispatch-letter (เจ้าหน้าที่สั่งออกหนังสือส่งตัว)
 // ⛔ ออกได้เมื่อใบอยู่สถานะ `accepted` แล้วเท่านั้น — ด่านอยู่ใน controller
 router.post(

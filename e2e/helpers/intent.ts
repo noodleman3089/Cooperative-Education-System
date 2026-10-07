@@ -34,6 +34,28 @@ export function placementCard(page: Page) {
 }
 
 /**
+ * เจ้าหน้าที่กดรับคำร้องผ่าน API (ต้องล็อกอินเป็นเจ้าหน้าที่ก่อนเรียก)
+ *
+ * `officer-approve` บังคับให้ส่ง `request_form_path` ของไฟล์ที่ "หน้าจอกำลังแสดง" แล้วเทียบกับค่าในแถว
+ * (ไม่ตรง = 409) — helper นี้ส่งค่าปัจจุบันในฐานให้ = จำลองเจ้าหน้าที่ที่เปิดดูไฟล์ล่าสุดแล้ว
+ * · ใบที่ยังไม่มีไฟล์ส่งค่าหลอกไป เพื่อให้ถึงด่านของโมเดล (สถานะ/ไม่มีไฟล์) ไม่ตกที่ด่านรูปแบบคำขอ
+ * · เทสต์ที่ตั้งใจส่ง path เก่า ใส่ `request_form_path` ใน `data` เอง (ค่าใน `data` ชนะ)
+ */
+export async function officerApprove(
+  request: APIRequestContext,
+  formId: number,
+  data: Record<string, unknown>
+) {
+  const shown = await dbValue<string | null>(
+    'SELECT request_form_path FROM intent_forms WHERE form_id = $1',
+    [formId]
+  );
+  return request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
+    data: { request_form_path: shown ?? 'request_forms/not-uploaded.pdf', ...data },
+  });
+}
+
+/**
  * พาใบความจำนงจาก `pending_advisor` ไปถึง `approved_by_dept_head` ตามเส้นทางจริง
  *
  * ตั้งแต่ 2026-08-26 ลายเซ็นของอาจารย์ที่ปรึกษาและหัวหน้าสาขาอยู่บน **กระดาษ**
@@ -69,11 +91,7 @@ export async function approveIntentThroughOfficer(
   expect(upload.status(), await upload.text()).toBe(200);
 
   await apiLoginAs(request, 'staff1');
-  const approved = await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
-    data: {
-      document_no: documentNo,
-    },
-  });
+  const approved = await officerApprove(request, formId, { document_no: documentNo });
   expect(approved.status(), await approved.text()).toBe(200);
 
   expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(

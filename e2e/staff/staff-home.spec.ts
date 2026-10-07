@@ -258,6 +258,46 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     expect(body.tiles.dean.note).toBeNull();
   });
 
+  test('“เลยกำหนด” ของคิวคำร้องนับจากวันที่อัปโหลดกระดาษ ไม่ใช่วันที่กดยื่น', async ({ request }) => {
+    await clearCalendar();
+    await apiLoginAs(request, 'staff1');
+
+    /**
+     * นักศึกษากดยื่นแล้วเดินเรื่องกระดาษอีกหลายวันก่อนอัปโหลด — ช่วงนั้นไม่ใช่งานค้างของเจ้าหน้าที่
+     * ⛔ ใบที่ยื่นมา 10 วันแต่เพิ่งอัปโหลดวันนี้ ต้องไม่ขึ้นเป็น "เลยกำหนด" ตั้งแต่วันแรกที่เข้าคิว
+     */
+    const justUploaded = await makeIntent('pending_officer_request');
+    const waitingLong = await makeIntent('pending_officer_request');
+    const unknown = await makeIntent('pending_officer_request');
+    await dbExec("UPDATE intent_forms SET created_at = NOW() - INTERVAL '10 days' WHERE form_id = ANY($1)", [
+      [justUploaded, waitingLong],
+    ]);
+    await dbExec('UPDATE intent_forms SET created_at = NULL WHERE form_id = $1', [unknown]);
+    await dbExec(
+      `INSERT INTO intent_stage_events (form_id, stage, entered_at) VALUES
+         ($1, 'request_uploaded', NOW()),
+         ($2, 'request_uploaded', NOW() - INTERVAL '9 days')`,
+      [justUploaded, waitingLong]
+    );
+
+    const body = await home(request);
+    expect(body.tiles.request.count).toBe(3);
+    expect(body.tiles.request.overdue, 'นับเฉพาะใบที่รอเจ้าหน้าที่เกิน 7 วันจริง').toBe(1);
+
+    // รายการคิวต้องตอบตรงกับกองงาน — ที่มาเดียวกัน และหน้าจอไม่นับเอง
+    const rows = (await (
+      await request.get(`${API_URL}/intents?status=pending_officer_request`)
+    ).json()) as { form_id: number; request_wait_days: number | null; request_overdue: boolean }[];
+    const of = (id: number) => rows.find((r) => r.form_id === id)!;
+    expect(of(justUploaded).request_wait_days).toBe(0);
+    expect(of(justUploaded).request_overdue).toBe(false);
+    expect(of(waitingLong).request_wait_days).toBe(9);
+    expect(of(waitingLong).request_overdue).toBe(true);
+    // ไม่รู้ทั้งวันอัปโหลดและวันสร้าง = ไม่ทราบ ไม่ใช่ 0 วัน และไม่ใช่เลยกำหนด
+    expect(of(unknown).request_wait_days).toBeNull();
+    expect(of(unknown).request_overdue).toBe(false);
+  });
+
   test('ไม่มีภาคเรียนที่เปิดใช้งาน = ช่วงว่าง พร้อมบอกว่าต้องไปตั้งที่ไหน', async ({ request }) => {
     await dbExec('UPDATE coop_semesters SET is_active = FALSE');
     await apiLoginAs(request, 'staff1');

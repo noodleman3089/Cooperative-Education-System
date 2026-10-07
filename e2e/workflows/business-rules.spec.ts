@@ -135,6 +135,8 @@ test.describe('Business Rules & Guards E2E Tests', () => {
       {
         data: {
           document_no: 'อว 0656.10/999',
+          // officer-approve บังคับให้บอกว่ากำลังดูไฟล์ไหน — ใบนี้ยังไม่มีไฟล์ ส่งค่าหลอกให้ถึงด่านสถานะ
+          request_form_path: 'request_forms/not-uploaded.pdf',
         },
       }
     );

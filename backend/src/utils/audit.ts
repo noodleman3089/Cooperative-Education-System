@@ -39,6 +39,8 @@ export const AuditAction = {
   INTENT_REQUEST_FORM_UPLOADED: 'intent.request_form_uploaded',
   INTENT_OFFICER_APPROVED: 'intent.officer_approved',
   INTENT_OFFICER_REJECTED: 'intent.officer_rejected',
+  // เจ้าหน้าที่แก้เลขที่หนังสือออกหลังรับคำร้อง (ก่อนคณบดีลงนาม) — detail เก็บเลขเก่าและเลขใหม่
+  INTENT_DOCUMENT_NO_CHANGED: 'intent.document_no_changed',
   // นักศึกษายกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ — ใบถูกลบทั้งใบ บรรทัด audit คือร่องรอยเดียวที่เหลือ
   INTENT_WITHDRAWN: 'intent.withdrawn',
   // นักศึกษาแก้สถานประกอบการของคำร้องก่อนอัปโหลดกระดาษที่ลงนาม (from = to คือแก้ข้อมูลในแถวร่างเดิม)

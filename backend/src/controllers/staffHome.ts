@@ -10,6 +10,7 @@ import {
 } from '../utils/coopCalendar';
 import { sendUnexpectedError } from '../utils/httpError';
 import { semesterLabel } from '../utils/semesterLabel';
+import { REQUEST_OVERDUE_DAYS, requestQueuedAtSql } from '../utils/stageEvents';
 
 /**
  * หน้าแรกของเจ้าหน้าที่งานสหกิจศึกษา — “คิวงานวันนี้” (spec-E ข้อ 4 · SB8)
@@ -35,9 +36,10 @@ export class StaffHomeController {
       const today = await CoopCalendarModel.today();
       const semester = await CoopSemesterModel.findActiveSemester();
 
-      const [tiles, windows] = await Promise.all([
+      const [tiles, windows, missingCoverLetters] = await Promise.all([
         loadTiles(today),
         loadCalendarWindows(semester?.semester_id ?? null, today),
+        loadMissingCoverLetters(),
       ]);
 
       /**
@@ -90,6 +92,8 @@ export class StaffHomeController {
         // ไม่งั้นนักศึกษาภาคเก่าที่ยังฝึก/รอประเมินหายจากหน้าแรกพอเปิดภาคใหม่ (F7)
         other_semesters: otherSemesters,
         season_detail: seasonDetail(season, today, tiles, windows, extra),
+        // ใบที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี — ไม่มีใครเห็นถ้าไม่ขึ้นที่นี่ (แถวแดงบนสุดของหน้าแรก)
+        missing_cover_letters: missingCoverLetters,
         tiles,
         timeline: [
           timelineEntry('intent_submission', 'รับคำร้อง & ออกหนังสือ', windows.intent_submission),
@@ -189,15 +193,20 @@ const isOpen = (s: CalendarStatus): boolean => s === 'open' || s === 'late';
 async function loadTiles(today: string): Promise<Tiles> {
   const res = await query(
     `SELECT
-       -- 1. คำร้องรอออกเลขหนังสือ · เลยกำหนด = ค้างเกิน 7 วัน
-       --    ⛔ created_at เป็น NULL ได้ (แถวก่อน migration 030) = ไม่ทราบอายุ
-       --       ต้อง **ไม่นับ** เป็นเลยกำหนด ไม่ใช่เดาว่าเก่า
+       -- 1. คำร้องรอออกเลขหนังสือ · เลยกำหนด = รอเจ้าหน้าที่เกิน 7 วัน
+       --    นับจาก **วันที่อัปโหลดกระดาษล่าสุด** ไม่ใช่วันที่กดยื่น — นักศึกษาเดินเรื่องกระดาษอยู่หลายวัน
+       --    ก่อนอัปโหลด ช่วงนั้นไม่ใช่งานค้างของเจ้าหน้าที่ (ที่มาเดียวกับ GET /intents และ staffPipeline)
+       --    ⛔ ไม่มีทั้งเหตุการณ์อัปโหลดและ created_at (แถวก่อน migration 030) = ไม่ทราบอายุ
+       --       ต้อง **ไม่นับ** เป็นเลยกำหนด ไม่ใช่เดาว่าเก่า (NULL > 7 ไม่เป็นจริง)
        (SELECT COUNT(*)::int FROM intent_forms
          WHERE status = 'pending_officer_request')                      AS request_count,
-       (SELECT COUNT(*)::int FROM intent_forms
-         WHERE status = 'pending_officer_request'
-           AND created_at IS NOT NULL
-           AND created_at < ($1::date - 7))                             AS request_overdue,
+       (SELECT COUNT(*)::int FROM intent_forms i
+         WHERE i.status = 'pending_officer_request'
+           AND ($1::date - (${requestQueuedAtSql('i')} AT TIME ZONE 'Asia/Bangkok')::date)
+               > ${REQUEST_OVERDUE_DAYS})                               AS request_overdue,
+       (SELECT MAX($1::date - (${requestQueuedAtSql('i')} AT TIME ZONE 'Asia/Bangkok')::date)::int
+          FROM intent_forms i
+         WHERE i.status = 'pending_officer_request')                    AS request_oldest_days,
        (SELECT COUNT(*)::int FROM intent_forms
          WHERE status = 'pending_officer_request' AND submitted_late)   AS request_late,
 
@@ -268,6 +277,35 @@ async function loadTiles(today: string): Promise<Tiles> {
             : `ค้างมา ${deanDays} วัน`,
     },
   };
+}
+
+/**
+ * คำร้องที่เจ้าหน้าที่รับแล้ว (เลขออกแล้ว บริษัทรับรองแล้ว) แต่ **ไม่มีหนังสือขอความอนุเคราะห์** จับคู่อยู่
+ * — เกิดเมื่อการวาด/บันทึกหนังสือล้มหลังรับคำร้อง (ฟอนต์หาย · เขียนดิสก์ไม่ได้ · ข้อมูลหนังสือไม่ครบ)
+ * ใบแบบนี้ไม่อยู่ในคิวไหนเลย: ไม่ใช่คิวเจ้าหน้าที่แล้ว และคณบดีก็ไม่มีอะไรให้ลงนาม
+ *
+ * ⛔ เงื่อนไขจับคู่เดียวกับ LATERAL ทั้งระบบ และเดียวกับที่ `issueCoverLetter` ใช้กันออกซ้ำ
+ */
+async function loadMissingCoverLetters(): Promise<
+  { form_id: number; student_code: string; student_name: string | null; company_name: string; document_no: string | null }[]
+> {
+  const res = await query(
+    `SELECT i.form_id, s.student_code,
+            NULLIF(TRIM(CONCAT_WS(' ', s.first_name, s.last_name)), '') AS student_name,
+            c.name_th AS company_name, i.officer_document_no AS document_no
+       FROM intent_forms i
+       JOIN students s ON s.student_id = i.student_id
+       JOIN companies c ON c.company_id = i.company_id
+      WHERE i.status = 'approved_by_dept_head'
+        AND NOT EXISTS (
+          SELECT 1 FROM official_documents d
+           WHERE d.student_id = i.student_id AND d.company_id = i.company_id
+             AND d.type = 'cover_letter'
+             AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+        )
+      ORDER BY i.form_id`
+  );
+  return res.rows;
 }
 
 /* ── ช่วงเวลาจากปฏิทิน ─────────────────────────────────────────────── */

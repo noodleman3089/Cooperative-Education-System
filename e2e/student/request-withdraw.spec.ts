@@ -6,6 +6,7 @@ import { API_URL } from '../helpers/env';
 import { dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
+import { officerApprove } from '../helpers/intent';
 
 /**
  * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — `POST /api/intents/:id/withdraw` (เจ้าของสั่ง 2026-10-06)
@@ -149,10 +150,9 @@ test.describe('ยกเลิกคำร้องก่อนเจ้าห�
 
     // เจ้าหน้าที่กดรับใบที่ถูกยกเลิกไปแล้วไม่ได้
     await apiLoginAs(request, 'staff1');
-    const approve = await request.patch(`${API_URL}/intents/${formId}/officer-approve`, {
-      data: { document_no: 'อว 0000/1' },
-    });
+    const approve = await officerApprove(request, formId, { document_no: 'อว 0000/1' });
     expect(approve.status()).toBe(400);
+    expect((await approve.json()).message).toContain('ไม่พบคำร้อง');
 
     // (ข) บริษัทที่ student2 กรอกเองและยังไม่รับรอง แต่มี**ใบของภาคอื่น**อ้างอยู่ → แถวบริษัทต้องอยู่
     const { formId: form2, companyId: shared } = await seedSelfFoundIntent();

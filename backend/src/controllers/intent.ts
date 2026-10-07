@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import {
   IntentFormModel,
+  IntentConflictError,
   COMPANY_MAIL_LIMIT,
   LATE_REASON_MIN_LENGTH,
   LateStamp,
@@ -25,6 +26,11 @@ import {
   fetchCoverLetterData,
   toCoverLetterData,
 } from '../utils/coverLetterPdf';
+import {
+  CoverLetterConflictError,
+  coverLetterFailureReason,
+  issueCoverLetter,
+} from '../utils/coverLetterIssue';
 import { buildAcceptanceFormPdf } from '../utils/acceptanceFormPdf';
 import {
   buildDispatchLetterPdf,
@@ -33,7 +39,7 @@ import {
 } from '../utils/dispatchLetterPdf';
 import { OfficialDocumentModel } from '../models/officialDocument';
 import { AuditAction, writeAudit } from '../utils/audit';
-import { recordStageEvent } from '../utils/stageEvents';
+import { REQUEST_OVERDUE_DAYS, recordStageEvent, requestQueuedAtSql } from '../utils/stageEvents';
 import {
   IssuedAcceptanceLink,
   createAcceptanceLinkToken,
@@ -43,6 +49,70 @@ import {
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
 
+
+/** ความกว้างของ `intent_forms.officer_document_no` และ `official_documents.document_number` (migration 051) */
+const DOCUMENT_NO_MAX_LENGTH = 100;
+
+/** เลขที่หนังสือออกจาก body — ว่างหรือยาวเกินตอบ 400 ให้เองแล้วคืน null */
+function parseDocumentNo(raw: unknown, res: Response): string | null {
+  const documentNo = typeof raw === 'string' ? raw.trim() : '';
+  if (!documentNo) {
+    res.status(400).json({ message: 'กรุณากรอกเลขที่หนังสือออก' });
+    return null;
+  }
+  if (documentNo.length > DOCUMENT_NO_MAX_LENGTH) {
+    res.status(400).json({ message: `เลขที่หนังสือออกยาวเกิน ${DOCUMENT_NO_MAX_LENGTH} ตัวอักษร` });
+    return null;
+  }
+  return documentNo;
+}
+
+/**
+ * ของที่แผงรับคำร้องแสดงให้เจ้าหน้าที่เพิ่มจากตัวใบ: ส่งมาเป็นครั้งที่เท่าไร · ตีกลับครั้งล่าสุดเพราะอะไร ·
+ * นักศึกษาที่ส่งช้ายื่นบันทึกข้อความชี้แจงแล้วหรือยัง
+ *
+ * "ส่งครั้งที่ N" = จำนวนครั้งที่ถูกตีกลับ + 1 — ⛔ ไม่นับจาก `request_uploaded` เพราะการเปลี่ยนไฟล์ระหว่างรอก็สร้างเหตุการณ์นั้น
+ * การตีกลับก่อน migration 051 ไม่มีเหตุผลเก็บไว้ = `last_return` เป็น null (หน้าจอไม่แสดง ห้ามแต่งข้อความ)
+ */
+async function loadOfficerReview(formId: number) {
+  const [returns, memo] = await Promise.all([
+    query(
+      `SELECT e.entered_at, e.note,
+              NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS actor_name,
+              COUNT(*) OVER ()::int AS return_count
+         FROM intent_stage_events e
+         LEFT JOIN personnel p ON p.personnel_id = e.actor_id
+        WHERE e.form_id = $1 AND e.stage = 'request_returned'
+        ORDER BY e.entered_at DESC, e.event_id DESC
+        LIMIT 1`,
+      [formId]
+    ),
+    query(
+      `SELECT memo_id, created_at FROM student_memos
+        WHERE intent_form_id = $1 AND memo_type = 'late_submission'
+        ORDER BY created_at DESC LIMIT 1`,
+      [formId]
+    ),
+  ]);
+  const last = returns.rows[0] as
+    | { entered_at: string; note: string | null; actor_name: string | null; return_count: number }
+    | undefined;
+  return {
+    submission_no: (last?.return_count ?? 0) + 1,
+    last_return:
+      last && last.note
+        ? { returned_at: last.entered_at, by_name: last.actor_name, reason: last.note }
+        : null,
+    late_memo: (memo.rows[0] as { memo_id: number; created_at: string } | undefined) ?? null,
+  };
+}
+
+/** 409 พร้อม `code` เมื่อคำขอชนกับสภาพปัจจุบันของใบ — คืน true ถ้าตอบไปแล้ว */
+function sendIntentConflict(res: Response, error: unknown): boolean {
+  if (!(error instanceof IntentConflictError)) return false;
+  res.status(409).json({ message: error.message, code: error.code, ...error.extra });
+  return true;
+}
 
 /** อีเมลหนึ่งที่อยู่ล้วน — ไม่รับรูปแบบ "ชื่อ <a@b.c>" หรืออักขระที่ใช้ต่อหลายที่อยู่ */
 const SINGLE_EMAIL_REGEX = /^[^\s@,;<>()"[\]\\]+@[^\s@,;<>()"[\]\\]+\.[^\s@,;<>()"[\]\\]+$/;
@@ -336,6 +406,16 @@ export class IntentFormController {
                s.parent_name, s.parent_phone, c.phone as company_phone, c.contact_person as company_contact_person,
                i.start_date, i.reject_reason,
                i.submitted_late, i.late_reason,
+               -- คิวคำร้องของเจ้าหน้าที่: รอมากี่วัน (นับจากอัปโหลดกระดาษล่าสุด) และเลยกำหนดหรือยัง
+               -- ที่มาเดียวกับกองงานบนหน้าแรก (requestQueuedAtSql) · NULL = ไม่ทราบ ห้ามให้หน้าจอนับเอง
+               CASE WHEN i.status = 'pending_officer_request' THEN
+                 ((NOW() AT TIME ZONE 'Asia/Bangkok')::date
+                   - (${requestQueuedAtSql('i')} AT TIME ZONE 'Asia/Bangkok')::date)::int
+               END AS request_wait_days,
+               (i.status = 'pending_officer_request' AND COALESCE(
+                 ((NOW() AT TIME ZONE 'Asia/Bangkok')::date
+                   - (${requestQueuedAtSql('i')} AT TIME ZONE 'Asia/Bangkok')::date) > ${REQUEST_OVERDUE_DAYS},
+                 FALSE)) AS request_overdue,
                i.acceptance_due_date, i.acceptance_submitted_late,
                i.acceptance_signer_name, i.acceptance_signer_position, i.acceptance_signed_date,
                i.dispatch_document_no, i.end_date, men.name AS mentor_name,
@@ -423,7 +503,12 @@ export class IntentFormController {
 
       const result = await query(
         `SELECT i.form_id, i.status, i.start_date, i.acceptance_evidence_path,
-                s.student_id, s.student_code, s.cumulative_gpa, s.resume_file,
+                -- แผงรับคำร้องของเจ้าหน้าที่ถามเส้นนี้ทุก 2 วินาทีระหว่างเปิดอยู่ เพื่อรู้ว่านักศึกษาเปลี่ยนไฟล์ (path เปลี่ยน)
+                -- หรือยกเลิกคำร้อง (404) — ด่านจริงอยู่ที่ officer-approve ซึ่งเทียบ path ภายใต้ FOR UPDATE
+                i.request_form_path, i.submitted_late, i.late_reason,
+                (SELECT MAX(e.entered_at) FROM intent_stage_events e
+                  WHERE e.form_id = i.form_id AND e.stage = 'request_uploaded') AS request_uploaded_at,
+                s.student_id, s.student_code, s.year_level, s.cumulative_gpa, s.resume_file,
                 m_maj.major_name_th, m_maj.major_code, f.faculty_name_th,
                 u_std.email as student_email,
                 c.company_id, c.name_th as company_name_th, c.address as company_address,
@@ -471,6 +556,12 @@ export class IntentFormController {
       if (!isAuthorized) {
         res.status(403).json({ message: 'Forbidden. You do not have access to view this intent form.' });
         return;
+      }
+
+      // ⛔ ประวัติการตีกลับ (เหตุผล + ชื่อเจ้าหน้าที่ที่กด) และสถานะบันทึกข้อความชี้แจง ให้ **เจ้าหน้าที่เท่านั้น**
+      //    เส้นนี้หลายบทบาทใช้ร่วม จึงเติมเฉพาะเมื่อผู้เรียกเป็น staff (หลักการ SEC-10: ตัดฟิลด์ตามบทบาท)
+      if (roles.includes('staff')) {
+        row.officer_review = await loadOfficerReview(formId);
       }
 
       res.status(200).json(row);
@@ -678,42 +769,37 @@ export class IntentFormController {
         return;
       }
 
-      const { document_no } = req.body ?? {};
-      if (typeof document_no !== 'string' || !document_no.trim()) {
-        res.status(400).json({ message: 'กรุณากรอกเลขที่หนังสือออก' });
+      const documentNo = parseDocumentNo(req.body?.document_no, res);
+      if (documentNo === null) return;
+
+      // ไฟล์ที่หน้าจอของเจ้าหน้าที่กำลังแสดง — โมเดลเทียบกับค่าในแถวภายใต้ FOR UPDATE (ไม่ตรง = 409)
+      // บังคับส่ง: ถ้าปล่อยว่างได้ ด่าน "รับเฉพาะไฟล์ที่เห็น" จะหายเงียบเมื่อหน้าจอลืมส่ง
+      const shownPath = req.body?.request_form_path;
+      if (typeof shownPath !== 'string' || !shownPath) {
+        res.status(400).json({
+          message: 'ระบบไม่ทราบว่าคุณกำลังดูไฟล์คำร้องฉบับไหน กรุณาปิดแผงแล้วเปิดคำร้องนี้ใหม่',
+        });
         return;
       }
 
-      const { studentId, companyId } = await IntentFormModel.officerApproveRequest(
-        formId,
-        req.user.userId,
-        { documentNo: document_no.trim() }
-      );
+      const { studentId } = await IntentFormModel.officerApproveRequest(formId, req.user.userId, {
+        documentNo,
+        shownRequestFormPath: shownPath,
+        allowDuplicateNo: req.body?.allow_duplicate_no === true,
+      });
 
       // ออกหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) แล้วส่งเข้าคิวคณบดี
       //
       // ทำ *หลัง* ทรานแซกชันจบโดยตั้งใจ — การเขียนไฟล์ลงดิสก์ย้อนกลับไม่ได้พร้อมกับ
       // ฐานข้อมูล ถ้าออกเอกสารล้มเหลว คำร้องที่ผ่านแล้วต้องไม่ย้อนกลับไปหานักศึกษา
-      // เจ้าหน้าที่กดออกใหม่ได้จากหน้าเดิม (ดูข้อความ error)
-      const letterRow = await fetchCoverLetterData(formId);
-      if (letterRow) {
-        const pdfBytes = await buildCoverLetterPdf(toCoverLetterData(letterRow));
-        const fileName = `cover_letter_${formId}_${Date.now()}.pdf`;
-        const relativePath = path.posix.join('secure_private', 'documents', fileName);
-        const absolutePath = path.join(process.cwd(), relativePath);
-
-        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-        fs.writeFileSync(absolutePath, pdfBytes);
-
-        await OfficialDocumentModel.create({
-          document_number: document_no.trim(),
-          type: 'cover_letter',
-          student_id: studentId,
-          company_id: companyId,
-          // ไม่มี template_id — หนังสือถูกวาดจากโค้ด ไม่ได้มาจากแม่แบบ (migration 005)
-          generated_file_path: relativePath,
-          status: 'pending_sign',
-        });
+      // ⛔ ล้มตรงนี้ **ห้ามตอบเป็นความล้มเหลวของการรับ** — ใบผ่านแล้วจริง เลขออกแล้ว บริษัทรับรองแล้ว
+      //    ตอบ 200 พร้อมธงว่าหนังสือยังไม่ออก หน้าจอขึ้นปุ่ม "สร้างหนังสืออีกครั้ง" (`/cover-letter/reissue`)
+      let letterError: string | null = null;
+      try {
+        await issueCoverLetter(formId);
+      } catch (error) {
+        console.error(`Cover letter not issued after approving form ${formId}:`, error);
+        letterError = coverLetterFailureReason(error);
       }
 
       writeAudit(
@@ -722,16 +808,127 @@ export class IntentFormController {
           entityType: 'intent_form',
           entityId: formId,
           subjectId: studentId,
-          detail: { document_no: document_no.trim() },
+          detail: { document_no: documentNo, cover_letter_issued: letterError === null },
         },
         req
       ).catch(() => undefined);
 
       notifyStudentStatusChange(formId, 'approved_by_dept_head').catch(console.error);
 
-      res.status(200).json({ message: 'รับคำร้องเรียบร้อยแล้ว', form_id: formId });
+      res.status(200).json({
+        message:
+          letterError === null
+            ? 'รับคำร้องเรียบร้อยแล้ว'
+            : 'รับคำร้องแล้ว แต่ยังสร้างหนังสือขอความอนุเคราะห์ไม่สำเร็จ',
+        form_id: formId,
+        cover_letter_issued: letterError === null,
+        cover_letter_error: letterError,
+      });
     } catch (error) {
+      if (sendIntentConflict(res, error)) return;
       res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถรับคำร้องได้') });
+    }
+  }
+
+  /**
+   * สร้างหนังสือขอความอนุเคราะห์อีกครั้ง — ใช้เมื่อรับคำร้องสำเร็จแต่การวาด/บันทึกหนังสือล้ม
+   * Route: POST /api/intents/:id/cover-letter/reissue
+   * Access: staff
+   *
+   * ทำได้เมื่อใบอยู่ `approved_by_dept_head` **และยังไม่มี** แถวหนังสือที่จับคู่กับใบ · มีอยู่แล้ว = 409
+   * (ไม่ใช่ทางวาดหนังสือที่มีอยู่ใหม่ — เลขผิดให้ใช้ `PATCH /:id/document-no`)
+   */
+  static async reissueCoverLetter(req: Request, res: Response): Promise<void> {
+    try {
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const { docId } = await issueCoverLetter(formId, { onlyIfMissing: true });
+
+      writeAudit(
+        {
+          action: AuditAction.DOCUMENT_GENERATED,
+          entityType: 'official_document',
+          entityId: docId,
+          detail: { type: 'cover_letter', form_id: formId, reissued: true },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message: 'สร้างหนังสือขอความอนุเคราะห์แล้ว รอคณบดีลงนาม',
+        form_id: formId,
+        doc_id: docId,
+      });
+    } catch (error) {
+      if (error instanceof CoverLetterConflictError) {
+        res.status(error.status).json({ message: error.message });
+        return;
+      }
+      console.error('Reissue Cover Letter Error:', error);
+      res.status(500).json({
+        message: `สร้างหนังสือไม่สำเร็จ — ${coverLetterFailureReason(error)}`,
+      });
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม
+   * Route: PATCH /api/intents/:id/document-no
+   * Access: staff
+   *
+   * ⛔ ไม่ออกเลขให้อัตโนมัติและไม่เปลี่ยนลำดับขั้น — ยังไม่รู้ว่าเลขของคณะมาจากระบบไหน (คำถามค้างกับคณะ)
+   */
+  static async changeOfficerDocumentNo(req: Request, res: Response): Promise<void> {
+    try {
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+      const documentNo = parseDocumentNo(req.body?.document_no, res);
+      if (documentNo === null) return;
+
+      const { studentId, previousNo } = await IntentFormModel.changeOfficerDocumentNo(formId, {
+        documentNo,
+        allowDuplicateNo: req.body?.allow_duplicate_no === true,
+      });
+
+      // ไฟล์ฉบับยังไม่ลงนามมีเลขเก่าพิมพ์อยู่ — วาดใหม่หลัง COMMIT (ฉบับที่คณบดีลงนามวาดจากฐานอีกรอบอยู่แล้ว)
+      let redrawError: string | null = null;
+      try {
+        await issueCoverLetter(formId);
+      } catch (error) {
+        console.error(`Cover letter not redrawn after changing document no of form ${formId}:`, error);
+        redrawError = coverLetterFailureReason(error);
+      }
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_DOCUMENT_NO_CHANGED,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: studentId,
+          detail: { from: previousNo, to: documentNo },
+        },
+        req
+      ).catch(() => undefined);
+
+      res.status(200).json({
+        message:
+          redrawError === null
+            ? 'แก้เลขที่หนังสือแล้ว'
+            : `แก้เลขที่หนังสือแล้ว แต่ไฟล์ตัวอย่างยังเป็นเลขเดิม — ${redrawError}`,
+        form_id: formId,
+        document_no: documentNo,
+        cover_letter_redrawn: redrawError === null,
+      });
+    } catch (error) {
+      if (sendIntentConflict(res, error)) return;
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถแก้เลขที่หนังสือได้') });
     }
   }
 
@@ -759,7 +956,11 @@ export class IntentFormController {
         return;
       }
 
-      const { studentId, previousPath } = await IntentFormModel.officerRejectRequest(formId, reason);
+      const { studentId, previousPath } = await IntentFormModel.officerRejectRequest(
+        formId,
+        reason,
+        req.user.userId
+      );
 
       if (previousPath) {
         const abs = path.join(process.cwd(), 'uploads', previousPath);
@@ -905,13 +1106,12 @@ export class IntentFormController {
           .json({ message: 'กรุณากรอกเลขที่หนังสือส่งตัว และวันสิ้นสุดการปฏิบัติงาน' });
         return;
       }
-      // ⛔ **สองคอลัมน์ที่เก็บเลขนี้กว้างไม่เท่ากัน** — `intent_forms.dispatch_document_no`
-      //    เป็น VARCHAR(100) แต่ `official_documents.document_number` เป็น VARCHAR(50)
-      //    เลขยาว 51-100 จึงผ่านการอัปเดตใบความจำนงแล้วไปตกตอน INSERT เอกสาร
-      //    ผู้ใช้จะได้ข้อความ "ข้อมูลที่กรอกยาวเกินกำหนด" ที่ไม่บอกว่าช่องไหน
-      //    → กันที่ค่าแคบกว่าตั้งแต่ต้นทาง พร้อมบอกให้ตรงจุด (เจอตอนเขียนเทสต์ D6 รอบ 61)
-      if (documentNo.length > 50) {
-        res.status(400).json({ message: 'เลขที่หนังสือส่งตัวยาวเกิน 50 ตัวอักษร' });
+      // กันที่ต้นทางพร้อมบอกให้ตรงจุด — ปล่อยไปถึงฐานผู้ใช้จะได้ "ข้อมูลที่กรอกยาวเกินกำหนด" ที่ไม่บอกว่าช่องไหน
+      // (เดิมกันที่ 50 เพราะ `official_documents.document_number` แคบกว่า `dispatch_document_no` · migration 051 ขยายให้เท่ากันแล้ว)
+      if (documentNo.length > DOCUMENT_NO_MAX_LENGTH) {
+        res.status(400).json({
+          message: `เลขที่หนังสือส่งตัวยาวเกิน ${DOCUMENT_NO_MAX_LENGTH} ตัวอักษร`,
+        });
         return;
       }
       // วันที่เป็นสตริง YYYY-MM-DD ล้วน — ห้าม new Date() แล้วส่งต่อ (เลื่อนวันตาม timezone)

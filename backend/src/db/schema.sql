@@ -572,7 +572,9 @@ CREATE TABLE IF NOT EXISTS document_templates (
 -- 9. Official Documents Table
 CREATE TABLE IF NOT EXISTS official_documents (
     doc_id SERIAL PRIMARY KEY,
-    document_number VARCHAR(50),
+    -- กว้างเท่า intent_forms.officer_document_no / dispatch_document_no (migration 051) —
+    -- เดิม 50 เลขยาว 51–100 ผ่านขั้นรับคำร้องแล้วล้มตอนบันทึกหนังสือ
+    document_number VARCHAR(100),
     type VARCHAR(50) NOT NULL, -- e.g., 'cover_letter', 'transfer_letter', 'dispatch_letter'
     student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
     company_id INT NOT NULL REFERENCES companies(company_id) ON DELETE RESTRICT,
@@ -620,7 +622,11 @@ CREATE TABLE IF NOT EXISTS intent_stage_events (
     event_id SERIAL PRIMARY KEY,
     form_id INT NOT NULL REFERENCES intent_forms(form_id) ON DELETE CASCADE,
     stage VARCHAR(30) NOT NULL,
-    entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    entered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    -- ใช้กับ `request_returned` เท่านั้น (migration 051): เหตุผลที่ตีกลับ + เจ้าหน้าที่ที่กด
+    -- ว่างได้ทั้งคู่ — เหตุการณ์อื่นไม่ใช้ และแถวเก่าไม่มีข้อมูล (หน้าจอไม่แสดง ห้ามแต่ง)
+    note TEXT,
+    actor_id INT REFERENCES users(user_id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_intent_stage_events_form ON intent_stage_events (form_id, stage, entered_at DESC);
 

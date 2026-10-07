@@ -7,6 +7,7 @@ import { API_URL } from '../helpers/env';
 import { dbExec, dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
+import { officerApprove } from '../helpers/intent';
 
 /**
  * กติกาของการอัปโหลดแบบคำร้องที่ลงนาม (เอกสารหมายเลข 1) ที่เจ้าของเคาะ 2026-10-06
@@ -136,9 +137,7 @@ test.describe('กติกาอัปโหลดแบบคำร้อง�
     await expect.poll(() => fs.existsSync(firstFile), { timeout: 5000 }).toBe(false);
 
     await apiLoginAs(request, 'staff1');
-    expect(
-      (await request.patch(`${API_URL}/intents/${formId}/officer-approve`, { data: { document_no: 'อว 0000/9' } })).status()
-    ).toBe(200);
+    expect((await officerApprove(request, formId, { document_no: 'อว 0000/9' })).status()).toBe(200);
     await apiLoginAs(request, 'student2');
     const afterApprove = await upload(request, formId);
     expect(afterApprove.status()).toBe(400);
