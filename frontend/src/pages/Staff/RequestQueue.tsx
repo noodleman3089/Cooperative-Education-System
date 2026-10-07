@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -9,7 +9,8 @@ import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
-import { Search, FileText, ExternalLink, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Search, ExternalLink, AlertTriangle } from 'lucide-react';
+import RequestReviewPanel from './RequestReviewPanel';
 
 export interface RequestFormRow {
   form_id: number;
@@ -32,30 +33,9 @@ export interface RequestFormRow {
   late_reason?: string | null;
   created_at?: string | null;
   start_date?: string | null;
-}
-
-export interface RequestDetailData {
-  form_id: number;
-  student_id: number;
-  student_code?: string;
-  first_name?: string | null;
-  last_name?: string | null;
-  cumulative_gpa?: number | string | null;
-  year_level?: number | string | null;
-  major_name_th?: string | null;
-  faculty_name_th?: string | null;
-  company_id: number;
-  company_name_th?: string;
-  company_address?: string | null;
-  company_district?: string | null;
-  company_province?: string | null;
-  company_postal_code?: string | null;
-  company_contact_person?: string | null;
-  company_contact_position?: string | null;
-  start_date?: string | null;
-  request_form_path?: string | null;
-  submitted_late?: boolean;
-  late_reason?: string | null;
+  /** รอเจ้าหน้าที่มากี่วัน นับจากอัปโหลดกระดาษล่าสุด — เซิร์ฟเวอร์นับให้ · null = ไม่ทราบ (ห้ามนับเองที่หน้าจอ) */
+  request_wait_days?: number | null;
+  request_overdue?: boolean;
 }
 
 export interface AcceptanceRow {
@@ -105,17 +85,6 @@ const addDays = (iso: string, days: number): string => {
   return new Date(Date.UTC(y, m - 1, d) + days * 86_400_000).toISOString().slice(0, 10);
 };
 
-const REJECT_PRESET_CHIPS = [
-  'นักศึกษายังไม่ลงชื่อ',
-  'ลายเซ็นอาจารย์ที่ปรึกษายังไม่ครบ',
-  'ลายเซ็นหัวหน้าสาขาวิชายังไม่ครบ',
-  'ช่องความเห็นระบุว่าไม่อนุญาต',
-  'ชื่อ/ที่อยู่สถานประกอบการไม่ตรงกับหนังสือ',
-  'ไฟล์ที่แนบไม่ใช่หน้า 1 ของแบบคำร้อง',
-  'ไฟล์ที่แนบอ่านไม่ออก',
-  'อื่น ๆ',
-];
-
 interface RequestQueueProps {
   onDataChanged?: () => void;
   showAllIfNoQueueFilter?: boolean;
@@ -125,9 +94,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const [searchParams, setSearchParams] = useSearchParams();
   const queueParam = searchParams.get('queue'); // 'request' | 'acceptance' | 'dispatch' | null
   const formParam = searchParams.get('form'); // e.g. '41'
-
-  /** ใบที่เปิดแผงตรวจอยู่ตอนนี้ — กันไม่ให้โหลดคิวรอบถัดไปล้างฟอร์มที่พิมพ์ค้างไว้ */
-  const openedFormRef = useRef<number | null>(null);
 
   const [requestQueue, setRequestQueue] = useState<RequestFormRow[]>([]);
   const [acceptanceQueue, setAcceptanceQueue] = useState<AcceptanceRow[]>([]);
@@ -141,14 +107,9 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
   const [searchQuery, setSearchQuery] = useState('');
   const [onlyLate, setOnlyLate] = useState(false);
 
-  // Modal Review States - Request (E1)
+  // แผงรับคำร้อง (E1) — ของที่เจ้าหน้าที่พิมพ์ค้าง (เลขที่หนังสือ · เหตุผลตีกลับ) อยู่ใน `RequestReviewPanel`
+  // ไม่ได้อยู่ที่นี่ การโหลดคิวซ้ำจึงล้างมันไม่ได้
   const [reviewingRequest, setReviewingRequest] = useState<RequestFormRow | null>(null);
-  const [requestDetail, setRequestDetail] = useState<RequestDetailData | null>(null);
-  const [officerForm, setOfficerForm] = useState({ document_no: '' });
-  const [officerBusy, setOfficerBusy] = useState(false);
-  const [confirmingApprove, setConfirmingApprove] = useState(false);
-  const [rejectingRequest, setRejectingRequest] = useState(false);
-  const [rejectReason, setRejectReason] = useState('');
 
   // Modal Review States - Acceptance
   const [reviewingAcceptance, setReviewingAcceptance] = useState<AcceptanceRow | null>(null);
@@ -183,27 +144,13 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
 
       // Auto-open modal if ?form= is specified in URL
       //
-      // ⛔ เฉพาะตอนโหลดจริงเท่านั้น — การเปิดแผงตรวจตั้ง `?form=` ไว้บน URL แล้ว poll
-      //    เบื้องหลัง (ทุก 10 วินาที) วิ่งเข้าบล็อกนี้ซ้ำ **แล้วล้างฟอร์มผู้ลงนามเป็นค่าว่าง**
-      //    เจ้าหน้าที่ที่พิมพ์ชื่อผู้ลงนามค้างไว้จึงเสียข้อความที่พิมพ์ทุก 10 วินาที
-      //    และปุ่ม "รับคำร้อง" กลับไป disabled เอง
+      // ⛔ เฉพาะตอนโหลดจริงเท่านั้น — การโหลดเบื้องหลังต้องไม่เปิด/รีเซ็ตแผงที่ผู้ใช้กำลังใช้อยู่
       if (formParam && !isBackground) {
         const formIdNum = Number(formParam);
         if (queueParam === 'request' || !queueParam) {
           const matched = reqRows.find((r) => r.form_id === formIdNum);
-          // ⛔ เปิดอยู่แล้ว = ไม่แตะฟอร์ม · การกดเปิดแผงตั้ง `?form=` ซึ่งทำให้ loadQueues
-          //    วิ่งอีกรอบ (formParam เป็น dependency) แล้วล้างชื่อผู้ลงนามที่เพิ่งพิมพ์
-          if (matched && openedFormRef.current !== formIdNum) {
-            openedFormRef.current = formIdNum;
-            setReviewingRequest(matched);
-            api
-              .get(`/intents/${matched.form_id}`)
-              .then(setRequestDetail)
-              .catch((err) =>
-                setError(getErrorMessage(err, 'ไม่สามารถเปิดรายละเอียดคำร้องได้'))
-              );
-            setOfficerForm({ document_no: '' });
-          }
+          // แผงผูก key กับ form_id — ตั้งแถวเดิมซ้ำไม่ทำให้ของที่พิมพ์ค้างในแผงหาย
+          if (matched) setReviewingRequest(matched);
         }
         if (queueParam === 'acceptance') {
           const matched = accRows.find((r) => r.form_id === formIdNum);
@@ -248,13 +195,8 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
     );
   };
 
-  const openRequestReview = async (row: RequestFormRow) => {
-    openedFormRef.current = row.form_id;
+  const openRequestReview = (row: RequestFormRow) => {
     setReviewingRequest(row);
-    setRequestDetail(null);
-    setOfficerForm({ document_no: '' });
-    setRejectReason('');
-    setRejectingRequest(false);
     setError(null);
     setSuccess(null);
     setSearchParams(
@@ -266,19 +208,10 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       },
       { replace: false }
     );
-
-    try {
-      const detail = await api.get(`/intents/${row.form_id}`);
-      setRequestDetail(detail);
-    } catch {
-      // Fallback cleanly to basic row data
-    }
   };
 
   const closeRequestReview = () => {
-    openedFormRef.current = null;
     setReviewingRequest(null);
-    setRequestDetail(null);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -287,57 +220,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       },
       { replace: false }
     );
-  };
-
-  const submitOfficerApprove = async () => {
-    if (!reviewingRequest) return;
-    setOfficerBusy(true);
-    setError(null);
-    try {
-      await api.patch(`/intents/${reviewingRequest.form_id}/officer-approve`, officerForm);
-      setSuccess(`รับคำร้องของ ${reviewingRequest.student_code || ''} แล้ว เลขที่หนังสือ ${officerForm.document_no}`);
-      setConfirmingApprove(false);
-      closeRequestReview();
-      await loadQueues(true);
-      onDataChanged?.();
-    } catch (err) {
-      setConfirmingApprove(false);
-      setError(getErrorMessage(err, 'ไม่สามารถรับคำร้องได้'));
-    } finally {
-      setOfficerBusy(false);
-    }
-  };
-
-  const submitOfficerReject = async () => {
-    if (!reviewingRequest || !rejectReason.trim()) return;
-    setOfficerBusy(true);
-    setError(null);
-    try {
-      await api.patch(`/intents/${reviewingRequest.form_id}/officer-reject`, {
-        reason: rejectReason.trim(),
-      });
-      setSuccess(`ตีกลับคำร้องของ ${reviewingRequest.student_code || ''} แล้ว`);
-      closeRequestReview();
-      await loadQueues(true);
-      onDataChanged?.();
-    } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถตีกลับคำร้องได้'));
-    } finally {
-      setOfficerBusy(false);
-    }
-  };
-
-  const handleApplyPresetChip = (chip: string) => {
-    if (chip === 'อื่น ๆ') {
-      setRejectReason((prev) => prev.trim());
-      return;
-    }
-    setRejectReason((prev) => {
-      const clean = prev.trim();
-      if (!clean) return chip;
-      if (clean.includes(chip)) return clean;
-      return `${clean}\n${chip}`;
-    });
   };
 
   const openAcceptanceReview = (row: AcceptanceRow) => {
@@ -447,8 +329,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
       setDispatchBusy(false);
     }
   };
-
-  const officerFormIncomplete = !officerForm.document_no.trim();
 
   // Filter lists based on search & late toggles
   const filteredRequests = useMemo(() => {
@@ -843,340 +723,23 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         </div>
       )}
 
-      {/* ══ ตรวจคำร้องขอหนังสือ (เอกสารหมายเลข 1) — E1 แผงรับคำร้อง ด่าน SEC-04 ══ */}
+      {/* ══ แผงรับคำร้อง (เอกสารหมายเลข 1) — แถวล่าสุดของคิวถ้ายังอยู่ ไม่งั้นใช้แถวตอนกดเปิด ══ */}
       {reviewingRequest && (
-        <Modal
+        <RequestReviewPanel
+          key={reviewingRequest.form_id}
+          row={requestQueue.find((r) => r.form_id === reviewingRequest.form_id) ?? reviewingRequest}
           onClose={closeRequestReview}
-          title={`แผงรับคำร้อง — เอกสารหมายเลข 1 (คำร้องที่ ${reviewingRequest.form_id})`}
-          size="5xl"
-          closeOnBackdrop={false}
-        >
-          <ModalBody>
-            <div className="space-y-4">
-              <AlertBanner variant="error" message={error} />
-
-              {/* Student Header Summary */}
-              <div className="rounded-xl border border-gray-200 bg-gray-50/80 p-4 dark:border-gray-800 dark:bg-gray-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-xs font-bold text-brand-blue dark:text-blue-400">
-                    เอกสารหมายเลข 1 · คำร้องที่ {reviewingRequest.form_id}
-                  </span>
-                  <h3 className="text-base font-extrabold text-gray-900 dark:text-white mt-0.5">
-                    {[reviewingRequest.first_name, reviewingRequest.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'} · {reviewingRequest.student_code || '-'}
-                  </h3>
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
-                    {requestDetail?.major_name_th || reviewingRequest.major_name_th || 'สาขาวิชา'} 
-                    {requestDetail?.year_level ? ` · ชั้นปีที่ ${requestDetail.year_level}` : ''}
-                  </span>
-                </div>
-                {reviewingRequest.submitted_late ? (
-                  <span className="self-start sm:self-auto rounded-full bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
-                    ยื่นช่วงผ่อนผัน
-                  </span>
-                ) : (
-                  <span className="self-start sm:self-auto rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-800 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800">
-                    ในกำหนด
-                  </span>
-                )}
-              </div>
-
-              {/* Two Column Layout matching RequestOfficerPanel.dc.html */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-                {/* ══ ฝั่งซ้าย: กระดาษที่นักศึกษาอัปโหลด + ข้อมูลในคำร้อง (SEC-05 อ่านอย่างเดียว) ══ */}
-                <div className="space-y-4">
-                  {/* กล่องไฟล์กระดาษ */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50 space-y-3 shadow-sm">
-                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
-                      กระดาษที่นักศึกษาอัปโหลดกลับมา
-                    </span>
-                    <div className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/60">
-                      <div className="flex items-center gap-3 overflow-hidden">
-                        <FileText className="h-6 w-6 text-red-600 shrink-0" />
-                        <div className="overflow-hidden">
-                          <span className="block truncate text-xs font-bold text-gray-800 dark:text-gray-200">
-                            {reviewingRequest.request_form_path
-                              ? reviewingRequest.request_form_path.split('/').pop()
-                              : `request-form-${reviewingRequest.form_id}.pdf`}
-                          </span>
-                          <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                            เอกสารลงนามคำร้องขอความอนุเคราะห์
-                          </span>
-                        </div>
-                      </div>
-                      {reviewingRequest.request_form_path ? (
-                        <a
-                          href={`${API_BASE_URL}/files/${reviewingRequest.request_form_path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          data-testid="open-uploaded-request-form"
-                          className="inline-flex items-center gap-1 shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700 shadow-sm"
-                        >
-                          เปิดดู
-                          <ExternalLink className="h-3 w-3" />
-                        </a>
-                      ) : (
-                        <span className="text-xs text-amber-700 dark:text-amber-400">ยังไม่มีไฟล์</span>
-                      )}
-                    </div>
-                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      ต้องเปิดอ่านก่อนกรอกชื่อผู้ลงนาม — ชื่อสองคนนี้ถูกพิมพ์ลงหนังสือราชการที่คณบดีเซ็น ระบบไม่มีทางตรวจแทนคุณได้
-                    </p>
-                  </div>
-
-                  {/* กล่องข้อมูลที่นักศึกษากรอกในคำร้อง (SEC-05) */}
-                  <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800/50 space-y-3 shadow-sm">
-                    <span className="text-xs font-bold text-gray-800 dark:text-gray-200 block">
-                      ข้อมูลที่นักศึกษากรอกในคำร้อง (SEC-05 อ่านอย่างเดียว)
-                    </span>
-                    <dl className="grid grid-cols-1 gap-2 text-xs">
-                      <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-                        <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">สถานประกอบการ</dt>
-                        <dd className="font-bold text-gray-900 dark:text-gray-100 text-right">
-                          {reviewingRequest.company_name_th}
-                        </dd>
-                      </div>
-                      {requestDetail?.company_address && (
-                        <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-                          <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">ที่อยู่</dt>
-                          <dd className="text-gray-700 dark:text-gray-300 text-right text-[11px] max-w-xs">
-                            {[
-                              requestDetail.company_address,
-                              requestDetail.company_district,
-                              requestDetail.company_province,
-                              requestDetail.company_postal_code,
-                            ]
-                              .filter(Boolean)
-                              .join(' ')}
-                          </dd>
-                        </div>
-                      )}
-                      <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-                        <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">ผู้รับหนังสือ</dt>
-                        <dd className="font-semibold text-gray-800 dark:text-gray-200 text-right">
-                          {requestDetail?.company_contact_person || 'ผู้จัดการฝ่ายทรัพยากรบุคคล'}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-                        <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">ตำแหน่ง</dt>
-                        <dd className="text-gray-700 dark:text-gray-300 text-right">
-                          {requestDetail?.company_contact_position || 'ผู้จัดการ'}
-                        </dd>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-                        <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">เริ่มปฏิบัติงาน</dt>
-                        {requestDetail?.start_date ? (
-                          <dd className="font-semibold text-gray-800 dark:text-gray-200 text-right">
-                            {formatThaiDate(requestDetail.start_date)}
-                          </dd>
-                        ) : (
-                          // start_date ถูกเซ็ตตอนสถานประกอบการตอบรับเท่านั้น — ก่อนนั้นยังไม่มีค่าเป็นเรื่องปกติ
-                          <dd className="text-xs font-normal text-gray-600 dark:text-gray-400 text-right">
-                            ยังไม่ระบุ — ได้จากแบบตอบรับของสถานประกอบการ
-                          </dd>
-                        )}
-                      </div>
-                      <div className="flex justify-between py-1">
-                        <dt className="text-gray-500 dark:text-gray-400 w-32 shrink-0">เกรดเฉลี่ยสะสม</dt>
-                        <dd className="font-bold text-gray-900 dark:text-gray-100 text-right">
-                          {requestDetail?.cumulative_gpa ?? reviewingRequest.cumulative_gpa ?? '-'}
-                        </dd>
-                      </div>
-                    </dl>
-                    <p className="text-[11px] leading-relaxed text-gray-500 dark:text-gray-400">
-                      ⛔ ค่าพวกนี้แก้ที่นี่ไม่ได้ — เป็นของแถวคำร้อง ถ้าผิดต้องตีกลับ: ข้อมูลนักศึกษาผิด = นักศึกษาแก้โปรไฟล์แล้วพิมพ์ใหม่ · ข้อมูลสถานประกอบการผิด = นักศึกษาแก้ข้อมูลในคำร้องแล้วพิมพ์ใหม่ (SEC-05: ฟิลด์ทะเบียนเป็นของเซิร์ฟเวอร์)
-                    </p>
-                  </div>
-
-                  {/* กล่องเตือน SEC-04 การรับรองสถานประกอบการอัตโนมัติ */}
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3.5 text-xs text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
-                    <span className="font-bold block mb-1 flex items-center gap-1.5">
-                      <ShieldCheck className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
-                      สถานประกอบการได้รับการรับรองอัตโนมัติ (SEC-04)
-                    </span>
-                    <p className="text-[11px] leading-relaxed">
-                      การกด “ยืนยันรับคำร้อง” จะรับรองสถานประกอบการ{' '}
-                      <strong>{reviewingRequest.company_name_th}</strong> เข้าทำเนียบโดยอัตโนมัติในทรานแซกชันเดียวกัน
-                      — ไม่มีปุ่มรับรองแยก และไม่ต้องไปกดที่ทำเนียบก่อน
-                    </p>
-                  </div>
-
-                  {/* ลิงก์ดูตัวอย่างหนังสือขอความอนุเคราะห์ */}
-                  <div>
-                    <a
-                      href={`${API_BASE_URL}/intents/${reviewingRequest.form_id}/cover-letter/preview`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-testid="preview-cover-letter"
-                      className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue hover:underline dark:text-blue-400"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      ดูตัวอย่างหนังสือขอความอนุเคราะห์ที่จะออกให้
-                    </a>
-                  </div>
-                </div>
-
-                {/* ══ ฝั่งขวา: ส่วนของเจ้าหน้าที่ฝ่ายวิชาการและวิจัย ══ */}
-                <div className="space-y-4">
-                  {rejectingRequest ? (
-                    /* ══ ตีกลับให้แก้ (เหตุผลบังคับ) ══ */
-                    <div className="rounded-xl border border-red-200 bg-red-50/40 p-5 dark:border-red-900/50 dark:bg-red-950/20 space-y-4">
-                      <div>
-                        <h4 className="text-sm font-bold text-red-900 dark:text-red-300">
-                          ตีกลับให้แก้ — บังคับใส่เหตุผล
-                        </h4>
-                        <p className="text-xs text-red-700 dark:text-red-400 mt-0.5">
-                          เหตุผลนี้นักศึกษาเห็นบนหน้าจอตัวเอง จึงต้องบอกว่าต้องแก้อะไร ไม่ใช่แค่ว่าไม่ผ่าน
-                        </p>
-                      </div>
-
-                      {/* Preset Chips */}
-                      <div className="flex flex-wrap gap-1.5">
-                        {REJECT_PRESET_CHIPS.map((chip) => (
-                          <button
-                            key={chip}
-                            type="button"
-                            onClick={() => handleApplyPresetChip(chip)}
-                            className="rounded-full border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:border-red-400 hover:bg-red-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300"
-                          >
-                            + {chip}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div>
-                        <Textarea
-                          rows={4}
-                          value={rejectReason}
-                          data-testid="officer-reject-reason"
-                          onChange={(e) => setRejectReason(e.target.value)}
-                          placeholder="ระบุเหตุผลที่ตีกลับ เช่น ลายเซ็นหัวหน้าสาขาวิชายังไม่ครบ หรือที่อยู่ไม่ตรงกับสถานที่ปฏิบัติงานจริง"
-                          className="w-full text-xs"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2 pt-1">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setRejectingRequest(false)}
-                        >
-                          ย้อนกลับ
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          disabled={!rejectReason.trim()}
-                          loading={officerBusy}
-                          data-testid="officer-reject-submit"
-                          onClick={submitOfficerReject}
-                        >
-                          ยืนยันตีกลับ
-                        </Button>
-                      </div>
-
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                        ตีกลับแล้วนักศึกษาอัปโหลดกระดาษชุดใหม่ได้ทันที · ไม่มีการออกเลขและไม่มีการรับรองบริษัทเกิดขึ้น
-                      </p>
-                    </div>
-                  ) : (
-                    /* ══ ฟอร์มกรอกส่วนของเจ้าหน้าที่ ══ */
-                    <div className="rounded-xl border border-gray-200 bg-white p-5 dark:border-gray-700 dark:bg-gray-800/50 space-y-4 shadow-sm">
-                      <div>
-                        <h4 className="text-sm font-bold text-gray-900 dark:text-white">
-                          ส่วนของเจ้าหน้าที่ฝ่ายวิชาการและวิจัย
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                          ตรวจลายเซ็นบนกระดาษ แล้วกรอกเลขที่หนังสือออกช่องเดียว — ชื่อผู้ลงนามระบบดึงให้แล้ว (หรือนักศึกษากรอกตอนอัปโหลด)
-                        </p>
-                      </div>
-
-                      {/* ⛔ เจ้าหน้าที่ไม่ต้องคีย์ชื่อ/วันที่จากกระดาษอีก (เจ้าของตัดสิน 2026-09-21) — แสดงให้เทียบกับกระดาษเท่านั้น */}
-                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1" data-testid="officer-signers">
-                        {/* ชื่อไม่ตรงกับที่ระบบรู้ = นักศึกษาระบุเอง (ผู้รักษาการแทน · ที่ปรึกษาเพิ่งเปลี่ยน) — ให้เทียบกับกระดาษ */}
-                        {(
-                          [
-                            ['อาจารย์ที่ปรึกษาผู้ลงนาม', reviewingRequest.advisor_signer_name, reviewingRequest.system_advisor_name],
-                            ['หัวหน้าสาขาวิชาผู้ลงนาม', reviewingRequest.dept_head_signer_name, reviewingRequest.system_dept_head_name],
-                          ] as const
-                        ).map(([label, onPaper, inSystem]) => (
-                          <p key={label}>
-                            {label}: <strong>{onPaper || '—'}</strong>
-                            {onPaper && onPaper !== inSystem && (
-                              <span className="ml-1.5 text-amber-800 dark:text-amber-300" data-testid="signer-typed-by-student">
-                                (นักศึกษาระบุเอง{inSystem ? ` · ระบบบันทึกว่า ${inSystem}` : ''} — เทียบกับกระดาษ)
-                              </span>
-                            )}
-                          </p>
-                        ))}
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                          เลขที่หนังสือออก <span className="text-red-600 dark:text-red-400">*</span>
-                        </label>
-                        <Input
-                          value={officerForm.document_no}
-                          data-testid="officer-document-no"
-                          placeholder="เช่น อว 0651.11/ว 218"
-                          onChange={(e) => setOfficerForm((f) => ({ ...f, document_no: e.target.value }))}
-                        />
-                        <span className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 block">
-                          ช่อง “เลขที่หนังสือออก” ในกรอบส่วนของเจ้าหน้าที่ · เลขนี้จะถูกพิมพ์ลงหนังสือขอความอนุเคราะห์ทันที และย้อนกลับไม่ได้
-                        </span>
-                      </div>
-
-                      {/* กล่องสรุปผล 3 อย่างที่จะเกิดขึ้นพร้อมกัน */}
-                      <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-200 space-y-1.5">
-                        <span className="font-bold block text-blue-950 dark:text-blue-200">
-                          กดยืนยันแล้วระบบทำสามอย่างพร้อมกัน:
-                        </span>
-                        <div className="space-y-1 text-[11px] text-blue-900 dark:text-blue-300">
-                          <p>① เลื่อนสถานะคำร้องเป็น “ผ่านการพิจารณาแล้ว”</p>
-                          <p>
-                            ② <strong>รับรองบริษัท {reviewingRequest.company_name_th}</strong> เข้าทำเนียบ (นักศึกษาคนอื่นจะเห็นและเลือกได้)
-                          </p>
-                          <p>③ ออกหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) เข้าคิวคณบดี</p>
-                        </div>
-                        <span className="text-[11px] text-blue-800 dark:text-blue-400 block pt-1">
-                          ล้มข้อใดข้อหนึ่ง = ไม่เกิดขึ้นเลยทั้งสามข้อ · กดซ้ำไม่ได้ (คำร้องจะไม่อยู่ในสถานะที่รับได้อีก)
-                        </span>
-                      </div>
-
-                      {/* Action buttons */}
-                      <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => setRejectingRequest(true)}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/40"
-                        >
-                          ตีกลับให้แก้ไข
-                        </Button>
-
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            disabled={officerFormIncomplete}
-                            data-testid="officer-approve-open"
-                            onClick={() => setConfirmingApprove(true)}
-                            className="bg-brand-blue hover:bg-blue-700 text-white font-bold"
-                          >
-                            รับคำร้อง
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <Button variant="secondary" size="sm" onClick={closeRequestReview}>
-              ปิด
-            </Button>
-          </ModalFooter>
-        </Modal>
+          onChanged={() => {
+            void loadQueues(true);
+            onDataChanged?.();
+          }}
+          onDone={(message) => {
+            setSuccess(message);
+            closeRequestReview();
+            void loadQueues(true);
+            onDataChanged?.();
+          }}
+        />
       )}
 
       {/* ══ ตรวจแบบตอบรับจากสถานประกอบการ (เอกสารหมายเลข 2) ══ */}
@@ -1448,36 +1011,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ onDataChanged, showA
         busy={dispatchBusy}
         onConfirm={submitIssueDispatch}
         onCancel={() => setConfirmingDispatch(false)}
-      />
-
-      {/* ══ ConfirmDialog Level 3 สำหรับรับคำร้อง (E1 ด่าน SEC-04 ระบุครบ 3 ข้อ) ══ */}
-      <ConfirmDialog
-        open={confirmingApprove}
-        title="ยืนยันการรับคำร้องและออกเลขหนังสือ"
-        message={
-          <div className="space-y-3 text-left">
-            <p>
-              คุณกำลังจะรับคำร้องของ{' '}
-              <strong>
-                {[reviewingRequest?.first_name, reviewingRequest?.last_name].filter(Boolean).join(' ')}
-              </strong>{' '}
-              ({reviewingRequest?.student_code || '-'})
-            </p>
-            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200 space-y-1">
-              <p className="font-bold mb-1">การกดยืนยันนี้ ระบบจะทำ ๓ อย่างพร้อมกันในทรานแซกชันเดียว:</p>
-              <p>① เลื่อนสถานะคำร้องเป็น “ผ่านการพิจารณาแล้ว” พร้อมออกเลขที่หนังสือ <strong>{officerForm.document_no}</strong></p>
-              <p>② <strong>รับรองสถานประกอบการ {reviewingRequest?.company_name_th}</strong> เข้าทำเนียบโดยอัตโนมัติ (นักศึกษาคนอื่นจะเห็นและเลือกได้)</p>
-              <p>③ ออกหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) ส่งเข้าคิวรอคณบดีลงนาม</p>
-            </div>
-            <p className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-              ⚠️ เลขที่หนังสือที่ออกแล้วและการรับรองสถานประกอบการย้อนกลับเองไม่ได้ หากล้มข้อใดข้อหนึ่งระบบจะไม่ดำเนินการเลยทั้งสามข้อ
-            </p>
-          </div>
-        }
-        confirmLabel="ออกเลขและรับคำร้อง"
-        busy={officerBusy}
-        onConfirm={submitOfficerApprove}
-        onCancel={() => setConfirmingApprove(false)}
       />
 
       {/* ══ ConfirmDialog สำหรับรับแบบตอบรับ — กดแล้วเปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญออกนอกระบบ ══ */}

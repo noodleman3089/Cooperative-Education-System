@@ -388,8 +388,8 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await loginAs(page, 'staff1');
     await page.locator('button:has-text("ตรวจคำร้อง")').first().click();
     const dialog = page.locator('[role="dialog"]');
-    // หัวแผงเปลี่ยนจาก "ตรวจคำร้อง — …" ตอนรีเมคฝ่ายเจ้าหน้าที่
-    await expect(dialog.getByRole('heading', { name: /แผงรับคำร้อง — เอกสารหมายเลข 1/ })).toBeVisible();
+    // หัวแผงแบบ A (2026-10-07): บรรทัดบนบอกว่าเป็นเอกสารใบไหน หัวเรื่องคือชื่อนักศึกษา
+    await expect(dialog.getByText(/เอกสารหมายเลข 1 · คำร้องที่ \d+/)).toBeVisible();
 
     // 3. กดตีกลับ — ปุ่มยืนยันต้องยังกดไม่ได้เพราะยังไม่มีเหตุผล
     await dialog.locator('button:has-text("ตีกลับให้แก้ไข")').click();

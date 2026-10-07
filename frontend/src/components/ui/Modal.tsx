@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
 
-export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '5xl';
+export type ModalSize = 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl' | '5xl' | '7xl';
 
 const SIZES: Record<ModalSize, string> = {
   sm: 'max-w-sm',
@@ -13,6 +13,8 @@ const SIZES: Record<ModalSize, string> = {
   '2xl': 'max-w-2xl',
   '3xl': 'max-w-3xl',
   '5xl': 'max-w-5xl',
+  // แผงที่วางเอกสารคู่กับฟอร์ม (แผงรับคำร้องของเจ้าหน้าที่) — เอกสารต้องกว้างพออ่านได้โดยไม่ต้องเปิดแท็บใหม่
+  '7xl': 'max-w-7xl',
 };
 
 /** Nested dialogs must not let the inner one restore scrolling on its way out. */

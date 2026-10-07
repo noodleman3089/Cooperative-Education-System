@@ -249,7 +249,7 @@ test.describe('กติกาอัปโหลดแบบคำร้อง�
     const signers = page.getByTestId('officer-signers');
     await expect(signers).toContainText('ผศ.รักษาการ แทนหัวหน้า');
     await expect(signers.getByTestId('signer-typed-by-student')).toHaveCount(1);
-    await expect(signers.getByTestId('signer-typed-by-student')).toContainText('นักศึกษาระบุเอง');
+    await expect(signers.getByTestId('signer-typed-by-student')).toContainText('นักศึกษาระบุชื่อหัวหน้าสาขาวิชาเอง');
   });
 
   test('U5: พิมพ์ชื่อซ้ำกับสถานประกอบการในทำเนียบ → ถามก่อน · ใช้ของทำเนียบ = ล็อกช่อง · ยืนยันพิมพ์เอง = ไปต่อได้', async ({ page }) => {

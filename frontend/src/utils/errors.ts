@@ -49,6 +49,16 @@ export function getErrorStatus(err: unknown): number | undefined {
   return typeof status === 'number' ? status : undefined;
 }
 
+/**
+ * `code` ที่เซิร์ฟเวอร์แนบมากับ 409 — ใช้แยกว่าชนเพราะอะไร (เช่น `duplicate_document_no` ให้ถามยืนยัน
+ * กับ `stale_request_file` ให้ดูไฟล์ใหม่) โดยไม่ต้องเทียบข้อความภาษาไทย
+ */
+export function getErrorCode(err: unknown): string | undefined {
+  const data = asErrorShape(err).response?.data;
+  const code = typeof data === 'object' && data !== null ? (data as { code?: unknown }).code : undefined;
+  return typeof code === 'string' ? code : undefined;
+}
+
 /** ชื่อชนิดของ error — ใช้ตรวจ `AbortError` ตอนผู้ใช้ออกจากหน้าไปก่อนโหลดเสร็จ */
 export function getErrorName(err: unknown): string | undefined {
   const name = asErrorShape(err).name;
