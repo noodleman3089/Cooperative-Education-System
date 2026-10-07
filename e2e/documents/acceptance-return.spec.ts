@@ -252,7 +252,8 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     expect((await uploadAcceptance(request, formId)).status()).toBe(200);
 
     await loginAs(page, 'staff1');
-    await expect(page.getByText(/แบบตอบรับจากสถานประกอบการรอตรวจ \(1 รายการ\)/)).toBeVisible();
+    // หน้าแรกแบบ B: ไม่มีคำร้องรอรับ → รายการเริ่มที่กองแบบตอบรับเอง
+    await expect(page.getByTestId('staff-queue-acceptance')).toContainText('แบบตอบรับรอตรวจ · 1 คน');
 
     await page.getByTestId(`review-acceptance-${formId}`).click();
     const dialog = page.getByRole('dialog');

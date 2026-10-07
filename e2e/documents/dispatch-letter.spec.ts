@@ -303,7 +303,8 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     await walkToAccepted(request, formId);
 
     await loginAs(page, 'staff1');
-    await expect(page.getByText(/รอออกหนังสือส่งตัว \(1 รายการ\)/)).toBeVisible();
+    // หน้าแรกแบบ B: กองเดียวที่มีงานคือหนังสือส่งตัว → รายการเริ่มที่กองนั้นเอง
+    await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 1 คน');
 
     await page.getByTestId(`issue-dispatch-${formId}`).click();
     const dialog = page.getByRole('dialog');
@@ -328,7 +329,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
 
     // คิวกลับเป็น 0 ได้ก็ต่อเมื่อ `loadData()` รันจบ ซึ่งเกิดหลัง API ตอบแล้วเท่านั้น
     // — ยืนยันตรงนี้ก่อนค่อยอ่านฐาน จะได้ไม่แข่งกับคำขอ
-    await expect(page.getByText(/รอออกหนังสือส่งตัว \(0 รายการ\)/)).toBeVisible();
+    await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 0 คน');
 
     expect(
       await dbValue<string>('SELECT dispatch_document_no FROM intent_forms WHERE form_id = $1', [
