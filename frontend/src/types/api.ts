@@ -258,6 +258,8 @@ export interface StudentProfile {
   advisor_last_name?: string | null;
   supervisor_id?: number | null;
   supervisor_email?: string | null;
+  /** นาย · นาง · นางสาว — พิมพ์ลงหนังสือขอความอนุเคราะห์ */
+  name_prefix?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   nickname?: string | null;

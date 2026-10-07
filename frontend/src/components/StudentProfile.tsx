@@ -5,6 +5,7 @@ import type { StudentProfile as StudentType, LanguageProficiency } from '../type
 import ResumePdfModal from './ResumePdfModal';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
+import { NAME_PREFIXES } from '../utils/namePrefix';
 import {
   JOB_TYPE_OPTIONS,
   WORK_REGION_OPTIONS,
@@ -27,6 +28,7 @@ const StudentProfile: React.FC = () => {
   // Base profile fields
   const [studentCode, setStudentCode] = useState('');
   const [selectedMajorId, setSelectedMajorId] = useState<number | ''>('');
+  const [namePrefix, setNamePrefix] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [nickname, setNickname] = useState('');
@@ -124,6 +126,7 @@ const StudentProfile: React.FC = () => {
         setStudentCode(prof.student_code || '');
         setStoredAvatar(prof.profile_image || null);
         setSelectedMajorId(prof.major_id || '');
+        setNamePrefix(prof.name_prefix || '');
         setFirstName(prof.first_name || '');
         setLastName(prof.last_name || '');
         setNickname(prof.nickname || '');
@@ -272,6 +275,8 @@ const StudentProfile: React.FC = () => {
         formData.append('major_id', String(selectedMajorId));
       }
       formData.append('cumulative_gpa', cumulativeGpa.trim());
+      // ว่าง = เซิร์ฟเวอร์คงค่าเดิม (ล้างคำนำหน้าที่ตั้งแล้วไม่ได้ — หนังสือราชการต้องมี)
+      formData.append('name_prefix', namePrefix);
       formData.append('first_name', firstName.trim());
       formData.append('last_name', lastName.trim());
       formData.append('nickname', nickname.trim());
@@ -528,6 +533,28 @@ const StudentProfile: React.FC = () => {
 
             {/* Right: Form Inputs */}
             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label htmlFor="profile-name-prefix" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  คำนำหน้าชื่อ
+                </label>
+                <select
+                  id="profile-name-prefix"
+                  data-testid="profile-name-prefix"
+                  value={namePrefix}
+                  onChange={(e) => setNamePrefix(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                >
+                  {/* ยังไม่เคยเลือก = มีตัวเลือกว่างให้เห็นว่ายังขาด · เลือกแล้วล้างกลับเป็นว่างไม่ได้ */}
+                  {!profile?.name_prefix && <option value="">-- ยังไม่ได้เลือก --</option>}
+                  {NAME_PREFIXES.map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-[11px] text-gray-600 dark:text-gray-400">
+                  พิมพ์ลงหนังสือขอความอนุเคราะห์
+                </span>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   ชื่อ (ภาษาไทย) *

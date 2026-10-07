@@ -39,6 +39,8 @@ export interface Student {
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` เหมือน resume_file — NULL = ยังไม่เคยอัปโหลด */
   profile_image?: string | null;
+  /** นาย · นาง · นางสาว — พิมพ์ลงหนังสือขอความอนุเคราะห์ (ชุดค่าอยู่ที่ `utils/namePrefix.ts`) */
+  name_prefix?: string | null;
   first_name: string | null;
   last_name: string | null;
   nickname: string | null;
@@ -65,6 +67,8 @@ export interface Personnel {
   first_name: string | null;
   last_name: string | null;
   birth_date: Date | string | null;
+  /** ตำแหน่งทางวิชาการ เช่น "ผู้ช่วยศาสตราจารย์" — พิมพ์หน้าชื่อผู้ลงนามในหนังสือ */
+  academic_title?: string | null;
   email?: string;
   major_name_th?: string | null;
   faculty_name_th?: string | null;
@@ -85,6 +89,7 @@ export interface StudentProfileSetupBody {
   major_id: number;
   province_id?: number | null;
   cumulative_gpa?: number | null;
+  name_prefix?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   nickname?: string | null;

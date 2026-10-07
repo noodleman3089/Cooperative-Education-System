@@ -40,8 +40,9 @@ backend/secure_private/signatures/*
 # ตรามหาวิทยาลัยและแม่แบบแบบคำร้อง (เอกสารหมายเลข 1) เป็นเอกสารของมหาวิทยาลัย — repo นี้เปิดสาธารณะ
 # จึงไม่เก็บใน git (เอาออกพร้อมประวัติ 2026-10-06) · วางไฟล์เองที่เครื่องที่รันระบบ:
 #   backend/secure_private/emblems/rmutto_seal.png
+#   backend/secure_private/emblems/garuda.png   (ตราครุฑหัวหนังสือขอความอนุเคราะห์ · PNG สัดส่วนราว 4:5)
 #   backend/secure_private/templates/request_form_template.pdf
-# ไม่มีไฟล์ = ระบบยังทำงาน แต่แบบตอบรับไม่มีตรา และแบบคำร้องตกไปเป็นหน้า HTML
+# ไม่มีไฟล์ = ระบบยังทำงาน แต่แบบตอบรับไม่มีตรา หนังสือขอความอนุเคราะห์ไม่มีครุฑ และแบบคำร้องตกไปเป็นหน้า HTML
 backend/secure_private/emblems/*
 backend/secure_private/templates/*
 

@@ -6,7 +6,7 @@ export class StudentModel {
     const res = await query(
       `SELECT s.student_id, s.student_code, s.major_id, s.province_id, s.cumulative_gpa, s.claimed_gpa, s.section,
               s.resume_file, s.profile_image, s.advisor_id, s.supervisor_id,
-              s.first_name, s.last_name, s.nickname, s.year_level, s.birth_date, s.alt_email, s.phone,
+              s.name_prefix, s.first_name, s.last_name, s.nickname, s.year_level, s.birth_date, s.alt_email, s.phone,
               s.current_address, s.parent_name, s.parent_phone, s.enrollment_year,
               s.skills_and_activities, s.language_proficiency, s.preferred_work_region, s.interested_job_types,
               m.major_name_th, f.faculty_name_th,
@@ -145,6 +145,14 @@ export class StudentModel {
       [studentId, studentCode, majorId, provinceId, cumulativeGpa, resumeFile, firstName, lastName, nickname, yearLevel, birthDate, altEmail, phone, currentAddress, parentName, parentPhone, enrollmentYear, section]
     );
     return res.rows[0] as Student;
+  }
+
+  /**
+   * ตั้งคำนำหน้าชื่อ — แยกจาก `updateStudent` ด้วยเหตุผลเดียวกับรูปโปรไฟล์ด้านล่าง:
+   * ตัวนั้นเขียนทับทุกคอลัมน์ ฟอร์มที่ไม่ได้ส่งช่องนี้มาจะล้างมันเป็น NULL
+   */
+  static async setNamePrefix(studentId: number, prefix: string): Promise<void> {
+    await query('UPDATE students SET name_prefix = $2 WHERE student_id = $1', [studentId, prefix]);
   }
 
   /**

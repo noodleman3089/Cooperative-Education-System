@@ -1058,7 +1058,15 @@ export class IntentFormController {
         return;
       }
 
-      const pdfBytes = await buildCoverLetterPdf(toCoverLetterData(row));
+      const data = toCoverLetterData(row);
+      // อีเมลท้ายกระดาษ = เจ้าหน้าที่ที่กดรับคำร้อง · ตอนดูตัวอย่างยังไม่มีใครกดรับ จึงแสดงของคนที่กำลังดู
+      // (คนเดียวกับที่กำลังจะกดรับ) เพื่อให้ตัวอย่างตรงกับฉบับที่จะออกจริง
+      if (!data.officer_email && req.user) {
+        const me = await query('SELECT email FROM users WHERE user_id = $1', [req.user.userId]);
+        data.officer_email = (me.rows[0]?.email as string | undefined) ?? null;
+      }
+
+      const pdfBytes = await buildCoverLetterPdf(data);
       res.contentType('application/pdf');
       res.setHeader('Content-Disposition', 'inline; filename="cover-letter-preview.pdf"');
       res.send(pdfBytes);

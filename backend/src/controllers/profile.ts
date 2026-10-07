@@ -11,6 +11,7 @@ import { query } from '../config/database';
 import { hashPassword } from '../utils/password';
 import { sendUnexpectedError } from '../utils/httpError';
 import { AuditAction, writeAudit } from '../utils/audit';
+import { NAME_PREFIX_ERROR, readNamePrefix } from '../utils/namePrefix';
 import { StudentProfileSetupBody } from '../types';
 
 export class ProfileController {
@@ -178,6 +179,13 @@ export class ProfileController {
           typedGpa = Math.round(parsed * 100) / 100;
         }
 
+        // คำนำหน้าชื่อ — ตรวจก่อนสร้างแถวด้วยเหตุผลเดียวกับเกรด (ผิดแล้วต้องไม่ทิ้งแถวค้าง)
+        const prefix = readNamePrefix(body.name_prefix);
+        if (!prefix.ok) {
+          res.status(400).json({ message: NAME_PREFIX_ERROR });
+          return;
+        }
+
         // ด่านตรวจของสาขานักศึกษาผ่านครบแล้ว — จากนี้ไปคือการเขียน
         if (hashedPassword) {
           await UserModel.updatePassword(userId, hashedPassword);
@@ -202,6 +210,10 @@ export class ProfileController {
           null, // parent_phone
           Number(enrollment_year)
         );
+        if (prefix.value) {
+          await StudentModel.setNamePrefix(userId, prefix.value);
+          profile.name_prefix = prefix.value;
+        }
 
         // Assign 'student' role in USER_ROLES
         await UserModel.addRole(userId, 'student');
@@ -386,6 +398,13 @@ export class ProfileController {
         }
       }
 
+      // คำนำหน้าชื่อ: ไม่ส่งมา/ว่าง = คงค่าเดิม (ฟอร์มอื่นที่ไม่รู้จักช่องนี้ต้องไม่ล้างมัน)
+      const prefix = readNamePrefix(req.body.name_prefix);
+      if (!prefix.ok) {
+        res.status(400).json({ message: NAME_PREFIX_ERROR });
+        return;
+      }
+
       // Validate province only
       if (parsedProvinceId !== null) {
         const provinceExists = await MasterModel.verifyProvinceExists(parsedProvinceId);
@@ -428,6 +447,10 @@ export class ProfileController {
         lockedEnrollmentYear,
         cleanSection
       );
+      if (prefix.value) {
+        await StudentModel.setNamePrefix(userId, prefix.value);
+        updated.name_prefix = prefix.value;
+      }
 
       if (nextMajorId !== previousMajorId) {
         // ที่ปรึกษา/อาจารย์นิเทศเดิมถูกตั้งโดยหัวหน้าสาขาเก่า — ไม่อยู่ในสาขาใหม่แล้ว ให้หัวหน้าสาขาใหม่ตั้งใหม่
@@ -480,7 +503,7 @@ export class ProfileController {
       // `resolveMajorScope` reads it to decide whose students an advisor or
       // department head can see, so letting people pick it here let them widen
       // their own access. Staff change it at PUT /users/:id.
-      const { first_name, last_name, birth_date } = req.body;
+      const { first_name, last_name, birth_date, academic_title } = req.body;
 
       const existingProfile = await PersonnelModel.findByPersonnelId(userId);
       if (!existingProfile) {
@@ -518,6 +541,12 @@ export class ProfileController {
         last_name !== undefined ? last_name : null,
         cleanBirthDate
       );
+
+      // ตำแหน่งทางวิชาการ — ส่งมา (แม้ว่าง) = ตั้งตามนั้น จึงล้างได้ · ไม่ส่งมา = ไม่แตะ
+      // (หน้าตั้งค่าลายมือชื่อของคณบดีเรียกเส้นนี้โดยไม่รู้จักช่องนี้ ต้องไม่ล้างมัน)
+      if (typeof academic_title === 'string') {
+        await PersonnelModel.setAcademicTitle(userId, academic_title.trim().slice(0, 100) || null);
+      }
 
       res.status(200).json({
         message: 'Personnel profile updated successfully.',

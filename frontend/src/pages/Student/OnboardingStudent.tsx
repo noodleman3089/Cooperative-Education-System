@@ -7,6 +7,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import { Input, Select } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
+import { NAME_PREFIXES } from '../../utils/namePrefix';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 
@@ -44,6 +45,7 @@ const OnboardingStudent: React.FC = () => {
   const [majors, setMajors] = useState<Major[]>([]);
 
   // ขั้นที่ 1 — ข้อมูลทั่วไป
+  const [namePrefix, setNamePrefix] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [studentCode, setStudentCode] = useState('');
@@ -105,6 +107,8 @@ const OnboardingStudent: React.FC = () => {
   const validateStepOne = () => {
     const next: Record<string, string> = {};
 
+    // คำนำหน้าพิมพ์ลงหนังสือขอความอนุเคราะห์ — ระบบเดาแทนไม่ได้ จึงบังคับเลือกตั้งแต่ตั้งโปรไฟล์
+    if (!namePrefix) next.namePrefix = 'กรุณาเลือกคำนำหน้าชื่อ';
     if (!firstName.trim()) next.firstName = 'กรุณากรอกชื่อ';
     if (!lastName.trim()) next.lastName = 'กรุณากรอกนามสกุล';
 
@@ -183,6 +187,7 @@ const OnboardingStudent: React.FC = () => {
         student_code: studentCode.trim(),
         major_id: Number(selectedMajorId),
         enrollment_year: Number(enrollmentYear),
+        name_prefix: namePrefix,
         first_name: firstName.trim(),
         last_name: lastName.trim(),
         phone: phone.trim(),
@@ -283,6 +288,22 @@ const OnboardingStudent: React.FC = () => {
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="sm:col-span-2 sm:max-w-[240px]">
+                      {label('คำนำหน้าชื่อ *')}
+                      <Select
+                        value={namePrefix}
+                        disabled={isSubmitting}
+                        error={!!errors.namePrefix}
+                        onChange={e => { setNamePrefix(e.target.value); clearError('namePrefix'); }}
+                        data-testid="onboarding-name-prefix"
+                      >
+                        <option value="">-- เลือกคำนำหน้า --</option>
+                        {NAME_PREFIXES.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </Select>
+                      {fieldError('namePrefix')}
+                    </div>
                     <div>
                       {label('ชื่อ *')}
                       <Input
@@ -531,7 +552,7 @@ const OnboardingStudent: React.FC = () => {
                 value: majors.find(m => m.major_id === selectedMajorId)?.major_name_th ?? '—',
               },
               { label: 'ปีที่เข้าศึกษา', value: enrollmentYear },
-              { label: 'ชื่อ-นามสกุล', value: `${firstName.trim()} ${lastName.trim()}`.trim() },
+              { label: 'ชื่อ-นามสกุล', value: `${namePrefix}${firstName.trim()} ${lastName.trim()}`.trim() },
             ]}
             lockNote="รหัสและปีที่เข้า แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่ · สาขาแก้ได้ที่หน้าโปรไฟล์"
           />

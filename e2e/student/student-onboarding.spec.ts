@@ -69,6 +69,8 @@ async function arriveAsFirstTimeStudent(page: Page): Promise<number> {
 
 /** กรอกขั้นที่ 1 ให้ครบแล้วกดไปขั้นที่ 2 */
 async function fillStepOne(page: Page) {
+  // คำนำหน้าบังคับเลือก — พิมพ์ลงหนังสือขอความอนุเคราะห์ (2026-10-07)
+  await page.getByTestId('onboarding-name-prefix').selectOption('นาย');
   await page.getByTestId('onboarding-first-name').fill('ธนกฤต');
   await page.getByTestId('onboarding-last-name').fill('ศรีสุวรรณ');
   await page.getByTestId('onboarding-student-code').fill(NEW_STUDENT_CODE);
@@ -272,11 +274,12 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
 
     await withDb(async db => {
       const row = (await db.query(
-        `SELECT first_name, last_name, phone, alt_email, cumulative_gpa, interested_job_types
+        `SELECT name_prefix, first_name, last_name, phone, alt_email, cumulative_gpa, interested_job_types
          FROM students WHERE student_id = $1`,
         [userId]
       )).rows[0];
 
+      expect(row.name_prefix).toBe('นาย');
       // ก่อน 2026-09-07 controller ส่ง null เข้าไปทุกช่อง นักศึกษาจึงต้องไปกรอกชื่อ
       // ตัวเองซ้ำในหน้าโปรไฟล์ ทั้งที่เพิ่งกรอกไปเมื่อครู่
       expect(row.first_name).toBe('ธนกฤต');

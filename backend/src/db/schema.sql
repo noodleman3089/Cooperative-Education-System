@@ -66,7 +66,12 @@ DROP TABLE IF EXISTS weekly_work_plans CASCADE;
 -- 1. Master Data Tables
 CREATE TABLE IF NOT EXISTS master_faculty (
     faculty_id SERIAL PRIMARY KEY,
-    faculty_name_th VARCHAR(255) NOT NULL UNIQUE
+    faculty_name_th VARCHAR(255) NOT NULL UNIQUE,
+    -- หัวกระดาษและท้ายกระดาษของหนังสือขอความอนุเคราะห์ (migration 052) — ค่ามากับ seeds.sql
+    -- `address` หลายบรรทัดคั่นด้วย \n · ว่างได้: หนังสือข้ามบรรทัดที่ไม่มีค่า ไม่แต่งที่อยู่ให้
+    campus_name VARCHAR(255),
+    address TEXT,
+    phone VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS master_major (
@@ -155,7 +160,10 @@ CREATE TABLE IF NOT EXISTS personnel (
     status VARCHAR(50) NOT NULL DEFAULT 'pending_approval',
     first_name VARCHAR(255),
     last_name VARCHAR(255),
-    birth_date DATE
+    birth_date DATE,
+    -- ตำแหน่งทางวิชาการ เช่น "ผู้ช่วยศาสตราจารย์" · "รองศาสตราจารย์ ดร." (migration 052)
+    -- พิมพ์ติดหน้าชื่อใต้ลายมือชื่อคณบดีในหนังสือขอความอนุเคราะห์ · เจ้าตัวกรอกเองที่หน้าโปรไฟล์
+    academic_title VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS students (
@@ -181,6 +189,9 @@ CREATE TABLE IF NOT EXISTS students (
     --    ระบบไม่ตรวจสิทธิ์สหกิจและไม่มีขั้นปฐมนิเทศ — ไม่อยู่ในขอบเขต · ห้ามเพิ่มกลับโดยไม่แก้ SEC-02
     advisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
     supervisor_id INT REFERENCES personnel(personnel_id) ON DELETE SET NULL,
+    -- คำนำหน้าชื่อ (นาย · นาง · นางสาว) — พิมพ์ลงหนังสือขอความอนุเคราะห์ (migration 052)
+    -- ชุดค่าที่ยอมรับอยู่ที่ `utils/namePrefix.ts` ที่เดียว จงใจไม่ทำ CHECK ให้เป็นแหล่งความจริงที่สอง
+    name_prefix VARCHAR(20),
     first_name VARCHAR(255),
     last_name VARCHAR(255),
     nickname VARCHAR(100),

@@ -139,8 +139,8 @@ export async function setupDatabase(quiet = false) {
           
           await client.query(
             `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
-                                  first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone)
-             VALUES ($1, $2, $3, $4, $5, 'สมชาย', 'สายดี', 'ชาย', 3, '2005-05-15', 'somchai@alt.com', '0812345678', '123/45 ถนนเจริญกรุง กรุงเทพฯ', 'สมพร สายดี', '0898765432')
+                                  name_prefix, first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone)
+             VALUES ($1, $2, $3, $4, $5, 'นาย', 'สมชาย', 'สายดี', 'ชาย', 3, '2005-05-15', 'somchai@alt.com', '0812345678', '123/45 ถนนเจริญกรุง กรุงเทพฯ', 'สมพร สายดี', '0898765432')
              ON CONFLICT (student_id) DO NOTHING`,
             // GPA matches the eligible_students_list row seeded just below, since
             // that staging table is now the authoritative source for it.
@@ -292,9 +292,9 @@ export async function seedDevDemoData() {
     // advisor_id / supervisor_id ปล่อย NULL โดยตั้งใจ
     await pool.query(
       `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
-                            first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone)
+                            name_prefix, first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone)
        SELECT user_id, '640101002', $1, $2, 3.50,
-              'สมหญิง', 'ใจดี', 'หญิง', 3, '2005-08-20', 'somying@alt.com', '0823456789', '456/78 ถนนมิตรภาพ นครราชสีมา', 'สมปอง ใจดี', '0887654321'
+              'นางสาว', 'สมหญิง', 'ใจดี', 'หญิง', 3, '2005-08-20', 'somying@alt.com', '0823456789', '456/78 ถนนมิตรภาพ นครราชสีมา', 'สมปอง ใจดี', '0887654321'
          FROM users WHERE email = 'student1@test.com'
        ON CONFLICT (student_id) DO NOTHING`,
       [majorRes.rows[0].major_id, provinceRes.rows[0].province_id]

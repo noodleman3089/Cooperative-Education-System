@@ -157,6 +157,20 @@ test.describe('โปรไฟล์บุคลากร · ใครแก้�
     // คณบดีเห็นทุกสาขา — สาขาในแถว personnel (สาขาแรกของตารางตอนสร้างอัตโนมัติ) ต้องไม่โผล่มาหลอก
     await expect(page.getByTestId('personnel-profile-major')).toHaveText('ทุกสาขา (สิทธิ์ระดับคณะ)');
 
+    // ตำแหน่งทางวิชาการ — พิมพ์หน้าชื่อคณบดีในหนังสือขอความอนุเคราะห์ · เจ้าตัวกรอกเองและล้างได้ (2026-10-07)
+    const dean1 = await uid('dean1@test.com');
+    const titleOf = () => dbValue('SELECT academic_title FROM personnel WHERE personnel_id = $1', [dean1]);
+    await page.getByTestId('personnel-academic-title').fill('ผู้ช่วยศาสตราจารย์');
+    await page.getByTestId('personnel-profile-save').click();
+    await expect(page.getByText('บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว')).toBeVisible();
+    expect(await titleOf()).toBe('ผู้ช่วยศาสตราจารย์');
+    await page.reload();
+    await expect(page.getByTestId('personnel-academic-title')).toHaveValue('ผู้ช่วยศาสตราจารย์');
+    await page.getByTestId('personnel-academic-title').fill('');
+    await page.getByTestId('personnel-profile-save').click();
+    await expect(page.getByText('บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว')).toBeVisible();
+    expect(await titleOf()).toBeNull();
+
     await page.getByTestId('personnel-go-signature').click();
     await expect(page.getByRole('heading', { name: 'ลายมือชื่อสำหรับหนังสือราชการ' })).toBeVisible();
     await expect(page).toHaveURL(/menu=signature/);

@@ -629,32 +629,38 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     expect(download.status(), await download.text()).toBe(200);
   });
 
-  test('D14: ที่อยู่ยาวสุดที่ระบบยอม — หนังสือต้องยาวขึ้นตาม ไม่ใช่เขียนทับกัน', async ({
+  /** ข้อความทั้งฉบับของ PDF โดยตัดช่องว่างทั้งหมดออก (ตัวอ่าน PDF แทรกวรรคไม่แน่นอน) + จำนวนหน้า */
+  async function letterText(bytes: Buffer): Promise<{ flat: string; pages: number }> {
+    const parser = new PDFParse({ data: new Uint8Array(bytes) });
+    try {
+      const parsed = await parser.getText();
+      return { flat: parsed.text.replace(/\s+/g, ''), pages: parsed.pages.length };
+    } finally {
+      await parser.destroy();
+    }
+  }
+  const flat = (s: string) => s.replace(/\s+/g, '');
+  /** หนังสือราชการใช้เลขไทยทั้งฉบับ */
+  const thai = (s: string) => s.replace(/[0-9]/g, (d) => String.fromCharCode(0x0e50 + Number(d)));
+
+  test('D14: ชื่อสถานประกอบการยาวสุดที่ระบบยอม — บรรทัด "เรียน" ขึ้นบรรทัดใหม่ ข้อความครบ ไม่ถูกตัดหรือเขียนทับ', async ({
     request,
   }) => {
     test.setTimeout(180_000);
 
     /**
-     * เคสนี้คือสิ่งที่โค้ดเดิมพัง: พิกัดลายเซ็นฝังตายที่ `y: 165` พอที่อยู่ยาวขึ้น
-     * เนื้อหาก็ไหลลงไปทับลายเซ็น (หรือกลับกัน) · ตัววาดใหม่ไล่ `cursorY` เอง
+     * เคสนี้คือสิ่งที่โค้ดเดิมพัง: พิกัดลายเซ็นฝังตายที่ `y: 165` พอเนื้อหายาวขึ้น
+     * ก็ไหลลงไปทับลายเซ็น (หรือกลับกัน) · ตัววาดไล่ `cursorY` เอง
      *
-     * วัดด้วยการเทียบ **สองใบ**: ที่อยู่สั้นกับที่อยู่ยาวสุดเท่าที่คอลัมน์ยอม
-     * (`companies.address` เป็น VARCHAR(255)) — ใบที่ยาวกว่าต้องมีเนื้อหามากกว่าจริง
-     * ถ้าตัววาดตัดข้อความทิ้งหรือเขียนทับที่เดิม ขนาดจะไม่ต่างกัน
+     * เดิมวัดจากที่อยู่สถานประกอบการ — หนังสือฉบับจริงของคณะ **ไม่มีที่อยู่สถานประกอบการ** (2026-10-07)
+     * ของที่ยาวได้ตอนนี้คือบรรทัด "เรียน <ผู้รับ> <ชื่อสถานประกอบการ>" (`companies.name_th` VARCHAR(255))
      */
-    const longAddress = `เลขที่ 999/888 อาคารสำนักงานใหญ่ ชั้นที่ 45 ${'ถนนทดสอบความยาว '.repeat(11)}`;
-    expect(longAddress.length).toBeLessThanOrEqual(255);
+    const longName = `บริษัท ${'ทดสอบความยาวชื่อ '.repeat(13)}จำกัด`;
+    expect(longName.length).toBeLessThanOrEqual(255);
 
-    const render = async (address: string): Promise<Buffer> => {
+    const render = async (companyName: string): Promise<Buffer> => {
       await seedTestData();
-      const formId = await seedIntent('บริษัท ทดสอบความยาวที่อยู่ จำกัด');
-      await withDb(async (db) => {
-        await db.query(
-          `UPDATE companies SET address = $1
-            WHERE company_id = (SELECT company_id FROM intent_forms WHERE form_id = $2)`,
-          [address, formId]
-        );
-      });
+      const formId = await seedIntent(companyName);
       await uploadSignedForm(request, formId);
       await apiLoginAs(request, 'staff1');
       const res = await request.get(`${API_URL}/intents/${formId}/cover-letter/preview`);
@@ -662,21 +668,23 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
       return Buffer.from(await res.body());
     };
 
-    const short = await render('1 ถนนสั้น');
-    const long = await render(longAddress);
+    const short = await render('บริษัท ชื่อสั้น จำกัด');
+    const long = await render(longName);
 
     for (const [label, bytes] of [
-      ['ที่อยู่สั้น', short],
-      ['ที่อยู่ยาว', long],
+      ['ชื่อสั้น', short],
+      ['ชื่อยาว', long],
     ] as const) {
       expect(bytes.subarray(0, 5).toString('latin1'), `${label} ไม่ใช่ PDF`).toBe('%PDF-');
       expect(bytes.subarray(-1024).toString('latin1'), `${label} เขียนไม่จบ`).toContain('%%EOF');
     }
 
-    expect(
-      long.length,
-      'ที่อยู่ยาวขึ้นแล้วขนาดไฟล์ไม่ต่างเลย = ข้อความถูกตัดทิ้งหรือเขียนทับที่เดิม'
-    ).toBeGreaterThan(short.length);
+    const longText = await letterText(long);
+    expect(longText.flat, 'ชื่อยาวถูกตัดทิ้ง').toContain(flat(longName));
+    // ⛔ ที่อยู่สถานประกอบการไม่อยู่ในหนังสือฉบับจริง — ห้ามงอกกลับ (`seedIntent` ตั้งที่อยู่ "1 ถนนทดสอบ")
+    expect(longText.flat).not.toContain(flat('1 ถนนทดสอบ'));
+    // ตัวอย่างก่อนกดรับ: อีเมลท้ายกระดาษเป็นของเจ้าหน้าที่ที่กำลังดู (คนที่จะกดรับ)
+    expect(longText.flat).toContain('อีเมล.staff1@test.com');
 
     // และฉบับที่ลงนามจริงก็ต้องออกได้โดยไม่พัง (เส้นทางเดียวกับที่คณบดีกด)
     const formId = await dbValue<number>('SELECT form_id FROM intent_forms ORDER BY form_id DESC LIMIT 1');
@@ -697,7 +705,150 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     );
     const signedBytes = fs.readFileSync(path.resolve(process.cwd(), 'backend', signedPath as string));
     expect(signedBytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-    // ฉบับลงนามต้องใหญ่กว่าฉบับร่างของที่อยู่เดียวกัน เพราะมีรูปลายเซ็นฝังอยู่
+    // ฉบับลงนามต้องใหญ่กว่าฉบับร่างของชื่อเดียวกัน เพราะมีรูปลายเซ็นฝังอยู่
     expect(signedBytes.length).toBeGreaterThan(long.length);
+  });
+
+  test('D15: หนังสือตามรูปแบบฉบับจริงของคณะ — เลขไทย · คำนำหน้า · ช่วงฝึกจากปฏิทิน · ที่อยู่คณะ · อีเมลเจ้าหน้าที่ที่กดรับ · ตำแหน่งวิชาการคณบดี', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    await seedTestData();
+    const formId = await seedIntent();
+    await withDb(async (db) => {
+      await db.query('UPDATE intent_forms SET start_date = NULL WHERE form_id = $1', [formId]);
+      for (const [key, day] of [
+        ['coop_start', '2026-11-16'],
+        ['coop_end', '2027-03-05'],
+      ]) {
+        await db.query(
+          `INSERT INTO coop_calendar_events (semester_id, activity_key, date_kind, start_date, end_date)
+           SELECT semester_id, $1, 'single', $2, $2 FROM coop_semesters WHERE is_active = TRUE LIMIT 1`,
+          [key, day]
+        );
+      }
+    });
+
+    // คณบดีกรอกตำแหน่งทางวิชาการเองที่หน้าโปรไฟล์
+    await apiLoginAs(request, 'dean1');
+    const titled = await request.put(`${API_URL}/profile/personnel`, {
+      multipart: { academic_title: 'ผู้ช่วยศาสตราจารย์' },
+    });
+    expect(titled.status(), await titled.text()).toBe(200);
+
+    await approveIntentThroughOfficer(request, formId, { documentNo: 'อว 0651.208(1)/1967.1001' });
+    const doc = await dbRow<{ doc_id: number; generated_file_path: string }>(
+      `SELECT doc_id, generated_file_path FROM official_documents WHERE type = 'cover_letter'`
+    );
+    const who = await dbRow<{ name_prefix: string; first_name: string; last_name: string; student_code: string; company: string; contact: string; address: string; dean: string }>(
+      `SELECT s.name_prefix, s.first_name, s.last_name, s.student_code,
+              c.name_th AS company, c.contact_person AS contact, c.address,
+              (SELECT p.first_name || p.last_name FROM personnel p
+                 JOIN user_roles ur ON ur.user_id = p.personnel_id AND ur.role_name = 'dean' LIMIT 1) AS dean
+         FROM intent_forms i
+         JOIN students s ON s.student_id = i.student_id
+         JOIN companies c ON c.company_id = i.company_id
+        WHERE i.form_id = $1`,
+      [formId]
+    );
+    expect(who!.name_prefix, 'นักศึกษาตัวอย่างต้องมีคำนำหน้าจาก seed').toBeTruthy();
+
+    const check = async (label: string, relativePath: string) => {
+      const { flat: text, pages } = await letterText(
+        fs.readFileSync(path.resolve(process.cwd(), 'backend', relativePath))
+      );
+      const has = (expected: string) =>
+        expect(text, `${label}: ไม่พบ "${expected}"`).toContain(flat(expected));
+
+      // ฉบับจริงจบในหน้าเดียว (บล็อกลงนามอยู่เหนือท้ายกระดาษ)
+      expect(pages, `${label}: ต้องจบในหน้าเดียว`).toBe(1);
+      has(`ที่ ${thai('อว 0651.208(1)/1967.1001')}`);
+      has('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ');
+      has('เขตพื้นที่จักรพงษภูวนารถ');
+      has(`กรุงเทพมหานคร ${thai('10400')}`);
+      has('ขอความอนุเคราะห์รับนักศึกษาสหกิจศึกษา ประจำภาคการศึกษาที่');
+      has(`เรียน ${who!.contact} ${who!.company}`);
+      has('แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา');
+      has(`${who!.name_prefix}${who!.first_name} ${who!.last_name}`);
+      has(`รหัสนักศึกษา ${thai(who!.student_code)}`);
+      // ช่วงฝึกมาจากปฏิทินสหกิจของภาคนั้น (ใบยังไม่มีวันเริ่มจากสถานประกอบการ) — ต้องมีทั้งวันเริ่มและวันสิ้นสุด
+      has(`ระหว่างวันที่ ${thai('16')} พฤศจิกายน ${thai('2569')} ถึง ${thai('5')} มีนาคม ${thai('2570')}`);
+      has(`(ผู้ช่วยศาสตราจารย์${who!.dean})`);
+      has(`โทร. ${thai('02-692-2360-4')} ต่อ ${thai('817')}`);
+      // อีเมลท้ายกระดาษ = บัญชีเจ้าหน้าที่ที่กดรับคำร้องใบนี้ ไม่ใช่ของคณบดี · ไม่แปลงเลขในอีเมล
+      has('อีเมล. staff1@test.com');
+      expect(text).not.toContain('dean1@test.com');
+
+      // ⛔ ฉบับจริงไม่มีที่อยู่สถานประกอบการ และเลขในเนื้อหนังสือเป็นเลขไทย
+      expect(text, `${label}: ที่อยู่สถานประกอบการงอกกลับ`).not.toContain(flat(who!.address));
+      expect(text).not.toContain(who!.student_code);
+      expect(text).not.toContain('undefined');
+      expect(text).not.toContain('null');
+    };
+
+    await check('ฉบับรอลงนาม', doc!.generated_file_path);
+
+    await apiLoginAs(request, 'dean1');
+    const signed = await request.post(`${API_URL}/documents/batch-sign`, {
+      data: { doc_ids: [doc!.doc_id] },
+    });
+    expect((await signed.json()).signed_count).toBe(1);
+    await check(
+      'ฉบับลงนาม',
+      (await dbValue<string>('SELECT generated_file_path FROM official_documents WHERE doc_id = $1', [
+        doc!.doc_id,
+      ]))!
+    );
+  });
+
+  test('D16: ข้อมูลที่หนังสือใช้ — คำนำหน้ารับเฉพาะ นาย/นาง/นางสาว และไม่ถูกล้างเมื่อฟอร์มอื่นไม่ส่งมา · ตำแหน่งวิชาการล้างได้', async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    await seedTestData();
+    const prefixOf = () =>
+      dbValue<string | null>(
+        "SELECT name_prefix FROM students WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')"
+      );
+    const titleOf = () =>
+      dbValue<string | null>(
+        "SELECT academic_title FROM personnel WHERE personnel_id = (SELECT user_id FROM users WHERE email = 'dean1@test.com')"
+      );
+    const before = await prefixOf();
+
+    await apiLoginAs(request, 'student2');
+    const save = (fields: Record<string, string>) =>
+      request.put(`${API_URL}/profile/student`, {
+        multipart: { first_name: 'สมชาย', last_name: 'สายดี', ...fields },
+      });
+
+    // ข้อความอิสระพิมพ์ลงหนังสือราชการไม่ได้
+    const bad = await save({ name_prefix: 'ดร.' });
+    expect(bad.status()).toBe(400);
+    expect((await bad.json()).message).toContain('คำนำหน้าชื่อต้องเป็น');
+    expect(await prefixOf()).toBe(before);
+
+    expect((await save({ name_prefix: 'นางสาว' })).status()).toBe(200);
+    expect(await prefixOf()).toBe('นางสาว');
+
+    // ฟอร์มที่ไม่รู้จักช่องนี้ (หรือส่งว่าง) ต้องไม่ล้างคำนำหน้าที่ตั้งแล้ว
+    expect((await save({})).status()).toBe(200);
+    expect(await prefixOf()).toBe('นางสาว');
+    expect((await (await request.get(`${API_URL}/profile/me`)).json()).profile.name_prefix).toBe('นางสาว');
+
+    // ตำแหน่งทางวิชาการ: เจ้าตัวกรอกเอง · ไม่ส่งมา = ไม่แตะ (หน้าตั้งค่าลายมือชื่อเรียกเส้นเดียวกัน) · ส่งว่าง = ล้าง
+    await apiLoginAs(request, 'dean1');
+    const put = (fields: Record<string, string>) =>
+      request.put(`${API_URL}/profile/personnel`, { multipart: fields });
+    expect((await put({ academic_title: '  รองศาสตราจารย์ ดร.  ' })).status()).toBe(200);
+    expect(await titleOf()).toBe('รองศาสตราจารย์ ดร.');
+    expect((await put({ first_name: 'สมศักดิ์' })).status()).toBe(200);
+    expect(await titleOf()).toBe('รองศาสตราจารย์ ดร.');
+    expect((await (await request.get(`${API_URL}/profile/me`)).json()).profile.academic_title).toBe(
+      'รองศาสตราจารย์ ดร.'
+    );
+    // ⚠️ Playwright ไม่ส่งช่อง multipart ที่เป็นสตริงว่าง (เบราว์เซอร์จริงส่ง) — ใช้ช่องว่างหนึ่งเคาะ ซึ่งเซิร์ฟเวอร์ trim เป็นว่างเหมือนกัน
+    expect((await put({ academic_title: ' ' })).status()).toBe(200);
+    expect(await titleOf()).toBeNull();
   });
 });

@@ -9,6 +9,8 @@ import { AuthContext } from '../context/AuthContext';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 
 interface PersonnelProfileData {
+  /** ตำแหน่งทางวิชาการ — พิมพ์หน้าชื่อใต้ลายมือชื่อในหนังสือที่คณบดีลงนาม */
+  academic_title?: string | null;
   first_name?: string | null;
   last_name?: string | null;
   birth_date?: string | null;
@@ -74,6 +76,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
   const [caseload, setCaseload] = useState<Caseload | null>(null);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [academicTitle, setAcademicTitle] = useState('');
   const [birthDate, setBirthDate] = useState('');
 
   const [loading, setLoading] = useState(true);
@@ -88,6 +91,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
 
   const applyProfile = (prof: PersonnelProfileData) => {
     setProfile(prof);
+    setAcademicTitle(prof.academic_title || '');
     setFirstName(prof.first_name || '');
     setLastName(prof.last_name || '');
     setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
@@ -102,6 +106,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
         setCaseload(res.caseload ?? null);
         if (prof) {
           setProfile(prof);
+          setAcademicTitle(prof.academic_title || '');
           setFirstName(prof.first_name || '');
           setLastName(prof.last_name || '');
           setBirthDate(prof.birth_date ? prof.birth_date.split('T')[0] : '');
@@ -130,6 +135,8 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
     setIsSubmitting(true);
     try {
       const formData = new FormData();
+      // ส่งเสมอ (ว่างได้) — เซิร์ฟเวอร์ตั้งตามที่ส่ง จึงล้างตำแหน่งที่พิมพ์ผิดได้
+      formData.append('academic_title', academicTitle.trim());
       formData.append('first_name', firstName.trim());
       formData.append('last_name', lastName.trim());
       if (!profile?.birth_date) formData.append('birth_date', birthDate);
@@ -241,6 +248,21 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label htmlFor="personnel-academic-title" className={labelClass}>ตำแหน่งทางวิชาการ</label>
+                    <Input
+                      id="personnel-academic-title"
+                      data-testid="personnel-academic-title"
+                      value={academicTitle}
+                      maxLength={100}
+                      disabled={isSubmitting}
+                      placeholder="เช่น ผู้ช่วยศาสตราจารย์ · รองศาสตราจารย์ ดร."
+                      onChange={(e) => setAcademicTitle(e.target.value)}
+                    />
+                    <span className="mt-1 block text-xs text-gray-600 dark:text-gray-400">
+                      ไม่มีให้เว้นว่าง · พิมพ์ติดหน้าชื่อใต้ลายมือชื่อในหนังสือที่คณบดีลงนาม
+                    </span>
+                  </div>
                   <div>
                     <label htmlFor="personnel-first-name" className={labelClass}>ชื่อ *</label>
                     <Input
