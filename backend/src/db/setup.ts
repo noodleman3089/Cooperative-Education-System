@@ -1,4 +1,4 @@
-import { Client } from 'pg';
+import { Client, PoolClient } from 'pg';
 import pool from '../config/database';
 import fs from 'fs';
 import path from 'path';
@@ -79,6 +79,63 @@ export async function setupDatabase(quiet = false) {
     await stampAllMigrations(client);
     log('Migration history stamped to match schema.sql.');
 
+    await seedBaseData(client, log);
+
+    client.release();
+
+    // ponytail: generate mock PDF templates and signature images directly during db:setup
+    log('Checking and generating test assets...');
+    await generateTestAssets();
+    log('✅ Test assets checked/created.');
+
+    log('Database setup completed successfully.');
+  } catch (error) {
+    console.error('Error setting up tables or seeds:', error);
+    // Thrown, not exited: a caller running this between tests needs to see the
+    // failure, not have its own process killed out from under it.
+    throw error;
+  }
+}
+
+/**
+ * ล้างข้อมูลทุกตารางแล้ว seed ใหม่ **โดยไม่สร้าง schema ใหม่** — ให้ผลเหมือน `setupDatabase()`
+ * ในฐานที่ schema ตรงกับ `schema.sql` อยู่แล้ว แต่ไม่ต้อง DROP + CREATE 41 ตาราง
+ *
+ * มีไว้ให้ E2E seeder เรียกระหว่างเทสต์: `setupDatabase()` ก่อนทุกเคสกินเวลาเกือบครึ่งของทั้งชุด
+ * (วัด 2026-10-08: DDL 213 ms + hash รหัสผ่าน 374 ms ต่อครั้ง เทียบกับ TRUNCATE 128 ms + seed 10 ms)
+ * · `RESTART IDENTITY` ทำให้เลข id เริ่มที่ 1 ใหม่เหมือนตารางที่เพิ่งสร้าง — เทสต์หลายตัวพึ่งเลขนี้
+ * · `schema_migrations` ไม่ถูกล้าง: มันบอกสภาพของ schema ไม่ใช่ข้อมูลของเทสต์
+ * ⛔ ไม่ซ่อม schema — เทสต์ที่แก้ DDL (ถอด constraint · ปิด trigger) ต้องคืนเองเหมือนเดิม
+ */
+export async function reseedDatabase() {
+  const client = await pool.connect();
+  try {
+    const tables = await client.query(
+      `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`
+    );
+    const names = tables.rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(', ');
+    await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
+    await seedBaseData(client, () => undefined);
+  } finally {
+    client.release();
+  }
+  await generateTestAssets();
+}
+
+// รหัสผ่านของบัญชี seed เป็นค่าเดียวกันทุกบัญชีและทุกครั้งที่ seed — hash ครั้งเดียวต่อโปรเซสพอ
+// (bcrypt ตั้งใจให้ช้า: 6 บัญชี ≈ 0.3 วินาที ต่อการรีเซ็ตหนึ่งครั้ง คูณ 600 เคสใน E2E)
+const seedHashes = new Map<string, Promise<string>>();
+function seedPasswordHash(password: string): Promise<string> {
+  let hash = seedHashes.get(password);
+  if (!hash) {
+    hash = hashPassword(password);
+    seedHashes.set(password, hash);
+  }
+  return hash;
+}
+
+/** ข้อมูลตั้งต้น: master data จาก seeds.sql + บัญชีทดสอบ · ใช้ร่วมกันโดย setupDatabase และ reseedDatabase */
+async function seedBaseData(client: PoolClient, log: (message: string) => void) {
     // Read seeds.sql
     const seedsPath = path.join(__dirname, 'seeds.sql');
     log(`Reading seeds from ${seedsPath}`);
@@ -108,7 +165,7 @@ export async function setupDatabase(quiet = false) {
     ];
 
     for (const u of defaultUsers) {
-      const passwordHash = u.password ? await hashPassword(u.password) : null;
+      const passwordHash = u.password ? await seedPasswordHash(u.password) : null;
       
       // Insert or update user
       const userInsert = await client.query(
@@ -188,21 +245,6 @@ export async function setupDatabase(quiet = false) {
         }
       }
     }
-
-    client.release();
-
-    // ponytail: generate mock PDF templates and signature images directly during db:setup
-    log('Checking and generating test assets...');
-    await generateTestAssets();
-    log('✅ Test assets checked/created.');
-
-    log('Database setup completed successfully.');
-  } catch (error) {
-    console.error('Error setting up tables or seeds:', error);
-    // Thrown, not exited: a caller running this between tests needs to see the
-    // failure, not have its own process killed out from under it.
-    throw error;
-  }
 }
 
 async function generateTestAssets() {

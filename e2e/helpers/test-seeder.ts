@@ -6,7 +6,11 @@ import fs from 'fs';
 dotenv.config({ path: path.resolve(__dirname, '../../backend/.env') });
 
 import pool from '../../backend/src/config/database';
-import { setupDatabase } from '../../backend/src/db/setup';
+import { setupDatabase, reseedDatabase } from '../../backend/src/db/setup';
+
+// schema ถูกสร้างจาก schema.sql ครั้งเดียวต่อโปรเซสของ worker · หลังจากนั้นล้างข้อมูลแล้ว seed ใหม่พอ
+// Playwright เปิด worker ใหม่หลังเคสที่แดง → เคสถัดไปได้ schema ใหม่เอี่ยมเองโดยไม่ต้องทำอะไร
+let schemaBuilt = false;
 
 /**
  * Resets the database to a known state before a test runs. That reset is what
@@ -16,9 +20,20 @@ import { setupDatabase } from '../../backend/src/db/setup';
  * It used to shell out to `npm run db:setup`, which spawned node and compiled
  * setup.ts through ts-node every time — 2.5s of which nearly all was startup,
  * 41 times a run. Calling it in-process costs the SQL and nothing else.
+ *
+ * 2026-10-08: การรีเซ็ตนี้กินเวลาเกือบครึ่งของชุดเต็ม (600 เคส · 26.5 นาที) เพราะ DROP + CREATE
+ * ทุกตารางก่อนทุกเคส — ตอนนี้สร้าง schema ครั้งแรกครั้งเดียว ครั้งถัดไป TRUNCATE แล้ว seed ใหม่
+ * (ชุดเต็มเหลือ 16.3 นาที · รีเซ็ตต่อเคสจากกลาง ๆ 1.5 วินาที เหลือ 0.45)
+ * ข้อมูลที่เทสต์เห็นเหมือนเดิมทุกอย่าง (รวมเลข id ที่เริ่มจาก 1)
+ * ⛔ เทสต์ที่แก้ DDL ต้องคืนเองใน `finally` — การรีเซ็ตไม่ซ่อม schema ให้อีกแล้ว
  */
 export async function seedTestData() {
-  await setupDatabase(true);
+  if (schemaBuilt) {
+    await reseedDatabase();
+  } else {
+    await setupDatabase(true);
+    schemaBuilt = true;
+  }
 
   const client = await pool.connect();
   try {
@@ -26,7 +41,7 @@ export async function seedTestData() {
 
     // 3. Find User IDs
     const studentRes = await client.query("SELECT user_id FROM users WHERE email = 'student2@test.com'");
-    const advisorRes = await client.query("SELECT user_id FROM users WHERE email = 'advisor1@test.com'");
+    const advisorRes = await client.query("SELECT user_id, password_hash FROM users WHERE email = 'advisor1@test.com'");
     const staffRes = await client.query("SELECT user_id FROM users WHERE email = 'staff1@test.com'");
 
     if (studentRes.rowCount === 0 || advisorRes.rowCount === 0 || staffRes.rowCount === 0) {
@@ -87,12 +102,10 @@ export async function seedTestData() {
     const advisor2Check = await client.query("SELECT user_id FROM users WHERE email = 'advisor2@test.com'");
     let advisor2Id: number;
     if (advisor2Check.rowCount === 0) {
-      // Import hash utility
-      const { hashPassword: hashPw } = await import('../../backend/src/utils/password');
-      const hashedPw = await hashPw('password123');
+      // รหัสผ่านเดียวกับ advisor1 — ลอก hash มาใช้ ไม่ต้อง hash ใหม่ทุกครั้งที่รีเซ็ต
       const advisor2Insert = await client.query(
         "INSERT INTO users (email, password_hash) VALUES ('advisor2@test.com', $1) RETURNING user_id",
-        [hashedPw]
+        [advisorRes.rows[0].password_hash]
       );
       advisor2Id = advisor2Insert.rows[0].user_id;
       await client.query(
