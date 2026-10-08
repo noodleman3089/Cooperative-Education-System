@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbRow, dbExec, dbValue } from '../helpers/db';
 import { loginAs, apiLoginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
@@ -230,7 +230,7 @@ test.describe('ปฏิทินสหกิจศึกษา', () => {
     const now = await today();
     await setWindow('report_outline', shift(now, -60), shift(now, -30));
 
-    const uploadDir = path.resolve(__dirname, '../../backend/uploads');
+    const uploadDir = path.join(BACKEND_ROOT, 'uploads');
     const countFiles = () =>
       fs.existsSync(uploadDir)
         ? fs.readdirSync(uploadDir, { recursive: true as never }).length

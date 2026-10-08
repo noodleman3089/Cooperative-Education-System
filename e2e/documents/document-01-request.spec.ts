@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer, officerApprove } from '../helpers/intent';
@@ -589,7 +589,7 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     expect(doc?.template_id).toBeNull();
 
     const draftPath = doc!.generated_file_path;
-    expect(fs.existsSync(path.resolve(process.cwd(), 'backend', draftPath))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT,draftPath))).toBe(true);
 
     // นักศึกษายังโหลดไม่ได้ เพราะยังไม่ลงนาม
     await apiLoginAs(request, 'student2');
@@ -610,7 +610,7 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
     // ⛔ ฉบับลงนามต้องเป็น **คนละไฟล์** กับต้นฉบับ — ของเดิมเขียนทับไฟล์เดิม
     // ทำให้ไม่มีต้นฉบับให้ถอย และกดซ้ำแล้วลายเซ็นซ้อนกัน
     expect(after?.generated_file_path).not.toBe(draftPath);
-    expect(fs.existsSync(path.resolve(process.cwd(), 'backend', draftPath))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT,draftPath))).toBe(true);
 
     // กดซ้ำต้องไม่ได้ และไฟล์ต้องไม่เปลี่ยนอีก
     const again = await request.post(`${API_URL}/documents/batch-sign`, {
@@ -703,7 +703,7 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
       'SELECT generated_file_path FROM official_documents WHERE doc_id = $1',
       [docId]
     );
-    const signedBytes = fs.readFileSync(path.resolve(process.cwd(), 'backend', signedPath as string));
+    const signedBytes = fs.readFileSync(path.join(BACKEND_ROOT,signedPath as string));
     expect(signedBytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     // ฉบับลงนามต้องใหญ่กว่าฉบับร่างของชื่อเดียวกัน เพราะมีรูปลายเซ็นฝังอยู่
     expect(signedBytes.length).toBeGreaterThan(long.length);
@@ -755,7 +755,7 @@ test.describe('เอกสารหมายเลข 1 — แบบคำร�
 
     const check = async (label: string, relativePath: string) => {
       const { flat: text, pages } = await letterText(
-        fs.readFileSync(path.resolve(process.cwd(), 'backend', relativePath))
+        fs.readFileSync(path.join(BACKEND_ROOT,relativePath))
       );
       const has = (expected: string) =>
         expect(text, `${label}: ไม่พบ "${expected}"`).toContain(flat(expected));

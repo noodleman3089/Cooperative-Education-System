@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
@@ -24,7 +24,7 @@ import { officerApprove } from '../helpers/intent';
 
 const STUDENT2 = "(SELECT user_id FROM users WHERE email = 'student2@test.com')";
 const PDF = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
-const UPLOAD_DIR = path.resolve(__dirname, '../../backend/uploads/request_forms');
+const UPLOAD_DIR = path.join(BACKEND_ROOT, 'uploads/request_forms');
 const LATE_REASON = 'อาจารย์ที่ปรึกษาไปราชการต่างจังหวัด จึงได้ลายมือชื่อช้ากว่ากำหนด';
 
 const today = () =>
@@ -124,7 +124,7 @@ test.describe('กติกาอัปโหลดแบบคำร้อง�
 
     expect((await upload(request, formId, { advisor_signer_name: 'อ.ที่ปรึกษา คนใหม่' })).status()).toBe(200);
     const first = (await row(formId))!;
-    const firstFile = path.resolve(__dirname, '../../backend/uploads', first.request_form_path!);
+    const firstFile = path.join(BACKEND_ROOT, 'uploads', first.request_form_path!);
     expect(fs.existsSync(firstFile)).toBe(true);
 
     // เปลี่ยนไฟล์ — ไม่ส่งชื่อมา (หน้าจอไม่ถามซ้ำ)

@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
@@ -138,7 +138,7 @@ test.describe('ยกเลิกคำร้องก่อนเจ้าห�
     });
     expect(upload.status(), await upload.text()).toBe(200);
     expect(await dbValue<string>('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe('pending_officer_request');
-    const stored = path.resolve(__dirname, '../../backend/uploads', (await upload.json()).request_form_path);
+    const stored = path.join(BACKEND_ROOT, 'uploads', (await upload.json()).request_form_path);
     expect(fs.existsSync(stored)).toBe(true);
 
     const res = await request.post(`${API_URL}/intents/${formId}/withdraw`);

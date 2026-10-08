@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs } from '../helpers/auth';
 import { deanSign, officerApprove } from '../helpers/intent';
@@ -20,7 +20,7 @@ import { deanSign, officerApprove } from '../helpers/intent';
  */
 
 const PDF = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
-const FONT = path.resolve(__dirname, '../../backend/secure_private/fonts/THSarabunNew.ttf');
+const FONT = path.join(BACKEND_ROOT, 'secure_private/fonts/THSarabunNew.ttf');
 const FONT_HIDDEN = `${FONT}.e2e-hidden`;
 const STUDENT2 = "(SELECT user_id FROM users WHERE email = 'student2@test.com')";
 
@@ -204,7 +204,7 @@ test.describe('ขั้น 2 — เจ้าหน้าที่รับ/ต
     expect(docs).toHaveLength(1);
     expect(docs[0].status).toBe('pending_sign');
     expect(docs[0].document_number).toBe('อว 0656.10/3');
-    expect(fs.existsSync(path.resolve(__dirname, '../../backend', docs[0].generated_file_path))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT, docs[0].generated_file_path))).toBe(true);
     expect(await missingOnHome(request)).not.toContain(formId);
 
     // เข้าคิวคณบดีจริง — คณบดีเห็นและลงนามได้
@@ -344,7 +344,7 @@ test.describe('ขั้น 2 — เจ้าหน้าที่รับ/ต
     expect(docs[0].status).toBe('pending_sign');
     // ไฟล์ฉบับยังไม่ลงนามถูกวาดใหม่ (เลขเก่าพิมพ์อยู่ในไฟล์เดิม)
     expect(docs[0].generated_file_path).not.toBe(draft.generated_file_path);
-    expect(fs.existsSync(path.resolve(__dirname, '../../backend', docs[0].generated_file_path))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT, docs[0].generated_file_path))).toBe(true);
 
     // หนังสือยังจับคู่กับใบ — เส้นที่ทั้งระบบใช้อ่านสถานะหนังสือยังเห็น และหน้าแรกไม่นับเป็นใบไม่มีหนังสือ
     const listed = (await (await request.get(`${API_URL}/intents?status=approved_by_dept_head`)).json()) as {

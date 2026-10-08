@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { walkToSigned, placementCard } from '../helpers/intent';
@@ -28,8 +28,8 @@ import { walkToSigned, placementCard } from '../helpers/intent';
  */
 
 const PUB = `${API_URL}/public/acceptance`;
-const EVIDENCE_DIR = path.resolve(__dirname, '../../backend/uploads/acceptance_evidence');
-const RESUME_DIR = path.resolve(__dirname, '../../backend/uploads/resumes');
+const EVIDENCE_DIR = path.join(BACKEND_ROOT, 'uploads/acceptance_evidence');
+const RESUME_DIR = path.join(BACKEND_ROOT, 'uploads/resumes');
 const PDF_FIXTURE = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
 
 const evidenceCount = (): number =>
@@ -480,7 +480,7 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(intent?.acceptance_source).toBe('link');
     expect(intent?.signer).toBe('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     expect(intent?.late).toBe(false);
-    expect(fs.existsSync(path.resolve(__dirname, '../../backend/uploads', intent!.evidence))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT, 'uploads', intent!.evidence))).toBe(true);
 
     // ⛔ ลิงก์ไม่แตะทะเบียนบริษัทและไม่สร้างบัญชีใดๆ — พี่เลี้ยงมาจากนักศึกษาทีหลัง ไม่ได้มาจากคนถือลิงก์
     expect(await companySnapshot(formId)).toEqual(companyBefore);

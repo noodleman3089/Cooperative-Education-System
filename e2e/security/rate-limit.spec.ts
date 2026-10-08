@@ -1,6 +1,6 @@
 import { test, expect, request as playwrightRequest } from '@playwright/test';
 import { spawn, execSync, ChildProcess } from 'child_process';
-import path from 'path';
+import { BACKEND_ROOT, BACKEND_START_COMMAND, CHILD_SERVER_PORT } from '../helpers/env';
 
 /**
  * Rate limit — อีกช่องที่ CLAUDE.md บันทึกไว้ว่า "ไม่เคยทดสอบเลย"
@@ -16,7 +16,7 @@ import path from 'path';
  * จึงไม่แตะข้อมูลของเทสต์อื่น
  */
 
-const PORT = 5099;
+const PORT = CHILD_SERVER_PORT;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 let server: ChildProcess | undefined;
@@ -45,8 +45,8 @@ test.describe('Rate limiting (โหมด production จริง)', () => {
   test.beforeAll(async () => {
     // คำสั่งเป็นสตริงเดียวเพราะต้องผ่าน shell (npx เป็น .cmd บน Windows) —
     // การส่ง args array คู่กับ shell:true ทำให้ Node เตือนเรื่องการต่อสตริงที่ไม่ escape
-    server = spawn('npx ts-node src/index.ts', {
-      cwd: path.resolve(__dirname, '../../backend'),
+    server = spawn(BACKEND_START_COMMAND, {
+      cwd: BACKEND_ROOT,
       env: {
         ...process.env,
         NODE_ENV: 'production',

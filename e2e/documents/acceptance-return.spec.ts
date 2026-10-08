@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 
@@ -197,7 +197,7 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     request,
   }) => {
     const formId = await seedIntent(5);
-    const evidenceDir = path.resolve(__dirname, '../../backend/uploads/acceptance_evidence');
+    const evidenceDir = path.join(BACKEND_ROOT, 'uploads/acceptance_evidence');
     const countFiles = () => fs.readdirSync(evidenceDir).length;
     const before = countFiles();
 
@@ -320,7 +320,7 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     expect(row?.status).toBe('approved_by_dept_head');
     expect(row?.reject_reason).toBe('ไม่มีลายเซ็นผู้มีอำนาจ');
     expect(row?.acceptance_evidence_path).toBeNull();
-    const onDisk = () => fs.existsSync(path.resolve(__dirname, '../../backend/uploads', firstFile));
+    const onDisk = () => fs.existsSync(path.join(BACKEND_ROOT, 'uploads', firstFile));
     await expect.poll(onDisk, { timeout: 5000 }).toBe(false);
 
     // ส่งใหม่ในใบเดิม — อีเมลพี่เลี้ยงเดิม (บัญชีที่สร้างไว้รอบแรก) ต้องใช้ซ้ำได้

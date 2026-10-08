@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbValue } from '../helpers/db';
 import { apiLoginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer, officerApprove } from '../helpers/intent';
@@ -19,7 +19,7 @@ import { approveIntentThroughOfficer, officerApprove } from '../helpers/intent';
  *   N4  เปิดคิวนับเฉพาะคณบดี · เขียนไม่ถี่เกิน 1 นาที
  */
 
-const FONT = `${process.cwd()}/backend/secure_private/fonts/THSarabunNew.ttf`;
+const FONT = path.join(BACKEND_ROOT, 'secure_private/fonts/THSarabunNew.ttf');
 const FONT_HIDDEN = `${FONT}.e2e-hidden`;
 
 const DEAN = "(SELECT user_id FROM users WHERE email = 'dean1@test.com')";

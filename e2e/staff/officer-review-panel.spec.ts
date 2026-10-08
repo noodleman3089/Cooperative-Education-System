@@ -3,7 +3,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 
@@ -19,7 +19,7 @@ import { apiLoginAs, loginAs } from '../helpers/auth';
  */
 
 const PDF = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
-const FONT = path.resolve(__dirname, '../../backend/secure_private/fonts/THSarabunNew.ttf');
+const FONT = path.join(BACKEND_ROOT, 'secure_private/fonts/THSarabunNew.ttf');
 const FONT_HIDDEN = `${FONT}.e2e-hidden`;
 const STUDENT2 = "(SELECT user_id FROM users WHERE email = 'student2@test.com')";
 const LATE_REASON = 'หัวหน้าสาขาวิชาไปราชการต่างจังหวัด จึงได้ลายมือชื่อช้ากว่ากำหนด';

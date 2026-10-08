@@ -81,7 +81,6 @@ export async function logout(page: Page): Promise<void> {
   if (!(await btn.isVisible())) {
     await page.getByRole('button', { name: 'เมนูบัญชีผู้ใช้' }).click();
   }
-  await btn.click();
   /**
    * ⛔ ต้องรอให้เด้งไป /login ให้เสร็จก่อนคืนค่า
    *
@@ -89,6 +88,15 @@ export async function logout(page: Page): Promise<void> {
    * แบบ async · ผู้เรียกที่สั่ง `page.goto(...)` ต่อทันทีจะไปชนกับการเด้งนั้น
    * แล้วได้ `Navigation ... is interrupted by another navigation to .../login`
    * เป็นครั้งคราว — แดงคนละเคสกันทุกรอบ หาสาเหตุยาก (เจอ 2026-09-10)
+   *
+   * ⛔ รอ URL อย่างเดียวไม่พอ (2026-10-08): ปุ่มนี้พาไป /login **สองทาง** — ตัวกันเส้นทางเปลี่ยน URL
+   * ในหน้าเดิม และ `window.location.href = '/login'` ใน `Navbar` โหลดหน้าใหม่ทั้งหน้า · ถ้าทางแรกถึงก่อน
+   * URL ตรงแล้วแต่การโหลดหน้าใหม่ยังค้างอยู่ แล้วไปขัด `page.goto` ถัดไป (flaky 2 จาก 3 รอบเมื่อรัน 4 worker
+   * ที่ `placement-happy-path` Scenario 2) → ต้องรอเหตุการณ์ `load` ของหน้าใหม่ ซึ่งเกิดครั้งเดียวและเกิดเสมอ
+   * · ต้องเริ่มรอ **ก่อน** กดปุ่ม ไม่งั้นพลาดเหตุการณ์ที่มาเร็ว
    */
+  const reloaded = page.waitForEvent('load', { timeout: 15_000 });
+  await btn.click();
+  await reloaded;
   await page.waitForURL(/\/login/, { timeout: 15_000 });
 }

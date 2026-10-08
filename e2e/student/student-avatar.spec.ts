@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
@@ -43,7 +43,7 @@ const storedAvatar = (email = 'student2@test.com') =>
   );
 
 const onDisk = (relativePath: string) =>
-  fs.existsSync(path.resolve(__dirname, '../../backend/uploads', relativePath));
+  fs.existsSync(path.join(BACKEND_ROOT, 'uploads', relativePath));
 
 test.describe('รูปโปรไฟล์นักศึกษา', () => {
   test.beforeEach(async ({ page }) => {

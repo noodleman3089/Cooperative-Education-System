@@ -15,7 +15,7 @@ import { execSync } from 'child_process';
  * แก้ schema.sql → production มีคอลัมน์ เครื่องเราไม่มี → เทสต์เขียวแต่ของจริงพัง
  * (หรือกลับกัน) เทสต์นี้สร้างฐานชั่วคราวสองตัวจากคนละทาง แล้วเทียบกันทีละคอลัมน์
  *
- * ไม่ใช้ browser และไม่แตะฐานของ dev — สร้างฐานชื่อ `coop_drift_*` ขึ้นมาแล้วลบทิ้ง
+ * ไม่ใช้ browser และไม่แตะฐานของ dev — ใช้ฐานชื่อ `coop_drift_*` สามตัว (สร้างครั้งแรก · จบแล้วล้างให้ว่าง)
  */
 
 const DB_DIR = path.resolve(__dirname, '../../backend/src/db');
@@ -69,19 +69,6 @@ async function withAdmin<T>(fn: (c: Client) => Promise<T>): Promise<T> {
   }
 }
 
-async function recreateDatabase(name: string): Promise<void> {
-  await withAdmin(async (admin) => {
-    await admin.query(`DROP DATABASE IF EXISTS ${name}`);
-    await admin.query(`CREATE DATABASE ${name}`);
-  });
-}
-
-async function dropDatabase(name: string): Promise<void> {
-  await withAdmin(async (admin) => {
-    await admin.query(`DROP DATABASE IF EXISTS ${name}`);
-  });
-}
-
 async function withDatabase<T>(name: string, fn: (c: Client) => Promise<T>): Promise<T> {
   const client = new Client({ ...ADMIN_CONFIG, database: name });
   await client.connect();
@@ -90,6 +77,21 @@ async function withDatabase<T>(name: string, fn: (c: Client) => Promise<T>): Pro
   } finally {
     await client.end();
   }
+}
+
+/**
+ * ฐานเปล่าชื่อนี้ — สร้างถ้ายังไม่มี · มีแล้วล้าง schema `public` ทิ้งทั้งก้อน (ผลเท่ากับฐานที่เพิ่งสร้าง)
+ *
+ * ⛔ ไม่ใช้ `DROP DATABASE`: มันบังคับ checkpoint แล้วรอจนเสร็จ ระหว่างชุด E2E ที่รีเซ็ตฐานหลายร้อยครั้ง
+ *    checkpoint หนึ่งรอบต้อง fsync เป็นแสนไฟล์ — เคสนี้เคยค้าง 153 วินาทีจากเพดาน 180 (วัด 2026-10-08
+ *    จาก log ของ Postgres: `sync files=98239 … total=386.984 s`) ทั้งที่รันเดี่ยวใช้ 5 วินาที
+ */
+async function recreateDatabase(name: string): Promise<void> {
+  await withAdmin(async (admin) => {
+    const exists = await admin.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+    if ((exists.rowCount ?? 0) === 0) await admin.query(`CREATE DATABASE ${name}`);
+  });
+  await withDatabase(name, (client) => client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;'));
 }
 
 /** หน้าตาของฐาน: คอลัมน์ทุกตัว + ข้อจำกัด + ดัชนี เรียงให้เทียบกันได้ */
@@ -127,9 +129,10 @@ async function describeDatabase(client: Client) {
 
 test.describe('Schema drift: schema.sql กับ migrations/ ต้องให้ผลเหมือนกัน', () => {
   test.afterAll(async () => {
-    await dropDatabase(DB_FROM_SCHEMA);
-    await dropDatabase(DB_FROM_MIGRATIONS);
-    await dropDatabase(DB_FOR_RUNNER);
+    // ทิ้งฐานไว้แบบว่างเปล่า ไม่ลบฐาน — เหตุผลอยู่ที่ recreateDatabase
+    await recreateDatabase(DB_FROM_SCHEMA);
+    await recreateDatabase(DB_FROM_MIGRATIONS);
+    await recreateDatabase(DB_FOR_RUNNER);
   });
 
   test('ฐานที่สร้างจาก schema.sql เท่ากับฐานที่สร้างจาก migration ทุกไฟล์', async () => {

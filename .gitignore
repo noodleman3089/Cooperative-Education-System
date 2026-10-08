@@ -56,6 +56,9 @@ backend/secure_private/documents/*
 e2e/test-results/
 e2e/test-results-walkthrough/
 e2e/playwright-report/
+# โฟลเดอร์ไฟล์ของ backend ต่อ worker (E2E รันขนาน) — มีสำเนาตรา · แม่แบบ · ลายเซ็น และไฟล์ที่เทสต์อัปโหลด
+# ⛔ ห้ามเอาเข้า git ด้วยเหตุผลเดียวกับ backend/secure_private/ และ backend/uploads/
+e2e/.workers/
 
 # Agent configuration
 .agents

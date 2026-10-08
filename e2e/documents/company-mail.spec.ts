@@ -4,7 +4,7 @@ import { spawn, execSync, ChildProcess } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT, BACKEND_START_COMMAND, CHILD_SERVER_PORT } from '../helpers/env';
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs, ACCOUNTS } from '../helpers/auth';
 import type { AccountKey } from '../helpers/auth';
@@ -558,10 +558,10 @@ test.describe('นักศึกษาส่งหนังสือให้�
  * M7 — ส่งล้ม: ต้องตอบ 502 · ไม่ตั้ง sent_at/to · ไม่นับครั้ง
  *
  * ทำกับ backend หลักไม่ได้ (MAIL_DRY_RUN=true ทำให้ส่งสำเร็จเสมอ) จึงสตาร์ท backend อีกตัว
- * ตามแบบ `security/rate-limit.spec.ts` บนพอร์ต 5099 โดยปิด dry-run แล้วชี้ SMTP ไปพอร์ต 9
+ * ตามแบบ `security/rate-limit.spec.ts` บนพอร์ตของ worker (`CHILD_SERVER_PORT`) โดยปิด dry-run แล้วชี้ SMTP ไปพอร์ต 9
  * (ไม่มีใครฟัง → ECONNREFUSED ทันที · ไม่ออกเน็ต · ไม่ใช้โหมด production จึงไม่ต้องมี env production)
  */
-const PORT = 5099;
+const PORT = CHILD_SERVER_PORT;
 const BASE = `http://127.0.0.1:${PORT}`;
 let failingServer: ChildProcess | undefined;
 
@@ -587,8 +587,8 @@ async function waitForServer(timeoutMs = 90_000): Promise<void> {
 test.describe('ส่งอีเมลล้ม (backend แยก · SMTP ใช้ไม่ได้)', () => {
   test.beforeAll(async () => {
     test.setTimeout(150_000);
-    failingServer = spawn('npx ts-node src/index.ts', {
-      cwd: path.resolve(__dirname, '../../backend'),
+    failingServer = spawn(BACKEND_START_COMMAND, {
+      cwd: BACKEND_ROOT,
       env: {
         ...process.env,
         PORT: String(PORT),

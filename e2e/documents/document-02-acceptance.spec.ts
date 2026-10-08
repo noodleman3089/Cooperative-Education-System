@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer } from '../helpers/intent';
@@ -145,13 +145,7 @@ test.describe('เอกสารหมายเลข 2 — แบบยืน�
     // ซึ่งไม่มี alpha ในสเปก แล้วพื้นหลังขาวทึบจะติดไปบนเอกสารทุกใบ
     const fs = await import('fs');
     const path = await import('path');
-    const seal = path.resolve(
-      process.cwd(),
-      'backend',
-      'secure_private',
-      'emblems',
-      'rmutto_seal.png'
-    );
+    const seal = path.join(BACKEND_ROOT, 'secure_private', 'emblems', 'rmutto_seal.png');
     expect(fs.existsSync(seal)).toBe(true);
     const bytes = fs.readFileSync(seal);
     expect(bytes.subarray(1, 4).toString()).toBe('PNG');

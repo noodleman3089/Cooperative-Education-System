@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { PDFParse } from 'pdf-parse';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer, coverLetterDocId, deanSign, officerApprove } from '../helpers/intent';
@@ -21,7 +21,7 @@ import { approveIntentThroughOfficer, coverLetterDocId, deanSign, officerApprove
  */
 
 const PDF = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
-const FONT = path.resolve(__dirname, '../../backend/secure_private/fonts/THSarabunNew.ttf');
+const FONT = path.join(BACKEND_ROOT, 'secure_private/fonts/THSarabunNew.ttf');
 const FONT_HIDDEN = `${FONT}.e2e-hidden`;
 const STUDENT2 = "(SELECT user_id FROM users WHERE email = 'student2@test.com')";
 const REASON = 'บริษัทแจ้งว่าชื่อผู้รับหนังสือเปลี่ยน กรุณาตรวจข้อมูลอีกครั้ง';
@@ -363,9 +363,8 @@ test.describe('ขั้น 3 — คณบดีลงนามหนังส�
     const signedPdfText = async (docId: number): Promise<string> =>
       letterText(
         fs.readFileSync(
-          path.resolve(
-            process.cwd(),
-            'backend',
+          path.join(
+            BACKEND_ROOT,
             (await dbValue<string>('SELECT generated_file_path FROM official_documents WHERE doc_id = $1', [docId]))!
           )
         )

@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { PDFParse } from 'pdf-parse';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbValue, withDb } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { walkToSigned } from '../helpers/intent';
@@ -32,7 +32,7 @@ import { formatThaiDateLong } from '../../backend/src/utils/thaiDate';
  */
 
 const PUB = `${API_URL}/public/acceptance`;
-const EVIDENCE_DIR = path.resolve(__dirname, '../../backend/uploads/acceptance_evidence');
+const EVIDENCE_DIR = path.join(BACKEND_ROOT, 'uploads/acceptance_evidence');
 const PDF_FIXTURE = path.resolve(__dirname, '../fixtures/mock_official_letter.pdf');
 
 const evidenceCount = (): number => (fs.existsSync(EVIDENCE_DIR) ? fs.readdirSync(EVIDENCE_DIR).length : 0);

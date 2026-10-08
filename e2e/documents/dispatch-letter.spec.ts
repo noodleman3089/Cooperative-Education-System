@@ -3,7 +3,7 @@ import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { API_URL } from '../helpers/env';
+import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { approveIntentThroughOfficer } from '../helpers/intent';
@@ -185,7 +185,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(doc?.status).toBe('pending_sign');
     expect(doc?.document_number).toBe('อว 0656.10/ส่งตัว-1');
     // ไฟล์ต้องมีอยู่จริงบนดิสก์ ไม่ใช่แค่แถวในฐาน — คณบดีจะเปิดไฟล์นี้ตอนลงนาม
-    expect(fs.existsSync(path.resolve(__dirname, '../../backend', doc!.path))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT, doc!.path))).toBe(true);
 
     // กดซ้ำต้องไม่ได้เอกสารใบที่สอง — เลขที่หนังสือราชการซ้ำคือปัญหาจริงของงานสารบรรณ
     const again = await issue(request, formId, {
@@ -245,7 +245,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(after?.signed_at).not.toBeNull();
     // ⛔ ฉบับลงนามต้องเป็น **ไฟล์ใหม่** ต้นฉบับยังอยู่ (กดซ้ำแล้วลายเซ็นไม่ซ้อน)
     expect(after?.path).not.toBe(before?.path);
-    expect(fs.existsSync(path.resolve(__dirname, '../../backend', before!.path))).toBe(true);
+    expect(fs.existsSync(path.join(BACKEND_ROOT, before!.path))).toBe(true);
     // ชื่อไฟล์บอกชนิดหนังสือ — ถ้าตัววาดถูกเรียกผิดตัว จะได้ cover_letter_signed_*
     expect(path.basename(after!.path)).toContain('dispatch_letter_signed');
 

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { withDb, ensureLegacyTemplate } from './db';
+import { BACKEND_ROOT } from './env';
 
 /**
  * จัดฉาก "เอกสารราชการที่ออกไปแล้วและรอคณบดีลงนาม"
@@ -24,7 +25,7 @@ export async function seedPendingSignDocument(
 
   const fileName = `e2e_pending_sign_${Date.now()}.pdf`;
   const relativePath = path.posix.join('secure_private', 'documents', fileName);
-  const absolutePath = path.resolve(__dirname, '../../backend', relativePath);
+  const absolutePath = path.join(BACKEND_ROOT, relativePath);
 
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
   fs.copyFileSync(path.resolve(__dirname, '../fixtures/mock_official_letter.pdf'), absolutePath);

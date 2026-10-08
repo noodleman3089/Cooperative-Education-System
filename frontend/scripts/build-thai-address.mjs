@@ -35,7 +35,11 @@ const trimmed = raw.map((province) => ({
   })),
 }));
 
-fs.writeFileSync(TARGET, JSON.stringify(trimmed));
+// เขียนเฉพาะตอนเนื้อหาเปลี่ยน — เขียนทับด้วยเนื้อเดิมก็ทำให้ vite dev ที่เปิดอยู่รีโหลดหน้า
+// (E2E รันสคริปต์นี้ระหว่างที่ worker อื่นกำลังใช้หน้าจออยู่)
+const output = JSON.stringify(trimmed);
+const current = fs.existsSync(TARGET) ? fs.readFileSync(TARGET, 'utf8') : null;
+if (current !== output) fs.writeFileSync(TARGET, output);
 
 const kb = (bytes) => `${(bytes / 1024).toFixed(0)} KB`;
 const districts = trimmed.reduce((n, p) => n + p.districts.length, 0);

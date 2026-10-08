@@ -7,6 +7,7 @@ dotenv.config({ path: path.resolve(__dirname, '../../backend/.env') });
 
 import pool from '../../backend/src/config/database';
 import { setupDatabase, reseedDatabase } from '../../backend/src/db/setup';
+import { BACKEND_ROOT } from './env';
 
 // schema ถูกสร้างจาก schema.sql ครั้งเดียวต่อโปรเซสของ worker · หลังจากนั้นล้างข้อมูลแล้ว seed ใหม่พอ
 // Playwright เปิด worker ใหม่หลังเคสที่แดง → เคสถัดไปได้ schema ใหม่เอี่ยมเองโดยไม่ต้องทำอะไร
@@ -144,7 +145,19 @@ export async function seedTestData() {
     // ไม่ใช่รูปที่เปิดได้จริง ใช้ได้เพราะ multer ตรวจแค่ไบต์ต้นไฟล์
     // (`mock_consent.pdf` ถูกถอดออกพร้อมใบยินยอมผู้ปกครอง 2026-08-26 · เอกสารที่ต้อง
     //  ให้ pdf-lib เปิดได้จริงใช้ `mock_official_letter.pdf` แทน)
-    fs.writeFileSync(path.join(fixturesDir, 'mock_evidence.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    // เขียนเฉพาะตอนยังไม่มี — หลาย worker เขียนไฟล์เดียวกันพร้อมกันทำให้ตัวที่กำลังอ่านเจอไฟล์ว่าง
+    const evidencePath = path.join(fixturesDir, 'mock_evidence.png');
+    if (!fs.existsSync(evidencePath)) {
+      fs.writeFileSync(evidencePath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    }
+
+    // ลายเซ็นคณบดีจำลองถูกสร้างที่ backend/ (setupDatabase) — backend ของ worker อื่นอ่านจากโฟลเดอร์ของตัวเอง
+    const deanSignature = path.join('secure_private', 'signatures', 'dean_sig.png');
+    const ownSignature = path.join(BACKEND_ROOT, deanSignature);
+    if (!fs.existsSync(ownSignature)) {
+      fs.mkdirSync(path.dirname(ownSignature), { recursive: true });
+      fs.copyFileSync(path.resolve(__dirname, '../../backend', deanSignature), ownSignature);
+    }
 
     await client.query('COMMIT');
   } catch (error) {
