@@ -27,8 +27,9 @@ async function acceptedStudent2(): Promise<Ctx> {
     const company = (await db.query('SELECT company_id FROM companies ORDER BY company_id LIMIT 1')).rows[0];
     const semester = await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
     await db.query(
-      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, start_date, acceptance_due_date)
-       VALUES ($1, $2, $3, 'accepted', CURRENT_DATE, CURRENT_DATE + 21)`,
+      // เลขที่หนังสือของใบต้องตรงกับของหนังสือ — เซิร์ฟเวอร์จับคู่หนังสือกับใบด้วยเลขที่ (เหมือนข้อมูลจริง)
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status, start_date, acceptance_due_date, officer_document_no)
+       VALUES ($1, $2, $3, 'accepted', CURRENT_DATE, CURRENT_DATE + 21, 'ST/1')`,
       [s.student_id, company.company_id, semester.rows[0].semester_id]
     );
     // เฟส 1 ต้องจบครบจริง — ขั้น 1.4 อ่านจากหนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้ว
@@ -204,5 +205,69 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     await expect(active).toHaveCount(1);
     await expect(active).toContainText('ขอหนังสือขอความอนุเคราะห์');
     await expect(steps.filter({ hasText: 'รอหนังสือตอบรับ' })).toHaveAttribute('data-state', 'pending');
+
+    // 3) "เอกสารของฉัน": หนังสือของคำร้องที่ปิดแล้วยังอยู่ (ไม่ซ่อน) แต่ติดป้ายชัดและบอกว่าเป็นของบริษัทไหน
+    const oldLetter = page.getByTestId('student-doc-cover_letter');
+    await expect(oldLetter).toHaveCount(1);
+    await expect(oldLetter).toHaveAttribute('data-closed', 'true');
+    await expect(oldLetter).toContainText('ของคำร้องที่ปิดแล้ว · ใช้ยื่นไม่ได้');
+    await expect(oldLetter).toContainText('ถึง บริษัท');
+
+    // 4) ช่องที่เคยเหลือ: เจ้าหน้าที่รับใบใหม่แล้ว (มีเลขที่) แต่หนังสือฉบับใหม่ยังไม่มีแถว
+    //    — เซิร์ฟเวอร์ต้องไม่หยิบหนังสือเก่ามาตอบแทน · พอมีฉบับใหม่ ฉบับใหม่ต้องไม่ถูกติดป้ายว่าเป็นของเก่า
+    const dashboard = async () => (await page.request.get(`${API_URL}/students/dashboard`)).json();
+    await dbExec(
+      `UPDATE intent_forms SET status = 'approved_by_dept_head', officer_document_no = 'ST/NEW' WHERE status = 'pending_advisor'`
+    );
+    let dash = await dashboard();
+    expect(dash.activeIntent.cover_letter_status).toBeNull();
+    expect(dash.documents.map((d: { of_closed_request: boolean }) => d.of_closed_request)).toEqual([true]);
+
+    await dbExec(
+      `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
+       SELECT 'ST/NEW', 'cover_letter', student_id, company_id, 'pending_sign' FROM intent_forms WHERE officer_document_no = 'ST/NEW'`
+    );
+    dash = await dashboard();
+    expect(dash.activeIntent.cover_letter_status).toBe('pending_sign');
+    // ฉบับที่ยังใช้ได้มาก่อน · ของคำร้องที่ปิดแล้วอยู่ล่าง
+    expect(
+      dash.documents.map((d: { status: string; of_closed_request: boolean }) => [d.status, d.of_closed_request])
+    ).toEqual([
+      ['pending_sign', false],
+      ['signed', true],
+    ]);
+    await page.reload();
+    const letters = page.getByTestId('student-doc-cover_letter');
+    await expect(letters).toHaveCount(2);
+    await expect(letters.nth(0)).toHaveAttribute('data-closed', 'false');
+    await expect(letters.nth(0)).toContainText('บริษัท ที่ใหม่ จำกัด');
+    await expect(letters.nth(0)).not.toContainText('ของคำร้องที่ปิดแล้ว');
+    await expect(letters.nth(1)).toHaveAttribute('data-closed', 'true');
+  });
+
+  test('หนังสือที่จับคู่กับใบไม่ได้ (เลขที่ว่าง / ไม่ตรงใบไหน) ไม่ถูกติดป้ายว่าเป็นของคำร้องที่ปิดแล้ว — ไม่รู้ = ไม่แต่งเรื่อง', async ({
+    request,
+  }) => {
+    await withDb(async (db) => {
+      const studentId = (await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")).rows[0].user_id;
+      const companyId = (await db.query('SELECT company_id FROM companies ORDER BY company_id LIMIT 1')).rows[0].company_id;
+      const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0]
+        .semester_id;
+      // ใบปิดที่ไม่เคยมีเลขที่ (ปิดก่อนถึงมือเจ้าหน้าที่) + หนังสือที่เลขที่ว่าง และหนังสือที่เลขที่ไม่ตรงใบไหน
+      await db.query(
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status) VALUES ($1, $2, $3, 'rejected')`,
+        [studentId, companyId, semesterId]
+      );
+      await db.query(
+        `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
+         VALUES (NULL, 'cover_letter', $1, $2, 'signed'), ('ST/ORPHAN', 'cover_letter', $1, $2, 'signed')`,
+        [studentId, companyId]
+      );
+    });
+
+    await apiLoginAs(request, 'student2');
+    const dash = await (await request.get(`${API_URL}/students/dashboard`)).json();
+    expect(dash.documents).toHaveLength(2);
+    expect(dash.documents.map((d: { of_closed_request: boolean }) => d.of_closed_request)).toEqual([false, false]);
   });
 });

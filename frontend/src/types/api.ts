@@ -428,4 +428,8 @@ export interface OfficialDocument {
   status: string;
   dean_signature_date?: string | null;
   docusign_envelope_id?: string | null;
+  /** ชื่อสถานประกอบการที่หนังสือฉบับนี้ส่งถึง — `GET /students/dashboard` */
+  company_name_th?: string | null;
+  /** หนังสือของคำร้องที่ปิดไปแล้ว ใช้ยื่นไม่ได้อีก (เซิร์ฟเวอร์จับคู่ด้วยเลขที่หนังสือ) — `GET /students/dashboard` */
+  of_closed_request?: boolean;
 }

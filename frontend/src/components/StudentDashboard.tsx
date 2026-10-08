@@ -616,11 +616,13 @@ const StudentDashboard: React.FC = () => {
   }
 
   const activeIntent = data.activeIntent;
-  const documents = data.documents || [];
 
   // ป้าย "สถานะการพิจารณา" ต้องอ่านจากหนังสือเมื่อออกหนังสือแล้ว — ตรรกะอยู่ที่
   // `utils/intentStatus.ts` ที่เดียว เพราะหน้าที่ปรึกษาและหัวหน้าสาขาก็ใช้ตัวเดียวกัน
-  const coverLetter = documents.find(d => d.type === 'cover_letter');
+  // ⛔ สถานะหนังสือมาจาก `activeIntent.cover_letter_status` (เซิร์ฟเวอร์จับคู่หนังสือกับใบด้วยเลขที่หนังสือ)
+  //    ห้ามหยิบจาก `documents` เอง — รายการนั้นมีหนังสือของคำร้องที่ปิดไปแล้วปนอยู่ ของเดิมหยิบฉบับล่าสุดมาใช้
+  //    ทำให้ใบที่ปิดแล้วยังดัน "คณบดีลงนาม ✓" บนแถบเส้นทาง และใบใหม่ได้ ✓ มาฟรี (บั๊ก 2026-10-08)
+  const coverLetterStatus = activeIntent?.cover_letter_status ?? null;
 
   /**
    * ขั้นของเฟส 1 — **ต้องตรงกับเส้นทางเอกสารหมายเลข 1 ทีละขั้นจริงๆ**
@@ -640,10 +642,8 @@ const StudentDashboard: React.FC = () => {
   const step1_1Done = !!activeIntent;
   const step1_2Done = !!activeIntent?.request_form_path || OFFICER_RECEIVED.includes(intentStatus);
   const step1_3Done = OFFICER_RECEIVED.includes(intentStatus);
-  // ⛔ ต้องมี `step1_3Done` นำ — `coverLetter` คือหนังสือฉบับล่าสุดของนักศึกษา **ไม่ได้ผูกกับใบที่ยังเดินอยู่**
-  //    ใบที่ปิดไปแล้ว (บริษัทไม่รับ · ระบบปิด) ยังทิ้งหนังสือที่ลงนามไว้ ถ้าอ่านตรง ๆ ขั้นนี้จะ ✓ ค้าง
-  //    แล้วแถบเส้นทางขึ้น "ตอนนี้" สองช่อง (เลือกสถานประกอบการ + รอหนังสือตอบรับ) ทั้งที่ไม่มีใบเลย (เจอ 2026-10-08)
-  const step1_4Done = step1_3Done && coverLetter?.status === 'signed';
+  // หนังสือของ **ใบที่ยังเดินอยู่** ลงนามแล้ว — `step1_3Done` นำไว้กันสถานะที่ยังไม่ถึงมือเจ้าหน้าที่
+  const step1_4Done = step1_3Done && coverLetterStatus === 'signed';
 
   /**
    * กำหนดตอบกลับของแบบตอบรับ (เอกสารหมายเลข 2)
@@ -1546,7 +1546,7 @@ const StudentDashboard: React.FC = () => {
                 )}
                 <StatusBadge
                   domain="intent"
-                  status={intentDisplayStatus(activeIntent.status, coverLetter?.status)}
+                  status={intentDisplayStatus(activeIntent.status, coverLetterStatus)}
                   className="mt-1 self-start"
                 />
               </div>
@@ -1626,22 +1626,43 @@ const StudentDashboard: React.FC = () => {
 
           {data.documents && data.documents.length > 0 ? (
             <div className="space-y-3">
+              {/* เซิร์ฟเวอร์เรียงมาแล้ว: หนังสือที่ยังใช้ได้ก่อน · ของคำร้องที่ปิดแล้ว (`of_closed_request`) อยู่ล่าง
+                  ⛔ ไม่ซ่อนของเก่า — นักศึกษาต้องตอบได้ว่า "ฉบับก่อนหายไปไหน" แต่ต้องเห็นชัดว่าฉบับไหนใช้ยื่นไม่ได้แล้ว */}
               {data.documents.map((doc) => (
-                <div key={doc.doc_id} data-testid={`student-doc-${doc.type}`} className="flex justify-between items-center p-3 rounded-lg border border-gray-100 bg-gray-50 dark:bg-gray-800 dark:border-gray-800 text-xs">
-                  <div>
+                <div
+                  key={doc.doc_id}
+                  data-testid={`student-doc-${doc.type}`}
+                  data-closed={doc.of_closed_request ? 'true' : 'false'}
+                  className={`flex justify-between items-center gap-3 p-3 rounded-lg border text-xs ${
+                    doc.of_closed_request
+                      ? 'border-dashed border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-900'
+                      : 'border-gray-100 bg-gray-50 dark:border-gray-800 dark:bg-gray-800'
+                  }`}
+                >
+                  <div className="min-w-0">
                     <span className="block font-bold text-gray-700 dark:text-gray-300">
                       {doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา'}
                     </span>
+                    {doc.company_name_th && (
+                      <span className="block break-words text-xs text-gray-700 dark:text-gray-300 mt-0.5">
+                        ถึง {doc.company_name_th}
+                      </span>
+                    )}
                     <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                       สถานะ: {doc.status === 'signed' ? 'คณบดีเซ็นอนุมัติแล้ว' : 'รอการลงนาม'}
                     </span>
+                    {doc.of_closed_request && (
+                      <span className="mt-1.5 inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800 dark:bg-gray-700 dark:text-gray-200">
+                        ของคำร้องที่ปิดแล้ว · ใช้ยื่นไม่ได้
+                      </span>
+                    )}
                   </div>
                   {doc.generated_file_path && (
                     <a
                       href={`${API_BASE_URL}/files/documents/${doc.doc_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2 py-1 rounded border border-gray-300 hover:border-brand-blue hover:text-brand-blue transition-all dark:border-gray-700 dark:hover:text-blue-400"
+                      className="shrink-0 px-2 py-1 rounded border border-gray-300 hover:border-brand-blue hover:text-brand-blue transition-all dark:border-gray-700 dark:hover:text-blue-400"
                     >
                       เปิดอ่าน PDF
                     </a>

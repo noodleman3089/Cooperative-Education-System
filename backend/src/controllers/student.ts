@@ -105,11 +105,23 @@ export class StudentController {
                   c.email AS company_email, i.acceptance_source,
                   i.acceptance_signer_name,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
-                  m.position as mentor_position, m.department as mentor_department
+                  m.position as mentor_position, m.department as mentor_department,
+                  doc.status AS cover_letter_status
            FROM intent_forms i
            JOIN companies c ON i.company_id = c.company_id
            LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
            LEFT JOIN users u_men ON i.mentor_id = u_men.user_id
+           -- หนังสือขอความอนุเคราะห์ **ของใบนี้** — LATERAL เดียวกับ SEC-13 ด่าน 2 / ด่านลิงก์ (เทียบ officer_document_no)
+           LEFT JOIN LATERAL (
+             SELECT d.status
+               FROM official_documents d
+              WHERE d.student_id = i.student_id
+                AND d.company_id = i.company_id
+                AND d.type = 'cover_letter'
+                AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+              ORDER BY d.doc_id DESC
+              LIMIT 1
+           ) doc ON TRUE
            WHERE i.student_id = $1 AND i.semester_id = $2
              AND i.status NOT IN ('rejected', 'company_rejected', 'superseded')
            ORDER BY i.form_id DESC
@@ -129,6 +141,9 @@ export class StudentController {
             request_form_path: row.request_form_path,
             reject_reason: row.reject_reason,
             officer_document_no: row.officer_document_no,
+            // สถานะหนังสือขอความอนุเคราะห์ของใบนี้เอง (null = ยังไม่ออก) — แถบเส้นทางและป้ายสถานะอ่านจากตรงนี้
+            // ⛔ ห้ามให้หน้าจอไปหยิบจาก `documents` เอง: รายการนั้นมีหนังสือของใบที่ปิดไปแล้วปนอยู่ (บั๊ก 2026-10-08)
+            cover_letter_status: row.cover_letter_status,
             // ยื่นล่าช้า + กำหนดตอบกลับ ๑๕ วันทำการ — หน้าแรกของนักศึกษาอ่านจากตรงนี้
             // ไม่ใช่จาก `documents` ซึ่งจะกลายเป็นแหล่งความจริงที่สอง
             submitted_late: row.submitted_late,
@@ -183,13 +198,27 @@ export class StudentController {
       }
 
       // 3. Fetch generated official documents for this student
+      // `of_closed_request` = หนังสือฉบับนี้เป็นของคำร้องที่ปิดไปแล้ว (บริษัทไม่รับ · นักศึกษาแจ้งเอง · ระบบปิด) ใช้ยื่นไม่ได้อีก
+      //   จับคู่ด้วยเลขที่หนังสือของใบ (นักศึกษา + บริษัท + เลขที่) แบบเดียวกับที่ระบบใช้ทุกที่
+      //   ⛔ ติดป้ายเมื่อ **มีหลักฐานชัด** เท่านั้น: เลขที่ตรงกับใบที่ปิดแล้ว และไม่ตรงกับใบที่ยังเดินอยู่
+      //      หาใบไม่เจอ / เลขที่ว่าง = ไม่รู้ = ไม่ติดป้าย (ใช้ `=` ไม่ใช่ IS NOT DISTINCT FROM — NULL ต้องไม่จับคู่กัน)
       const docQuery = await query(
         `SELECT d.doc_id, d.type, d.status, d.generated_file_path, d.dean_signature_date, d.docusign_envelope_id,
-                c.name_th as company_name_th
+                c.name_th as company_name_th,
+                COALESCE(f.matched > 0 AND f.still_open = 0, FALSE) AS of_closed_request
          FROM official_documents d
          JOIN companies c ON d.company_id = c.company_id
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*) AS matched,
+                  COUNT(*) FILTER (WHERE i.status NOT IN ('rejected', 'company_rejected', 'superseded')) AS still_open
+             FROM intent_forms i
+            WHERE i.student_id = d.student_id
+              AND i.company_id = d.company_id
+              AND ((d.type = 'cover_letter' AND d.document_number = i.officer_document_no)
+                OR (d.type = 'send_letter'  AND d.document_number = i.dispatch_document_no))
+         ) f ON TRUE
          WHERE d.student_id = $1
-         ORDER BY d.doc_id DESC`,
+         ORDER BY of_closed_request, d.doc_id DESC`,
         [userId]
       );
 
