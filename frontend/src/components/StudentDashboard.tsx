@@ -82,6 +82,7 @@ const StudentDashboard: React.FC = () => {
       supervision_visits: number;
       final_report_approved: boolean;
       mentor_evaluations: number;
+      coop03_missing_count?: number;
     };
   } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -681,6 +682,12 @@ const StudentDashboard: React.FC = () => {
   const supervisionVisits = progress?.supervision_visits ?? 0;
 
   const step2_1Done = step1_5Done && !!progress?.accommodation_submitted;
+  const step2_2Done = step1_5Done && progress?.coop03_missing_count === 0;
+  const hasSignedDispatchLetter = data.documents?.some(
+    (d) => d.type === 'send_letter' && d.status === 'signed' && !d.of_closed_request
+  );
+  const step2_3Done = step1_5Done && Boolean(hasSignedDispatchLetter);
+  const phase2Done = step2_1Done && step2_2Done && step2_3Done;
 
   const step3_1Done = step1_5Done && !!progress?.outline_submitted;
   const step3_2Done = step1_5Done && !!progress?.outline_approved;
@@ -697,7 +704,7 @@ const StudentDashboard: React.FC = () => {
   // ⛔ นักศึกษากรอกจริงแค่ สหกิจ 06 (สหกิจ 03 พิมพ์จากเมนูใบสมัครงานสหกิจ) — แผนปฏิบัติงาน สหกิจ 07 หน้า 3
   //    ไม่ใช่ภาระนักศึกษาและห้ามเป็นเงื่อนไขบล็อกความคืบหน้า (เจ้าของสั่ง 2026-10-05)
   if (step1_5Done) activePhaseId = 2;
-  if (step2_1Done) activePhaseId = 3;
+  if (phase2Done) activePhaseId = 3;
   if (step3_3Done || step4_1Done) activePhaseId = 4;
 
   const phases: PhaseGroup[] = [
@@ -750,16 +757,32 @@ const StudentDashboard: React.FC = () => {
       phaseId: 2,
       title: '2. เตรียมเอกสารก่อนเริ่มฝึก',
       subtitle: 'ใบสมัครงานสหกิจ (สหกิจ 03) & แจ้งที่พัก (สหกิจ 06)',
-      status: step2_1Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
+      status: phase2Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
       subSteps: [
         {
           id: '2.1',
           title: '2.1 แบบแจ้งรายละเอียดที่พัก (สหกิจ 06)',
           description:
-            'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · คณะใช้ข้อมูลนี้ออกหนังสือส่งตัวและจัดอาจารย์นิเทศ · ใบสมัครงานสหกิจ (สหกิจ 03) ตรวจทานและพิมพ์ได้จากเมนู "ใบสมัครงานสหกิจ"',
+            'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · ส่งคู่กับสหกิจ 03 เพื่อให้คณะออกหนังสือส่งตัวและจัดอาจารย์นิเทศ',
           status: step2_1Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
           actionLabel: activePhaseId === 2 && !step2_1Done ? 'กรอกรายละเอียดที่พัก' : undefined,
           onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
+        },
+        {
+          id: '2.2',
+          title: '2.2 ใบสมัครงานสหกิจ (สหกิจ 03)',
+          description:
+            'กรอกข้อมูลในใบสมัครให้ครบทุกช่องบังคับเพื่อส่งคณะ · พิมพ์เป็นหลักฐานได้จากเมนู "ใบสมัครงานสหกิจ"',
+          status: step2_2Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
+          actionLabel: activePhaseId === 2 && !step2_2Done ? 'กรอกใบสมัครงาน' : undefined,
+          onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'job_application' }))
+        },
+        {
+          id: '2.3',
+          title: '2.3 รับหนังสือส่งตัว นำส่งสถานประกอบการ',
+          description:
+            'คณะจะออกหนังสือส่งตัวให้หลังส่งสหกิจ 06 และกรอกสหกิจ 03 ครบถ้วนแล้ว · เมื่อคณบดีลงนาม ให้ดาวน์โหลดจากส่วน "เอกสารของฉัน" ด้านล่างแล้วนำส่งสถานประกอบการ',
+          status: step2_3Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending'
         }
       ]
     },
@@ -1579,6 +1602,30 @@ const StudentDashboard: React.FC = () => {
               รอหัวหน้าสาขาวิชาจัดสรร — ยังไม่ต้องทำอะไร ระบบจะแจ้งเมื่อมีชื่อแล้ว
             </p>
           )}
+
+          {/* แถวที่สอง: อาจารย์นิเทศ (Section ข) */}
+          <div className="border-t border-gray-100 pt-3 dark:border-gray-800" data-testid="student-supervisor">
+            <h4 className="mb-2 text-xs font-semibold text-gray-500 dark:text-gray-400">อาจารย์นิเทศ</h4>
+            {data.student.supervisor ? (
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-50 text-sm font-bold text-purple-700 dark:bg-purple-950/40 dark:text-purple-300">
+                  {(data.student.supervisor.name || 'อ').charAt(0)}
+                </div>
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {data.student.supervisor.name || 'จัดสรรแล้ว (ไม่ระบุชื่อ)'}
+                  </span>
+                  <span className="truncate text-xs text-gray-600 dark:text-gray-400">
+                    {data.student.supervisor.email}
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                รอหัวหน้าสาขาวิชาจัดสรร
+              </p>
+            )}
+          </div>
         </section>
       </div>
 
@@ -1595,7 +1642,7 @@ const StudentDashboard: React.FC = () => {
           { label: 'เลือกสถานประกอบการ', subStepIds: ['1.1'] },
           { label: 'ขอหนังสือขอความอนุเคราะห์', subStepIds: ['1.2', '1.3'], pendingLabel: 'รอเจ้าหน้าที่' },
           { label: 'รอหนังสือตอบรับ', subStepIds: ['1.4', '1.5'], pendingLabel: 'รอสถานประกอบการ' },
-          { label: 'แจ้งที่พัก', subStepIds: ['2.1'] },
+          { label: 'เอกสารก่อนออกฝึก', subStepIds: ['2.1', '2.2', '2.3'] },
           { label: 'ปฏิบัติงานและส่งบันทึก', subStepIds: ['3.1', '3.2', '3.3'] },
           { label: 'ส่งรายงานและรับผลประเมิน', subStepIds: ['4.1', '4.2', '4.3'] },
         ]}
@@ -1651,6 +1698,14 @@ const StudentDashboard: React.FC = () => {
                     <span className="block text-xs text-gray-600 dark:text-gray-400 mt-0.5">
                       สถานะ: {doc.status === 'signed' ? 'คณบดีเซ็นอนุมัติแล้ว' : 'รอการลงนาม'}
                     </span>
+                    {doc.type === 'send_letter' && doc.status === 'signed' && !doc.of_closed_request && (
+                      <span
+                        data-testid="dispatch-letter-hint"
+                        className="mt-1 block text-xs font-semibold text-blue-700 dark:text-blue-400"
+                      >
+                        ดาวน์โหลดแล้วนำส่งสถานประกอบการ
+                      </span>
+                    )}
                     {doc.of_closed_request && (
                       <span className="mt-1.5 inline-block rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-800 dark:bg-gray-700 dark:text-gray-200">
                         ของคำร้องที่ปิดแล้ว · ใช้ยื่นไม่ได้

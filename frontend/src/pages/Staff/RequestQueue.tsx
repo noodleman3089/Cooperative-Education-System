@@ -73,6 +73,9 @@ export interface DispatchRow {
   last_name?: string | null;
   major_name_th?: string | null;
   company_name_th?: string;
+  company_contact_person?: string | null;
+  accommodation_submitted?: boolean;
+  coop03_missing_count?: number;
   start_date?: string | null;
   end_date?: string | null;
   mentor_name?: string | null;
@@ -89,6 +92,26 @@ export interface DispatchRow {
 }
 
 const COOP_DEFAULT_DAYS = 111;
+
+const isDispatchPrepIncomplete = (row: DispatchRow | null): boolean => {
+  if (!row) return false;
+  return (
+    row.accommodation_submitted === false ||
+    (typeof row.coop03_missing_count === 'number' && row.coop03_missing_count > 0)
+  );
+};
+
+const getDispatchPrepBadgeText = (row: DispatchRow): string | null => {
+  const parts: string[] = [];
+  if (row.accommodation_submitted === false) {
+    parts.push('ยังไม่ส่งสหกิจ 06');
+  }
+  if (typeof row.coop03_missing_count === 'number' && row.coop03_missing_count > 0) {
+    parts.push(`สหกิจ 03 ขาด ${row.coop03_missing_count} ช่อง`);
+  }
+  if (parts.length === 0) return null;
+  return `รอนักศึกษา: ${parts.join(' และ ')}`;
+};
 
 const addDays = (iso: string, days: number): string => {
   const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
@@ -541,6 +564,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                   {row.dispatch_recall.by === 'dean' ? 'คณบดีตีกลับ' : 'ดึงกลับ'}
                 </span>
               )}
+              {getDispatchPrepBadgeText(row) && (
+                <span
+                  data-testid={`dispatch-prep-${row.form_id}`}
+                  className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                >
+                  {getDispatchPrepBadgeText(row)}
+                </span>
+              )}
               <span className="text-[13px] text-gray-600 dark:text-gray-400">
                 {row.start_date ? `เริ่มงาน ${formatThaiDate(row.start_date)}` : 'ยังไม่มีวันเริ่มงาน'}
               </span>
@@ -738,6 +769,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <div className="space-y-4">
               <AlertBanner variant="error" message={error} />
 
+              {isDispatchPrepIncomplete(reviewingDispatch) && (
+                <AlertBanner
+                  variant="warning"
+                  data-testid="dispatch-prep-warning"
+                  message={`ยังออกหนังสือส่งตัวไม่ได้ เนื่องจาก${getDispatchPrepBadgeText(reviewingDispatch)} — นักศึกษาต้องส่งเอกสารก่อนออกฝึกให้ครบก่อน`}
+                />
+              )}
+
               {reviewingDispatch.dispatch_recall && (
                 <div
                   data-testid="dispatch-recall-note"
@@ -762,9 +801,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-gray-500 dark:text-gray-400">เรียน (ผู้ลงนามในแบบตอบรับ)</dt>
+                  <dt className="text-gray-500 dark:text-gray-400">เรียน</dt>
                   <dd className="font-bold text-gray-800 dark:text-gray-200" data-testid="dispatch-recipient">
-                    {reviewingDispatch.acceptance_signer_name || '— ใช้ผู้ประสานงานของบริษัทแทน —'}
+                    {[
+                      reviewingDispatch.company_contact_person?.trim() || 'ผู้จัดการฝ่ายบุคคล',
+                      reviewingDispatch.company_name_th?.trim(),
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
                   </dd>
                 </div>
                 <div>
@@ -834,7 +878,12 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <Button
               size="sm"
               loading={dispatchBusy}
-              disabled={!dispatchForm.document_no.trim() || !dispatchForm.start_date || !dispatchForm.end_date}
+              disabled={
+                isDispatchPrepIncomplete(reviewingDispatch) ||
+                !dispatchForm.document_no.trim() ||
+                !dispatchForm.start_date ||
+                !dispatchForm.end_date
+              }
               data-testid="dispatch-submit"
               onClick={() => setConfirmingDispatch(true)}
             >

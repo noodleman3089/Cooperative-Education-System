@@ -51,7 +51,22 @@ interface CoopApplication {
   training_history: Row[] | null;
   activity_history: Row[] | null;
   language_proficiency: Row[] | null;
+  missing_required?: string[];
 }
+
+const COOP03_FIELD_LABELS: Record<string, string> = {
+  first_name_en: 'ชื่อภาษาอังกฤษ',
+  last_name_en: 'นามสกุลภาษาอังกฤษ',
+  gender: 'เพศ',
+  nationality: 'สัญชาติ',
+  phone: 'เบอร์โทรศัพท์',
+  national_id: 'เลขประจำตัวประชาชน',
+  national_id_issued_district: 'อำเภอ/เขตที่ออกบัตร',
+  national_id_expiry_date: 'วันหมดอายุบัตร',
+  emergency_contact_name: 'ชื่อผู้ติดต่อฉุกเฉิน',
+  emergency_relationship: 'ความสัมพันธ์ผู้ติดต่อฉุกเฉิน',
+  emergency_phone: 'เบอร์โทรผู้ติดต่อฉุกเฉิน',
+};
 
 /** แถวหนึ่งของตารางประวัติ — คีย์ที่เซิร์ฟเวอร์ยอมรับต่างกันไปตามตาราง */
 type Row = Record<string, string>;
@@ -149,7 +164,7 @@ const RowTable: React.FC<{
 
     {rows.length === 0 ? (
       <p className="rounded-xl border border-dashed border-gray-300 py-4 text-center text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
-        ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่มีก็ส่งใบสมัครได้)
+        ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่บังคับ)
       </p>
     ) : (
       <div className="space-y-2">
@@ -301,10 +316,38 @@ const CoopJobApplication: React.FC = () => {
           ใบสมัครงานสหกิจศึกษา (สหกิจ 03)
         </h2>
         <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
-          ข้อมูลชุดนี้จะถูกใช้จัดทำใบสมัครงานที่ส่งให้สถานประกอบการ
-          ส่วนที่ระบบรู้อยู่แล้ว (ชื่อไทย · รหัสนักศึกษา · สาขา · เกรด) ดึงจากโปรไฟล์ให้อัตโนมัติ
+          ข้อมูลชุดนี้จะถูกใช้จัดทำใบสมัครงานที่<strong>ส่งคณะ</strong>เพื่อประกอบการออกหนังสือส่งตัว
+          ส่วนที่ระบบรู้อยู่แล้ว (ชื่อไทย · รหัสนักศึกษา · สาขา · เกรด) ดึงจากโปรไฟล์ให้อัตโนมัติ ·
+          ต้องกรอกช่องบังคับให้ครบและส่งแบบแจ้งที่พัก (สหกิจ 06) ก่อน คณะจึงจะออกหนังสือส่งตัวให้
         </p>
       </div>
+
+      {/* กล่องสรุปช่องบังคับ */}
+      {server && (
+        <div
+          data-testid="ca-required-summary"
+          className={`rounded-xl border p-4 text-xs ${
+            (server.missing_required?.length ?? 0) === 0
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+              : 'border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+          }`}
+        >
+          {(server.missing_required?.length ?? 0) === 0 ? (
+            <p className="font-semibold text-emerald-800 dark:text-emerald-300">
+              ช่องบังคับครบแล้ว
+            </p>
+          ) : (
+            <div>
+              <p className="font-semibold text-amber-800 dark:text-amber-300">
+                ยังขาด {server.missing_required!.length} ช่อง:
+              </p>
+              <p className="mt-1">
+                {server.missing_required!.map((key) => COOP03_FIELD_LABELS[key] || key).join(' · ')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       <AlertBanner variant="error" message={error} scrollOnShow />
       <AlertBanner variant="success" message={success} scrollOnShow />
@@ -329,7 +372,7 @@ const CoopJobApplication: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="ca-first-en" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              ชื่อ (ภาษาอังกฤษ)
+              ชื่อ (ภาษาอังกฤษ) <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-first-en"
@@ -341,7 +384,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-last-en" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              นามสกุล (ภาษาอังกฤษ)
+              นามสกุล (ภาษาอังกฤษ) <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-last-en"
@@ -353,7 +396,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-gender" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              เพศ
+              เพศ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Select
               id="ca-gender"
@@ -370,7 +413,7 @@ const CoopJobApplication: React.FC = () => {
           <div>
             {/* ⛔ สัญชาติ ≠ เชื้อชาติ — ตัวนี้เป็นข้อมูลทั่วไป ไม่ต้องยินยอมแยก */}
             <label htmlFor="ca-nationality" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              สัญชาติ
+              สัญชาติ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-nationality"
@@ -398,7 +441,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-mobile" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              โทรศัพท์มือถือ
+              โทรศัพท์มือถือ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-mobile"
@@ -440,7 +483,7 @@ const CoopJobApplication: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label htmlFor="ca-emg-name" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              ชื่อ-นามสกุล
+              ชื่อ-นามสกุล <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-emg-name"
@@ -451,7 +494,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-emg-relation" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              ความสัมพันธ์
+              ความสัมพันธ์ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-emg-relation"
@@ -463,7 +506,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-emg-phone" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              เบอร์โทรศัพท์
+              เบอร์โทรศัพท์ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-emg-phone"
@@ -502,7 +545,7 @@ const CoopJobApplication: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label htmlFor="ca-national-id" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              เลขประจำตัวประชาชน (13 หลัก)
+              เลขประจำตัวประชาชน (13 หลัก) <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-national-id"
@@ -523,7 +566,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-id-district" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              บัตรออกให้ ณ เขต/อำเภอ
+              บัตรออกให้ ณ เขต/อำเภอ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-id-district"
@@ -534,7 +577,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-id-expiry" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              วันหมดอายุบัตร
+              วันหมดอายุบัตร <span className="text-red-600 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-id-expiry"
@@ -740,9 +783,9 @@ const CoopJobApplication: React.FC = () => {
           พิมพ์ใบสมัครงาน (สหกิจ 03)
         </h3>
         <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
-          สถานประกอบการที่มีบัญชีในระบบอ่านใบสมัครได้เลย ไม่ต้องพิมพ์ ·
-          ปุ่มนี้มีไว้สำหรับที่ที่ยังไม่มีบัญชี — พิมพ์แล้ว<strong>เซ็นชื่อด้วยมือ</strong>
-          ก่อนยื่นให้สถานประกอบการ
+          ใบสมัครงานชุดนี้ต้อง<strong>ส่งคณะ</strong>เพื่อประกอบการออกหนังสือส่งตัว —
+          ต้องกรอกช่องบังคับให้ครบและส่งแบบแจ้งที่พัก (สหกิจ 06) ก่อน คณะจึงจะออกหนังสือส่งตัวให้
+          · พิมพ์แล้ว<strong>เซ็นชื่อด้วยมือ</strong>ก่อนนำส่งคณะ
         </p>
         <p className="mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
           ไฟล์ที่ได้จะมี<strong>เลขบัตรประชาชน เชื้อชาติ และศาสนาเป็นค่าจริง</strong>

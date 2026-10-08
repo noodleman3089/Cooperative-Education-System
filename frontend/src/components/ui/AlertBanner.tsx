@@ -41,6 +41,7 @@ interface AlertBannerProps {
    * ⛔ ใช้กับ message ที่เป็นข้อความเท่านั้น — JSX เป็น object ใหม่ทุก render จะเลื่อนซ้ำไม่หยุด
    */
   scrollOnShow?: boolean;
+  'data-testid'?: string;
 }
 
 /**
@@ -54,6 +55,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
   message,
   className = '',
   scrollOnShow = false,
+  'data-testid': dataTestId,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -71,6 +73,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
     <div
       ref={ref}
       role={variant === 'error' ? 'alert' : 'status'}
+      data-testid={dataTestId}
       className={`flex items-start gap-3 rounded-xl border p-4 text-sm ${box} ${className}`.trim()}
     >
       <Icon className={`h-5 w-5 shrink-0 ${icon}`} aria-hidden="true" />

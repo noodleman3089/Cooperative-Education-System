@@ -4,6 +4,7 @@ import { API_URL } from '../helpers/env';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { seedTestData } from '../helpers/test-seeder';
 import { dbExec, withDb } from '../helpers/db';
+import { completeDispatchPrep } from '../helpers/intent';
 
 /**
  * ไทม์ไลน์หน้าแรกนักศึกษา เฟส 2–4 — ทุกขั้นต้องเดินตามแถวจริงในฐาน
@@ -74,6 +75,24 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
       [studentId]
     );
 
+    // 🆕 ขั้น 6 — เฟส 2 มีสามขั้นย่อย: ที่พัก (06) → ใบสมัครงาน (03) ครบช่องบังคับ → หนังสือส่งตัวที่คณบดีลงนาม
+    //    ส่ง 06 แล้วแต่ 03 ยังไม่ครบ ต้องยังไม่ข้ามไปเฟส 3
+    await expectNow(page, 'ใบสมัครงานสหกิจ (สหกิจ 03)');
+    const prepStep = page.getByTestId('journey-bar').getByTestId('journey-step').filter({ hasText: 'เอกสารก่อนออกฝึก' });
+    await expect(prepStep).toHaveAttribute('data-state', 'active');
+    await completeDispatchPrep();
+
+    // 03 ครบแล้ว — รอคณะออกหนังสือส่งตัว · ฉบับที่ยังไม่ลงนามยังไม่นับ
+    await expectNow(page, 'รับหนังสือส่งตัว นำส่งสถานประกอบการ');
+    await dbExec(`UPDATE intent_forms SET dispatch_document_no = 'ST/2' WHERE student_id = $1`, [studentId]);
+    await dbExec(
+      `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
+       VALUES ('ST/2', 'send_letter', $1, $2, 'pending_sign')`,
+      [studentId, companyId]
+    );
+    await expectNow(page, 'รับหนังสือส่งตัว นำส่งสถานประกอบการ');
+    await dbExec(`UPDATE official_documents SET status = 'signed' WHERE document_number = 'ST/2'`);
+
     // เฟส 3 — โครงร่างที่ยังรอพี่เลี้ยงตรวจ ยังไม่ถึงมืออาจารย์ จึงไม่นับว่าส่งแล้ว
     await expectNow(page, 'ส่งโครงร่างรายงาน (สหกิจ 11)');
     await dbExec(
@@ -139,9 +158,37 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
       supervision_visits: 2,
       final_report_approved: true,
       mentor_evaluations: 2,
-      // สหกิจ 03 ขาดกี่ช่องบังคับ (ขั้น 6) — เคสนี้ไม่ได้กรอก 03 · ค่าที่ถูกต้องคุมที่ `documents/dispatch-prep-gate` G4–G5
-      coop03_missing_count: expect.any(Number),
+      // สหกิจ 03 ครบช่องบังคับแล้ว (ขั้น 6 · ขั้นย่อย 2.2) — กติกาช่องบังคับคุมที่ `documents/dispatch-prep-gate` G4–G5
+      coop03_missing_count: 0,
     });
+  });
+
+  test('อาจารย์นิเทศ — ชื่อขึ้นบนหน้าแรกหลังหัวหน้าสาขาจัดสรร และไม่ขึ้นก่อนหน้านั้น', async ({ page, request }) => {
+    const { studentId } = await acceptedStudent2();
+    // seed ผูกอาจารย์ไว้ให้แล้ว — เริ่มจากยังไม่มีใครจัดสรร
+    await dbExec('UPDATE students SET supervisor_id = NULL WHERE student_id = $1', [studentId]);
+
+    await loginAs(page, 'student2');
+    const card = page.getByTestId('student-supervisor');
+    await expect(card).toContainText('อาจารย์นิเทศ');
+    await expect(card).toContainText('รอหัวหน้าสาขาวิชาจัดสรร');
+
+    const supervisor = (await withDb(async (db) =>
+      (await db.query(
+        `SELECT p.personnel_id, p.first_name, p.last_name, u.email
+           FROM personnel p JOIN users u ON u.user_id = p.personnel_id WHERE u.email = 'advisor1@test.com'`
+      )).rows[0]
+    )) as { personnel_id: number; first_name: string; last_name: string; email: string };
+    await apiLoginAs(request, 'head1');
+    const assigned = await request.put(`${API_URL}/students/batch-assign-personnel`, {
+      data: { studentIds: [studentId], advisor_id: supervisor.personnel_id, supervisor_id: supervisor.personnel_id },
+    });
+    expect(assigned.status(), await assigned.text()).toBe(200);
+
+    await page.reload();
+    await expect(card).toContainText(`${supervisor.first_name} ${supervisor.last_name}`);
+    await expect(card).toContainText(supervisor.email);
+    await expect(card).not.toContainText('รอหัวหน้าสาขาวิชาจัดสรร');
   });
 
   test('ความคืบหน้าเป็นของตัวเองเท่านั้น — role อื่นเรียก /students/dashboard ไม่ได้', async ({ request }) => {

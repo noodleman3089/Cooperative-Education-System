@@ -3,7 +3,9 @@ import type { APIRequestContext } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { dbExec, dbRow, dbValue } from '../helpers/db';
-import { apiLoginAs } from '../helpers/auth';
+import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
+import { completeDispatchPrep } from '../helpers/intent';
 
 /**
  * ขั้น 6 ข้อ ค — นักศึกษาส่งสหกิจ 03 · 06 ก่อน คณะจึงออกหนังสือส่งตัวได้ (คู่มือคณะ PDF 14)
@@ -271,5 +273,100 @@ test.describe('ขั้น 6 — ส่งสหกิจ 03 · 06 ก่อน
     };
     expect(progress.accommodation_submitted).toBe(true);
     expect(progress.coop03_missing_count).toBeGreaterThan(0);
+  });
+
+  test('G6: หน้าจอเจ้าหน้าที่ — ใบที่ยังไม่พร้อมขึ้นป้ายรอนักศึกษา กล่องเตือนและกดออกไม่ได้ · ข้อมูลเปลี่ยนระหว่างเปิดกล่อง = 409 แสดงในกล่อง', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const { formId, studentId } = await seedAcceptedIntent();
+
+    await loginAs(page, 'staff1');
+    const badge = page.getByTestId(`dispatch-prep-${formId}`);
+    await expect(badge).toContainText('รอนักศึกษา');
+    await expect(badge).toContainText('ยังไม่ส่งสหกิจ 06');
+    await expect(badge).toContainText(/สหกิจ 03 ขาด \d+ ช่อง/);
+
+    // เปิดกล่องได้ (ดูข้อมูลได้) แต่กดออกไม่ได้ ถึงจะกรอกครบ
+    await page.getByTestId(`issue-dispatch-${formId}`).click();
+    const dialog = page.getByRole('dialog').filter({ has: page.getByTestId('dispatch-document-no') });
+    await expect(dialog.getByTestId('dispatch-prep-warning')).toContainText('ยังออกหนังสือส่งตัวไม่ได้');
+    await dialog.getByTestId('dispatch-document-no').fill(DISPATCH.document_no);
+    await expect(dialog.getByTestId('dispatch-end-date')).not.toHaveValue('');
+    await expect(dialog.getByTestId('dispatch-submit')).toBeDisabled();
+    // ⛔ เจ้าหน้าที่เห็นแค่จำนวน — ชื่อช่องของสหกิจ 03 ต้องไม่ขึ้นบนหน้าจอนี้
+    await expect(page.locator('body')).not.toContainText('เลขประจำตัวประชาชน');
+
+    // นักศึกษาส่งครบ → ป้ายหาย กล่องไม่เตือน
+    // (ปิดกล่องก่อนรีโหลด — กล่องมี URL ของตัวเอง รีโหลดทั้งที่เปิดอยู่จะเปิดกลับมาเองและบังปุ่มในคิว)
+    await dialog.getByRole('button', { name: 'ยกเลิก' }).click();
+    await expect(dialog).toHaveCount(0);
+    await completeDispatchPrep();
+    await page.reload();
+    await expect(page.getByTestId(`issue-dispatch-${formId}`)).toBeVisible();
+    await expect(page.getByTestId(`dispatch-prep-${formId}`)).toHaveCount(0);
+    await page.getByTestId(`issue-dispatch-${formId}`).click();
+    await expect(dialog.getByTestId('dispatch-prep-warning')).toHaveCount(0);
+    // ⚠️ เปิดกล่องแล้วคิวโหลดซ้ำหนึ่งรอบ (URL ได้ `?form=`) พอโหลดจบช่องเลขที่หนังสือถูกล้าง — พิมพ์เร็วกว่านั้นค่าหาย
+    //    (ของเดิมก่อนขั้น 6 · เคยทำเคสนี้ flaky ในชุดเต็ม) จึงกรอกซ้ำจนค่าอยู่ ไม่ใช่กรอกครั้งเดียวแล้วหวังว่าทัน
+    await expect(async () => {
+      await dialog.getByTestId('dispatch-document-no').fill(DISPATCH.document_no);
+      await expect(dialog.getByTestId('dispatch-submit')).toBeEnabled({ timeout: 1500 });
+    }).toPass({ timeout: 15_000 });
+
+    // หน้าจอค้างข้อมูลเก่า (06 หายไประหว่างเปิดกล่อง) — ด่านจริงอยู่ที่เซิร์ฟเวอร์ และคำตอบต้องขึ้น **ใน** กล่อง
+    await dbExec('DELETE FROM accommodations WHERE student_id = $1', [studentId]);
+    await dialog.getByTestId('dispatch-submit').click();
+    await page.getByRole('button', { name: 'ออกเลขและส่งเข้าคิวคณบดี' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('สหกิจ 06');
+    expect(await sendLetterCount()).toBe(0);
+    expect(
+      await dbValue<string | null>('SELECT dispatch_document_no FROM intent_forms WHERE form_id = $1', [formId])
+    ).toBeNull();
+  });
+
+  test('G7: หน้าสหกิจ 03 — กล่องสรุปบอกช่องที่ขาดเป็นชื่อไทย กรอกครบแล้วเป็น "ครบแล้ว" โดยไม่ต้องกรอกเชื้อชาติ ศาสนา · ข้อความบอกว่าส่งคณะ', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await seedAcceptedIntent();
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'job_application');
+
+    const summary = page.getByTestId('ca-required-summary');
+    await expect(summary).toContainText(/ยังขาด \d+ ช่อง/);
+    await expect(summary).toContainText('เลขประจำตัวประชาชน');
+    await expect(summary).toContainText('ชื่อผู้ติดต่อฉุกเฉิน');
+    await expect(summary).not.toContainText('เชื้อชาติ');
+    await expect(summary).not.toContainText('ศาสนา');
+    // ชื่อช่องต้องเป็นภาษาไทยทุกตัว ไม่มีคีย์ดิบหลุดออกมา
+    await expect(summary).not.toContainText(/[a-z]+_[a-z]+/);
+
+    // ใบนี้ส่งคณะ ไม่ใช่สถานประกอบการ — และสถานประกอบการไม่มีบัญชีในระบบ
+    const body = page.locator('body');
+    await expect(body).toContainText('ส่งคณะ');
+    await expect(body).not.toContainText('สถานประกอบการที่มีบัญชีในระบบ');
+    await expect(body).not.toContainText('ไม่มีก็ส่งใบสมัครได้');
+
+    await page.getByTestId('ca-first-en').fill(COOP03_REQUIRED.first_name_en);
+    await page.getByTestId('ca-last-en').fill(COOP03_REQUIRED.last_name_en);
+    await page.getByTestId('ca-gender').selectOption(COOP03_REQUIRED.gender);
+    await page.getByTestId('ca-nationality').fill(COOP03_REQUIRED.nationality);
+    await page.getByTestId('ca-mobile').fill(COOP03_REQUIRED.mobile_phone);
+    await page.getByTestId('ca-emg-name').fill(COOP03_REQUIRED.emergency_contact_name);
+    await page.getByTestId('ca-emg-relation').fill(COOP03_REQUIRED.emergency_relationship);
+    await page.getByTestId('ca-emg-phone').fill(COOP03_REQUIRED.emergency_phone);
+    await page.getByTestId('ca-national-id').fill(COOP03_REQUIRED.national_id);
+    await page.getByTestId('ca-id-district').fill(COOP03_REQUIRED.national_id_issued_district);
+    await page.getByTestId('ca-id-expiry').fill(COOP03_REQUIRED.national_id_expiry_date);
+    await page.getByTestId('ca-submit').click();
+
+    await expect(summary).toHaveText('ช่องบังคับครบแล้ว');
+    // ไม่ได้แตะเชื้อชาติ ศาสนา = ไม่มีการยินยอมข้อมูลอ่อนไหวเกิดขึ้น
+    expect(
+      await dbValue<string | null>(
+        `SELECT sensitive_data_consented_at::text FROM students WHERE student_id = ${STUDENT2}`
+      )
+    ).toBeNull();
   });
 });

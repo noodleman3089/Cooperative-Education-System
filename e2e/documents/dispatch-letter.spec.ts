@@ -345,15 +345,26 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     test.setTimeout(180_000);
     const formId = await seedIntent();
     await walkToAccepted(request, formId);
+    await dbExec(
+      `UPDATE companies SET contact_person = 'คุณวิภา ประสานงาน'
+        WHERE company_id = (SELECT company_id FROM intent_forms WHERE form_id = $1)`,
+      [formId]
+    );
 
     await loginAs(page, 'staff1');
     // หน้าแรกแบบ B: กองเดียวที่มีงานคือหนังสือส่งตัว → รายการเริ่มที่กองนั้นเอง
     await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 1 คน');
+    // เอกสารก่อนออกฝึกครบแล้ว = ไม่มีป้ายรอนักศึกษา
+    await expect(page.getByTestId(`dispatch-prep-${formId}`)).toHaveCount(0);
 
     await page.getByTestId(`issue-dispatch-${formId}`).click();
     const dialog = page.getByRole('dialog');
-    // ผู้รับหนังสือต้องเป็นคนที่ลงนามในแบบตอบรับ ไม่ใช่ผู้ประสานงานตั้งต้นของบริษัท
-    await expect(dialog.getByTestId('dispatch-recipient')).toContainText('คุณสมชาย ทรงชัย');
+    // ผู้รับที่กล่องแสดง = ผู้รับที่หนังสือพิมพ์จริง: ผู้ประสานงานของสถานประกอบการ (คนเดียวกับหนังสือขอความอนุเคราะห์)
+    // ⛔ ไม่ใช่ผู้ลงนามแบบตอบรับ — ฉบับจริงไม่ได้เรียนถึงคนนั้น (D5 ตรวจฝั่ง PDF)
+    await expect(dialog.getByTestId('dispatch-recipient')).toContainText('คุณวิภา ประสานงาน');
+    await expect(dialog.getByTestId('dispatch-recipient')).not.toContainText('คุณสมชาย ทรงชัย');
+    await expect(dialog).not.toContainText('ผู้ลงนามในแบบตอบรับ');
+    await expect(dialog.getByTestId('dispatch-prep-warning')).toHaveCount(0);
 
     // ระบบเติมวันจบไว้ให้ = วันเริ่ม + ๑๖ สัปดาห์ นับรวมวันแรก (2026-11-02 → 2027-02-21)
     await expect(dialog.getByTestId('dispatch-end-date')).toHaveValue('2027-02-21');
@@ -397,6 +408,8 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     await loginAs(page, 'student2');
     await expect(page.getByTestId('student-doc-send_letter')).toContainText('หนังสือส่งตัวนักศึกษา');
     await expect(page.getByTestId('student-doc-send_letter')).toContainText('รอการลงนาม');
+    // บรรทัดบอกให้นำส่งสถานประกอบการขึ้นเฉพาะฉบับที่ลงนามแล้ว (ยังไม่ลงนาม = ยังโหลดไม่ได้)
+    await expect(page.getByTestId('dispatch-letter-hint')).toHaveCount(0);
 
     const docId = await dbValue<number>(
       "SELECT doc_id FROM official_documents WHERE type = 'send_letter' ORDER BY doc_id DESC LIMIT 1"
@@ -408,6 +421,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
 
     await page.reload();
     await expect(page.getByTestId('student-doc-send_letter')).toContainText('คณบดีเซ็นอนุมัติแล้ว');
+    await expect(page.getByTestId('dispatch-letter-hint')).toHaveText('ดาวน์โหลดแล้วนำส่งสถานประกอบการ');
   });
 
   test('D9: ตัวนับ "รอออกหนังสือส่งตัว" นับเฉพาะใบที่ยังไม่ออกจริง', async ({ request }) => {
