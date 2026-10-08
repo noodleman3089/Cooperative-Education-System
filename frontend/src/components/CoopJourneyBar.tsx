@@ -57,7 +57,10 @@ const CoopJourneyBar: React.FC<CoopJourneyBarProps> = ({ phases, steps }) => {
   const doneCount = resolved.filter(s => s.state === 'completed').length;
 
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+    <section
+      data-testid="journey-bar"
+      className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900"
+    >
       <div className="mb-5 flex flex-wrap items-baseline justify-between gap-4">
         <h3 className="text-lg font-bold text-gray-900 dark:text-white">เส้นทางสหกิจของคุณ</h3>
         <span className="text-xs text-gray-600 dark:text-gray-400">
@@ -68,7 +71,7 @@ const CoopJourneyBar: React.FC<CoopJourneyBarProps> = ({ phases, steps }) => {
       {/* แถวเดียวบนจอกว้าง · จอแคบไหลเป็นสองคอลัมน์แทนการบีบจนอ่านไม่ออก */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         {resolved.map(step => (
-          <div key={step.label} className="flex flex-col gap-2.5">
+          <div key={step.label} data-testid="journey-step" data-state={step.state} className="flex flex-col gap-2.5">
             <div
               className={`h-1.5 rounded-full ${
                 step.state === 'completed'

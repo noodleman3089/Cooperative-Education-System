@@ -640,7 +640,10 @@ const StudentDashboard: React.FC = () => {
   const step1_1Done = !!activeIntent;
   const step1_2Done = !!activeIntent?.request_form_path || OFFICER_RECEIVED.includes(intentStatus);
   const step1_3Done = OFFICER_RECEIVED.includes(intentStatus);
-  const step1_4Done = coverLetter?.status === 'signed';
+  // ⛔ ต้องมี `step1_3Done` นำ — `coverLetter` คือหนังสือฉบับล่าสุดของนักศึกษา **ไม่ได้ผูกกับใบที่ยังเดินอยู่**
+  //    ใบที่ปิดไปแล้ว (บริษัทไม่รับ · ระบบปิด) ยังทิ้งหนังสือที่ลงนามไว้ ถ้าอ่านตรง ๆ ขั้นนี้จะ ✓ ค้าง
+  //    แล้วแถบเส้นทางขึ้น "ตอนนี้" สองช่อง (เลือกสถานประกอบการ + รอหนังสือตอบรับ) ทั้งที่ไม่มีใบเลย (เจอ 2026-10-08)
+  const step1_4Done = step1_3Done && coverLetter?.status === 'signed';
 
   /**
    * กำหนดตอบกลับของแบบตอบรับ (เอกสารหมายเลข 2)

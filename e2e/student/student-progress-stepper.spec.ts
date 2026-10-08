@@ -148,4 +148,61 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
       expect((await request.get(`${API_URL}/students/dashboard`)).status(), who).toBe(403);
     }
   });
+
+  // บั๊ก 2026-10-08: ขั้น 1.4 อ่านหนังสือฉบับล่าสุดของนักศึกษาโดยไม่ดูว่าเป็นของใบที่ยังเดินอยู่ไหม
+  // ใบที่ปิดไปแล้วทิ้งหนังสือที่ลงนามไว้ → แถบเส้นทางขึ้น "ตอนนี้" สองช่อง และใบใหม่ได้ ✓ คณบดีลงนามมาฟรี
+  test('หนังสือที่ลงนามของใบที่ปิดแล้ว ไม่นับเป็นความคืบหน้า — แถบเส้นทางมี "ตอนนี้" ช่องเดียว ทั้งตอนไม่มีใบและตอนยื่นใบใหม่', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const ids = await withDb(async (db) => {
+      const studentId = (await db.query("SELECT user_id FROM users WHERE email = 'student2@test.com'")).rows[0].user_id;
+      const companyId = (await db.query('SELECT company_id FROM companies ORDER BY company_id LIMIT 1')).rows[0].company_id;
+      const semesterId = (await db.query('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1')).rows[0]
+        .semester_id;
+      // ใบเดิม: คณบดีลงนามแล้ว ส่งถึงบริษัทแล้ว แล้วบริษัทตอบไม่รับ — หนังสือที่ลงนามยังอยู่ในฐาน
+      await db.query(
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status, officer_document_no, acceptance_due_date, reject_reason)
+         VALUES ($1, $2, $3, 'company_rejected', 'ST/OLD', CURRENT_DATE + 10, 'ไม่มีตำแหน่งที่ตรงกับสาขา')`,
+        [studentId, companyId, semesterId]
+      );
+      await db.query(
+        `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
+         VALUES ('ST/OLD', 'cover_letter', $1, $2, 'signed')`,
+        [studentId, companyId]
+      );
+      return { studentId, semesterId };
+    });
+
+    const steps = page.getByTestId('journey-bar').getByTestId('journey-step');
+    const active = page.getByTestId('journey-bar').locator('[data-testid="journey-step"][data-state="active"]');
+
+    // 1) ไม่มีใบที่ยังเดินอยู่ — ต้องอยู่ที่ "เลือกสถานประกอบการ" ช่องเดียว
+    await loginAs(page, 'student2');
+    await expect(steps).toHaveCount(7);
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText('เลือกสถานประกอบการ');
+    await expect(steps.filter({ hasText: 'รอหนังสือตอบรับ' })).toHaveAttribute('data-state', 'pending');
+
+    // 2) ยื่นใบใหม่ถึงที่อื่น ยังไม่ถึงมือเจ้าหน้าที่ — หนังสือเก่าต้องไม่ทำให้ขั้นหลังได้ ✓ หรือ "ตอนนี้" ล่วงหน้า
+    await withDb(async (db) => {
+      const other = (
+        await db.query(
+          `INSERT INTO companies (name_th, address, province, district, postal_code, phone, created_by, is_verified)
+           VALUES ('บริษัท ที่ใหม่ จำกัด', '1 ถนนทดสอบ', 'ชลบุรี', 'ศรีราชา', '20110', '020000000', $1, FALSE)
+           RETURNING company_id`,
+          [ids.studentId]
+        )
+      ).rows[0].company_id;
+      await db.query(
+        `INSERT INTO intent_forms (student_id, company_id, semester_id, status) VALUES ($1, $2, $3, 'pending_advisor')`,
+        [ids.studentId, other, ids.semesterId]
+      );
+    });
+    await page.reload();
+    await expect(steps).toHaveCount(7);
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText('ขอหนังสือขอความอนุเคราะห์');
+    await expect(steps.filter({ hasText: 'รอหนังสือตอบรับ' })).toHaveAttribute('data-state', 'pending');
+  });
 });
