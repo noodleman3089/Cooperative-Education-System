@@ -142,6 +142,38 @@ export function assertAllowedTransition(action: string, currentStatus: string, a
 }
 
 /**
+ * สถานประกอบการแห่งนี้ตอบ "ไม่รับ" นักศึกษาคนนี้ในภาคเรียนนี้ไปแล้ว → ยื่นถึงที่เดิมซ้ำไม่ได้ (เจ้าของสั่ง 2026-10-08)
+ * กันนักศึกษาส่งซ้ำไปรบกวนที่เดิม และกันงานเปล่าของเจ้าหน้าที่/คณบดี — ใช้ทั้งตอนยื่นและตอนแก้สถานประกอบการของใบร่าง
+ *
+ * ⛔ เทียบด้วย `company_id` เท่านั้น — คือกรณีที่ระบบรู้แน่ว่าเป็นที่เดิม (แถวในทำเนียบ · สถานที่ Google Maps เดียวกัน)
+ *    **จงใจไม่เทียบชื่อ**: ชื่อที่พิมพ์เองสะกดต่างก็หลุด แต่ชื่อคล้ายของคนละนิติบุคคลจะบล็อกคนสุจริตโดยไม่มีปุ่มปลด
+ *    ทางพิมพ์ชื่อเองจึงยังเป็นหน้าที่ของด่านเจ้าหน้าที่รับคำร้อง
+ * ⛔ นับเฉพาะ `company_rejected` (คำตอบจากบริษัทเองทางลิงก์ มีเหตุผล มี audit) — ไม่นับ `rejected`
+ *    (นักศึกษาแจ้งเอง · ระบบปิดเมื่อพ้นปฏิทิน ซึ่งบริษัทไม่ได้ปฏิเสธ) · ไม่ข้ามภาคเรียน
+ */
+async function assertNotDeclinedByCompany(
+  db: Pick<PoolClient, 'query'>,
+  studentId: number,
+  semesterId: number,
+  companyId: number
+): Promise<void> {
+  const declined = await db.query(
+    `SELECT c.name_th
+       FROM intent_forms i
+       JOIN companies c ON c.company_id = i.company_id
+      WHERE i.student_id = $1 AND i.semester_id = $2 AND i.company_id = $3
+        AND i.status = 'company_rejected'
+      LIMIT 1`,
+    [studentId, semesterId, companyId]
+  );
+  if ((declined.rowCount ?? 0) > 0) {
+    throw new Error(
+      `${declined.rows[0].name_th} ตอบไม่รับคุณในภาคเรียนนี้แล้ว จึงยื่นคำร้องถึงที่เดิมซ้ำไม่ได้ — กรุณาเลือกสถานประกอบการแห่งอื่น`
+    );
+  }
+}
+
+/**
  * คำขอถูกรูปแบบ แต่ชนกับสภาพปัจจุบันของใบ — controller ตอบ 409 พร้อม `code` ให้หน้าจอแยกกรณีได้
  * (ไฟล์ที่ดูอยู่เป็นไฟล์เก่า · เลขที่หนังสือซ้ำ · คณบดีลงนามไปแล้ว)
  */
@@ -238,6 +270,12 @@ export class IntentFormModel {
       if ((companyCheck.rowCount ?? 0) === 0) {
         throw new Error('Company not found in directory.');
       }
+      await assertNotDeclinedByCompany(
+        client,
+        intentData.student_id,
+        intentData.semester_id,
+        intentData.company_id
+      );
 
       // 3. Verify that semester exists and is active
       const semesterCheck = await client.query(
@@ -864,7 +902,7 @@ export class IntentFormModel {
       await client.query('BEGIN');
 
       const current = await client.query(
-        `SELECT student_id, company_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        `SELECT student_id, company_id, semester_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
         [formId]
       );
       if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
@@ -915,6 +953,8 @@ export class IntentFormModel {
       }
 
       if (toCompanyId !== fromCompanyId) {
+        // ยื่นที่อื่นแล้วแก้กลับไปที่ที่ตอบไม่รับไว้ = ทางอ้อมของการยื่นซ้ำ ต้องผ่านด่านเดียวกัน (ROLLBACK ทิ้งแถวร่างที่เพิ่งสร้าง)
+        await assertNotDeclinedByCompany(client, studentId, row.semester_id as number, toCompanyId);
         await client.query('UPDATE intent_forms SET company_id = $1 WHERE form_id = $2', [toCompanyId, formId]);
         await IntentFormModel.deleteDraftCompanyIfOrphan(client, fromCompanyId, studentId);
       }
