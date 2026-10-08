@@ -643,6 +643,9 @@ test.describe('ขั้น 4 — กำหนด ๑๕ วันทำกา�
     await expect(page.getByTestId('link-expired-note')).toContainText('ลิงก์ในอีเมลจึงใช้ไม่ได้');
     await expect(card).toContainText('สิ่งที่ต้องทำตอนนี้');
     await expect(page.getByTestId('company-mail-resend-open')).toHaveCount(0);
+    // โควตายังเหลือ 2 ครั้ง แต่ส่งไม่ได้แล้ว — ห้ามบอกว่า "ส่งได้อีก" ขัดกับหัวการ์ด (เจอตอนเปิดดูหน้าจอจริง 2026-10-08)
+    await expect(page.getByTestId('company-mail-status')).toContainText('ส่งถึง');
+    await expect(card).not.toContainText('ส่งได้อีก');
     await expect(page.getByTestId('proof-open')).toBeVisible();
     await expect(page.getByTestId('fail-open')).toBeVisible();
 

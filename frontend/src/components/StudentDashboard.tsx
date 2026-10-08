@@ -1137,7 +1137,8 @@ const StudentDashboard: React.FC = () => {
         {intent.company_mail_sent_at && intent.company_mail_to && (
           <p data-testid="company-mail-status" className="mt-2 font-semibold text-emerald-700 dark:text-emerald-400">
             ส่งถึง {intent.company_mail_to} เมื่อ {formatThaiDateTime(intent.company_mail_sent_at)}
-            {companyMailLeft > 0 && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
+            {/* รอบริษัทจนเลยกำหนด = ส่งซ้ำไม่ได้แล้ว (409) — ห้ามบอกว่ายังเหลือโควตา ขัดกับหัวการ์ด */}
+            {companyMailLeft > 0 && !(mode === 'wait' && acceptanceDue?.overdue) && ` · ส่งได้อีก ${companyMailLeft} ครั้ง`}
           </p>
         )}
         {!intent.company_mail_sent_at && companyMailLeft > 0 && (
