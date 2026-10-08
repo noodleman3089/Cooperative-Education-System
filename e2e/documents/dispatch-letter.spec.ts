@@ -2,11 +2,12 @@ import { test, expect } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import { PDFParse } from 'pdf-parse';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
-import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
+import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { approveIntentThroughOfficer } from '../helpers/intent';
+import { approveIntentThroughOfficer, deanSign } from '../helpers/intent';
 
 /**
  * หนังสือส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา — ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ
@@ -408,5 +409,350 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(
       await dbValue<string>("SELECT COUNT(*) FROM official_documents WHERE type = 'send_letter'")
     ).toBe('1');
+  });
+});
+
+/**
+ * ขั้น 6 ข้อ ก — ทางแก้ของหนังสือส่งตัวที่ยังไม่ลงนาม
+ *
+ * สิ่งที่พังเงียบได้:
+ *   R1–R2  ถอนแล้วใบต้อง **คง `accepted`** และกลับเข้าคิวรอออก (เลขถูกล้าง) — ถ้าใบถอยสถานะ บัญชีพี่เลี้ยงที่เปิดไปแล้วจะค้าง
+ *          ออกใหม่ด้วยเลขเดิมได้ (หนังสือถูกลบ ไม่ใช่ตั้ง rejected) · เหตุผลถึงเจ้าหน้าที่เท่านั้น
+ *   R3–R4  สิทธิ์ · ลงนามแล้วถอนไม่ได้ · ต้องมีเหตุผล · ลงนามฉบับที่ถูกถอนไปแล้วไม่ได้
+ *   R5     วันเริ่มงานแก้ได้ตอนออกหนังสือ และหนังสือพิมพ์วันใหม่
+ *   R6     วาดไฟล์ล้มหลังบันทึกเลข ใบต้องไม่หายจากคิว (เดิมเลขค้าง = ทางตัน)
+ */
+const RECALL_REASON = 'วันสิ้นสุดการปฏิบัติงานไม่ตรงกับแบบตอบรับ กรุณาตรวจอีกครั้ง';
+const DISPATCH_NO = 'อว 0656.10/ส่งตัว-1';
+const FONT = path.join(BACKEND_ROOT, 'secure_private/fonts/THSarabunNew.ttf');
+const FONT_HIDDEN = `${FONT}.e2e-hidden-dispatch`;
+
+const sendLetter = (formId: number) =>
+  dbRow<{ doc_id: number; status: string; path: string }>(
+    `SELECT d.doc_id, d.status, d.generated_file_path AS path
+       FROM official_documents d JOIN intent_forms i
+         ON i.student_id = d.student_id AND i.company_id = d.company_id
+      WHERE i.form_id = $1 AND d.type = 'send_letter' ORDER BY d.doc_id DESC LIMIT 1`,
+    [formId]
+  );
+
+const dispatchForm = (formId: number) =>
+  dbRow<{ status: string; dispatch_document_no: string | null; start_date: string | null; end_date: string | null; reject_reason: string | null }>(
+    `SELECT status, dispatch_document_no, start_date::text AS start_date, end_date::text AS end_date, reject_reason
+       FROM intent_forms WHERE form_id = $1`,
+    [formId]
+  );
+
+const recallEvents = (formId: number) =>
+  dbRows<{ stage: string; note: string | null; actor_id: number | null }>(
+    `SELECT stage, note, actor_id FROM intent_stage_events
+      WHERE form_id = $1 AND stage LIKE 'dispatch_%' AND stage <> 'dispatch_issued' ORDER BY event_id`,
+    [formId]
+  );
+
+type AcceptedRow = {
+  form_id: number;
+  dispatch_recall?: { by: 'dean' | 'staff'; reason: string; at: string; actor_name: string | null } | null;
+};
+const acceptedList = async (request: APIRequestContext): Promise<AcceptedRow[]> =>
+  (await (await request.get(`${API_URL}/intents?status=accepted`)).json()) as AcceptedRow[];
+
+async function pdfText(bytes: Buffer): Promise<string> {
+  const parser = new PDFParse({ data: new Uint8Array(bytes) });
+  try {
+    return (await parser.getText()).text.replace(/\s+/g, '');
+  } finally {
+    await parser.destroy();
+  }
+}
+
+test.describe('หนังสือส่งตัว — ถอนกลับ · แก้วันเริ่มงาน · วาดไฟล์ล้ม', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    if (fs.existsSync(FONT_HIDDEN)) fs.renameSync(FONT_HIDDEN, FONT);
+    await seedTestData();
+  });
+
+  test('R1: เจ้าหน้าที่ดึงกลับ → หนังสือหายจากคิวคณบดี · ใบคง accepted กลับเข้าคิวรอออกพร้อมเหตุผล · ออกใหม่เลขเดิมแล้วคณบดีลงนามได้', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const first = (await sendLetter(formId))!;
+
+    // รายการหนังสือของเจ้าหน้าที่ต้องบอกว่าหนังสือส่งตัวฉบับนี้เป็นของใบไหน — ปุ่มดึงกลับบนหน้าจอใช้ค่านี้
+    const docs = (await (await request.get(`${API_URL}/documents`)).json()) as Array<{ doc_id: number; form_id: number | null }>;
+    expect(docs.find((d) => d.doc_id === first.doc_id)!.form_id).toBe(formId);
+
+    const recalled = await request.post(`${API_URL}/intents/${formId}/dispatch-letter/recall`, {
+      data: { reason: RECALL_REASON },
+    });
+    expect(recalled.status(), await recalled.text()).toBe(200);
+
+    // ── ฐาน: หนังสือถูกลบ · เลขถูกล้าง · ใบไม่ถอยสถานะ · วันสิ้นสุดคงอยู่ · ไม่เขียน reject_reason ──
+    expect(await sendLetter(formId)).toBeUndefined();
+    const form = (await dispatchForm(formId))!;
+    expect(form.status).toBe('accepted');
+    expect(form.dispatch_document_no).toBeNull();
+    expect(form.end_date).toBe('2027-02-19');
+    expect(form.reject_reason).toBeNull();
+    const events = await recallEvents(formId);
+    expect(events.map((e) => e.stage)).toEqual(['dispatch_staff_recalled']);
+    expect(events[0].note).toBe(RECALL_REASON);
+    expect(events[0].actor_id).toBe(
+      await dbValue<number>("SELECT user_id FROM users WHERE email = 'staff1@test.com'")
+    );
+    // ไฟล์ฉบับร่างไม่มีแถวไหนชี้ถึงแล้ว ต้องถูกลบ
+    await expect.poll(() => fs.existsSync(path.join(BACKEND_ROOT, first.path))).toBe(false);
+    await expect
+      .poll(() =>
+        dbValue<string>(
+          `SELECT detail->>'by' FROM audit_log WHERE action = 'document.dispatch_letter_returned' AND entity_id = $1`,
+          [String(formId)]
+        )
+      )
+      .toBe('staff');
+
+    // ── หายจากคิวคณบดี · กลับเข้าคิวรอออกของเจ้าหน้าที่พร้อมเหตุผล ──
+    const after = (await (await request.get(`${API_URL}/documents`)).json()) as Array<{ doc_id: number }>;
+    expect(after.some((d) => d.doc_id === first.doc_id)).toBe(false);
+    expect((await (await request.get(`${API_URL}/intents/pipeline-summary`)).json()).dispatch_eligible).toBe(1);
+    const queued = (await acceptedList(request)).find((r) => r.form_id === formId)!;
+    expect(queued.dispatch_recall).toMatchObject({ by: 'staff', reason: RECALL_REASON });
+
+    // ── ออกใหม่ด้วยเลขเดิม (ถ้าหนังสือเดิมไม่ถูกลบ ตรงนี้จะ 409) แล้วคณบดีลงนามได้ ──
+    const again = await issue(request, formId);
+    expect(again.status(), await again.text()).toBe(200);
+    const second = (await sendLetter(formId))!;
+    expect(second.doc_id).not.toBe(first.doc_id);
+    // ออกใหม่แล้ว = ไม่อยู่ในคิวรอออก ป้ายถอนต้องไม่ตามไป
+    expect((await acceptedList(request)).find((r) => r.form_id === formId)!.dispatch_recall).toBeNull();
+
+    await deanSign(request, second.doc_id);
+    expect((await sendLetter(formId))!.status).toBe('signed');
+  });
+
+  test('R2: คณบดีตีกลับ → ผลเดียวกัน · เหตุผลถึงเจ้าหน้าที่เท่านั้น นักศึกษาและบทบาทอื่นไม่เห็น', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const letter = (await sendLetter(formId))!;
+
+    await apiLoginAs(request, 'dean1');
+    const returned = await request.post(`${API_URL}/documents/${letter.doc_id}/return`, {
+      data: { reason: RECALL_REASON },
+    });
+    expect(returned.status(), await returned.text()).toBe(200);
+
+    expect(await sendLetter(formId)).toBeUndefined();
+    const form = (await dispatchForm(formId))!;
+    expect(form.status).toBe('accepted');
+    expect(form.dispatch_document_no).toBeNull();
+    const events = await recallEvents(formId);
+    expect(events.map((e) => e.stage)).toEqual(['dispatch_dean_returned']);
+    expect(events[0].actor_id).toBe(
+      await dbValue<number>("SELECT user_id FROM users WHERE email = 'dean1@test.com'")
+    );
+    // ⛔ ต้องไม่ไปโผล่เป็นเหตุการณ์ของคิวคำร้อง (dean_returned / staff_recalled อ่านเป็น "เข้าคิวคำร้องรอรับ")
+    expect(
+      await dbValue<number>(
+        `SELECT COUNT(*)::int FROM intent_stage_events WHERE form_id = $1 AND stage IN ('dean_returned', 'staff_recalled')`,
+        [formId]
+      )
+    ).toBe(0);
+
+    // เจ้าหน้าที่เห็นว่าใครตีกลับ เพราะอะไร
+    await apiLoginAs(request, 'staff1');
+    expect((await acceptedList(request)).find((r) => r.form_id === formId)!.dispatch_recall).toMatchObject({
+      by: 'dean',
+      reason: RECALL_REASON,
+    });
+
+    // บทบาทอื่นที่ใช้เส้นเดียวกันไม่ได้ค่านี้เลย (ไม่ใช่ได้ null)
+    for (const account of ['dean1', 'head1', 'advisor1'] as const) {
+      await apiLoginAs(request, account);
+      const res = await request.get(`${API_URL}/intents?status=accepted`);
+      expect(res.status(), account).toBe(200);
+      const body = await res.text();
+      expect(body, `${account} ต้องไม่เห็นเหตุผล`).not.toContain(RECALL_REASON);
+      expect(body, `${account} ต้องไม่ได้คีย์ dispatch_recall`).not.toContain('dispatch_recall');
+    }
+
+    // นักศึกษาไม่เห็นเหตุผล ทั้งทาง API และบนหน้าจอ
+    await apiLoginAs(request, 'student2');
+    for (const url of [`${API_URL}/intents/${formId}`, `${API_URL}/intents/me`, `${API_URL}/students/dashboard`]) {
+      const res = await request.get(url);
+      expect(res.status(), url).toBe(200);
+      expect(await res.text(), url).not.toContain(RECALL_REASON);
+    }
+    await loginAs(page, 'student2');
+    await expect(page.getByRole('heading', { name: 'ที่ฝึกงานของคุณ' })).toBeVisible();
+    await expect(page.locator('body')).not.toContainText(RECALL_REASON);
+  });
+
+  test('R3: สิทธิ์ — ดึงกลับได้เฉพาะเจ้าหน้าที่ · ตีกลับได้เฉพาะคณบดี', async ({ request }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const letter = (await sendLetter(formId))!;
+
+    for (const account of ['student2', 'advisor1', 'head1', 'dean1', 'mentor1'] as const) {
+      await apiLoginAs(request, account);
+      const res = await request.post(`${API_URL}/intents/${formId}/dispatch-letter/recall`, {
+        data: { reason: RECALL_REASON },
+      });
+      expect(res.status(), `${account} เรียก route ของเจ้าหน้าที่`).toBe(403);
+    }
+    for (const account of ['student2', 'advisor1', 'head1', 'staff1', 'mentor1'] as const) {
+      await apiLoginAs(request, account);
+      const res = await request.post(`${API_URL}/documents/${letter.doc_id}/return`, {
+        data: { reason: RECALL_REASON },
+      });
+      expect(res.status(), `${account} เรียก route ของคณบดี`).toBe(403);
+    }
+
+    // ไม่มีอะไรขยับ
+    expect((await sendLetter(formId))!.status).toBe('pending_sign');
+    expect((await dispatchForm(formId))!.dispatch_document_no).toBe(DISPATCH_NO);
+    expect(await recallEvents(formId)).toHaveLength(0);
+  });
+
+  test('R4: ไม่ส่งเหตุผล (400) · ยังไม่ออกหนังสือ (409) · ลงนามแล้วถอนไม่ได้ (409) · ลงนามฉบับที่ถูกถอนไปแล้วไม่ได้', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+
+    // ยังไม่มีหนังสือให้ถอน — ต้องไม่เกิดเหตุการณ์ถอน (ป้ายในคิวจะขึ้นทั้งที่ไม่เคยออก)
+    await apiLoginAs(request, 'staff1');
+    const nothing = await request.post(`${API_URL}/intents/${formId}/dispatch-letter/recall`, {
+      data: { reason: RECALL_REASON },
+    });
+    expect(nothing.status(), await nothing.text()).toBe(409);
+    expect(await recallEvents(formId)).toHaveLength(0);
+
+    expect((await issue(request, formId)).status()).toBe(200);
+    const first = (await sendLetter(formId))!;
+
+    // ไม่ส่งเหตุผล / เหตุผลว่าง = 400 และไม่มีอะไรเปลี่ยน
+    for (const body of [{}, { reason: '   ' }]) {
+      const res = await request.post(`${API_URL}/intents/${formId}/dispatch-letter/recall`, { data: body });
+      expect(res.status(), JSON.stringify(body)).toBe(400);
+    }
+    await apiLoginAs(request, 'dean1');
+    expect((await request.post(`${API_URL}/documents/${first.doc_id}/return`, { data: {} })).status()).toBe(400);
+    expect((await sendLetter(formId))!.doc_id).toBe(first.doc_id);
+
+    // คณบดีตีกลับ แล้วพยายามลงนามฉบับที่ถูกถอนไปแล้ว (หน้าคิวที่เปิดค้างไว้) → ไม่นับว่าลงนาม
+    expect(
+      (await request.post(`${API_URL}/documents/${first.doc_id}/return`, { data: { reason: RECALL_REASON } })).status()
+    ).toBe(200);
+    const stale = await request.post(`${API_URL}/documents/batch-sign`, { data: { doc_ids: [first.doc_id] } });
+    expect(stale.status()).toBe(200);
+    const staleBody = await stale.json();
+    expect(staleBody.signed_count).toBe(0);
+    expect(staleBody.failed_documents.map((f: { doc_id: number }) => f.doc_id)).toEqual([first.doc_id]);
+
+    // ออกใหม่ → ลงนาม → ถอนไม่ได้ทั้งสองทาง · หนังสือและเลขยังอยู่
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const second = (await sendLetter(formId))!;
+    await deanSign(request, second.doc_id);
+
+    const lateReturn = await request.post(`${API_URL}/documents/${second.doc_id}/return`, {
+      data: { reason: RECALL_REASON },
+    });
+    expect(lateReturn.status(), await lateReturn.text()).toBe(409);
+    expect((await lateReturn.json()).code).toBe('letter_signed');
+    await apiLoginAs(request, 'staff1');
+    const lateRecall = await request.post(`${API_URL}/intents/${formId}/dispatch-letter/recall`, {
+      data: { reason: RECALL_REASON },
+    });
+    expect(lateRecall.status(), await lateRecall.text()).toBe(409);
+    expect((await lateRecall.json()).code).toBe('letter_signed');
+    expect((await sendLetter(formId))!.status).toBe('signed');
+    expect((await dispatchForm(formId))!.dispatch_document_no).toBe(DISPATCH_NO);
+    expect(await recallEvents(formId)).toHaveLength(1);
+  });
+
+  test('R5: แก้วันเริ่มงานตอนออกหนังสือ → ใบและข้อความในหนังสือเป็นวันใหม่ · วันเริ่มหลังวันสิ้นสุด = 400', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+    await apiLoginAs(request, 'staff1');
+
+    const badFormat = await issue(request, formId, { document_no: DISPATCH_NO, end_date: '2027-02-19', start_date: '26/10/2026' });
+    expect(badFormat.status()).toBe(400);
+    const backwards = await issue(request, formId, { document_no: DISPATCH_NO, end_date: '2027-02-19', start_date: '2027-03-01' });
+    expect(backwards.status()).toBe(400);
+    expect((await backwards.json()).message as string).toContain('ก่อนวันเริ่มปฏิบัติงาน');
+    // ถูกปฏิเสธ = ใบไม่ถูกแตะ
+    expect((await dispatchForm(formId))!.start_date).toBe(MENTOR.start_date);
+    expect(await sendLetter(formId)).toBeUndefined();
+
+    // นักศึกษากรอกวันเริ่ม 2 พ.ย. — เจ้าหน้าที่แก้เป็น 26 ต.ค. ตอนออกหนังสือ
+    const ok = await issue(request, formId, { document_no: DISPATCH_NO, end_date: '2027-02-19', start_date: '2026-10-26' });
+    expect(ok.status(), await ok.text()).toBe(200);
+    expect((await dispatchForm(formId))!.start_date).toBe('2026-10-26');
+
+    const letter = (await sendLetter(formId))!;
+    const text = await pdfText(fs.readFileSync(path.join(BACKEND_ROOT, letter.path)));
+    expect(text).toMatch(/26ต\.ค\.2569|๒๖ตุลาคม๒๕๖๙/);
+    expect(text, 'วันเริ่มเดิม (2 พ.ย.) ต้องไม่ถูกพิมพ์').not.toMatch(/2พ\.ย\.2569|๒พฤศจิกายน๒๕๖๙/);
+
+    await expect
+      .poll(() =>
+        dbRow<{ from: string | null; to: string | null }>(
+          `SELECT detail->>'start_date_from' AS "from", detail->>'start_date_to' AS "to"
+             FROM audit_log WHERE action = 'document.generated' AND entity_id = $1`,
+          [String(letter.doc_id)]
+        )
+      )
+      .toEqual({ from: MENTOR.start_date, to: '2026-10-26' });
+  });
+
+  test('R6: วาดไฟล์หนังสือล้มหลังบันทึกเลข → ตอบ 500 · เลขถูกล้าง ใบยังอยู่ในคิวรอออก · กดออกใหม่ได้', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+    await apiLoginAs(request, 'staff1');
+
+    // ฟอนต์หาย = ตัววาดล้ม (หลัง COMMIT ของเลขที่หนังสือ) · โฟลเดอร์นี้เป็นของ worker นี้เท่านั้น
+    fs.renameSync(FONT, FONT_HIDDEN);
+    try {
+      const failed = await issue(request, formId);
+      expect(failed.status(), await failed.text()).toBe(500);
+      expect((await failed.json()).message as string).toContain('กดออกหนังสืออีกครั้ง');
+    } finally {
+      fs.renameSync(FONT_HIDDEN, FONT);
+    }
+
+    expect(await sendLetter(formId)).toBeUndefined();
+    expect((await dispatchForm(formId))!.dispatch_document_no).toBeNull();
+    expect((await (await request.get(`${API_URL}/intents/pipeline-summary`)).json()).dispatch_eligible).toBe(1);
+    // กองงานบนหน้าแรกเจ้าหน้าที่ก็ต้องยังนับใบนี้ — ที่นั่นกรองด้วยเลขที่หนังสือ ไม่ใช่การมีอยู่ของเอกสาร
+    const home = await request.get(`${API_URL}/staff/home`);
+    expect((await home.json()).tiles.dispatch.count).toBe(1);
+
+    const retry = await issue(request, formId);
+    expect(retry.status(), await retry.text()).toBe(200);
+    expect((await sendLetter(formId))!.status).toBe('pending_sign');
   });
 });

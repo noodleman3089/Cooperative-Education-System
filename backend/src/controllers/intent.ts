@@ -142,15 +142,18 @@ function sendIntentConflict(res: Response, error: unknown): boolean {
 }
 
 /**
- * ถอนหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนามแล้วตอบ HTTP เอง — ใช้ร่วมกันสองเส้น
- *   `POST /api/documents/:id/return` (คณบดีตีกลับ) · `POST /api/intents/:id/cover-letter/recall` (เจ้าหน้าที่ดึงกลับ)
- * ตัวงานจริงอยู่ที่ `IntentFormModel.returnCoverLetter` (ทรานแซกชันเดียว) · เหตุผลบังคับ ใช้กติกาเดียวกับ `officer-reject` (ไม่ว่าง)
+ * ถอนหนังสือที่ยังไม่ลงนามแล้วตอบ HTTP เอง — ใช้ร่วมกันทั้งสองชนิดหนังสือ
+ *   `POST /api/documents/:id/return` (คณบดีตีกลับ · ทั้งสองชนิด)
+ *   `POST /api/intents/:id/cover-letter/recall` · `POST /api/intents/:id/dispatch-letter/recall` (เจ้าหน้าที่ดึงกลับ)
+ * ตัวงานจริงอยู่ที่ `IntentFormModel.returnCoverLetter` / `returnDispatchLetter` (ทรานแซกชันเดียว)
+ * · เหตุผลบังคับ ใช้กติกาเดียวกับ `officer-reject` (ไม่ว่าง) · `letter` ไม่ส่ง = หนังสือขอความอนุเคราะห์
  */
 export async function handleLetterReturn(
   req: Request,
   res: Response,
-  args: { formId: number; by: 'dean' | 'staff'; docId?: number }
+  args: { formId: number; by: 'dean' | 'staff'; docId?: number; letter?: 'cover' | 'dispatch' }
 ): Promise<void> {
+  const isDispatch = args.letter === 'dispatch';
   try {
     if (!req.user) {
       res.status(401).json({ message: 'Unauthorized. Please log in.' });
@@ -162,12 +165,10 @@ export async function handleLetterReturn(
       return;
     }
 
-    const { studentId, documentNo, draftPath, officerId } = await IntentFormModel.returnCoverLetter(args.formId, {
-      reason,
-      actorUserId: req.user.userId,
-      by: args.by,
-      docId: args.docId,
-    });
+    const returnInput = { reason, actorUserId: req.user.userId, by: args.by, docId: args.docId };
+    const { studentId, documentNo, draftPath, officerId } = isDispatch
+      ? await IntentFormModel.returnDispatchLetter(args.formId, returnInput)
+      : await IntentFormModel.returnCoverLetter(args.formId, returnInput);
 
     // ไฟล์ฉบับร่างไม่มีแถวไหนชี้ถึงแล้ว — ลบไม่สำเร็จไม่ถือว่าล้ม · ลบเฉพาะใต้โฟลเดอร์เอกสารของระบบ
     if (draftPath) {
@@ -178,7 +179,9 @@ export async function handleLetterReturn(
 
     writeAudit(
       {
-        action: AuditAction.DOCUMENT_COVER_LETTER_RETURNED,
+        action: isDispatch
+          ? AuditAction.DOCUMENT_DISPATCH_LETTER_RETURNED
+          : AuditAction.DOCUMENT_COVER_LETTER_RETURNED,
         entityType: 'intent_form',
         entityId: args.formId,
         subjectId: studentId,
@@ -203,6 +206,7 @@ export async function handleLetterReturn(
             companyName: row.company_name,
             documentNo,
             reason,
+            letter: isDispatch ? 'dispatch' : 'cover',
           });
         })
         .catch(console.error);
@@ -212,7 +216,9 @@ export async function handleLetterReturn(
       message:
         args.by === 'dean'
           ? 'ตีกลับหนังสือให้เจ้าหน้าที่แล้ว'
-          : 'ดึงหนังสือกลับแล้ว คำร้องกลับไปรอรับในคิวคำร้อง',
+          : isDispatch
+            ? 'ดึงหนังสือส่งตัวกลับแล้ว ใบกลับไปรอออกหนังสือส่งตัวใหม่'
+            : 'ดึงหนังสือกลับแล้ว คำร้องกลับไปรอรับในคิวคำร้อง',
       form_id: args.formId,
     });
   } catch (error) {
@@ -540,7 +546,21 @@ export class IntentFormController {
                            (SELECT MAX(r.entered_at) FROM intent_stage_events r
                              WHERE r.form_id = i.form_id AND r.stage = 'request_returned'), '-infinity'::timestamptz)
                    ORDER BY e.entered_at DESC, e.event_id DESC LIMIT 1)
-               END AS letter_recall
+               END AS letter_recall,
+               -- ป้ายในคิว "หนังสือส่งตัวรอออก": หนังสือส่งตัวถูกถอนกลับมาและยังไม่ได้ออกใหม่ (เลขยังว่าง)
+               -- เหตุการณ์ถอนล่าสุดของใบ พร้อมเหตุผลและผู้กด · เจ้าหน้าที่เท่านั้นที่ได้ค่านี้ — ตัดตามบทบาทที่ปลายทาง
+               CASE WHEN i.status = 'accepted' AND i.dispatch_document_no IS NULL THEN
+                 (SELECT json_build_object(
+                           'by', CASE WHEN e.stage = 'dispatch_dean_returned' THEN 'dean' ELSE 'staff' END,
+                           'reason', e.note,
+                           'at', e.entered_at,
+                           'actor_name', NULLIF(TRIM(CONCAT_WS(' ', pr.first_name, pr.last_name)), ''))
+                    FROM intent_stage_events e
+                    LEFT JOIN personnel pr ON pr.personnel_id = e.actor_id
+                   WHERE e.form_id = i.form_id
+                     AND e.stage IN ('dispatch_dean_returned', 'dispatch_staff_recalled')
+                   ORDER BY e.entered_at DESC, e.event_id DESC LIMIT 1)
+               END AS dispatch_recall
         FROM intent_forms i
         JOIN students s ON i.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
@@ -593,9 +613,12 @@ export class IntentFormController {
 
       const result = await query(queryStr, queryParams);
 
-      // ⛔ ป้ายหนังสือถูกถอนกลับให้เจ้าหน้าที่เท่านั้น (หลักการ SEC-10) — เส้นนี้หลายบทบาทใช้ร่วม
+      // ⛔ ป้ายหนังสือถูกถอนกลับ (ทั้งสองชนิด) ให้เจ้าหน้าที่เท่านั้น (หลักการ SEC-10) — เส้นนี้หลายบทบาทใช้ร่วม
       if (!roles.includes('staff')) {
-        for (const row of result.rows) delete (row as Record<string, unknown>).letter_recall;
+        for (const row of result.rows as Record<string, unknown>[]) {
+          delete row.letter_recall;
+          delete row.dispatch_recall;
+        }
       }
 
       res.status(200).json(result.rows);
@@ -1012,6 +1035,20 @@ export class IntentFormController {
   }
 
   /**
+   * เจ้าหน้าที่ดึงหนังสือส่งตัวที่ยังไม่ลงนามกลับ — ใบคง `accepted` กลับไปรอออกหนังสือส่งตัวใหม่
+   * Route: POST /api/intents/:id/dispatch-letter/recall
+   * Access: staff · body { reason }
+   */
+  static async recallDispatchLetter(req: Request, res: Response): Promise<void> {
+    const formId = parseInt(req.params.id, 10);
+    if (isNaN(formId)) {
+      res.status(400).json({ message: 'Invalid intent form ID format.' });
+      return;
+    }
+    await handleLetterReturn(req, res, { formId, by: 'staff', letter: 'dispatch' });
+  }
+
+  /**
    * เจ้าหน้าที่แก้เลขที่หนังสือออก — ได้จนกว่าคณบดีจะลงนาม
    * Route: PATCH /api/intents/:id/document-no
    * Access: staff
@@ -1263,6 +1300,13 @@ export class IntentFormController {
         res.status(400).json({ message: 'รูปแบบวันสิ้นสุดการปฏิบัติงานต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
         return;
       }
+      // วันเริ่มปฏิบัติงาน — ไม่ส่ง = ใช้ค่าบนใบ · ส่งมา = เจ้าหน้าที่แก้ค่าที่นักศึกษา/บริษัทกรอกผิด (วันนี้ถูกพิมพ์ลงหนังสือ)
+      const startDateInput =
+        typeof req.body?.start_date === 'string' ? req.body.start_date.trim() : '';
+      if (startDateInput && !/^\d{4}-\d{2}-\d{2}$/.test(startDateInput)) {
+        res.status(400).json({ message: 'รูปแบบวันเริ่มปฏิบัติงานต้องเป็น ปี-เดือน-วัน (YYYY-MM-DD)' });
+        return;
+      }
 
       await client.query('BEGIN');
 
@@ -1303,53 +1347,74 @@ export class IntentFormController {
         return;
       }
 
-      if (!intent.start_date) {
+      const previousStartDate = (intent.start_date as string | null) ?? null;
+      const startDate = startDateInput || previousStartDate;
+      if (!startDate) {
         await client.query('ROLLBACK');
         res.status(400).json({
           message: 'ใบนี้ยังไม่มีวันเริ่มปฏิบัติงาน จึงพิมพ์ช่วงเวลาลงหนังสือส่งตัวไม่ได้',
         });
         return;
       }
-      if (endDate < intent.start_date) {
+      if (endDate < startDate) {
         await client.query('ROLLBACK');
         res.status(400).json({
-          message: `วันสิ้นสุดการปฏิบัติงาน (${endDate}) มาก่อนวันเริ่มปฏิบัติงาน (${intent.start_date})`,
+          message: `วันสิ้นสุดการปฏิบัติงาน (${endDate}) มาก่อนวันเริ่มปฏิบัติงาน (${startDate})`,
         });
         return;
       }
 
+      // วันเริ่มงานบันทึกในทรานแซกชันเดียวกับเลข — หนังสือที่จะวาดต่อจากนี้อ่านค่าจากใบ
       await client.query(
-        `UPDATE intent_forms SET dispatch_document_no = $2, end_date = $3 WHERE form_id = $1`,
-        [formId, documentNo, endDate]
+        `UPDATE intent_forms SET dispatch_document_no = $2, end_date = $3, start_date = $4 WHERE form_id = $1`,
+        [formId, documentNo, endDate, startDate]
       );
       await recordStageEvent(client, formId, 'dispatch_issued');
 
       await client.query('COMMIT');
 
       // วาดหนังสือ *หลัง* ทรานแซกชันจบ ด้วยเหตุผลเดียวกับหนังสือขอความอนุเคราะห์ —
-      // การเขียนไฟล์ลงดิสก์ย้อนกลับพร้อมฐานไม่ได้ · ล้มตรงนี้เจ้าหน้าที่กดใหม่ได้
-      // เพราะด่านกันซ้ำอยู่ที่การมีอยู่ของเอกสาร ไม่ใช่ที่เลขบนใบความจำนง
-      const letterRow = await fetchDispatchLetterData(formId);
-      if (!letterRow) {
-        res.status(500).json({ message: 'ไม่พบข้อมูลสำหรับวาดหนังสือส่งตัว' });
+      // การเขียนไฟล์ลงดิสก์ย้อนกลับพร้อมฐานไม่ได้
+      // ⛔ ล้มตรงนี้ต้อง **ล้างเลขกลับ** — ทุกคิว (หน้าแรก · รายการ · ท่อสถานะ) กรองด้วย `dispatch_document_no IS NULL`
+      //    ปล่อยเลขค้างไว้โดยไม่มีแถวหนังสือ = ใบหายจากทุกคิวและไม่มีปุ่มไหนพากลับมา (ทางตัน)
+      let absolutePath: string | null = null;
+      let doc: Awaited<ReturnType<typeof OfficialDocumentModel.create>>;
+      try {
+        const letterRow = await fetchDispatchLetterData(formId);
+        if (!letterRow) throw new Error('ไม่พบข้อมูลสำหรับวาดหนังสือส่งตัว');
+
+        const pdfBytes = await buildDispatchLetterPdf(toDispatchLetterData(letterRow));
+        const fileName = `dispatch_letter_${formId}_${Date.now()}.pdf`;
+        const relativePath = path.posix.join('secure_private', 'documents', fileName);
+        absolutePath = path.join(process.cwd(), relativePath);
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+        fs.writeFileSync(absolutePath, pdfBytes);
+
+        doc = await OfficialDocumentModel.create({
+          document_number: documentNo,
+          type: 'send_letter',
+          student_id: intent.student_id,
+          company_id: intent.company_id,
+          generated_file_path: relativePath,
+          status: 'pending_sign',
+        });
+      } catch (drawError) {
+        console.error('Issue Dispatch Letter Error (after commit):', drawError);
+        // ล้างเฉพาะเมื่อยังไม่มีแถวหนังสือของใบนี้ — มีแล้ว (ล้มหลังสร้างแถว) ต้องไม่ทำให้หนังสือหลุดจากใบ
+        await query(
+          `UPDATE intent_forms i SET dispatch_document_no = NULL
+            WHERE i.form_id = $1 AND i.dispatch_document_no = $2
+              AND NOT EXISTS (SELECT 1 FROM official_documents d
+                               WHERE d.student_id = i.student_id AND d.company_id = i.company_id
+                                 AND d.type = 'send_letter' AND d.document_number = $2)`,
+          [formId, documentNo]
+        ).catch((cleanupError) => console.error('Failed to clear dispatch_document_no:', cleanupError));
+        if (absolutePath) fs.promises.unlink(absolutePath).catch(() => undefined);
+        res.status(500).json({
+          message: 'สร้างไฟล์หนังสือส่งตัวไม่สำเร็จ ระบบยังไม่ได้ออกหนังสือ — กรุณากดออกหนังสืออีกครั้ง',
+        });
         return;
       }
-
-      const pdfBytes = await buildDispatchLetterPdf(toDispatchLetterData(letterRow));
-      const fileName = `dispatch_letter_${formId}_${Date.now()}.pdf`;
-      const relativePath = path.posix.join('secure_private', 'documents', fileName);
-      const absolutePath = path.join(process.cwd(), relativePath);
-      fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-      fs.writeFileSync(absolutePath, pdfBytes);
-
-      const doc = await OfficialDocumentModel.create({
-        document_number: documentNo,
-        type: 'send_letter',
-        student_id: intent.student_id,
-        company_id: intent.company_id,
-        generated_file_path: relativePath,
-        status: 'pending_sign',
-      });
 
       // หนังสือใหม่เข้าคิวคณบดี — แจ้งคณบดีที่ไม่อยู่ (ไม่รอ · ล้มก็ไม่กระทบการออกหนังสือ)
       notifyDeansOfPendingLetter().catch(console.error);
@@ -1360,7 +1425,15 @@ export class IntentFormController {
           entityType: 'official_document',
           entityId: doc.doc_id,
           subjectId: intent.student_id,
-          detail: { type: 'send_letter', document_no: documentNo, end_date: endDate },
+          detail: {
+            type: 'send_letter',
+            document_no: documentNo,
+            end_date: endDate,
+            // เจ้าหน้าที่แก้วันเริ่มงานตอนออกหนังสือ — เก็บค่าเดิมและค่าใหม่ (ไม่แก้ = ไม่มีคีย์นี้)
+            ...(startDate !== previousStartDate
+              ? { start_date_from: previousStartDate, start_date_to: startDate }
+              : {}),
+          },
         },
         req
       ).catch(() => undefined);

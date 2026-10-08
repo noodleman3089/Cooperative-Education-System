@@ -66,6 +66,11 @@ export const OFFICER_DECISION_FROM = ['pending_officer_request'];
  */
 export const LETTER_RETURN_FROM = ['approved_by_dept_head'];
 /**
+ * ถอนหนังสือส่งตัวที่ยังไม่ลงนามได้ **เฉพาะใบที่ตอบรับแล้ว** — ใบ **คงสถานะ `accepted`** ไม่ถอยไปไหน
+ * (ถอยไป `pending_officer_approval` = ต้องรื้อบัญชีพี่เลี้ยงที่เปิดไปแล้ว) · กลับเข้าคิว "หนังสือส่งตัวรอออก" เพราะเลขถูกล้าง
+ */
+export const DISPATCH_RETURN_FROM = ['accepted'];
+/**
  * นักศึกษายกเลิกคำร้องเองได้ **ก่อนเจ้าหน้าที่รับเท่านั้น** (เจ้าของสั่ง 2026-10-06)
  * หลังเจ้าหน้าที่รับ = บริษัทถูกรับรองและเลขที่หนังสือออกไปแล้ว ย้อนด้วยปุ่มของนักศึกษาไม่ได้
  */
@@ -701,6 +706,80 @@ export class IntentFormModel {
       return {
         studentId: row.student_id as number,
         documentNo: (row.officer_document_no as string | null) ?? null,
+        draftPath: letter?.generated_file_path ?? null,
+        officerId: (row.officer_approved_by as number | null) ?? null,
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * ถอนหนังสือส่งตัวที่ **ยังไม่ลงนาม** — คณบดีตีกลับ (`by = 'dean'`) หรือเจ้าหน้าที่ดึงกลับ (`'staff'`)
+   *
+   * โครงเดียวกับ `returnCoverLetter` ต่างกันที่ **ใบไม่เปลี่ยนสถานะ**: หนังสือถูกลบ · `dispatch_document_no` ถูกล้าง
+   * ใบจึงกลับเข้าคิว "หนังสือส่งตัวรอออก" เอง (ทุกคิวกรองด้วย `dispatch_document_no IS NULL`)
+   *
+   * ⛔ คง `end_date` (และ `start_date`) ไว้ — กล่องออกหนังสือเติมให้ · ไม่เขียน `reject_reason`
+   * ⛔ ล็อกแถวใบก่อนแถวหนังสือ · ลงนามแล้ว = 409 `letter_signed`
+   * ไม่มีแถวหนังสือแต่มีเลขค้าง (ออกแล้ววาดพังและล้างเลขไม่สำเร็จ) = ถอนได้ · ไม่มีทั้งเลขทั้งหนังสือ = ไม่มีอะไรให้ถอน (409)
+   * ผู้เรียกลบไฟล์ PDF ฉบับร่างหลัง COMMIT (`draftPath`)
+   */
+  static async returnDispatchLetter(
+    formId: number,
+    input: { reason: string; actorUserId: number; by: 'dean' | 'staff'; docId?: number }
+  ): Promise<{ studentId: number; documentNo: string | null; draftPath: string | null; officerId: number | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, company_id, status, dispatch_document_no, officer_approved_by
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+      const row = current.rows[0];
+      assertAllowedTransition('dispatch_return', row.status, DISPATCH_RETURN_FROM);
+      if (row.dispatch_document_no === null) {
+        throw new IntentConflictError('ใบนี้ยังไม่ได้ออกหนังสือส่งตัว จึงไม่มีหนังสือให้ถอนกลับ', 'letter_missing');
+      }
+
+      const doc = await client.query(
+        `SELECT doc_id, status, generated_file_path FROM official_documents
+          WHERE student_id = $1 AND company_id = $2 AND type = 'send_letter'
+            AND document_number IS NOT DISTINCT FROM $3
+          ORDER BY doc_id DESC LIMIT 1
+            FOR UPDATE`,
+        [row.student_id, row.company_id, row.dispatch_document_no]
+      );
+      const letter = doc.rows[0] as { doc_id: number; status: string; generated_file_path: string | null } | undefined;
+      if (letter && letter.status !== 'pending_sign') {
+        throw new IntentConflictError('คณบดีลงนามหนังสือฉบับนี้แล้ว จึงถอนกลับไม่ได้', 'letter_signed');
+      }
+      if (letter && input.docId !== undefined && letter.doc_id !== input.docId) {
+        throw new IntentConflictError(
+          'หนังสือฉบับนี้ไม่ใช่ฉบับล่าสุดของคำร้อง (อาจถูกออกใหม่แล้ว) กรุณารีเฟรชรายการ',
+          'letter_missing'
+        );
+      }
+
+      if (letter) await client.query('DELETE FROM official_documents WHERE doc_id = $1', [letter.doc_id]);
+      await client.query(`UPDATE intent_forms SET dispatch_document_no = NULL WHERE form_id = $1`, [formId]);
+      await recordStageEvent(
+        client,
+        formId,
+        input.by === 'dean' ? 'dispatch_dean_returned' : 'dispatch_staff_recalled',
+        { note: input.reason, actorId: input.actorUserId }
+      );
+
+      await client.query('COMMIT');
+      return {
+        studentId: row.student_id as number,
+        documentNo: (row.dispatch_document_no as string | null) ?? null,
         draftPath: letter?.generated_file_path ?? null,
         officerId: (row.officer_approved_by as number | null) ?? null,
       };

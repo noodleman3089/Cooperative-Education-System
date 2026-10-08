@@ -21,6 +21,9 @@
  *   mentor_set           นักศึกษาระบุพี่เลี้ยง → รอเจ้าหน้าที่ยืนยันแบบตอบรับ
  *   accepted             เจ้าหน้าที่ยืนยันแบบตอบรับ → ตอบรับแล้ว เตรียมเอกสารก่อนฝึก
  *   dispatch_issued      ออกหนังสือส่งตัว
+ *   dispatch_dean_returned   คณบดีตีกลับหนังสือส่งตัวที่ยังไม่ลงนาม → ใบคง `accepted` กลับไปรอออกหนังสือส่งตัว (หนังสือถูกลบ)
+ *   dispatch_staff_recalled  เจ้าหน้าที่ดึงหนังสือส่งตัวที่ยังไม่ลงนามกลับ → เหมือนบรรทัดบน
+ *     ⛔ คนละค่ากับ `dean_returned` / `staff_recalled` โดยตั้งใจ — สองค่านั้นคือ "เข้าคิวคำร้องรอรับ" (ดูค่าคงที่ด้านล่าง)
  *   exited               ออกจากท่อ (บริษัทไม่รับ / นักศึกษายกเลิก / ระบบปิดเมื่อพ้นปฏิทินรับแบบตอบรับ)
  */
 export type StageEvent =
@@ -37,6 +40,8 @@ export type StageEvent =
   | 'mentor_set'
   | 'accepted'
   | 'dispatch_issued'
+  | 'dispatch_dean_returned'
+  | 'dispatch_staff_recalled'
   | 'exited';
 
 interface Db {
@@ -44,7 +49,7 @@ interface Db {
 }
 
 /**
- * `extra` ใช้กับ `request_returned` · `dean_returned` · `staff_recalled` เท่านั้น — เหตุผลและผู้กด (migration 051)
+ * `extra` ใช้กับ `request_returned` · `dean_returned` · `staff_recalled` · `dispatch_dean_returned` · `dispatch_staff_recalled` เท่านั้น — เหตุผลและผู้กด (migration 051)
  * เก็บที่นี่เพราะ `intent_forms.reject_reason` ถูกล้างเมื่อนักศึกษาส่งใหม่ และ audit_log ไม่มี read API (SEC-07)
  * ⛔ สองค่านี้ให้เจ้าหน้าที่เห็นเท่านั้น (`GET /intents/:id` ตัดตามบทบาท)
  */

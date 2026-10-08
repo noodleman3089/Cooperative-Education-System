@@ -275,11 +275,12 @@ export class DocumentController {
   }
 
   /**
-   * คณบดีตีกลับหนังสือขอความอนุเคราะห์ที่ยังไม่ลงนาม — ใบถอยไปรอเจ้าหน้าที่รับคำร้องใหม่
+   * คณบดีตีกลับหนังสือที่ยังไม่ลงนาม — ทั้งสองชนิด
    * Route: POST /api/documents/:id/return
    * Access: dean เท่านั้น · body { reason }
    *
-   * หนังสือส่งตัว (`send_letter`) ยังตีกลับไม่ได้ = 409 (รอขั้น 6 — ดู known_issues.md)
+   * หนังสือขอความอนุเคราะห์: ใบถอยไปรอเจ้าหน้าที่รับคำร้องใหม่
+   * หนังสือส่งตัว (`send_letter`): ใบคง `accepted` กลับไปรอเจ้าหน้าที่ออกหนังสือส่งตัวใหม่
    */
   static async returnDocument(req: Request, res: Response): Promise<void> {
     try {
@@ -294,13 +295,11 @@ export class DocumentController {
         res.status(404).json({ message: 'Official document not found.' });
         return;
       }
-      if (doc.type !== 'cover_letter') {
-        res.status(409).json({
-          message: 'ยังตีกลับหนังสือส่งตัวในระบบไม่ได้ — หากข้อมูลผิด กรุณาแจ้งเจ้าหน้าที่',
-          code: 'send_letter_not_returnable',
-        });
+      if (doc.type !== 'cover_letter' && doc.type !== 'send_letter') {
+        res.status(409).json({ message: 'เอกสารชนิดนี้ตีกลับในระบบไม่ได้' });
         return;
       }
+      const isDispatch = doc.type === 'send_letter';
       if (doc.status !== 'pending_sign') {
         res.status(409).json({
           message: 'หนังสือฉบับนี้ไม่ได้อยู่ในสถานะรอลงนาม จึงตีกลับไม่ได้',
@@ -310,9 +309,11 @@ export class DocumentController {
       }
 
       // หาใบที่หนังสือฉบับนี้เป็นของมัน — เงื่อนไขเดียวกับ LATERAL ทั้งระบบ (นักศึกษา + สถานประกอบการ + เลขที่หนังสือ)
+      // หนังสือส่งตัวเทียบกับ `dispatch_document_no` — คนละเลขกับหนังสือขอความอนุเคราะห์
       const formRes = await query(
         `SELECT form_id FROM intent_forms
-          WHERE student_id = $1 AND company_id = $2 AND officer_document_no IS NOT DISTINCT FROM $3
+          WHERE student_id = $1 AND company_id = $2
+            AND ${isDispatch ? 'dispatch_document_no' : 'officer_document_no'} IS NOT DISTINCT FROM $3
           ORDER BY form_id DESC LIMIT 1`,
         [doc.student_id, doc.company_id, doc.document_number]
       );
@@ -325,6 +326,7 @@ export class DocumentController {
         formId: formRes.rows[0].form_id as number,
         by: 'dean',
         docId,
+        letter: isDispatch ? 'dispatch' : 'cover',
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Return Document Error', 'เกิดข้อผิดพลาดขณะตีกลับหนังสือ');

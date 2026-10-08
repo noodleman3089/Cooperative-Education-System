@@ -159,6 +159,14 @@ router.post(
   IntentFormController.issueDispatchLetter
 );
 
+// Route: POST /api/intents/:id/dispatch-letter/recall
+// เจ้าหน้าที่ดึงหนังสือส่งตัวที่ยังไม่ลงนามกลับ (เลข/วันที่ผิด) — ใบคง accepted กลับเข้าคิวรอออกหนังสือส่งตัว
+router.post(
+  '/:id/dispatch-letter/recall',
+  authorizeRoles('staff'),
+  IntentFormController.recallDispatchLetter
+);
+
 // Route: GET /api/intents/:id/cover-letter/preview (เจ้าหน้าที่ดูตัวอย่างก่อนส่งคิวคณบดี)
 router.get(
   '/:id/cover-letter/preview',

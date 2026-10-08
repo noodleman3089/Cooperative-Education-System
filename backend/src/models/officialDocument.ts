@@ -106,12 +106,17 @@ export class OfficialDocumentModel {
               CASE WHEN d.status = 'pending_sign' AND d.created_at IS NOT NULL
                    THEN ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (d.created_at AT TIME ZONE 'Asia/Bangkok')::date)
                    ELSE NULL END AS days_pending,
-              -- คำร้องที่หนังสือขอความอนุเคราะห์ฉบับนี้เป็นของมัน — หน้าเจ้าหน้าที่ใช้เปิดช่องแก้เลขที่หนังสือ
-              -- (จับคู่ย้อนด้วยเงื่อนไขเดียวกับ LATERAL ทั้งระบบ · หนังสือส่งตัวไม่มี = NULL)
+              -- คำร้องที่หนังสือฉบับนี้เป็นของมัน — หน้าเจ้าหน้าที่ใช้เปิดช่องแก้เลขที่หนังสือ / ปุ่มดึงกลับ
+              -- (จับคู่ย้อนด้วยเงื่อนไขเดียวกับ LATERAL ทั้งระบบ · หนังสือส่งตัวเทียบกับ dispatch_document_no)
               CASE WHEN d.type = 'cover_letter' THEN
                 (SELECT i.form_id FROM intent_forms i
                   WHERE i.student_id = d.student_id AND i.company_id = d.company_id
                     AND i.officer_document_no IS NOT DISTINCT FROM d.document_number
+                  ORDER BY i.form_id DESC LIMIT 1)
+              WHEN d.type = 'send_letter' THEN
+                (SELECT i.form_id FROM intent_forms i
+                  WHERE i.student_id = d.student_id AND i.company_id = d.company_id
+                    AND i.dispatch_document_no IS NOT DISTINCT FROM d.document_number
                   ORDER BY i.form_id DESC LIMIT 1)
               END AS form_id,
               s.student_code, s.first_name, s.last_name,

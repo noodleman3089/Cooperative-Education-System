@@ -459,6 +459,12 @@ export const notifyStudentStatusChangeByDocId = async (
             ? ' และส่งหนังสือพร้อมแบบตอบรับให้สถานประกอบการเองได้จากหน้าแดชบอร์ดเช่นกัน'
             : ''
         }</p>
+        ${
+          // คู่มือสหกิจข้อ 9: นักศึกษานำหนังสือส่งตัวไปส่งสถานประกอบการเอง — ระบบไม่ส่งอะไรถึงสถานประกอบการ และไม่แนบไฟล์
+          doc_type === 'send_letter'
+            ? '<p><b>กรุณาดาวน์โหลดหนังสือส่งตัว แล้วนำส่งสถานประกอบการด้วยตนเอง</b></p>'
+            : ''
+        }
       `;
     } else {
       statusLabel = status.replace(/_/g, ' ');
@@ -1001,7 +1007,14 @@ export const sendMentorSilentDigestEmail = async (
  */
 export const notifyOfficerLetterReturned = async (
   officerUserId: number,
-  info: { studentName: string; companyName: string; documentNo: string | null; reason: string }
+  info: {
+    studentName: string;
+    companyName: string;
+    documentNo: string | null;
+    reason: string;
+    /** ไม่ส่ง = หนังสือขอความอนุเคราะห์ */
+    letter?: 'cover' | 'dispatch';
+  }
 ): Promise<void> => {
   try {
     const res = await query(
@@ -1011,8 +1024,14 @@ export const notifyOfficerLetterReturned = async (
     if ((res.rowCount ?? 0) === 0) return;
     const toEmail = (res.rows[0].email as string).trim();
 
+    const isDispatch = info.letter === 'dispatch';
+    const letterName = isDispatch ? 'หนังสือส่งตัว' : 'หนังสือขอความอนุเคราะห์';
     const content = `
-      <p>คณบดี<b>ตีกลับ</b>หนังสือขอความอนุเคราะห์ที่ยังไม่ลงนาม คำร้องกลับมารอรับใหม่ในคิว "คำร้องรอรับ"</p>
+      <p>คณบดี<b>ตีกลับ</b>${letterName}ที่ยังไม่ลงนาม ${
+        isDispatch
+          ? 'ใบกลับมารอออกหนังสือใหม่ในคิว "หนังสือส่งตัวรอออก"'
+          : 'คำร้องกลับมารอรับใหม่ในคิว "คำร้องรอรับ"'
+      }</p>
       <p style="color: #d93025; font-weight: bold;">เหตุผล: ${esc(info.reason)}</p>
     `;
     const highlightBox = `
@@ -1025,8 +1044,8 @@ export const notifyOfficerLetterReturned = async (
     await transporter.sendMail({
       from: `"ระบบงานสหกิจศึกษา RMUTTO" <${SMTP_FROM}>`,
       to: toEmail,
-      subject: 'คณบดีตีกลับหนังสือขอความอนุเคราะห์ - ระบบสหกิจศึกษาออนไลน์',
-      html: renderEmailHtml({ title: 'คณบดีตีกลับหนังสือขอความอนุเคราะห์', themeColor: '#d93025', content, highlightBox }),
+      subject: `คณบดีตีกลับ${letterName} - ระบบสหกิจศึกษาออนไลน์`,
+      html: renderEmailHtml({ title: `คณบดีตีกลับ${letterName}`, themeColor: '#d93025', content, highlightBox }),
     });
     console.log(`[Email] Letter-returned notice sent to officer: ${toEmail}`);
   } catch (error) {

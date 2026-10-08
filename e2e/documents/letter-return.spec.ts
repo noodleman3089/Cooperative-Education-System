@@ -15,7 +15,7 @@ import { approveIntentThroughOfficer, coverLetterDocId, deanSign, officerApprove
  * สิ่งที่พังเงียบได้ และเป็นเหตุผลที่ไฟล์นี้มีอยู่:
  *   L1–L3  ถอนหนังสือที่ยังไม่ลงนาม (คณบดีตีกลับ · เจ้าหน้าที่ดึงกลับ) — ใบต้องกลับไปรอรับใหม่ได้ด้วยเลขเดิม
  *          ไม่แดง "เลยกำหนด" ทันที และนักศึกษาต้องไม่เห็นเหตุผล
- *   L4–L5  สิทธิ์ · ลงนามแล้วถอนไม่ได้ · ต้องมีเหตุผล · หนังสือส่งตัวยังตีกลับไม่ได้
+ *   L4–L5  สิทธิ์ · ลงนามแล้วถอนไม่ได้ · ต้องมีเหตุผล (หนังสือส่งตัว → `documents/dispatch-letter` R1–R4)
  *   L6     ด่านลงนามกันเฉพาะ `pending_sign` (เดิมกันแค่ `signed`) — ถอนไปแล้วต้องลงนามไม่ได้ และไม่ปั๊มกำหนดตอบรับ
  *   L7–L8  ชื่อ-ตำแหน่งใต้ลายเซ็นเป็นของ **คนที่กดลงนาม** (เดิมหยิบบัญชี dean ใบแรกที่ฐานเจอ) · ตำแหน่งตั้งได้เฉพาะ role dean
  */
@@ -253,7 +253,7 @@ test.describe('ขั้น 3 — คณบดีลงนามหนังส�
     expect((await formRow(formId))!.status).toBe('approved_by_dept_head');
   });
 
-  test('L5: ลงนามแล้วถอนไม่ได้ (409) · ไม่ส่งเหตุผล (400) · หนังสือส่งตัวตีกลับไม่ได้ (409)', async ({ request }) => {
+  test('L5: ลงนามแล้วถอนไม่ได้ (409) · ไม่ส่งเหตุผล (400)', async ({ request }) => {
     test.setTimeout(120_000);
     const { formId, docId } = await approvedForm(request);
 
@@ -267,21 +267,7 @@ test.describe('ขั้น 3 — คณบดีลงนามหนังส�
     expect((await request.post(`${API_URL}/intents/${formId}/cover-letter/recall`, { data: {} })).status()).toBe(400);
     expect(await letterCount(formId)).toBe(1);
 
-    // หนังสือส่งตัวในคิวเดียวกัน — ชนิดจริงคือ send_letter · ยังตีกลับในระบบไม่ได้
-    const sendDocId = (await dbValue<number>(
-      `INSERT INTO official_documents (document_number, type, student_id, company_id, generated_file_path, status)
-       SELECT 'อว ส่งตัว-1', 'send_letter', student_id, company_id, 'secure_private/documents/none.pdf', 'pending_sign'
-         FROM intent_forms WHERE form_id = $1 RETURNING doc_id`,
-      [formId]
-    ))!;
-    await apiLoginAs(request, 'dean1');
-    const dispatch = await request.post(`${API_URL}/documents/${sendDocId}/return`, { data: { reason: REASON } });
-    expect(dispatch.status(), await dispatch.text()).toBe(409);
-    expect((await dispatch.json()).message as string).toContain('หนังสือส่งตัว');
-    expect(await dbValue<string>('SELECT status FROM official_documents WHERE doc_id = $1', [sendDocId])).toBe(
-      'pending_sign'
-    );
-    await dbExec('DELETE FROM official_documents WHERE doc_id = $1', [sendDocId]);
+    // (หนังสือส่งตัวตีกลับได้แล้วตั้งแต่ขั้น 6 — คุมที่ `documents/dispatch-letter` R1–R4)
 
     // ลงนามแล้ว → คณบดีตีกลับไม่ได้ และเจ้าหน้าที่ดึงกลับไม่ได้ · หนังสือยังอยู่
     await deanSign(request, docId);
