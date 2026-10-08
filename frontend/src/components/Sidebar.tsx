@@ -32,6 +32,23 @@ interface MenuItem {
   group?: string;
 }
 
+/**
+ * เมนูที่ **พักไว้ชั่วคราว** ระหว่างไล่เส้นทางสหกิจหลักให้ครบ (เจ้าของสั่ง 2026-10-09 · กำหนดส่ง 2026-10-19)
+ *
+ * ซ่อนจากแถบเมนูอย่างเดียว — หน้าจอ route สิทธิ์ และ `?menu=<id>` ยังใช้ได้ครบ ไม่มีโค้ดถูกลบ
+ * ชุด E2E เห็นเมนูครบเสมอ เพราะ `playwright.config.ts` ตั้ง `VITE_SHOW_ALL_MENUS=true` ให้ frontend ที่มันเปิดเอง
+ * (dev server ที่เปิดค้างไว้ที่พอร์ต 5173 ไม่ได้ค่านี้ — ปิดก่อนรัน E2E ไม่งั้น spec ที่เดินเข้าเมนูพวกนี้จะแดง)
+ *
+ * ⛔ ดึงกลับก่อนส่งโปรเจค: ทำให้รายการนี้ว่าง · `announcements` อยู่ในขอบเขตเล่ม (เจ้าหน้าที่ ข้อ 5) ห้ามลืม
+ */
+const PARKED_MENUS: Record<string, string[]> = {
+  staff: ['semester_summary', 'announcements'],
+  advisor: ['mentor_followup'],
+  supervisor: ['mentor_followup'],
+  dept_head: ['mentor_followup'],
+};
+const SHOW_ALL_MENUS = import.meta.env.VITE_SHOW_ALL_MENUS === 'true';
+
 const Sidebar: React.FC<SidebarProps> = ({
   currentRole,
   activeMenu,
@@ -279,10 +296,11 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]
   };
 
-  const activeMenuItems = menuConfig[currentRole] || [
+  const parked = SHOW_ALL_MENUS ? [] : PARKED_MENUS[currentRole] ?? [];
+  const activeMenuItems = (menuConfig[currentRole] || [
     { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
     { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile }
-  ];
+  ]).filter((item) => !parked.includes(item.id));
 
 
   return (

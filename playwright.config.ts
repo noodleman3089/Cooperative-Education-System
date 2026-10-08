@@ -109,10 +109,15 @@ export default defineConfig({
       url: slot.appUrl,
       // vite.config.ts อ่านสองค่านี้: ส่ง /api ไป backend ของ worker เดียวกัน · แคช pre-bundle แยกกัน
       // (vite หลายตัวเขียนแคชโฟลเดอร์เดียวกันพร้อมกันไม่ได้) · worker 0 ไม่ตั้ง = ค่าเดิมของ dev
+      // VITE_SHOW_ALL_MENUS: แถบเมนูพักบางรายการไว้ชั่วคราว (`PARKED_MENUS` ใน Sidebar.tsx) — ชุดเทสต์ต้องเห็นครบ
       env:
         slot.index === 0
-          ? {}
-          : { E2E_API_TARGET: slot.serverUrl, E2E_VITE_CACHE_DIR: `node_modules/.vite-e2e-w${slot.index}` },
+          ? { VITE_SHOW_ALL_MENUS: 'true' }
+          : {
+              VITE_SHOW_ALL_MENUS: 'true',
+              E2E_API_TARGET: slot.serverUrl,
+              E2E_VITE_CACHE_DIR: `node_modules/.vite-e2e-w${slot.index}`,
+            },
       // ตัวที่ 0 คือ dev server ปกติ ใช้ตัวที่เปิดค้างได้ · ตัวอื่นต้องเปิดเองเพราะต้องได้ env ข้างบน
       reuseExistingServer: slot.index === 0,
       timeout: 120 * 1000,
