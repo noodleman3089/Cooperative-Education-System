@@ -139,6 +139,8 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
       supervision_visits: 2,
       final_report_approved: true,
       mentor_evaluations: 2,
+      // สหกิจ 03 ขาดกี่ช่องบังคับ (ขั้น 6) — เคสนี้ไม่ได้กรอก 03 · ค่าที่ถูกต้องคุมที่ `documents/dispatch-prep-gate` G4–G5
+      coop03_missing_count: expect.any(Number),
     });
   });
 
