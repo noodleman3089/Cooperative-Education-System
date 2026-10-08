@@ -684,9 +684,8 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               <span>{getDocTypeLabel(previewDoc.type)}</span>
             </div>
 
-            {/* ตีกลับหนังสือที่ยังไม่ลงนามให้เจ้าหน้าที่ — เฉพาะหนังสือขอความอนุเคราะห์
-                (หนังสือส่งตัวยังตีกลับในระบบไม่ได้ · ดู known_issues.md) */}
-            {previewDoc.type === 'cover_letter' && previewDoc.status === 'pending_sign' && (
+            {/* ตีกลับหนังสือที่ยังไม่ลงนามให้เจ้าหน้าที่ */}
+            {(previewDoc.type === 'cover_letter' || previewDoc.type === 'send_letter') && previewDoc.status === 'pending_sign' && (
               <div>
                 <Button
                   variant="secondary"
@@ -725,16 +724,16 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
       {/* ══ ตีกลับหนังสือให้เจ้าหน้าที่ — เหตุผลบังคับ ══ */}
       {returningDoc && (
         <ReasonModal
-          title="ตีกลับหนังสือให้เจ้าหน้าที่"
+          title={`ตีกลับ${getDocTypeLabel(returningDoc.type)}ให้เจ้าหน้าที่`}
           testIdPrefix="dean-return"
           submitLabel="ตีกลับหนังสือ"
           intro={
             <>
-              กำลังตีกลับหนังสือขอความอนุเคราะห์ของ <strong>{docStudentName(returningDoc)}</strong> (
+              กำลังตีกลับ{getDocTypeLabel(returningDoc.type)}ของ <strong>{docStudentName(returningDoc)}</strong> (
               {returningDoc.student_code}) · {returningDoc.company_name_th} · เลขที่{' '}
               {returningDoc.document_number || `#DOC-${returningDoc.doc_id}`}
               <br />
-              หนังสือฉบับนี้จะถูกลบออกจากคิว และคำร้องกลับไปรอเจ้าหน้าที่รับใหม่
+              หนังสือฉบับนี้จะถูกลบออกจากคิว และ{returningDoc.type === 'send_letter' ? 'ใบกลับไปรอออกหนังสือส่งตัวใหม่' : 'คำร้องกลับไปรอเจ้าหน้าที่รับใหม่'}
             </>
           }
           hint="เจ้าหน้าที่ที่รับคำร้องใบนี้จะได้รับอีเมลพร้อมเหตุผล · นักศึกษาไม่เห็นเหตุผลนี้"

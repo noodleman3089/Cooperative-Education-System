@@ -8,7 +8,7 @@ import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
-import { formatThaiDate } from '../../utils/thaiDate';
+import { formatThaiDate, formatThaiDateTime } from '../../utils/thaiDate';
 import { Search, ExternalLink } from 'lucide-react';
 import RequestReviewPanel from './RequestReviewPanel';
 
@@ -80,6 +80,12 @@ export interface DispatchRow {
   acceptance_signer_position?: string | null;
   acceptance_signed_date?: string | null;
   dispatch_document_no?: string | null;
+  dispatch_recall?: {
+    by: 'dean' | 'staff';
+    reason?: string | null;
+    at?: string | null;
+    actor_name?: string | null;
+  } | null;
 }
 
 const COOP_DEFAULT_DAYS = 111;
@@ -177,7 +183,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
   // Modal Review States - Dispatch
   const [reviewingDispatch, setReviewingDispatch] = useState<DispatchRow | null>(null);
-  const [dispatchForm, setDispatchForm] = useState({ document_no: '', end_date: '' });
+  const [dispatchForm, setDispatchForm] = useState({ document_no: '', start_date: '', end_date: '' });
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [confirmingDispatch, setConfirmingDispatch] = useState(false);
 
@@ -219,9 +225,11 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
           const matched = dispRows.find((r) => r.form_id === formIdNum);
           if (matched) {
             setReviewingDispatch(matched);
+            const initialStart = matched.start_date || '';
             setDispatchForm({
               document_no: '',
-              end_date: matched.end_date || (matched.start_date ? addDays(matched.start_date, COOP_DEFAULT_DAYS) : ''),
+              start_date: initialStart,
+              end_date: matched.end_date || (initialStart ? addDays(initialStart, COOP_DEFAULT_DAYS) : ''),
             });
           }
         }
@@ -323,9 +331,11 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
   const openDispatchReview = (row: DispatchRow) => {
     setReviewingDispatch(row);
+    const initialStart = row.start_date || '';
     setDispatchForm({
       document_no: '',
-      end_date: row.end_date || (row.start_date ? addDays(row.start_date, COOP_DEFAULT_DAYS) : ''),
+      start_date: initialStart,
+      end_date: row.end_date || (initialStart ? addDays(initialStart, COOP_DEFAULT_DAYS) : ''),
     });
     setConfirmingDispatch(false);
     setError(null);
@@ -523,6 +533,14 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
           filteredDispatches.map((row) => (
             <div key={row.form_id} className={`${QUEUE_ROW} border-gray-200 dark:border-gray-700`}>
               <QueueWho row={row} />
+              {row.dispatch_recall && (
+                <span
+                  data-testid={`dispatch-recall-badge-${row.form_id}`}
+                  className="rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-900 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200"
+                >
+                  {row.dispatch_recall.by === 'dean' ? 'คณบดีตีกลับ' : 'ดึงกลับ'}
+                </span>
+              )}
               <span className="text-[13px] text-gray-600 dark:text-gray-400">
                 {row.start_date ? `เริ่มงาน ${formatThaiDate(row.start_date)}` : 'ยังไม่มีวันเริ่มงาน'}
               </span>
@@ -720,6 +738,22 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <div className="space-y-4">
               <AlertBanner variant="error" message={error} />
 
+              {reviewingDispatch.dispatch_recall && (
+                <div
+                  data-testid="dispatch-recall-note"
+                  className="rounded-xl border border-purple-200 bg-purple-50/60 p-3.5 dark:border-purple-900/60 dark:bg-purple-950/20"
+                >
+                  <span className="block text-xs font-semibold text-purple-900 dark:text-purple-300">
+                    {reviewingDispatch.dispatch_recall.by === 'dean' ? 'คณบดีตีกลับหนังสือ' : 'เจ้าหน้าที่ดึงหนังสือกลับ'}
+                    {reviewingDispatch.dispatch_recall.at ? ` · ${formatThaiDateTime(reviewingDispatch.dispatch_recall.at)}` : ''}
+                    {reviewingDispatch.dispatch_recall.actor_name ? ` โดย ${reviewingDispatch.dispatch_recall.actor_name}` : ''}
+                  </span>
+                  <p className="mt-1 whitespace-pre-line text-sm text-gray-900 dark:text-gray-100">
+                    {reviewingDispatch.dispatch_recall.reason || 'ไม่ได้ระบุเหตุผล'}
+                  </p>
+                </div>
+              )}
+
               <dl className="grid gap-2 rounded-xl bg-gray-50 p-4 text-xs dark:bg-gray-800/40 sm:grid-cols-2">
                 <div>
                   <dt className="text-gray-500 dark:text-gray-400">สถานประกอบการ</dt>
@@ -748,7 +782,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               </dl>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div>
+                <div className="sm:col-span-2">
                   <label htmlFor="dispatch-document-no" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
                     เลขที่หนังสือส่งตัว <span className="text-red-600 dark:text-red-400">*</span>
                   </label>
@@ -761,6 +795,18 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                   />
                 </div>
                 <div>
+                  <label htmlFor="dispatch-start-date" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
+                    วันเริ่มปฏิบัติงาน <span className="text-red-600 dark:text-red-400">*</span>
+                  </label>
+                  <Input
+                    id="dispatch-start-date"
+                    type="date"
+                    data-testid="dispatch-start-date"
+                    value={dispatchForm.start_date}
+                    onChange={(e) => setDispatchForm((f) => ({ ...f, start_date: e.target.value }))}
+                  />
+                </div>
+                <div>
                   <label htmlFor="dispatch-end-date" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
                     วันสิ้นสุดการปฏิบัติงาน <span className="text-red-600 dark:text-red-400">*</span>
                   </label>
@@ -768,7 +814,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                     id="dispatch-end-date"
                     type="date"
                     data-testid="dispatch-end-date"
-                    min={reviewingDispatch.start_date || undefined}
+                    min={dispatchForm.start_date || undefined}
                     value={dispatchForm.end_date}
                     onChange={(e) => setDispatchForm((f) => ({ ...f, end_date: e.target.value }))}
                   />
@@ -788,7 +834,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <Button
               size="sm"
               loading={dispatchBusy}
-              disabled={!dispatchForm.document_no.trim() || !dispatchForm.end_date}
+              disabled={!dispatchForm.document_no.trim() || !dispatchForm.start_date || !dispatchForm.end_date}
               data-testid="dispatch-submit"
               onClick={() => setConfirmingDispatch(true)}
             >
@@ -813,12 +859,12 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <br />
             ช่วงปฏิบัติงาน{' '}
             <strong>
-              {reviewingDispatch?.start_date ? formatThaiDate(reviewingDispatch.start_date) : '-'}
+              {dispatchForm.start_date ? formatThaiDate(dispatchForm.start_date) : '-'}
               {' – '}
               {dispatchForm.end_date ? formatThaiDate(dispatchForm.end_date) : '-'}
             </strong>
             <br />
-            หนังสือจะเข้าคิวให้คณบดีลงนาม · เลขที่หนังสือที่ออกแล้วย้อนกลับไม่ได้
+            หนังสือจะเข้าคิวให้คณบดีลงนาม · ดึงกลับได้จนกว่าคณบดีจะลงนาม
           </>
         }
         confirmLabel="ออกเลขและส่งเข้าคิวคณบดี"

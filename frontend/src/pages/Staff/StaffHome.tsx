@@ -336,14 +336,19 @@ export const StaffHome: React.FC = () => {
   const recallLetter = async (reason: string) => {
     if (!recallingDoc?.form_id) return;
     try {
-      await api.post(`/intents/${recallingDoc.form_id}/cover-letter/recall`, { reason });
+      if (recallingDoc.type === 'send_letter') {
+        await api.post(`/intents/${recallingDoc.form_id}/dispatch-letter/recall`, { reason });
+      } else {
+        await api.post(`/intents/${recallingDoc.form_id}/cover-letter/recall`, { reason });
+      }
     } catch (err) {
       // คณบดีลงนามไปแล้วระหว่างที่กล่องเปิดอยู่ = แถวในตารางต้องเปลี่ยนตาม (ข้อความ error ยังขึ้นในกล่อง)
       await loadDocuments();
       throw err;
     }
+    const targetQueueName = recallingDoc.type === 'send_letter' ? 'หนังสือส่งตัวรอออก' : 'คำร้องรอรับ';
     setSuccess(
-      `ดึงหนังสือของ ${recallingDoc.student_code} กลับแล้ว · คำร้องกลับไปรอรับในคิว "คำร้องรอรับ"`
+      `ดึง${docTypeLabel(recallingDoc.type)}ของ ${recallingDoc.student_code} กลับแล้ว · ใบกลับไปรอในคิว "${targetQueueName}"`
     );
     setRecallingDoc(null);
     await Promise.all([loadHome(true), loadDocuments(), loadPipeline()]);
@@ -693,12 +698,12 @@ export const StaffHome: React.FC = () => {
                         </button>
                       )}
                       {/* ดึงกลับเมื่อบริษัท/นักศึกษาแจ้งเปลี่ยนข้อมูลหลังรับคำร้อง — แถวเดียวกัน เงื่อนไขเดียวกับปุ่มแก้เลข */}
-                      {doc.type === 'cover_letter' && doc.status === 'pending_sign' && doc.form_id && (
+                      {(doc.type === 'cover_letter' || doc.type === 'send_letter') && doc.status === 'pending_sign' && doc.form_id && (
                         <button
                           type="button"
                           data-testid={`recall-letter-${doc.doc_id}`}
                           onClick={() => setRecallingDoc(doc)}
-                          className="-mb-2 ml-3 py-2 text-xs font-semibold text-red-700 hover:underline dark:text-red-400"
+                          className={`-mb-2 py-2 text-xs font-semibold text-red-700 hover:underline dark:text-red-400 ${doc.type === 'cover_letter' ? 'ml-3' : ''}`}
                         >
                           ดึงหนังสือกลับ
                         </button>
@@ -768,17 +773,23 @@ export const StaffHome: React.FC = () => {
           submitLabel="ดึงหนังสือกลับ"
           intro={
             <>
-              กำลังดึงหนังสือขอความอนุเคราะห์ของ{' '}
+              กำลังดึง{docTypeLabel(recallingDoc.type)}ของ{' '}
               <strong>
                 {[recallingDoc.first_name, recallingDoc.last_name].filter(Boolean).join(' ') || recallingDoc.student_code}
               </strong>{' '}
               ({recallingDoc.student_code}) · {recallingDoc.company_name_th} · เลขที่{' '}
               {recallingDoc.document_number || `#DOC-${recallingDoc.doc_id}`}
               <br />
-              หนังสือฉบับนี้จะถูกลบออกจากคิวคณบดี และคำร้องกลับไปรอรับในคิว “คำร้องรอรับ” — รับใหม่ด้วยเลขเดิมหรือตีกลับนักศึกษาได้จากที่นั่น
+              {recallingDoc.type === 'send_letter'
+                ? 'หนังสือฉบับนี้จะถูกลบออกจากคิวคณบดี และใบกลับเข้าคิว “หนังสือส่งตัวรอออก” — ออกใหม่ด้วยเลขเดิมหรือเปลี่ยนวันที่ได้จากที่นั่น'
+                : 'หนังสือฉบับนี้จะถูกลบออกจากคิวคณบดี และคำร้องกลับไปรอรับในคิว “คำร้องรอรับ” — รับใหม่ด้วยเลขเดิมหรือตีกลับนักศึกษาได้จากที่นั่น'}
             </>
           }
-          hint="เหตุผลนี้เจ้าหน้าที่เห็นเท่านั้น (ในแผงรับคำร้อง) — นักศึกษาไม่เห็น"
+          hint={
+            recallingDoc.type === 'send_letter'
+              ? 'เหตุผลนี้เจ้าหน้าที่เห็นเท่านั้น (ในกล่องออกหนังสือส่งตัว) — นักศึกษาไม่เห็น'
+              : 'เหตุผลนี้เจ้าหน้าที่เห็นเท่านั้น (ในแผงรับคำร้อง) — นักศึกษาไม่เห็น'
+          }
           onSubmit={recallLetter}
           onClose={() => setRecallingDoc(null)}
         />

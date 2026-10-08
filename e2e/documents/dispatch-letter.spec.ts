@@ -802,4 +802,98 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
     expect(retry.status(), await retry.text()).toBe(200);
     expect((await sendLetter(formId))!.status).toBe('pending_sign');
   });
+
+  test('R7: หน้าจอ — คณบดีตีกลับหนังสือส่งตัว → เจ้าหน้าที่เห็นป้ายและเหตุผลในคิวรอออก แก้วันเริ่มงานแล้วออกใหม่ได้', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const first = (await sendLetter(formId))!;
+
+    // ── คณบดี: ปุ่มตีกลับขึ้นกับหนังสือส่งตัวด้วย และกล่องบอกชนิดหนังสือที่ถูกต้อง ──
+    await loginAs(page, 'dean1');
+    const row = page.getByTestId(`dean-doc-row-${first.doc_id}`);
+    await expect(row).toBeVisible();
+    await row.getByTestId('dean-doc-preview').click();
+    await page.getByTestId('dean-return-open').click();
+    const returnDialog = page.getByRole('dialog').filter({ has: page.getByTestId('dean-return-reason') });
+    await expect(returnDialog).toContainText('หนังสือส่งตัว');
+    await expect(returnDialog).toContainText(DISPATCH_NO);
+    await expect(returnDialog, 'กล่องต้องไม่เรียกหนังสือส่งตัวว่าหนังสือขอความอนุเคราะห์').not.toContainText(
+      'หนังสือขอความอนุเคราะห์'
+    );
+    await returnDialog.getByTestId('dean-return-reason').fill(RECALL_REASON);
+    await returnDialog.getByTestId('dean-return-submit').click();
+    await expect(page.getByTestId(`dean-doc-row-${first.doc_id}`)).toHaveCount(0);
+    expect(await sendLetter(formId)).toBeUndefined();
+
+    // ── เจ้าหน้าที่: ใบกลับเข้าคิวรอออก พร้อมป้าย · กล่องออกหนังสือบอกว่าใครตีกลับเพราะอะไร ──
+    await loginAs(page, 'staff1');
+    await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 1 คน');
+    await expect(page.getByTestId(`dispatch-recall-badge-${formId}`)).toHaveText('คณบดีตีกลับ');
+    await page.getByTestId(`issue-dispatch-${formId}`).click();
+    const dialog = page.getByRole('dialog').filter({ has: page.getByTestId('dispatch-document-no') });
+    await expect(dialog.getByTestId('dispatch-recall-note')).toContainText('คณบดีตีกลับหนังสือ');
+    await expect(dialog.getByTestId('dispatch-recall-note')).toContainText(RECALL_REASON);
+
+    // วันสิ้นสุดที่กรอกรอบก่อนยังอยู่ · วันเริ่มงานแก้ได้ในกล่องนี้
+    await expect(dialog.getByTestId('dispatch-end-date')).toHaveValue('2027-02-19');
+    await expect(dialog.getByTestId('dispatch-start-date')).toHaveValue(MENTOR.start_date);
+    await dialog.getByTestId('dispatch-start-date').fill('2026-10-26');
+    await dialog.getByTestId('dispatch-document-no').fill(DISPATCH_NO);
+    await dialog.getByTestId('dispatch-submit').click();
+
+    // กล่องยืนยันแสดงวันที่แก้แล้ว และไม่บอกว่าย้อนกลับไม่ได้อีก
+    const confirm = page.getByRole('dialog').filter({ hasText: 'ดึงกลับได้จนกว่าคณบดีจะลงนาม' });
+    await expect(confirm).toContainText('26');
+    await expect(page.locator('body')).not.toContainText('ย้อนกลับไม่ได้');
+    await page.getByRole('button', { name: 'ออกเลขและส่งเข้าคิวคณบดี' }).click();
+    await expect(page.getByText(/ออกหนังสือส่งตัวของ.*แล้ว เลขที่/)).toBeVisible();
+    await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 0 คน');
+
+    const form = (await dispatchForm(formId))!;
+    expect(form.dispatch_document_no).toBe(DISPATCH_NO);
+    expect(form.start_date).toBe('2026-10-26');
+    expect((await sendLetter(formId))!.status).toBe('pending_sign');
+  });
+
+  test('R8: หน้าจอ — เจ้าหน้าที่ดึงหนังสือส่งตัวกลับจากตารางหนังสือ · ไม่มีปุ่มแก้เลขที่หนังสือของหนังสือส่งตัว', async ({
+    page,
+    request,
+  }) => {
+    test.setTimeout(240_000);
+    const formId = await seedIntent();
+    await walkToAccepted(request, formId);
+    await apiLoginAs(request, 'staff1');
+    expect((await issue(request, formId)).status()).toBe(200);
+    const letter = (await sendLetter(formId))!;
+
+    await loginAs(page, 'staff1');
+    const recall = page.getByTestId(`recall-letter-${letter.doc_id}`);
+    await expect(recall).toBeVisible();
+    // แก้เลขของหนังสือส่งตัว = ดึงกลับแล้วออกใหม่ — ปุ่มแก้เลขเป็นของหนังสือขอความอนุเคราะห์เท่านั้น
+    await expect(page.getByTestId(`edit-document-no-${letter.doc_id}`)).toHaveCount(0);
+
+    await recall.click();
+    const dialog = page.getByRole('dialog').filter({ has: page.getByTestId('recall-letter-reason') });
+    await expect(dialog).toContainText('หนังสือส่งตัว');
+    await expect(dialog).toContainText(DISPATCH_NO);
+    await dialog.getByTestId('recall-letter-reason').fill(RECALL_REASON);
+    await dialog.getByTestId('recall-letter-submit').click();
+    await expect(page.getByTestId(`recall-letter-${letter.doc_id}`)).toHaveCount(0);
+
+    expect(await sendLetter(formId)).toBeUndefined();
+    const form = (await dispatchForm(formId))!;
+    expect(form.status).toBe('accepted');
+    expect(form.dispatch_document_no).toBeNull();
+    expect((await recallEvents(formId)).map((e) => e.stage)).toEqual(['dispatch_staff_recalled']);
+
+    // กลับเข้าคิวรอออกพร้อมป้าย "ดึงกลับ"
+    await page.reload();
+    await expect(page.getByTestId(`dispatch-recall-badge-${formId}`)).toHaveText('ดึงกลับ');
+  });
 });
