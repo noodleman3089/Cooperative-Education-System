@@ -50,6 +50,7 @@ import {
 import { getErrorMessage } from '../utils/httpError';
 import { sendUnexpectedError } from '../utils/httpError';
 import { notifyDeansOfPendingLetter } from '../utils/signQueueNotice';
+import { COOP03_REQUIRED_COLUMNS, coop03MissingKeys } from '../utils/coop03Required';
 
 
 /** ความกว้างของ `intent_forms.officer_document_no` และ `official_documents.document_number` (migration 051) */
@@ -618,6 +619,26 @@ export class IntentFormController {
         for (const row of result.rows as Record<string, unknown>[]) {
           delete row.letter_recall;
           delete row.dispatch_recall;
+        }
+      } else {
+        // คิว "หนังสือส่งตัวรอออก": นักศึกษาส่งเอกสารก่อนออกฝึกครบหรือยัง (ด่านจริงอยู่ที่ `issueDispatchLetter`)
+        // ⛔ เจ้าหน้าที่เท่านั้น และส่งแค่ "มี 06 ไหม" กับ **จำนวน** ช่องบังคับของ 03 ที่ขาด — ไม่ส่งชื่อช่อง ไม่ส่งค่า (SEC-12)
+        const acceptedRows = (result.rows as Record<string, unknown>[]).filter((r) => r.status === 'accepted');
+        if (acceptedRows.length > 0) {
+          const prep = await query(
+            `SELECT s.student_id, ${COOP03_REQUIRED_COLUMNS.map((c) => `s.${c}`).join(', ')},
+                    EXISTS (SELECT 1 FROM accommodations a WHERE a.student_id = s.student_id) AS accommodation_submitted
+               FROM students s WHERE s.student_id = ANY($1::int[])`,
+            [acceptedRows.map((r) => r.student_id)]
+          );
+          const byStudent = new Map(
+            (prep.rows as Record<string, unknown>[]).map((p) => [p.student_id as number, p])
+          );
+          for (const row of acceptedRows) {
+            const p = byStudent.get(row.student_id as number);
+            row.accommodation_submitted = Boolean(p?.accommodation_submitted);
+            row.coop03_missing_count = coop03MissingKeys(p ?? {}).length;
+          }
         }
       }
 
@@ -1344,6 +1365,29 @@ export class IntentFormController {
       if (intent.already_issued) {
         await client.query('ROLLBACK');
         res.status(409).json({ message: 'ใบนี้ออกหนังสือส่งตัวไปแล้ว' });
+        return;
+      }
+
+      // ⛔ คู่มือคณะ: หนังสือส่งตัวออก **หลัง** นักศึกษาส่งเอกสารก่อนออกฝึก (สหกิจ 03 · 06) — ด่านเดียว อยู่ที่นี่
+      //    ดูแค่ "มีแถว 06" กับ "03 ครบช่องบังคับ" · ไม่อ่านเนื้อ 03 (SEC-12) · ข้อความบอกแค่ใบไหนขาด ไม่บอกชื่อช่อง
+      const prepRes = await client.query(
+        `SELECT ${COOP03_REQUIRED_COLUMNS.map((c) => `s.${c}`).join(', ')},
+                EXISTS (SELECT 1 FROM accommodations a WHERE a.student_id = s.student_id) AS accommodation_submitted
+           FROM students s WHERE s.student_id = $1`,
+        [intent.student_id]
+      );
+      const prepRow = (prepRes.rows[0] ?? {}) as Record<string, unknown>;
+      const coop03Missing = coop03MissingKeys(prepRow).length;
+      if (!prepRow.accommodation_submitted || coop03Missing > 0) {
+        await client.query('ROLLBACK');
+        const lacking = [
+          !prepRow.accommodation_submitted ? 'ยังไม่ส่งแบบแจ้งที่พัก (สหกิจ 06)' : null,
+          coop03Missing > 0 ? `ใบสมัครงานสหกิจศึกษา (สหกิจ 03) ยังขาด ${coop03Missing} ช่องบังคับ` : null,
+        ].filter(Boolean);
+        res.status(409).json({
+          code: 'prep_incomplete',
+          message: `ยังออกหนังสือส่งตัวไม่ได้ เพราะนักศึกษา${lacking.join(' และ')} — แจ้งนักศึกษาให้ทำในระบบให้ครบก่อน`,
+        });
         return;
       }
 

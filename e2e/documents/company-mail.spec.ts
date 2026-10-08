@@ -8,7 +8,7 @@ import { API_URL, BACKEND_ROOT, BACKEND_START_COMMAND, CHILD_SERVER_PORT } from 
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs, ACCOUNTS } from '../helpers/auth';
 import type { AccountKey } from '../helpers/auth';
-import { approveIntentThroughOfficer, coverLetterDocId, deanSign, walkToSigned } from '../helpers/intent';
+import { approveIntentThroughOfficer, completeDispatchPrep, coverLetterDocId, deanSign, walkToSigned } from '../helpers/intent';
 
 /**
  * นักศึกษาส่งหนังสือขอความอนุเคราะห์ + แบบตอบรับถึงสถานประกอบการเอง
@@ -92,6 +92,7 @@ async function walkToIssuedDispatch(request: APIRequestContext, formId: number):
   });
   expect(accepted.status(), await accepted.text()).toBe(200);
 
+  await completeDispatchPrep();
   const issued = await request.post(`${API_URL}/intents/${formId}/dispatch-letter`, {
     data: { document_no: 'อว 0656.10/ส่งตัว-m8', end_date: '2027-02-19' },
   });

@@ -5,7 +5,7 @@ import path from 'path';
 import { API_URL } from '../helpers/env';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
-import { approveIntentThroughOfficer, coverLetterDocId, deanSign, submitRequestToDirectoryCompany } from '../helpers/intent';
+import { approveIntentThroughOfficer, completeDispatchPrep, coverLetterDocId, deanSign, submitRequestToDirectoryCompany } from '../helpers/intent';
 import { seedTestData } from '../helpers/test-seeder';
 import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
 import { newStudent, putEvent, putForm, today, twoSemesters } from '../helpers/semesters';
@@ -210,6 +210,7 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
 
     await apiLoginAs(request, 'staff1');
     expect((await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, { data: { action: 'accepted' } })).status()).toBe(200); // accepted
+    await completeDispatchPrep();
     const dispatch = await request.post(`${API_URL}/intents/${formId}/dispatch-letter`, {
       data: { document_no: 'อว 0656.10/ส่งตัว-c4', end_date: '2027-02-19' },
     });

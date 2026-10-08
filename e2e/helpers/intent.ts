@@ -4,7 +4,7 @@ import { expect } from '@playwright/test';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { API_URL } from './env';
 import { apiLoginAs, type AccountKey } from './auth';
-import { dbValue } from './db';
+import { dbExec, dbValue } from './db';
 
 /**
  * นักศึกษายื่นคำร้องขอหนังสือ (เอกสารหมายเลข 1) ถึงบริษัท **ที่อยู่ในทำเนียบของคณะ**
@@ -123,4 +123,33 @@ export async function deanSign(request: APIRequestContext, docId: number): Promi
 export async function walkToSigned(request: APIRequestContext, formId: number): Promise<void> {
   await approveIntentThroughOfficer(request, formId);
   await deanSign(request, await coverLetterDocId());
+}
+
+/**
+ * ทำให้นักศึกษา "ส่งเอกสารก่อนออกฝึกครบ" — สหกิจ 03 ครบช่องบังคับ และมีแถวสหกิจ 06 (แจ้งที่พัก)
+ * ซึ่งเป็นด่านของ `POST /intents/:id/dispatch-letter` ตั้งแต่ขั้น 6 (ไม่ครบ = 409 `prep_incomplete`)
+ *
+ * เขียนฐานตรง ๆ เพราะเทสต์ที่เรียกใช้ต้องการแค่ *ผ่านด่าน* เพื่อไปตรวจเรื่องอื่น — เส้นทางกรอกจริงของนักศึกษา
+ * และตัวด่านเองคุมที่ `documents/dispatch-prep-gate`
+ * ⚠️ เลขบัตรที่ใส่เป็นค่าหลอก (ไม่ใช่ ciphertext จริง) — พอสำหรับด่านที่ดูแค่ "มีค่า" แต่พิมพ์สหกิจ 03 แล้วช่องนั้นจะว่าง
+ *    เทสต์ที่ตรวจการเข้ารหัส/การพิมพ์ต้องกรอกผ่าน `PUT /students/coop-application` เอง
+ */
+export async function completeDispatchPrep(studentEmail = 'student2@test.com'): Promise<void> {
+  await dbExec(
+    `UPDATE students
+        SET first_name_en = 'Somsri', last_name_en = 'Tester', gender = 'หญิง', nationality = 'ไทย',
+            mobile_phone = '0811111111',
+            national_id_ciphertext = 'e2e-placeholder', national_id_iv = 'e2e', national_id_tag = 'e2e',
+            national_id_issued_district = 'เมืองชลบุรี', national_id_expiry_date = '2031-01-01',
+            emergency_contact_name = 'ผู้ปกครอง ทดสอบ', emergency_relationship = 'มารดา',
+            emergency_phone = '0822222222'
+      WHERE student_id = (SELECT user_id FROM users WHERE email = $1)`,
+    [studentEmail]
+  );
+  await dbExec(
+    `INSERT INTO accommodations (student_id, house_no, subdistrict, district, province, postal_code)
+     SELECT user_id, '99/1', 'บางพระ', 'ศรีราชา', 'ชลบุรี', '20110' FROM users WHERE email = $1
+     ON CONFLICT (student_id) DO NOTHING`,
+    [studentEmail]
+  );
 }

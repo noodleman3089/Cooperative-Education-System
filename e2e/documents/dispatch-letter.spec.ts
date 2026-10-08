@@ -7,7 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { approveIntentThroughOfficer, deanSign } from '../helpers/intent';
+import { approveIntentThroughOfficer, completeDispatchPrep, deanSign } from '../helpers/intent';
 
 /**
  * หนังสือส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา — ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ
@@ -95,6 +95,9 @@ async function walkToAccepted(request: APIRequestContext, formId: number): Promi
     data: { action: 'accepted' },
   });
   expect(approved.status(), await approved.text()).toBe(200);
+
+  // นักศึกษาส่งสหกิจ 03 · 06 ครบแล้ว — ด่านก่อนออกหนังสือส่งตัว (คุมแยกที่ `documents/dispatch-prep-gate`)
+  await completeDispatchPrep();
 }
 
 const issue = (

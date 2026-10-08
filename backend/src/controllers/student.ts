@@ -15,6 +15,7 @@ import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
 import { decryptSensitive, encryptSensitive, maskNationalId } from '../utils/encryption';
+import { COOP03_REQUIRED_COLUMNS, coop03MissingKeys } from '../utils/coop03Required';
 import {
   ACTIVITY_KEYS,
   EDUCATION_KEYS,
@@ -255,8 +256,17 @@ export class StudentController {
       );
       const reminderRow = reminderQuery.rows[0];
 
+      // สหกิจ 03 ครบช่องบังคับหรือยัง — ขั้นย่อยของเฟส 2 และเงื่อนไขที่คณะใช้ก่อนออกหนังสือส่งตัว
+      const coop03Query = await query(
+        `SELECT ${COOP03_REQUIRED_COLUMNS.join(', ')} FROM students WHERE student_id = $1`,
+        [userId]
+      );
+
       res.status(200).json({
-        progress: progressQuery.rows[0],
+        progress: {
+          ...progressQuery.rows[0],
+          coop03_missing_count: coop03MissingKeys(coop03Query.rows[0] ?? {}).length,
+        },
         mentor_reminders: {
           count: Number(reminderRow?.count ?? 0),
           last_at: reminderRow?.last_at ? new Date(reminderRow.last_at).toISOString() : null,
@@ -415,6 +425,8 @@ export class StudentController {
         has_ethnicity: hasCipher('ethnicity'),
         has_religion: hasCipher('religion'),
         sensitive_data_consented_at: row.sensitive_data_consented_at ?? null,
+        // ช่องบังคับที่ยังว่าง (คีย์) — ครบแล้วคณะจึงออกหนังสือส่งตัวได้ · กติกาอยู่ที่ `utils/coop03Required.ts` ที่เดียว
+        missing_required: coop03MissingKeys(row),
         // JSONB — `pg` แปลงกลับเป็น object/array ให้แล้ว ไม่ต้อง parse ซ้ำ
         career_objective: row.career_objective ?? null,
         family_info: row.family_info ?? null,
