@@ -224,6 +224,17 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     test.setTimeout(180_000);
     const formId = await seedIntent();
     await walkToAccepted(request, formId);
+    // ผู้รับหนังสือ = ผู้ประสานงานของสถานประกอบการ (คนเดียวกับหนังสือขอความอนุเคราะห์) · ชื่อนักศึกษามีคำนำหน้า
+    await dbExec(
+      `UPDATE companies SET contact_person = 'คุณวิภา ประสานงาน'
+        WHERE company_id = (SELECT company_id FROM intent_forms WHERE form_id = $1)`,
+      [formId]
+    );
+    await dbExec(
+      `UPDATE students SET name_prefix = 'นางสาว'
+        WHERE student_id = (SELECT student_id FROM intent_forms WHERE form_id = $1)`,
+      [formId]
+    );
 
     await apiLoginAs(request, 'staff1');
     expect((await issue(request, formId)).status()).toBe(200);
@@ -232,6 +243,25 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
       `SELECT doc_id, generated_file_path AS path
          FROM official_documents WHERE type = 'send_letter' ORDER BY doc_id DESC LIMIT 1`
     );
+
+    // ── ฉบับร่าง: เนื้อหาตามตัวอย่างในคู่มือคณะ ──
+    const who = (await dbRow<{ first_name: string; last_name: string; company: string }>(
+      `SELECT s.first_name, s.last_name, c.name_th AS company
+         FROM intent_forms i JOIN students s ON s.student_id = i.student_id
+         JOIN companies c ON c.company_id = i.company_id WHERE i.form_id = $1`,
+      [formId]
+    ))!;
+    const flat = (s: string) => s.replace(/\s+/g, '');
+    const draft = await pdfText(fs.readFileSync(path.join(BACKEND_ROOT, before!.path)));
+    expect(draft).toContain('เรื่องขอส่งนักศึกษาเข้าฝึกสหกิจศึกษา');
+    expect(draft).toContain(flat(`เรียนคุณวิภา ประสานงาน ${who.company}`));
+    expect(draft).toContain(flat(`นางสาว${who.first_name} ${who.last_name}`));
+    expect(draft).toContain('โดยเริ่มปฏิบัติงานตั้งแต่วันที่๒พฤศจิกายน๒๕๖๙ถึงวันที่๑๙กุมภาพันธ์๒๕๗๐');
+    expect(draft).toContain('จึงใคร่ขอส่งแบบประเมินผลนักศึกษาสหกิจศึกษา');
+    // ⛔ ฉบับจริงไม่มีสิ่งเหล่านี้ — ของเดิมที่ระบบร่างเองพิมพ์ครบทุกอย่าง
+    for (const gone of ['อ้างถึง', 'สิ่งที่ส่งมาด้วย', 'สัปดาห์', flat(MENTOR.name), flat('คุณสมชาย ทรงชัย'), 'ขอความอนุเคราะห์รับนักศึกษา']) {
+      expect(draft, gone).not.toContain(gone);
+    }
 
     await apiLoginAs(request, 'dean1');
     const signed = await request.post(`${API_URL}/documents/batch-sign`, {
@@ -252,6 +282,16 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(fs.existsSync(path.join(BACKEND_ROOT, before!.path))).toBe(true);
     // ชื่อไฟล์บอกชนิดหนังสือ — ถ้าตัววาดถูกเรียกผิดตัว จะได้ cover_letter_signed_*
     expect(path.basename(after!.path)).toContain('dispatch_letter_signed');
+
+    // ฉบับลงนาม: ยังเป็นหนังสือส่งตัว และชื่อใต้ลายมือชื่อเป็นของคนที่กดลงนาม
+    const signer = (await dbRow<{ first_name: string; last_name: string }>(
+      `SELECT first_name, last_name FROM personnel
+        WHERE personnel_id = (SELECT user_id FROM users WHERE email = 'dean1@test.com')`
+    ))!;
+    const signedText = await pdfText(fs.readFileSync(path.join(BACKEND_ROOT, after!.path)));
+    expect(signedText).toContain('เรื่องขอส่งนักศึกษาเข้าฝึกสหกิจศึกษา');
+    expect(signedText).toContain(flat(`${signer.first_name}${signer.last_name})`));
+    expect(signedText).not.toContain('อ้างถึง');
 
     // นักศึกษาโหลดได้เมื่อลงนามแล้วเท่านั้น (กติกาเดียวกับหนังสือขอความอนุเคราะห์)
     await apiLoginAs(request, 'student2');
@@ -389,20 +429,17 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(counts.accepted).toBe(1);
   });
 
-  test('D10: ใบที่ตอบรับผ่านทางบริษัทโดยตรงก็ออกหนังสือส่งตัวได้ (ไม่มีคนคีย์ชื่อผู้ลงนาม)', async ({
+  test('D10: สถานประกอบการไม่มีชื่อผู้ประสานงาน → ยังออกได้ และเรียนถึง "ผู้จัดการฝ่ายบุคคล" (ไม่หยิบผู้ลงนามแบบตอบรับมาแทน)', async ({
     request,
   }) => {
     test.setTimeout(180_000);
     const formId = await seedIntent();
     await walkToAccepted(request, formId);
 
-    // จำลองใบเก่าที่ไม่มีชื่อผู้ลงนามบนแบบตอบรับ — หนังสือต้องยังออกได้
-    // โดยถอยไปใช้ผู้ประสานงานของบริษัทเป็นผู้รับหนังสือแทน
+    // ผู้รับของหนังสือขอความอนุเคราะห์ก็ถอยไปใช้คำนี้เมื่อทำเนียบไม่มีชื่อ — สองฉบับต้องเรียนถึงคนเดียวกัน
     await dbExec(
-      `UPDATE intent_forms
-          SET acceptance_signer_name = NULL, acceptance_signer_position = NULL,
-              acceptance_signed_date = NULL
-        WHERE form_id = $1`,
+      `UPDATE companies SET contact_person = NULL
+        WHERE company_id = (SELECT company_id FROM intent_forms WHERE form_id = $1)`,
       [formId]
     );
 
@@ -412,6 +449,13 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     expect(
       await dbValue<string>("SELECT COUNT(*) FROM official_documents WHERE type = 'send_letter'")
     ).toBe('1');
+
+    const letterPath = (await dbValue<string>(
+      "SELECT generated_file_path FROM official_documents WHERE type = 'send_letter' ORDER BY doc_id DESC LIMIT 1"
+    ))!;
+    const text = await pdfText(fs.readFileSync(path.join(BACKEND_ROOT, letterPath)));
+    expect(text).toContain('เรียนผู้จัดการฝ่ายบุคคล');
+    expect(text).not.toContain('คุณสมชายทรงชัย');
   });
 });
 
@@ -715,8 +759,8 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
 
     const letter = (await sendLetter(formId))!;
     const text = await pdfText(fs.readFileSync(path.join(BACKEND_ROOT, letter.path)));
-    expect(text).toMatch(/26ต\.ค\.2569|๒๖ตุลาคม๒๕๖๙/);
-    expect(text, 'วันเริ่มเดิม (2 พ.ย.) ต้องไม่ถูกพิมพ์').not.toMatch(/2พ\.ย\.2569|๒พฤศจิกายน๒๕๖๙/);
+    expect(text).toContain('โดยเริ่มปฏิบัติงานตั้งแต่วันที่๒๖ตุลาคม๒๕๖๙ถึงวันที่๑๙กุมภาพันธ์๒๕๗๐');
+    expect(text, 'วันเริ่มเดิม (2 พ.ย.) ต้องไม่ถูกพิมพ์').not.toContain('๒พฤศจิกายน๒๕๖๙');
 
     await expect
       .poll(() =>

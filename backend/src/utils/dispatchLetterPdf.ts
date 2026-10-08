@@ -1,204 +1,118 @@
-import fs from 'fs';
-import path from 'path';
-import { ThaiPdf } from './thaiPdf';
-import { formatThaiDate } from './thaiDate';
+import { formatThaiDateLong, toThaiDigits } from './thaiDate';
 import { query } from '../config/database';
-import { signingPositionLines } from './coverLetterPdf';
+import {
+  LETTER,
+  LetterFrameData,
+  closeLetter,
+  letterBody,
+  letterLabelled,
+  letterPair,
+  openLetter,
+} from './coverLetterPdf';
 
 /**
- * หนังสือส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา — เอกสาร **ขาออก** ใบที่สอง
+ * หนังสือส่งตัวนักศึกษาเข้าฝึกสหกิจศึกษา — เอกสาร **ขาออก** ใบที่สอง
  *
  * ⛔ **ไม่ใช่ใบเดียวกับหนังสือขอความอนุเคราะห์**
  *   ขอความอนุเคราะห์ = "จะรับนักศึกษาคนนี้ไหม" ออก**ก่อน**สถานประกอบการตอบ
  *   ส่งตัว          = "ตกลงแล้ว ขอส่งตัวไปเริ่มงาน" ออก**หลัง**เจ้าหน้าที่รับแบบตอบรับ
  *   (คู่มือ ๑๓ ขั้นตอน ข้อ ๙: นักศึกษารับหนังสือส่งตัวแล้วนำส่งสถานประกอบการเอง)
  *
- * ⛔ **ของเดิมถูกลบเมื่อ `efc4219` และเอากลับมาไม่ได้** — มันเป็นแม่แบบ HTML ที่
- * hardcode คณะวิทยาศาสตร์ฯ · ที่อยู่บางพระ · ชื่อคณบดีที่เป็น placeholder · ภาคเรียน
- * ๒/๒๕๖๘ ไว้ในตัวไฟล์ ใบนี้จึงเขียนใหม่ทั้งใบด้วย `ThaiPdf` แบบเดียวกับ
- * `coverLetterPdf.ts` — ทุกค่ามาจากฐาน และ **ตำแหน่งลายเซ็นมาจากบรรทัดสุดท้ายจริง**
- *
- * สิ่งที่ใบนี้พูดถึงและใบขอความอนุเคราะห์ไม่มี:
- *   - **ช่วงเวลาปฏิบัติงาน** ตั้งแต่วันที่ … ถึงวันที่ … (เจ้าหน้าที่คีย์ `end_date`)
- *   - **พนักงานที่ปรึกษา (พี่เลี้ยง)** ที่สถานประกอบการมอบหมายมาในแบบตอบรับ
- *   - **อ้างถึงแบบตอบรับ** ลงวันที่ที่เจ้าหน้าที่อ่านจากกระดาษแล้วคีย์ไว้ (รอบ 53)
+ * 🆕 2026-10-09 **วาดตามตัวอย่างในคู่มือคณะ** ("ตัวอย่าง เอกสารส่งตัวเข้าสหกิจศึกษา" · `เอกสาร/manual-pages/pdf14-…jpg`)
+ * หัวกระดาษ ท้ายกระดาษ ระยะ และบล็อกลงนามใช้ชุดเดียวกับหนังสือขอความอนุเคราะห์ (`coverLetterPdf.ts` — กระดาษหัวเดียวกัน)
+ * · ⛔ ฉบับจริง **ไม่มี** บรรทัด "อ้างถึง" · "สิ่งที่ส่งมาด้วย" · ที่อยู่สถานประกอบการ · จำนวนสัปดาห์ · ชื่อพี่เลี้ยง — อย่าเอากลับมา
+ *   (ของเดิมที่ระบบร่างเองพิมพ์ครบทุกอย่างนั้น)
+ * · ⛔ ผู้รับ = คนเดียวกับหนังสือขอความอนุเคราะห์ (`companies.contact_person`) **ไม่ใช่ผู้ลงนามแบบตอบรับ**
+ * · ⛔ ถ้อยคำคัดจากตัวอย่างในคู่มือ ห้ามเรียบเรียงใหม่เอง — รวมย่อหน้า "ขอส่งแบบประเมินผล…" ที่คงไว้ตามฉบับจริง
+ *   ทั้งที่ระบบประเมินออนไลน์ (เจ้าของตัดสิน 2026-10-09)
+ * · ⚠️ ฉบับที่มี "สิ่งที่ส่งมาด้วย แบบประเมินผลการฝึกงาน" คือของ **ฝึกงานวิชาชีพ** (คู่มือ PDF 24) ไม่ใช่ใบนี้
  */
 
-export interface DispatchLetterData {
-  document_no: string | null;
-  faculty_name_th: string | null;
+export interface DispatchLetterData extends LetterFrameData {
+  student_prefix: string | null;
   first_name: string | null;
   last_name: string | null;
   student_code: string | null;
   major_name_th: string | null;
   year_level: number | null;
   company_name: string | null;
-  company_address: string | null;
-  company_district: string | null;
-  company_province: string | null;
-  company_postal_code: string | null;
-  /** ผู้รับหนังสือ — คนที่ลงนามอนุมัติในแบบตอบรับ ถ้าไม่มีค่อยใช้ผู้ประสานงานของบริษัท */
-  recipient_name: string | null;
-  recipient_position: string | null;
-  acceptance_signed_date: string | null;
+  /** ผู้รับหนังสือ — ผู้ประสานงานของสถานประกอบการ คนเดียวกับที่หนังสือขอความอนุเคราะห์เรียนถึง */
+  contact_person: string | null;
   start_date: string | null;
   end_date: string | null;
-  mentor_name: string | null;
-  mentor_position: string | null;
   academic_year: number | null;
   semester: string | null;
-  dean_name?: string | null;
-  /** ตำแหน่งทางวิชาการหน้าชื่อ และตำแหน่งใต้ชื่อ (ว่าง = "คณบดี…") — เหมือนหนังสือขอความอนุเคราะห์ */
-  dean_title?: string | null;
-  dean_position?: string | null;
 }
 
-/** ตัดคำว่า "สาขาวิชา" ที่ติดมากับค่าในฐาน — เหตุผลเดียวกับใน `coverLetterPdf.ts` */
-const stripMajorPrefix = (name: string | null | undefined): string =>
-  (name ?? '').trim().replace(/^สาขาวิชา\s*/, '') || '-';
-
-const fullAddress = (d: DispatchLetterData): string =>
-  [d.company_address, d.company_district, d.company_province, d.company_postal_code]
-    .map((p) => (p ?? '').trim())
-    .filter(Boolean)
-    .join(' ');
-
-/**
- * จำนวนสัปดาห์ของช่วงปฏิบัติงาน — นับแบบรวมวันแรกและวันสุดท้าย
- *
- * ⛔ คำนวณด้วย `Date.UTC` ล้วนจากสตริง `YYYY-MM-DD` เหมือน `workingDays.ts`
- * ห้าม `new Date(iso)` เพราะมันเลื่อนวันตาม timezone แล้วสัปดาห์จะขาดหรือเกินหนึ่ง
- * · คืน `null` เมื่อวันใดวันหนึ่งหายไป ผู้เรียกจะได้ไม่พิมพ์ "รวม 0 สัปดาห์" ลงหนังสือ
- */
-export function weeksBetween(startIso: string | null, endIso: string | null): number | null {
-  if (!startIso || !endIso) return null;
-  const toUtc = (iso: string) => {
-    const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-    return Date.UTC(y, m - 1, d);
-  };
-  const days = (toUtc(endIso) - toUtc(startIso)) / 86_400_000 + 1;
-  if (!Number.isFinite(days) || days <= 0) return null;
-  return Math.round(days / 7);
-}
+const { LEFT, SIZE, LINE, PARA_GAP, INDENT, UNIVERSITY, BLANK } = LETTER;
 
 /**
  * สร้างหนังสือส่งตัว · แนบลายเซ็นเมื่อส่ง `signatureFile` มาเท่านั้น
  *
  * ฉบับที่ยังไม่ลงนามกับฉบับที่ลงนามแล้วเป็น **คนละไฟล์** โดยตั้งใจ (บรรทัดฐานเดียว
  * กับหนังสือขอความอนุเคราะห์) — ตีกลับได้จริง และกดเซ็นซ้ำก็ไม่มีลายเซ็นซ้อน
+ * · วันที่บนหนังสือ = วันที่คณบดีลงนาม (`signedDate`) · ฉบับร่างใช้วันที่วาด
  */
 export async function buildDispatchLetterPdf(
   d: DispatchLetterData,
   options: { signatureFile?: string | null; signedDate?: Date | null } = {}
 ): Promise<Buffer> {
-  const pdf = await ThaiPdf.create();
-  const studentName = [d.first_name, d.last_name].filter(Boolean).join(' ').trim() || '-';
-  const faculty = d.faculty_name_th ?? 'คณะ';
+  const { pdf, faculty, campus } = await openLetter(d, options.signedDate);
+  /** "คณะ… มหาวิทยาลัย… เขตพื้นที่…" ตามที่ฉบับจริงเขียนเต็มทั้งสองย่อหน้า */
+  const facultyFull = [faculty, UNIVERSITY, campus].filter(Boolean).join(' ');
 
-  pdf.line(`ที่ ${d.document_no ?? '..............................'}`, { size: 16 });
-  pdf.space(4);
-  pdf.line(faculty, { size: 16, align: 'center' });
-  pdf.line('มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก', { size: 16, align: 'center' });
-  pdf.space(10);
-
-  const today = options.signedDate ?? new Date();
-  const iso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(
-    today.getDate()
-  ).padStart(2, '0')}`;
-  pdf.line(`วันที่ ${formatThaiDate(iso)}`, { size: 16, x: 360 });
-  pdf.space(6);
-
-  pdf.line('เรื่อง  ส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา', { size: 16 });
-  pdf.line(`เรียน  ${d.recipient_name?.trim() || 'ผู้จัดการฝ่ายบุคคล'}`, { size: 16 });
-  if (d.company_name) pdf.line(`         ${d.company_name}`, { size: 16 });
-  if (d.acceptance_signed_date) {
-    pdf.line(
-      `อ้างถึง  แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา ลงวันที่ ${formatThaiDate(
-        d.acceptance_signed_date
-      )}`,
-      { size: 16 }
-    );
-  }
-  pdf.space(8);
-
-  pdf.paragraph(
-    `ตามที่ ${d.company_name ?? 'สถานประกอบการ'} ได้ตอบรับนักศึกษาของ${faculty} ` +
-      `มหาวิทยาลัยเทคโนโลยีราชมงคลตะวันออก เข้าปฏิบัติงานสหกิจศึกษา ` +
-      `ในภาคการศึกษาที่ ${d.semester ?? '-'} ปีการศึกษา ` +
-      `${d.academic_year ?? '-'} นั้น`,
-    { indent: 40 }
+  // ── เรื่อง · เรียน ── (ไม่มี "อ้างถึง" และ "สิ่งที่ส่งมาด้วย")
+  letterLabelled(pdf, 'เรื่อง', 'ขอส่งนักศึกษาเข้าฝึกสหกิจศึกษา', LEFT + 36);
+  // ผู้รับ + ชื่อสถานประกอบการบรรทัดเดียว · ไม่แปลงเลขในชื่อ (เป็นชื่อเฉพาะ)
+  letterLabelled(
+    pdf,
+    'เรียน',
+    [d.contact_person?.trim() || 'ผู้จัดการฝ่ายบุคคล', d.company_name?.trim()].filter(Boolean).join(' '),
+    LEFT + 36
   );
-  pdf.space(4);
 
-  const weeks = weeksBetween(d.start_date, d.end_date);
-  const period =
-    d.start_date && d.end_date
-      ? ` ตั้งแต่วันที่ ${formatThaiDate(d.start_date)} ถึงวันที่ ${formatThaiDate(d.end_date)}` +
-        (weeks ? ` รวมระยะเวลา ${weeks} สัปดาห์` : '')
-      : '';
-
-  pdf.paragraph(
-    `บัดนี้ ${faculty} ขอส่งตัว ${studentName} ` +
-      `รหัสประจำตัวนักศึกษา ${d.student_code ?? '-'} ` +
-      `นักศึกษาชั้นปีที่ ${d.year_level ?? '-'} สาขาวิชา${stripMajorPrefix(d.major_name_th)} ` +
-      `เข้าปฏิบัติงานสหกิจศึกษา ณ ${d.company_name ?? '-'} ` +
-      `ที่ตั้ง ${fullAddress(d) || '-'}${period}` +
-      (d.mentor_name
-        ? ` โดยมี ${d.mentor_name}${
-            d.mentor_position ? ` ตำแหน่ง ${d.mentor_position}` : ''
-          } เป็นพนักงานที่ปรึกษา`
-        : ''),
-    { indent: 40 }
+  letterBody(
+    pdf,
+    toThaiDigits(
+      `ตามที่ท่านให้ความอนุเคราะห์รับนักศึกษาของ ${facultyFull} เข้าฝึกสหกิจศึกษา` +
+        `${LETTER.semesterPhrase(d)} แล้วนั้น ${faculty} จึงขอส่งนักศึกษาเข้าฝึกสหกิจศึกษา ` +
+        'เพื่อเข้าฝึกในหน่วยงานหรือสถานประกอบการของท่าน ได้แก่'
+    )
   );
-  pdf.space(4);
 
-  pdf.paragraph(
-    'ในการนี้ คณะขอความอนุเคราะห์ท่านมอบหมายงาน ควบคุมดูแลการปฏิบัติงาน ' +
-      'และประเมินผลการปฏิบัติงานของนักศึกษาตามแบบประเมินที่คณะกำหนด ' +
-      'เพื่อนำผลไปใช้ในการวัดผลการศึกษาต่อไป',
-    { indent: 40 }
+  // ── ชื่อนักศึกษา · ช่วงปฏิบัติงาน (ตัวหนา เริ่มที่แนวย่อหน้า) ──
+  const textX = LEFT + INDENT;
+  pdf.ensureSpace(PARA_GAP + LINE * 3);
+  pdf.space(PARA_GAP);
+  const studentName =
+    [`${d.student_prefix?.trim() ?? ''}${d.first_name?.trim() ?? ''}`, d.last_name?.trim()]
+      .filter(Boolean)
+      .join(' ') || '-';
+  letterPair(pdf, textX, studentName, `รหัสนักศึกษา ${toThaiDigits(d.student_code ?? '-')}`);
+  letterPair(
+    pdf,
+    textX,
+    `นักศึกษาชั้นปีที่ ${toThaiDigits(String(d.year_level ?? '-'))}`,
+    `สาขาวิชา${LETTER.stripMajorPrefix(d.major_name_th)}`
   );
-  pdf.space(4);
+  pdf.block(
+    toThaiDigits(
+      `โดยเริ่มปฏิบัติงานตั้งแต่วันที่ ${formatThaiDateLong(d.start_date) ?? BLANK} ` +
+        `ถึง วันที่ ${formatThaiDateLong(d.end_date) ?? BLANK}`
+    ),
+    { x: textX, size: SIZE, gap: LINE, bold: true }
+  );
+  pdf.space(PARA_GAP);
 
-  pdf.paragraph('จึงเรียนมาเพื่อโปรดพิจารณา และขอขอบคุณมา ณ โอกาสนี้', { indent: 40 });
+  letterBody(
+    pdf,
+    'ในการนี้ เพื่อให้นักศึกษาได้บรรลุถึงวัตถุประสงค์ของการฝึกสหกิจศึกษาในครั้งนี้ จึงใคร่ขอส่ง' +
+      'แบบประเมินผลนักศึกษาสหกิจศึกษา เพื่อให้หัวหน้างานหรือผู้ดูแลได้ทำการประเมินผลการฝึกสหกิจศึกษาของนักศึกษา ' +
+      `และใคร่ขอให้ท่านจัดส่งคืนภายหลังมายังที่${facultyFull} โดยตรง`
+  );
+  letterBody(pdf, 'จึงเรียนมาเพื่อโปรดทราบ และขอขอบพระคุณเป็นอย่างยิ่งในการให้ความอนุเคราะห์');
 
-  // ── บล็อกลงนาม ─────────────────────────────────────────────────────────
-  // ⛔ ทุกตำแหน่งอ้างอิง `cursorY` ปัจจุบัน ไม่ใช่พิกัดคงที่ — เนื้อหายาวขึ้นแล้ว
-  //    บล็อกนี้เลื่อนลงทั้งก้อน และขึ้นหน้าใหม่เองถ้าที่ไม่พอ
-  const positionLines = signingPositionLines(d.dean_position, `คณบดี${faculty}`);
-  pdf.ensureSpace(150 + 18 * (positionLines.length - 1));
-  pdf.space(20);
-
-  const signX = 330;
-  pdf.line('ขอแสดงความนับถือ', { size: 16, x: signX + 20 });
-
-  if (options.signatureFile) {
-    const sigPath = path.isAbsolute(options.signatureFile)
-      ? options.signatureFile
-      : path.join(process.cwd(), options.signatureFile);
-
-    if (fs.existsSync(sigPath)) {
-      const height = 40;
-      pdf.space(height + 4);
-      await pdf.drawImageKeepingRatio(fs.readFileSync(sigPath), {
-        x: signX + 10,
-        y: pdf.cursorY + 8,
-        height,
-      });
-    } else {
-      pdf.space(48);
-    }
-  } else {
-    // ฉบับที่ยังไม่ลงนาม — เว้นที่เท่ากับตอนมีลายเซ็น เพื่อให้ตัวอย่างที่เจ้าหน้าที่
-    // ตรวจมีหน้าตาเหมือนฉบับจริง
-    pdf.space(48);
-  }
-
-  const deanName = d.dean_name?.trim()
-    ? `${d.dean_title?.trim() ?? ''}${d.dean_name.trim()}`
-    : '.....................................................';
-  pdf.line(`( ${deanName} )`, { size: 16, x: signX });
-  positionLines.forEach((text) => pdf.line(text, { size: 16, x: signX }));
+  await closeLetter(pdf, d, options.signatureFile);
 
   return pdf.save();
 }
@@ -206,22 +120,21 @@ export async function buildDispatchLetterPdf(
 /**
  * ข้อมูลทั้งหมดที่หนังสือส่งตัวต้องใช้
  *
- * ผู้รับหนังสือคือ **คนที่ลงนามอนุมัติในแบบตอบรับ** ซึ่งเจ้าหน้าที่อ่านจากกระดาษแล้ว
- * คีย์ไว้ตั้งแต่รอบ 53 — นี่คือจุดที่ "บันทึกผลการตอบรับ" ถูกนำไปใช้จัดทำหนังสือส่งตัวจริง
- * ถ้าใบไหนไม่มี (ข้อมูลเก่า) ค่อยถอยไปใช้ผู้ประสานงานที่ผูกไว้กับบริษัท
+ * หัว-ท้ายกระดาษและผู้รับมาจากที่มาเดียวกับหนังสือขอความอนุเคราะห์ (`COVER_LETTER_SELECT`):
+ * ที่อยู่/โทรของคณะจาก `master_faculty` · อีเมลท้ายกระดาษ = เจ้าหน้าที่ที่รับคำร้องใบนี้ · ผู้รับ = `companies.contact_person`
+ * ⛔ ไม่ดึงผู้ลงนามแบบตอบรับและพี่เลี้ยงมาที่นี่ — ฉบับจริงไม่พิมพ์สองอย่างนั้น
  */
 const DISPATCH_LETTER_SELECT = `
-  SELECT i.form_id, i.student_id, i.company_id, i.start_date, i.end_date,
-         i.dispatch_document_no, i.acceptance_signed_date,
-         i.acceptance_signer_name, i.acceptance_signer_position,
-         s.student_code, s.first_name, s.last_name, s.year_level,
-         mj.major_name_th, f.faculty_name_th,
-         c.name_th AS company_name, c.address AS company_address,
-         c.district AS company_district, c.province AS company_province,
-         c.postal_code AS company_postal_code,
-         c.contact_person, c.contact_position,
-         men.name AS mentor_name, men.position AS mentor_position,
+  SELECT i.form_id, i.student_id, i.company_id,
+         to_char(i.start_date, 'YYYY-MM-DD') AS start_date,
+         to_char(i.end_date, 'YYYY-MM-DD')   AS end_date,
+         i.dispatch_document_no,
+         s.student_code, s.name_prefix, s.first_name, s.last_name, s.year_level,
+         mj.major_name_th,
+         f.faculty_name_th, f.campus_name, f.address AS faculty_address, f.phone AS faculty_phone,
+         c.name_th AS company_name, c.contact_person,
          sem.academic_year, sem.semester,
+         officer.email AS officer_email,
          dean.first_name AS dean_first_name, dean.last_name AS dean_last_name,
          dean.academic_title AS dean_title, dean.signing_position AS dean_position
     FROM intent_forms i
@@ -230,7 +143,7 @@ const DISPATCH_LETTER_SELECT = `
     JOIN master_faculty f   ON mj.faculty_id = f.faculty_id
     JOIN companies c        ON i.company_id = c.company_id
     JOIN coop_semesters sem ON i.semester_id = sem.semester_id
-    LEFT JOIN mentors men   ON i.mentor_id = men.mentor_id
+    LEFT JOIN users officer ON officer.user_id = i.officer_approved_by
     LEFT JOIN LATERAL (
       SELECT p.first_name, p.last_name, p.academic_title, p.signing_position
         FROM personnel p
@@ -272,32 +185,29 @@ export async function fetchDispatchLetterDataByDoc(
 
 /** แปลงแถวจากฐานเป็น payload ของตัววาดหนังสือ */
 export function toDispatchLetterData(row: Record<string, unknown>): DispatchLetterData {
+  const text = (key: string): string | null => (row[key] as string | null | undefined) ?? null;
   return {
-    document_no: (row.dispatch_document_no as string) ?? null,
-    faculty_name_th: (row.faculty_name_th as string) ?? null,
-    first_name: (row.first_name as string) ?? null,
-    last_name: (row.last_name as string) ?? null,
-    student_code: (row.student_code as string) ?? null,
-    major_name_th: (row.major_name_th as string) ?? null,
+    document_no: text('dispatch_document_no'),
+    faculty_name_th: text('faculty_name_th'),
+    campus_name: text('campus_name'),
+    faculty_address: text('faculty_address'),
+    faculty_phone: text('faculty_phone'),
+    officer_email: text('officer_email'),
+    student_prefix: text('name_prefix'),
+    first_name: text('first_name'),
+    last_name: text('last_name'),
+    student_code: text('student_code'),
+    major_name_th: text('major_name_th'),
     year_level: (row.year_level as number) ?? null,
-    company_name: (row.company_name as string) ?? null,
-    company_address: (row.company_address as string) ?? null,
-    company_district: (row.company_district as string) ?? null,
-    company_province: (row.company_province as string) ?? null,
-    company_postal_code: (row.company_postal_code as string) ?? null,
-    recipient_name:
-      (row.acceptance_signer_name as string) ?? (row.contact_person as string) ?? null,
-    recipient_position:
-      (row.acceptance_signer_position as string) ?? (row.contact_position as string) ?? null,
-    acceptance_signed_date: (row.acceptance_signed_date as string) ?? null,
-    start_date: (row.start_date as string) ?? null,
-    end_date: (row.end_date as string) ?? null,
-    mentor_name: (row.mentor_name as string) ?? null,
-    mentor_position: (row.mentor_position as string) ?? null,
+    company_name: text('company_name'),
+    contact_person: text('contact_person'),
+    start_date: text('start_date'),
+    end_date: text('end_date'),
     academic_year: (row.academic_year as number) ?? null,
-    semester: (row.semester as string) ?? null,
-    dean_name: [row.dean_first_name, row.dean_last_name].filter(Boolean).join(' ').trim() || null,
-    dean_title: (row.dean_title as string) ?? null,
-    dean_position: (row.dean_position as string) ?? null,
+    semester: text('semester'),
+    dean_title: text('dean_title'),
+    dean_position: text('dean_position'),
+    // ฉบับจริงเว้นสองเคาะระหว่างชื่อกับนามสกุลของผู้ลงนาม (เหมือนหนังสือขอความอนุเคราะห์)
+    dean_name: [row.dean_first_name, row.dean_last_name].filter(Boolean).join('  ').trim() || null,
   };
 }

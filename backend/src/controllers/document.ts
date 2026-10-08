@@ -141,13 +141,14 @@ export class DocumentController {
 
           // ⛔ ชื่อ-ตำแหน่งใต้ลายเซ็นเป็นของ **คนที่กดลงนาม** ไม่ใช่บัญชี role dean ใบแรกที่ฐานหยิบได้
           //    (ลายเซ็นคนหนึ่งเคยออกคู่ชื่ออีกคนได้เมื่อมีบัญชีคณบดีสองใบ)
+          //    ฉบับจริงทั้งสองใบเว้นสองเคาะระหว่างชื่อกับนามสกุลของผู้ลงนาม
           const signerName = (sep: string) =>
             [deanProfile.first_name, deanProfile.last_name].filter(Boolean).join(sep).trim() || null;
           const signedBytes = isDispatch
             ? await buildDispatchLetterPdf(
                 {
                   ...toDispatchLetterData(letterRow),
-                  dean_name: signerName(' '),
+                  dean_name: signerName('  '),
                   dean_title: deanProfile.academic_title ?? null,
                   dean_position: deanProfile.signing_position ?? null,
                 },

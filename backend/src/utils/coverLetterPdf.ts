@@ -100,7 +100,7 @@ const BLANK = '..............................';
 const stripMajorPrefix = (name: string | null | undefined): string =>
   (name ?? '').trim().replace(/^สาขาวิชา\s*/, '') || '-';
 
-const semesterPhrase = (d: CoverLetterData): string => {
+const semesterPhrase = (d: { academic_year: number | null; semester: string | null }): string => {
   const year = d.academic_year ?? '-';
   // ภาค '3' คือภาคฤดูร้อน (ดู utils/semesterLabel.ts)
   return d.semester === '3'
@@ -109,16 +109,46 @@ const semesterPhrase = (d: CoverLetterData): string => {
 };
 
 /**
- * สร้างหนังสือ · แนบลายเซ็นเมื่อส่ง `signatureFile` มาเท่านั้น
- *
- * ฉบับที่ยังไม่ลงนามกับฉบับที่ลงนามแล้วเป็น **คนละไฟล์** โดยตั้งใจ — ผู้เรียกเก็บ
- * ต้นฉบับไว้เสมอ ตีกลับได้จริงและกดเซ็นซ้ำก็ไม่มีลายเซ็นซ้อน
- * · วันที่บนหนังสือ = วันที่คณบดีลงนาม (`signedDate`) · ฉบับร่างใช้วันที่วาด
+ * โครงของหนังสือขาออกของคณะ — หัวกระดาษ · ท้ายกระดาษ · ระยะ · บล็อกลงนาม
+ * ใช้ร่วมกับหนังสือส่งตัว (`dispatchLetterPdf.ts`) เพราะฉบับจริงสองใบใช้กระดาษหัวเดียวกัน
+ * ⛔ แก้ของในก้อนนี้ = เปลี่ยนหน้าตาหนังสือ **ทั้งสองใบ** — ระยะทุกค่าวัดจากหนังสือขอความอนุเคราะห์ฉบับจริง
  */
-export async function buildCoverLetterPdf(
-  d: CoverLetterData,
-  options: { signatureFile?: string | null; signedDate?: Date | null } = {}
-): Promise<Buffer> {
+export const LETTER = {
+  LEFT,
+  RIGHT,
+  PAGE_WIDTH,
+  SIZE,
+  LINE,
+  PARA_GAP,
+  INDENT,
+  LIST_COL2_X,
+  UNIVERSITY,
+  BLANK,
+  stripMajorPrefix,
+  semesterPhrase,
+} as const;
+
+/** ข้อมูลที่หัวกระดาษ ท้ายกระดาษ และบล็อกลงนามใช้ — หนังสือทั้งสองใบมีชุดนี้เหมือนกัน */
+export interface LetterFrameData {
+  document_no: string | null;
+  faculty_name_th: string | null;
+  campus_name: string | null;
+  faculty_address: string | null;
+  faculty_phone: string | null;
+  officer_email: string | null;
+  dean_title?: string | null;
+  dean_name?: string | null;
+  dean_position?: string | null;
+}
+
+/**
+ * เปิดหนังสือ: ครุฑ · ท้ายกระดาษ · "ที่ …" ซ้าย · ที่อยู่หน่วยงานขวา · บรรทัดวันที่
+ * วันที่บนหนังสือ = วันที่คณบดีลงนาม (`signedDate`) · ฉบับร่างใช้วันที่วาด
+ */
+export async function openLetter(
+  d: LetterFrameData,
+  signedDate?: Date | null
+): Promise<{ pdf: ThaiPdf; faculty: string; campus: string }> {
   // บรรทัดแรก (ที่ … / ชื่อคณะ) อยู่ระดับฐานครุฑ · ขอบล่าง = เส้นฐานบรรทัดแรกของท้ายกระดาษ
   // (`line()` กันที่ว่างใต้เส้นฐานอีกหนึ่งบรรทัดเสมอ บรรทัดสุดท้ายของบล็อกลงนามจึงไม่ชนท้ายกระดาษ)
   const pdf = await ThaiPdf.create({
@@ -167,19 +197,102 @@ export async function buildCoverLetterPdf(
   sender.forEach((text, i) => pdf.drawAt(text, HEAD_X, headTop - i * LINE, SIZE));
   pdf.space(sender.length * LINE + PARA_GAP);
 
-  const letterDate = options.signedDate ?? new Date();
+  const letterDate = signedDate ?? new Date();
   const iso = `${letterDate.getFullYear()}-${String(letterDate.getMonth() + 1).padStart(2, '0')}-${String(
     letterDate.getDate()
   ).padStart(2, '0')}`;
   pdf.line(toThaiDigits(formatThaiDateLong(iso) ?? ''), { x: DATE_X, gap: LINE });
   pdf.space(PARA_GAP);
 
-  // ── เรื่อง · เรียน · สิ่งที่ส่งมาด้วย ── (ข้อความยาวขึ้นบรรทัดใหม่ตรงแนวเดิม ไม่กลับไปชิดขอบซ้าย)
-  const labelled = (label: string, text: string, textX: number) => {
-    pdf.drawAt(label, LEFT, pdf.cursorY, SIZE);
-    pdf.block(text, { x: textX, gap: LINE });
-    pdf.space(PARA_GAP);
-  };
+  return { pdf, faculty, campus };
+}
+
+/** บรรทัดมีป้าย (เรื่อง · เรียน · สิ่งที่ส่งมาด้วย) — ข้อความยาวขึ้นบรรทัดใหม่ตรงแนวเดิม ไม่กลับไปชิดขอบซ้าย */
+export function letterLabelled(pdf: ThaiPdf, label: string, text: string, textX: number): void {
+  pdf.drawAt(label, LEFT, pdf.cursorY, SIZE);
+  pdf.block(text, { x: textX, gap: LINE });
+  pdf.space(PARA_GAP);
+}
+
+/** ย่อหน้าเนื้อความ — บรรทัดแรกย่อ 2.5 ซม. ตัดบรรทัดตามคำไทย */
+export function letterBody(pdf: ThaiPdf, text: string): void {
+  pdf.paragraph(text, { indent: INDENT, gap: LINE, thaiWrap: true });
+}
+
+/**
+ * สองช่องตัวหนาบนบรรทัดเดียว (ชื่อ · รหัสนักศึกษา / ชั้นปี · สาขาวิชา) เริ่มที่ `textX`
+ * ช่องขวาเลื่อนตามความยาวช่องซ้าย · ไม่พอ = ขึ้นบรรทัดใหม่ ไม่เขียนทับกัน
+ */
+export function letterPair(pdf: ThaiPdf, textX: number, left: string, right: string): void {
+  const rightEdge = PAGE_WIDTH - RIGHT;
+  const col2 = Math.max(LIST_COL2_X, textX + pdf.textWidth(left, SIZE, true) + 14);
+  if (col2 + pdf.textWidth(right, SIZE, true) <= rightEdge) {
+    pdf.drawAt(left, textX, pdf.cursorY, SIZE, undefined, true);
+    pdf.line(right, { x: col2, gap: LINE, bold: true });
+  } else {
+    pdf.block(left, { x: textX, gap: LINE, bold: true });
+    pdf.block(right, { x: textX, gap: LINE, bold: true });
+  }
+}
+
+/**
+ * ปิดหนังสือ: "ขอแสดงความนับถือ" · ที่ลายมือชื่อ · ชื่อ ตำแหน่งของผู้ลงนาม · ชื่อมหาวิทยาลัย
+ * แนบลายเซ็นเมื่อส่ง `signatureFile` มาเท่านั้น
+ */
+export async function closeLetter(
+  pdf: ThaiPdf,
+  d: LetterFrameData,
+  signatureFile?: string | null
+): Promise<void> {
+  // ⛔ ทุกตำแหน่งด้านล่างอ้างอิง `cursorY` ปัจจุบัน ไม่ใช่พิกัดคงที่ — ถ้าเนื้อหา
+  // ด้านบนยาวขึ้น บล็อกนี้เลื่อนลงทั้งก้อน และขึ้นหน้าใหม่เองถ้าที่ไม่พอ
+  // ความสูงของทั้งบล็อก (เว้น 12 + คำลงท้าย + ที่ลายมือชื่อ + สามบรรทัดชื่อ) — ต้องไม่ถูกตัดข้ามหน้า
+  const positionLines = signingPositionLines(d.dean_position, `คณบดี${d.faculty_name_th?.trim() ?? ''}`);
+  pdf.ensureSpace(12 + LINE + SIGN_ROOM + LINE * (2 + positionLines.length));
+  pdf.space(12);
+  pdf.line('ขอแสดงความนับถือ', { centerX: SIGN_AXIS, gap: LINE });
+
+  const sigPath = signatureFile
+    ? path.isAbsolute(signatureFile)
+      ? signatureFile
+      : path.join(process.cwd(), signatureFile)
+    : null;
+  // เว้นที่เท่ากันทั้งฉบับร่างและฉบับลงนาม — ตัวอย่างที่เจ้าหน้าที่ตรวจต้องหน้าตาเหมือนฉบับจริง
+  pdf.space(SIGN_ROOM);
+  if (sigPath && fs.existsSync(sigPath)) {
+    // ลายมือชื่อวางเหนือบรรทัดชื่อ รักษาสัดส่วนเดิมของรูป
+    await pdf.drawImageKeepingRatio(fs.readFileSync(sigPath), {
+      x: SIGN_AXIS,
+      centered: true,
+      y: pdf.cursorY + 14,
+      height: SIGN_ROOM - 8,
+    });
+  }
+
+  // ตำแหน่งทางวิชาการพิมพ์ติดหน้าชื่อ ตามฉบับจริง: "(ผู้ช่วยศาสตราจารย์ละอองศรี  เหนี่ยงแจ่ม)"
+  const deanName = d.dean_name?.trim()
+    ? `${d.dean_title?.trim() ?? ''}${d.dean_name.trim()}`
+    : '.....................................................';
+  pdf.line(`(${deanName})`, { centerX: SIGN_AXIS, gap: LINE });
+  positionLines.forEach((text) => pdf.line(text, { centerX: SIGN_AXIS, gap: LINE }));
+  pdf.line(UNIVERSITY, { centerX: SIGN_AXIS, gap: LINE });
+}
+
+/**
+ * สร้างหนังสือ · แนบลายเซ็นเมื่อส่ง `signatureFile` มาเท่านั้น
+ *
+ * ฉบับที่ยังไม่ลงนามกับฉบับที่ลงนามแล้วเป็น **คนละไฟล์** โดยตั้งใจ — ผู้เรียกเก็บ
+ * ต้นฉบับไว้เสมอ ตีกลับได้จริงและกดเซ็นซ้ำก็ไม่มีลายเซ็นซ้อน
+ * · วันที่บนหนังสือ = วันที่คณบดีลงนาม (`signedDate`) · ฉบับร่างใช้วันที่วาด
+ */
+export async function buildCoverLetterPdf(
+  d: CoverLetterData,
+  options: { signatureFile?: string | null; signedDate?: Date | null } = {}
+): Promise<Buffer> {
+  const { pdf, faculty, campus } = await openLetter(d, options.signedDate);
+
+  // ── เรื่อง · เรียน · สิ่งที่ส่งมาด้วย ──
+  const labelled = (label: string, text: string, textX: number) => letterLabelled(pdf, label, text, textX);
   labelled('เรื่อง', toThaiDigits(`ขอความอนุเคราะห์รับนักศึกษาสหกิจศึกษา ${semesterPhrase(d)}`), LEFT + 36);
   // ผู้รับ + ชื่อสถานประกอบการบรรทัดเดียวตามฉบับจริง · ไม่แปลงเลขในชื่อ (เป็นชื่อเฉพาะ)
   labelled(
@@ -189,7 +302,7 @@ export async function buildCoverLetterPdf(
   );
   labelled('สิ่งที่ส่งมาด้วย', 'แบบยืนยันแบบตอบรับนักศึกษาสหกิจศึกษา', LEFT + 72);
 
-  const body = (text: string) => pdf.paragraph(text, { indent: INDENT, gap: LINE, thaiWrap: true });
+  const body = (text: string) => letterBody(pdf, text);
 
   body(
     `ด้วย${faculty} ${UNIVERSITY}${campus ? ` ${campus}` : ''} ` +
@@ -202,18 +315,7 @@ export async function buildCoverLetterPdf(
 
   // ── รายการ ๑ / ๒ (ตัวหนา) ──
   const textX = LIST_X + pdf.textWidth('๑.  ', SIZE, true);
-  const rightEdge = PAGE_WIDTH - RIGHT;
-  /** สองช่องบนบรรทัดเดียว · ช่องขวาเลื่อนตามความยาวช่องซ้าย · ไม่พอ = ขึ้นบรรทัดใหม่ ไม่เขียนทับกัน */
-  const pair = (left: string, right: string) => {
-    const col2 = Math.max(LIST_COL2_X, textX + pdf.textWidth(left, SIZE, true) + 14);
-    if (col2 + pdf.textWidth(right, SIZE, true) <= rightEdge) {
-      pdf.drawAt(left, textX, pdf.cursorY, SIZE, undefined, true);
-      pdf.line(right, { x: col2, gap: LINE, bold: true });
-    } else {
-      pdf.block(left, { x: textX, gap: LINE, bold: true });
-      pdf.block(right, { x: textX, gap: LINE, bold: true });
-    }
-  };
+  const pair = (left: string, right: string) => letterPair(pdf, textX, left, right);
 
   pdf.ensureSpace(PARA_GAP + LINE * 5);
   pdf.space(PARA_GAP);
@@ -244,39 +346,8 @@ export async function buildCoverLetterPdf(
   );
   body('จึงเรียนมาเพื่อโปรดพิจารณา และขอขอบคุณเป็นอย่างสูงมา ณ โอกาสนี้');
 
-  // ── บล็อกลงนาม ─────────────────────────────────────────────────────────
-  // ⛔ ทุกตำแหน่งด้านล่างอ้างอิง `cursorY` ปัจจุบัน ไม่ใช่พิกัดคงที่ — ถ้าเนื้อหา
-  // ด้านบนยาวขึ้น บล็อกนี้เลื่อนลงทั้งก้อน และขึ้นหน้าใหม่เองถ้าที่ไม่พอ
-  // ความสูงของทั้งบล็อก (เว้น 12 + คำลงท้าย + ที่ลายมือชื่อ + สามบรรทัดชื่อ) — ต้องไม่ถูกตัดข้ามหน้า
-  const positionLines = signingPositionLines(d.dean_position, `คณบดี${d.faculty_name_th?.trim() ?? ''}`);
-  pdf.ensureSpace(12 + LINE + SIGN_ROOM + LINE * (2 + positionLines.length));
-  pdf.space(12);
-  pdf.line('ขอแสดงความนับถือ', { centerX: SIGN_AXIS, gap: LINE });
-
-  const sigPath = options.signatureFile
-    ? path.isAbsolute(options.signatureFile)
-      ? options.signatureFile
-      : path.join(process.cwd(), options.signatureFile)
-    : null;
-  // เว้นที่เท่ากันทั้งฉบับร่างและฉบับลงนาม — ตัวอย่างที่เจ้าหน้าที่ตรวจต้องหน้าตาเหมือนฉบับจริง
-  pdf.space(SIGN_ROOM);
-  if (sigPath && fs.existsSync(sigPath)) {
-    // ลายมือชื่อวางเหนือบรรทัดชื่อ รักษาสัดส่วนเดิมของรูป
-    await pdf.drawImageKeepingRatio(fs.readFileSync(sigPath), {
-      x: SIGN_AXIS,
-      centered: true,
-      y: pdf.cursorY + 14,
-      height: SIGN_ROOM - 8,
-    });
-  }
-
-  // ตำแหน่งทางวิชาการพิมพ์ติดหน้าชื่อ ตามฉบับจริง: "(ผู้ช่วยศาสตราจารย์ละอองศรี  เหนี่ยงแจ่ม)"
-  const deanName = d.dean_name?.trim()
-    ? `${d.dean_title?.trim() ?? ''}${d.dean_name.trim()}`
-    : '.....................................................';
-  pdf.line(`(${deanName})`, { centerX: SIGN_AXIS, gap: LINE });
-  positionLines.forEach((text) => pdf.line(text, { centerX: SIGN_AXIS, gap: LINE }));
-  pdf.line(UNIVERSITY, { centerX: SIGN_AXIS, gap: LINE });
+  // ── บล็อกลงนาม ──
+  await closeLetter(pdf, d, options.signatureFile);
 
   return pdf.save();
 }
