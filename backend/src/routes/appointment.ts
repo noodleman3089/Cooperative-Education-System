@@ -28,6 +28,22 @@ router.post(
   AppointmentController.createDraft
 );
 
+// PUT /api/appointments/:id (อาจารย์แก้นัดของตัวเอง · ทุกสถานะ · แก้แล้วกลับเป็นร่าง)
+router.put(
+  '/:id',
+  authenticateToken,
+  authorizeRoles('advisor'),
+  AppointmentController.updateAppointment
+);
+
+// DELETE /api/appointments/:id (อาจารย์ลบร่างนัดของตัวเอง)
+router.delete(
+  '/:id',
+  authenticateToken,
+  authorizeRoles('advisor'),
+  AppointmentController.deleteDraft
+);
+
 // PUT /api/appointments/:id/audit-send (Staff clicks send email)
 router.put(
   '/:id/audit-send',

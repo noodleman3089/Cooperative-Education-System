@@ -52,6 +52,19 @@ function todayIsoDate(): string {
   return `${now.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * YYYY-MM-DD ที่เป็นวันจริงในปฏิทิน — ตรวจเป็นสตริง ไม่ผ่าน `new Date()` (parse แล้ววันเพี้ยนได้หนึ่งวัน)
+ * เดิมค่าเพี้ยนหลุดไปถึง Postgres แล้วกลายเป็น 500
+ */
+function isIsoDate(value: unknown): value is string {
+  const m = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null;
+  if (!m) return false;
+  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return year >= 1 && month >= 1 && month <= 12 && day >= 1 && day <= daysInMonth[month - 1];
+}
+
 export class AppointmentController {
   /**
    * Get appointments
@@ -138,6 +151,10 @@ export class AppointmentController {
         res.status(400).json({ message: 'รหัสนักศึกษาไม่ถูกต้อง' });
         return;
       }
+      if (!isIsoDate(appointment_date)) {
+        res.status(400).json({ message: 'รูปแบบวันที่ไม่ถูกต้อง' });
+        return;
+      }
 
       // SEC-06: เดิมไม่ตรวจเลย — อาจารย์คนไหนก็ร่างนัดให้นักศึกษาคนไหนก็ได้ที่มีที่ฝึกแล้ว
       // และร่างนั้นกลายเป็นอีเมลถึงพี่เลี้ยงของบริษัทนั้นเมื่อเจ้าหน้าที่กดส่ง
@@ -196,6 +213,161 @@ export class AppointmentController {
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Create Draft Appointment Error', 'An internal server error occurred.');
+    }
+  }
+
+  /**
+   * อาจารย์นิเทศแก้นัดที่ตัวเองร่าง — แก้ได้ทุกสถานะ แก้แล้วนัดกลับเป็นร่างเสมอ
+   * Route: PUT /api/appointments/:id
+   * Access: advisor (เจ้าของนัด)
+   *
+   * นัดที่ส่งถึงพี่เลี้ยงแล้วกลับเป็นร่าง = เจ้าหน้าที่ต้องตรวจและส่งใหม่ พี่เลี้ยงต้องตอบอีกครั้ง
+   * (ลิงก์เดิมตอบไม่ได้ระหว่างเป็นร่าง — ดู `respond`)
+   */
+  static async updateAppointment(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const appointmentId = parseInt(req.params.id, 10);
+      if (isNaN(appointmentId)) {
+        res.status(400).json({ message: 'Invalid appointment ID.' });
+        return;
+      }
+
+      const { appointment_date, student_time, mentor_time, tour_requested } = req.body;
+      if (!appointment_date || !student_time || !mentor_time) {
+        res.status(400).json({ message: 'กรุณาระบุวันที่ เวลาพบนักศึกษา และเวลาพบพี่เลี้ยงให้ครบ' });
+        return;
+      }
+      if (!isIsoDate(appointment_date)) {
+        res.status(400).json({ message: 'รูปแบบวันที่ไม่ถูกต้อง' });
+        return;
+      }
+
+      // คำสั่งเดียว: ล็อกแถวเดิม อ่านสถานะ/วันเดิม แล้วเขียนค่าใหม่ — ไม่มีช่องให้คำตอบของพี่เลี้ยงแทรกกลาง
+      const result = await query(
+        `UPDATE supervision_appointments a
+            SET appointment_date = $2, student_time = $3, mentor_time = $4, tour_requested = $5,
+                status = 'draft', proposed_reschedule_date = NULL, proposed_mentor_time = NULL,
+                updated_at = CURRENT_TIMESTAMP
+           FROM (SELECT appointment_id, status, appointment_date::text AS appointment_date
+                   FROM supervision_appointments
+                  WHERE appointment_id = $1 AND advisor_id = $6
+                    FOR UPDATE) old
+          WHERE a.appointment_id = old.appointment_id
+          RETURNING a.student_id, old.status AS previous_status, old.appointment_date AS previous_date`,
+        [appointmentId, appointment_date, student_time, mentor_time, tour_requested || false, req.user.userId]
+      );
+
+      if ((result.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบนัดหมายที่แก้ไขได้ (ไม่ใช่นัดของท่าน)' });
+        return;
+      }
+
+      const previous = result.rows[0];
+      const wasSent = previous.previous_status !== 'draft';
+
+      writeAudit({
+        action: AuditAction.APPOINTMENT_UPDATED,
+        entityType: 'supervision_appointment',
+        entityId: appointmentId,
+        subjectId: previous.student_id,
+        detail: {
+          previous_status: previous.previous_status,
+          previous_date: previous.previous_date,
+          appointment_date,
+        },
+      }, req).catch(() => undefined);
+
+      res.status(200).json({
+        success: true,
+        message: wasSent
+          ? 'บันทึกการแก้ไขแล้ว นัดกลับเป็นร่าง รอเจ้าหน้าที่ตรวจและส่งถึงสถานประกอบการอีกครั้ง'
+          : 'บันทึกการแก้ไขร่างนัดนิเทศแล้ว',
+        data: { status: 'draft', was_sent: wasSent },
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Update Appointment Error', 'An internal server error occurred.');
+    }
+  }
+
+  /**
+   * อาจารย์นิเทศลบร่างนัดที่ตัวเองร่าง
+   * Route: DELETE /api/appointments/:id
+   * Access: advisor (เจ้าของนัด)
+   *
+   * ลบได้เมื่อครบสามข้อ: ยังเป็นร่าง · เป็นนัดล่าสุดของนักศึกษา (เลขครั้งที่คิดจาก ROW_NUMBER —
+   * ลบครั้งที่ 1 แล้วครั้งที่ 2 จะกลายเป็นครั้งที่ 1) · ไม่มีบันทึกย่อของนัดนั้น (FK เป็น ON DELETE CASCADE)
+   */
+  static async deleteDraft(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const appointmentId = parseInt(req.params.id, 10);
+      if (isNaN(appointmentId)) {
+        res.status(400).json({ message: 'Invalid appointment ID.' });
+        return;
+      }
+
+      const found = await query(
+        `SELECT a.student_id, a.status, a.appointment_date::text AS appointment_date,
+                EXISTS (SELECT 1 FROM supervision_appointments n
+                         WHERE n.student_id = a.student_id
+                           AND (n.created_at, n.appointment_id) > (a.created_at, a.appointment_id)) AS has_later,
+                EXISTS (SELECT 1 FROM supervision_logs l WHERE l.appointment_id = a.appointment_id) AS has_log
+           FROM supervision_appointments a
+          WHERE a.appointment_id = $1 AND a.advisor_id = $2`,
+        [appointmentId, req.user.userId]
+      );
+      if ((found.rowCount ?? 0) === 0) {
+        res.status(404).json({ message: 'ไม่พบนัดหมายที่ลบได้ (ไม่ใช่นัดของท่าน)' });
+        return;
+      }
+
+      const appointment = found.rows[0];
+      const blocked =
+        appointment.status !== 'draft'
+          ? 'ลบได้เฉพาะนัดที่ยังเป็นร่าง — นัดที่ส่งถึงพี่เลี้ยงแล้วให้ใช้ "แก้ไขนัด" แทน'
+          : appointment.has_later
+            ? 'ลบไม่ได้ เพราะนักศึกษาคนนี้มีนัดนิเทศครั้งถัดไปอยู่แล้ว — ใช้ "แก้ไขนัด" แทน'
+            : appointment.has_log
+              ? 'ลบไม่ได้ เพราะมีบันทึกการนิเทศของนัดนี้แล้ว'
+              : null;
+      if (blocked) {
+        res.status(409).json({ message: blocked });
+        return;
+      }
+
+      // เงื่อนไขซ้ำใน DELETE: เจ้าหน้าที่กดส่ง หรือมีบันทึกเกิดขึ้น ระหว่างสองคำสั่งนี้ ต้องไม่ถูกลบ
+      const deleted = await query(
+        `DELETE FROM supervision_appointments a
+          WHERE a.appointment_id = $1 AND a.advisor_id = $2 AND a.status = 'draft'
+            AND NOT EXISTS (SELECT 1 FROM supervision_logs l WHERE l.appointment_id = a.appointment_id)
+          RETURNING a.appointment_id`,
+        [appointmentId, req.user.userId]
+      );
+      if ((deleted.rowCount ?? 0) === 0) {
+        res.status(409).json({ message: 'นัดนี้เพิ่งถูกเปลี่ยนสถานะ กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' });
+        return;
+      }
+
+      writeAudit({
+        action: AuditAction.APPOINTMENT_DRAFT_DELETED,
+        entityType: 'supervision_appointment',
+        entityId: appointmentId,
+        subjectId: appointment.student_id,
+        detail: { appointment_date: appointment.appointment_date },
+      }, req).catch(() => undefined);
+
+      res.status(200).json({ success: true, message: 'ลบร่างนัดนิเทศแล้ว' });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Delete Draft Appointment Error', 'An internal server error occurred.');
     }
   }
 
@@ -359,9 +531,14 @@ export class AppointmentController {
         return;
       }
 
+      // ลิงก์อายุ 14 วันและใช้ซ้ำได้ — เดิมไม่ดูสถานะ นัดที่ยืนยันแล้วถูกพลิกเป็น "ขอเลื่อน" ด้วยลิงก์เดิมได้
+      // ยืนยันได้จากรอตอบ · ขอเลื่อนได้จากรอตอบและขอเลื่อนค้างอยู่ (เปลี่ยนวันที่เสนอ) · นอกนั้น 409
+      let updated;
       if (action === 'accept') {
-        await query(
-          `UPDATE supervision_appointments SET status = 'accepted', updated_at = CURRENT_TIMESTAMP WHERE appointment_id = $1`,
+        updated = await query(
+          `UPDATE supervision_appointments SET status = 'accepted', updated_at = CURRENT_TIMESTAMP
+            WHERE appointment_id = $1 AND status = 'pending_company'
+            RETURNING appointment_id`,
           [appointmentId]
         );
       } else if (action === 'reschedule') {
@@ -373,22 +550,31 @@ export class AppointmentController {
         // was accepted, stored, and mailed to the advisor as a real proposal.
         // Compared as YYYY-MM-DD strings so the check cannot drift by a day the
         // way parsing a date-only value into a Date does.
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(new_date))) {
+        if (!isIsoDate(new_date)) {
           res.status(400).json({ message: 'รูปแบบวันที่ไม่ถูกต้อง' });
           return;
         }
-        if (String(new_date) < todayIsoDate()) {
+        if (new_date < todayIsoDate()) {
           res.status(400).json({ message: 'ไม่สามารถเสนอวันนัดหมายที่เป็นวันย้อนหลังได้' });
           return;
         }
-        await query(
-          `UPDATE supervision_appointments 
-           SET status = 'rescheduled', proposed_reschedule_date = $2, proposed_mentor_time = $3, updated_at = CURRENT_TIMESTAMP 
-           WHERE appointment_id = $1`,
+        updated = await query(
+          `UPDATE supervision_appointments
+           SET status = 'rescheduled', proposed_reschedule_date = $2, proposed_mentor_time = $3, updated_at = CURRENT_TIMESTAMP
+           WHERE appointment_id = $1 AND status IN ('pending_company', 'rescheduled')
+           RETURNING appointment_id`,
           [appointmentId, new_date, new_time]
         );
       } else {
         res.status(400).json({ message: 'Invalid action.' });
+        return;
+      }
+
+      if ((updated.rowCount ?? 0) === 0) {
+        res.status(409).json({
+          code: 'not_awaiting_response',
+          message: 'นัดหมายนี้ไม่ได้อยู่ระหว่างรอคำตอบแล้ว หากต้องการเปลี่ยนแปลงกรุณาติดต่ออาจารย์นิเทศ',
+        });
         return;
       }
 
