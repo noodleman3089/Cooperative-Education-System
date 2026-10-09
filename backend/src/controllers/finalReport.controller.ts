@@ -186,7 +186,7 @@ export class FinalReportController {
                 (SELECT v.report_title
                    FROM report_outlines o
                    JOIN report_outline_versions v ON v.outline_id = o.outline_id
-                  WHERE o.student_id = s.student_id AND v.status = 'approved'
+                  WHERE o.student_id = s.student_id AND v.status IN ('approved', 'approved_without_mentor')
                   ORDER BY v.version_id DESC LIMIT 1) AS report_title
            FROM final_reports r
            JOIN intent_forms i ON i.student_id = r.student_id

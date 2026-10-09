@@ -778,7 +778,7 @@ CREATE TABLE IF NOT EXISTS report_outline_versions (
     submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     rejection_comment TEXT,
     reviewed_by INT REFERENCES users(user_id) ON DELETE SET NULL, -- Who rejected/approved it
-    status VARCHAR(50) NOT NULL DEFAULT 'submitted' -- 'submitted', 'rejected', 'approved'
+    status VARCHAR(50) NOT NULL DEFAULT 'submitted' -- 'submitted', 'rejected', 'approved', 'approved_without_mentor' (อาจารย์นิเทศเห็นชอบแทนพี่เลี้ยง)
 );
 
 -- 15. Supervision Appointments (Phase 3)

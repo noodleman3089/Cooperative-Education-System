@@ -37,7 +37,7 @@ export async function fetchReportConfirmationData(studentId: number): Promise<Re
      LEFT JOIN (
        SELECT outline_id, report_title
        FROM report_outline_versions
-       WHERE status = 'approved'
+       WHERE status IN ('approved', 'approved_without_mentor')
        ORDER BY version_id DESC LIMIT 1
      ) rov ON ro.outline_id = rov.outline_id
      LEFT JOIN (

@@ -4,7 +4,8 @@ import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { dbRow, dbValue, withDb } from '../helpers/db';
-import { apiLoginAs } from '../helpers/auth';
+import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 
 /**
  * SB-F2 · คีย์ใหม่ใน `GET /outlines/advisor` — spec-F ข้อ 5 · 15.2
@@ -84,12 +85,23 @@ test.describe('SB-F2 · คิวโครงร่างของอาจา�
     expect(row?.waiting_since).toBeTruthy();
   });
 
-  test('O2: ใบที่ไม่ได้รออาจารย์ → days_waiting เป็น null', async ({ request }) => {
-    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+  test('O2: ใบที่ยังรอพี่เลี้ยง → days_waiting เป็น null · mentor_waiting_days นับจากวันที่นักศึกษาส่งฉบับล่าสุด', async ({
+    request,
+  }) => {
     await apiLoginAs(request, 'advisor1');
+    // ใบที่รออาจารย์: ไม่มีตัวนับฝั่งพี่เลี้ยง
+    expect((await findRow(request))?.mentor_waiting_days).toBeNull();
+
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
     const row = await findRow(request);
     expect(row).toBeTruthy();
     expect(row?.days_waiting).toBeNull();
+    // ฉบับล่าสุดส่งเมื่อ 4 วันก่อน (ตัวตั้งข้อมูล) — อาจารย์นิเทศใช้ตัดสินว่าจะเห็นชอบแทนหรือไม่
+    expect(row?.mentor_waiting_days).toBe(4);
+
+    // ⛔ ใบที่ยังรอพี่เลี้ยงไม่ใช่ "งานที่รอคุณ" — กองบนหน้าแรกไม่นับ
+    const home = await request.get(`${API_URL}/faculty/home/advisor?view=supervisor`);
+    expect((await home.json()).tiles.outline.count).toBe(0);
   });
 
   test('O3: อาจารย์ที่ไม่ใช่ผู้นิเทศไม่เห็นใบนี้ — แม้จะเป็นอาจารย์ที่ปรึกษาของนักศึกษา · และเห็นชอบแทนไม่ได้ (403)', async ({
@@ -265,5 +277,195 @@ test.describe('SB-F2 · คิวโครงร่างของอาจา�
       data: { status: 'rejected' },
     });
     expect(outsider.status(), await outsider.text()).toBe(403);
+  });
+
+  /**
+   * ขั้น 7 ข้อ ข3 (เจ้าของสั่ง 2026-10-09) — อาจารย์นิเทศเห็นชอบแทนเมื่อพี่เลี้ยงยังไม่ตรวจ
+   *
+   * ปิดทางตัน: พี่เลี้ยงเงียบหรือยังไม่มีพี่เลี้ยง → ใบค้าง `pending_mentor` → นักศึกษาอัปโหลดเล่มสมบูรณ์ไม่ได้
+   * ⛔ ขั้นพี่เลี้ยงยังเป็นทางปกติ · ทางนี้ต้องมีเหตุผล และเฉพาะอาจารย์นิเทศของนักศึกษาคนนั้น
+   * ⛔ ห้ามบันทึกว่าพี่เลี้ยงตรวจแล้ว — แถวฉบับได้สถานะ `approved_without_mentor`
+   */
+  const approve = (request: import('@playwright/test').APIRequestContext, comment?: string) =>
+    request.put(`${API_URL}/outlines/${outlineId}/status`, { data: { status: 'approved', comment } });
+
+  const BYPASS_REASON = 'พนักงานที่ปรึกษาลาพักร้อนสองสัปดาห์ ตรวจหัวข้อกับนักศึกษาทางโทรศัพท์แล้ว';
+
+  test('O9: อาจารย์นิเทศเห็นชอบใบที่ยังรอพี่เลี้ยง — ไม่มีเหตุผล 400 · มีเหตุผล 200 · จดว่าเห็นชอบแทน ไม่ใช่พี่เลี้ยงตรวจ · ลง audit', async ({
+    request,
+  }) => {
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+    await apiLoginAs(request, 'advisor1');
+
+    for (const comment of [undefined, '   ']) {
+      const res = await approve(request, comment);
+      expect(res.status(), await res.text()).toBe(400);
+      expect((await res.json()).message).toContain('เหตุผล');
+    }
+    expect(await statusOf()).toBe('pending_mentor');
+
+    const ok = await approve(request, BYPASS_REASON);
+    expect(ok.status(), await ok.text()).toBe(200);
+    expect(await statusOf()).toBe('approved');
+
+    const advisor1 = await dbValue<number>("SELECT user_id FROM users WHERE email = 'advisor1@test.com'");
+    expect(
+      await dbRow(
+        `SELECT status, rejection_comment, reviewed_by FROM report_outline_versions
+          WHERE outline_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
+        [outlineId]
+      )
+    ).toEqual({ status: 'approved_without_mentor', rejection_comment: BYPASS_REASON, reviewed_by: advisor1 });
+    await expect
+      .poll(() =>
+        dbValue<string>(
+          `SELECT detail::text FROM audit_log WHERE action = 'outline.approved_without_mentor' AND entity_id = $1`,
+          [String(outlineId)]
+        )
+      )
+      .toContain('ลาพักร้อน');
+  });
+
+  test('O10: เห็นชอบแทนได้เฉพาะอาจารย์นิเทศของนักศึกษา — ที่ปรึกษาที่ไม่ได้นิเทศ · เจ้าหน้าที่ · หัวหน้าสาขา · พี่เลี้ยง ถูกปฏิเสธ', async ({
+    request,
+  }) => {
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+
+    for (const who of ['advisor2', 'staff1', 'head1', 'mentor1'] as const) {
+      await apiLoginAs(request, who);
+      const res = await approve(request, BYPASS_REASON);
+      expect(res.status(), `${who}: ${await res.text()}`).toBe(403);
+    }
+    expect(await statusOf()).toBe('pending_mentor');
+    expect(
+      Number(await dbValue(`SELECT COUNT(*) FROM audit_log WHERE action = 'outline.approved_without_mentor'`))
+    ).toBe(0);
+  });
+
+  test('O11: หลังเห็นชอบแทน — นักศึกษาเห็นว่าเป็นการเห็นชอบแทน · อัปโหลดเล่มสมบูรณ์ได้ · พี่เลี้ยงส่งต่อใบเดิมไม่ได้และคิวพี่เลี้ยงไม่ค้าง', async ({
+    request,
+  }) => {
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+
+    const mentorQueue = async () => {
+      const res = await request.get(`${API_URL}/mentor/pending`);
+      expect(res.status(), await res.text()).toBe(200);
+      return ((await res.json()).items as Array<{ kind: string; id: number }>).filter((i) => i.kind === 'report_outline');
+    };
+    // ก่อนกด: ใบอยู่ในคิวของพี่เลี้ยง
+    await apiLoginAs(request, 'mentor1');
+    expect((await mentorQueue()).map((i) => i.id)).toEqual([outlineId]);
+
+    await apiLoginAs(request, 'advisor1');
+    expect((await approve(request, BYPASS_REASON)).status()).toBe(200);
+
+    await apiLoginAs(request, 'mentor1');
+    expect(await mentorQueue()).toEqual([]);
+    const late = await request.put(`${API_URL}/outlines/${outlineId}/status`, { data: { status: 'pending_advisor' } });
+    expect(late.status(), await late.text()).toBe(400);
+    expect(await statusOf()).toBe('approved');
+
+    await apiLoginAs(request, 'student2');
+    const mine = await request.get(`${API_URL}/outlines/student/${studentId}`);
+    expect(mine.status(), await mine.text()).toBe(200);
+    const data = (await mine.json()).data;
+    expect(data.status).toBe('approved');
+    expect(data.approved_without_mentor).toBe(true);
+    expect(data.versions[0]).toMatchObject({ status: 'approved_without_mentor', rejection_comment: BYPASS_REASON });
+    // ผู้ตรวจที่นักศึกษาเห็นคืออาจารย์ ไม่ใช่พี่เลี้ยง
+    expect(data.versions[0].reviewer_first_name).toBeTruthy();
+    expect(data.versions[0].reviewer_mentor_name).toBeNull();
+
+    const report = await request.post(`${API_URL}/final-reports`, {
+      multipart: {
+        report: {
+          name: 'report.pdf',
+          mimeType: 'application/pdf',
+          buffer: fs.readFileSync(path.join(__dirname, '../fixtures/mock_official_letter.pdf')),
+        },
+      },
+    });
+    expect(report.status(), await report.text()).toBe(201);
+  });
+
+  test('O12: ทางปกติยังอยู่ — พี่เลี้ยงเห็นชอบ → อาจารย์นิเทศเห็นชอบโดยไม่ต้องมีเหตุผล · ไม่ถูกจดว่าเห็นชอบแทน · ส่งกลับแล้วป้ายเห็นชอบแทนหาย', async ({
+    request,
+  }) => {
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+    const studentView = async () => {
+      await apiLoginAs(request, 'student2');
+      return (await (await request.get(`${API_URL}/outlines/student/${studentId}`)).json()).data;
+    };
+
+    await apiLoginAs(request, 'mentor1');
+    const forwarded = await request.put(`${API_URL}/outlines/${outlineId}/status`, { data: { status: 'pending_advisor' } });
+    expect(forwarded.status(), await forwarded.text()).toBe(200);
+
+    await apiLoginAs(request, 'advisor1');
+    expect((await approve(request)).status()).toBe(200);
+    expect(await statusOf()).toBe('approved');
+    const normal = await studentView();
+    expect(normal.approved_without_mentor).toBe(false);
+    expect(normal.versions[0].status).toBe('approved');
+
+    // ใบที่เห็นชอบแทนแล้วถูกส่งกลับ: ป้ายผูกกับฉบับ จึงหายเองเมื่อฉบับนั้นถูกส่งกลับ
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+    await apiLoginAs(request, 'advisor1');
+    expect((await approve(request, BYPASS_REASON)).status()).toBe(200);
+    expect((await studentView()).approved_without_mentor).toBe(true);
+    await apiLoginAs(request, 'advisor1');
+    expect((await reject(request)).status()).toBe(200);
+    const reopened = await studentView();
+    expect(reopened.status).toBe('rejected');
+    expect(reopened.approved_without_mentor).toBe(false);
+  });
+
+  test('O13: หน้าจอ — เมนูและกองโครงร่างอยู่ฝ่ายนิเทศ · อาจารย์ส่งใบที่อนุมัติแล้วกลับพร้อมเหตุผล · นักศึกษาเห็นเหตุผลในหน้าโครงร่าง', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    // advisor1 เป็นทั้งที่ปรึกษาและผู้นิเทศ เพื่อให้มีสองฝ่ายให้สลับ และพิสูจน์ว่าของโครงร่างไม่อยู่ฝ่ายที่ปรึกษา
+    await dbValue(
+      `UPDATE students SET advisor_id = supervisor_id WHERE student_id = $1 RETURNING student_id`,
+      [studentId]
+    );
+    const REASON = 'หัวข้อซ้ำกับรายงานรุ่นก่อน ขอให้เปลี่ยนขอบเขตเป็นระบบคลังสินค้า';
+
+    await loginAs(page, 'advisor1');
+    // ฝ่ายที่ปรึกษา: ไม่มีเมนูเห็นชอบโครงร่าง ไม่มีกองโครงร่าง
+    await expect(page.getByTestId('advisor-home-tile-report')).toBeVisible();
+    await expect(page.getByTestId('nav-report_outlines')).toHaveCount(0);
+    await expect(page.getByTestId('advisor-home-tile-outline')).toHaveCount(0);
+
+    await page.getByTestId('role-btn-supervisor').click();
+    await expect(page.getByTestId('advisor-home-tile-outline')).toHaveAttribute('data-count', '1');
+
+    // อนุมัติก่อน แล้วส่งกลับ — ปุ่มส่งกลับมีเฉพาะใบที่อนุมัติแล้ว
+    await goToMenu(page, 'report_outlines');
+    await expect(page.getByTestId('outline-reopen')).toHaveCount(0);
+    await page.getByTestId('outline-approve').click();
+    await expect(page.getByText('เห็นชอบโครงร่างรายงานของ')).toBeVisible();
+
+    // ใบที่อนุมัติแล้วย้ายไปแท็บ "อนุมัติแล้ว" — เปิดจากที่นั่น
+    await page.getByTestId('outline-tab-approved').click();
+    await page.getByTestId(`outline-row-${outlineId}`).click();
+    await page.getByTestId('outline-reopen').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('นักศึกษาต้องส่งฉบับใหม่ และผ่านพนักงานที่ปรึกษาอีกครั้ง');
+    // เหตุผลบังคับ — ยังไม่กรอกกดยืนยันไม่ได้
+    await expect(dialog.getByTestId('outline-reopen-submit')).toBeDisabled();
+    await dialog.getByTestId('outline-reopen-reason').fill(REASON);
+    await dialog.getByTestId('outline-reopen-submit').click();
+    await expect(page.getByText(/ส่งกลับโครงร่างรายงานของ .* ให้แก้ไขเรียบร้อยแล้ว/)).toBeVisible();
+    expect(await statusOf()).toBe('rejected');
+    // ใบย้ายไปแท็บตีกลับ และไม่มีปุ่มส่งกลับซ้ำ
+    await expect(page.getByTestId('outline-reopen')).toHaveCount(0);
+
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'report_outline');
+    await expect(page.getByText('โครงร่างรายงานถูกส่งกลับมาแก้ไข:')).toBeVisible();
+    // เหตุผลขึ้นทั้งในแถบส่งกลับและในประวัติฉบับ
+    await expect(page.getByText(REASON).first()).toBeVisible();
   });
 });

@@ -123,6 +123,8 @@ export class ReportOutlineController {
       const isAdvisor = roles.includes('advisor');
       // ใบที่อนุมัติแล้วถูกส่งกลับ — มีด่านเพิ่มและลง audit แยกจากการตีกลับปกติ
       let reopening = false;
+      // อาจารย์นิเทศเห็นชอบแทนขณะใบยังรอพี่เลี้ยง — จดบนแถวฉบับและลง audit แยก
+      let approvingWithoutMentor = false;
 
       if (!isMentor && !isAdvisor) {
         res.status(403).json({ message: 'Forbidden. Only mentor or advisor can update status.' });
@@ -163,8 +165,9 @@ export class ReportOutlineController {
          */
         await assertMentorOwnsStudent(userId, student_id);
       } else if (status === 'approved') {
-        if (current_status !== 'pending_advisor') {
-          res.status(400).json({ message: 'Cannot approve outline unless current status is pending_advisor (after mentor review).' });
+        // ทางปกติ = pending_advisor (พี่เลี้ยงเห็นชอบแล้ว) · pending_mentor = อาจารย์นิเทศเห็นชอบแทน (ด่านเหตุผลอยู่ถัดลงไป)
+        if (current_status !== 'pending_advisor' && current_status !== 'pending_mentor') {
+          res.status(400).json({ message: `อนุมัติโครงร่างในสถานะ ${current_status} ไม่ได้` });
           return;
         }
         // สหกิจ 11 เป็นงานของอาจารย์นิเทศ (`supervisor_id`) ตามคู่มือคณะ — เดิมผูกกับอาจารย์ที่ปรึกษา (เจ้าของตัดสิน 2026-10-09)
@@ -177,6 +180,22 @@ export class ReportOutlineController {
         if ((studentCheck.rowCount ?? 0) === 0 || studentCheck.rows[0].supervisor_id !== userId) {
           res.status(403).json({ message: 'งานนี้เป็นของอาจารย์นิเทศของนักศึกษาคนนี้เท่านั้น' });
           return;
+        }
+
+        /**
+         * เห็นชอบแทนพี่เลี้ยง (เจ้าของสั่ง 2026-10-09) — ปิดทางตัน: พี่เลี้ยงเงียบหรือยังไม่มีพี่เลี้ยง
+         * ใบค้าง pending_mentor แล้วนักศึกษาอัปโหลดเล่มสมบูรณ์ไม่ได้
+         *
+         * ⛔ เฉพาะอาจารย์นิเทศของนักศึกษาคนนั้น (ด่านข้างบน) และต้องมีเหตุผล — ไม่มีเกณฑ์จำนวนวัน
+         *    เป็นดุลยพินิจของอาจารย์ · ขั้นพี่เลี้ยงยังเป็นทางปกติ
+         * ⛔ ไม่บันทึกว่าพี่เลี้ยงตรวจแล้ว — แถวฉบับได้สถานะ approved_without_mentor และผู้ตรวจคืออาจารย์
+         */
+        if (current_status === 'pending_mentor') {
+          if (typeof comment !== 'string' || !comment.trim()) {
+            res.status(400).json({ message: 'กรุณาระบุเหตุผลที่เห็นชอบแทนพนักงานที่ปรึกษา' });
+            return;
+          }
+          approvingWithoutMentor = true;
         }
       } else if (status === 'rejected') {
         /**
@@ -286,16 +305,17 @@ export class ReportOutlineController {
 
       if ((versionRes.rowCount ?? 0) > 0) {
         const versionId = versionRes.rows[0].version_id;
-        const versionStatus = status === 'rejected' ? 'rejected' : 'approved';
+        const versionStatus =
+          status === 'rejected' ? 'rejected' : approvingWithoutMentor ? 'approved_without_mentor' : 'approved';
         await query(
           `UPDATE report_outline_versions SET status = $1, rejection_comment = $2, reviewed_by = $3 WHERE version_id = $4`,
           [versionStatus, comment || null, userId, versionId]
         );
       }
 
-      if (reopening) {
+      if (reopening || approvingWithoutMentor) {
         writeAudit({
-          action: AuditAction.OUTLINE_REOPENED,
+          action: reopening ? AuditAction.OUTLINE_REOPENED : AuditAction.OUTLINE_APPROVED_WITHOUT_MENTOR,
           entityType: 'report_outline',
           entityId: outlineId,
           subjectId: student_id,
@@ -406,6 +426,10 @@ export class ReportOutlineController {
         success: true,
         data: {
           ...outline,
+          // อาจารย์นิเทศเห็นชอบแทนพี่เลี้ยง — หน้าจอต้องไม่แสดงว่าพี่เลี้ยงตรวจแล้ว
+          // ผูกกับฉบับล่าสุด: ถูกส่งกลับหรือส่งฉบับใหม่แล้วค่านี้เป็น false เอง
+          approved_without_mentor:
+            outline.status === 'approved' && versionsRes.rows[0]?.status === 'approved_without_mentor',
           meta: studentMeta,
           versions: versionsRes.rows,
         },
@@ -516,7 +540,12 @@ export class ReportOutlineController {
           --    แปลงเป็น timestamptz ด้วยโซนเดียวกันก่อน แล้วค่อยตัดวันตามเวลาไทย
           CASE WHEN ro.status = 'pending_advisor'
                THEN ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (ro.updated_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date)
-               ELSE NULL END as days_waiting
+               ELSE NULL END as days_waiting,
+          -- "รอพี่เลี้ยงมากี่วัน" — นับจากวันที่นักศึกษาส่งฉบับล่าสุด เฉพาะใบที่ยังรอพี่เลี้ยง
+          -- อาจารย์นิเทศใช้ตัดสินว่าจะเห็นชอบแทนหรือไม่ · ไม่ใช่งานที่รออาจารย์ จึงแยกคีย์จาก days_waiting
+          CASE WHEN ro.status = 'pending_mentor' AND v.submitted_at IS NOT NULL
+               THEN ((NOW() AT TIME ZONE 'Asia/Bangkok')::date - (v.submitted_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date)
+               ELSE NULL END as mentor_waiting_days
         FROM report_outlines ro
         JOIN students s ON ro.student_id = s.student_id
         JOIN master_major m ON s.major_id = m.major_id
