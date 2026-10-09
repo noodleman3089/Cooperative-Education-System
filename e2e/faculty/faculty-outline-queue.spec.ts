@@ -468,4 +468,53 @@ test.describe('SB-F2 · คิวโครงร่างของอาจา�
     // เหตุผลขึ้นทั้งในแถบส่งกลับและในประวัติฉบับ
     await expect(page.getByText(REASON).first()).toBeVisible();
   });
+
+  test('O14: หน้าจอ — อาจารย์นิเทศกดเห็นชอบแทนในแท็บรอพี่เลี้ยง · นักศึกษาเห็นว่าเป็นการเห็นชอบแทนพร้อมเหตุผล ไม่ใช่พี่เลี้ยงเห็นชอบ', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    await dbValue("UPDATE report_outlines SET status = 'pending_mentor' WHERE outline_id = $1", [outlineId]);
+    await dbValue(`UPDATE students SET advisor_id = supervisor_id WHERE student_id = $1 RETURNING student_id`, [studentId]);
+
+    await loginAs(page, 'advisor1');
+    await page.getByTestId('role-btn-supervisor').click();
+    // ใบที่ยังรอพี่เลี้ยงไม่ใช่งานที่รออาจารย์ — กองบนหน้าแรกเป็นศูนย์
+    await expect(page.getByTestId('advisor-home-tile-outline')).toHaveAttribute('data-count', '0');
+
+    await goToMenu(page, 'report_outlines');
+    await page.getByTestId('outline-tab-pending_mentor').click();
+    const row = page.getByTestId(`outline-row-${outlineId}`);
+    // ฉบับล่าสุดส่งเมื่อ 4 วันก่อน (ตัวตั้งข้อมูล)
+    await expect(row).toContainText('รอมาแล้ว 4 วัน');
+    await row.click();
+    // ใบที่ยังรอพี่เลี้ยงไม่มีปุ่มเห็นชอบปกติและไม่มีปุ่มตีกลับ — มีทางเดียวคือเห็นชอบแทนพร้อมเหตุผล
+    await expect(page.getByTestId('outline-approve')).toHaveCount(0);
+    await expect(page.getByTestId('outline-reject')).toHaveCount(0);
+
+    await page.getByTestId('outline-approve-without-mentor').click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('พนักงานที่ปรึกษายังไม่ได้ตรวจโครงร่างนี้');
+    await expect(dialog.getByTestId('outline-approve-without-mentor-submit')).toBeDisabled();
+    expect(await statusOf()).toBe('pending_mentor');
+    await dialog.getByTestId('outline-approve-without-mentor-reason').fill(BYPASS_REASON);
+    await dialog.getByTestId('outline-approve-without-mentor-submit').click();
+    await expect(page.getByText(/เห็นชอบโครงร่างรายงานของ .* แทนพนักงานที่ปรึกษาเรียบร้อยแล้ว/)).toBeVisible();
+    expect(await statusOf()).toBe('approved');
+    // ประวัติฉบับบอกว่าเป็นการเห็นชอบแทน
+    await expect(page.getByTestId('outline-review-panel')).toContainText('เห็นชอบแทนพนักงานที่ปรึกษา');
+
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'report_outline');
+    await expect(page.getByTestId('outline-approved-without-mentor-banner')).toContainText(
+      'อาจารย์นิเทศเห็นชอบแทนพนักงานที่ปรึกษา'
+    );
+    await expect(page.getByTestId('outline-approved-without-mentor-banner')).toContainText(BYPASS_REASON);
+    // ⛔ ขั้นพี่เลี้ยงต้องไม่ขึ้นว่าเห็นชอบแล้ว
+    const mentorStep = page.getByTestId('outline-step-mentor');
+    await expect(mentorStep).toContainText('อาจารย์นิเทศเห็นชอบแทน');
+    await expect(mentorStep).not.toContainText('เห็นชอบแล้ว');
+    // อนุมัติแล้ว ส่งฉบับใหม่ทับไม่ได้
+    await expect(page.getByTestId('outline-submit')).toBeDisabled();
+  });
 });

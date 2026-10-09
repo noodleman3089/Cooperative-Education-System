@@ -44,6 +44,7 @@ interface OutlineMeta {
 interface OutlineResponse {
   outline_id: number | null;
   status: string;
+  approved_without_mentor?: boolean;
   created_at?: string;
   updated_at?: string;
   meta: OutlineMeta | null;
@@ -231,9 +232,11 @@ const ReportOutline: React.FC = () => {
   // 2: pending_advisor (Step 2 active) -> if passed (approved): step 2 done
   // 3: approved (Step 3 done)
   const currentStatus = data?.status || 'draft';
-  const isMentorApproved = currentStatus === 'pending_advisor' || currentStatus === 'approved';
+  const isApprovedWithoutMentor = Boolean(data?.approved_without_mentor);
+  const isMentorApproved = !isApprovedWithoutMentor && (currentStatus === 'pending_advisor' || currentStatus === 'approved');
   const isAdvisorApproved = currentStatus === 'approved';
   const isRejected = currentStatus === 'rejected';
+  const bypassReason = isApprovedWithoutMentor ? data?.versions?.[0]?.rejection_comment : null;
 
   const advisorFullName = data?.meta?.advisor_first_name
     ? `อาจารย์ ${data.meta.advisor_first_name} ${data.meta.advisor_last_name || ''}`
@@ -284,7 +287,9 @@ const ReportOutline: React.FC = () => {
           <div
             data-testid="outline-step-mentor"
             className={`p-4 rounded-xl border flex items-start gap-3 transition ${
-              isMentorApproved
+              isApprovedWithoutMentor
+                ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20'
+                : isMentorApproved
                 ? 'border-emerald-200 bg-emerald-50/60 dark:border-emerald-800 dark:bg-emerald-950/30'
                 : currentStatus === 'pending_mentor'
                 ? 'border-blue-300 bg-blue-50/60 dark:border-blue-700 dark:bg-blue-950/30'
@@ -293,7 +298,9 @@ const ReportOutline: React.FC = () => {
           >
             <div
               className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 mt-0.5 ${
-                isMentorApproved
+                isApprovedWithoutMentor
+                  ? 'bg-amber-700 text-white'
+                  : isMentorApproved
                   ? 'bg-emerald-500 text-white'
                   : currentStatus === 'pending_mentor'
                   ? 'bg-blue-600 text-white'
@@ -310,7 +317,9 @@ const ReportOutline: React.FC = () => {
                 {mentorFullName}
               </span>
               <span className="text-gray-600 dark:text-gray-400 block">
-                {isMentorApproved
+                {isApprovedWithoutMentor
+                  ? 'ข้ามขั้นตอน (อาจารย์นิเทศเห็นชอบแทน)'
+                  : isMentorApproved
                   ? 'เห็นชอบแล้ว'
                   : currentStatus === 'pending_mentor'
                   ? 'รอพี่เลี้ยงตรวจสอบ'
@@ -350,11 +359,22 @@ const ReportOutline: React.FC = () => {
               </span>
               <span className="text-gray-600 dark:text-gray-400 block">
                 {isAdvisorApproved
-                  ? 'ลงนามเห็นชอบแล้ว'
+                  ? isApprovedWithoutMentor
+                    ? 'อาจารย์นิเทศเห็นชอบแทนพนักงานที่ปรึกษา'
+                    : 'ลงนามเห็นชอบแล้ว'
                   : currentStatus === 'pending_advisor'
                   ? 'รออาจารย์นิเทศลงนาม'
                   : 'รอพี่เลี้ยงเห็นชอบก่อน'}
               </span>
+              {isApprovedWithoutMentor && bypassReason && (
+                <div
+                  data-testid="outline-approved-without-mentor-reason"
+                  className="mt-1.5 p-2 rounded-lg bg-emerald-100/70 dark:bg-emerald-950/50 text-[11px] text-emerald-900 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800"
+                >
+                  <span className="font-bold block">เหตุผลที่เห็นชอบแทน:</span>
+                  <span className="whitespace-pre-wrap">{bypassReason}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -394,6 +414,24 @@ const ReportOutline: React.FC = () => {
 
         {/* Calendar Gate */}
         <CalendarGate activityKey="report_outline" actionLabel="ส่งโครงร่างรายงาน" className="mb-2" />
+
+        {/* Approved Without Mentor Banner */}
+        {isApprovedWithoutMentor && (
+          <div
+            data-testid="outline-approved-without-mentor-banner"
+            className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100 text-sm space-y-1"
+          >
+            <span className="font-bold flex items-center gap-1.5 text-emerald-900 dark:text-emerald-100">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              อาจารย์นิเทศเห็นชอบแทนพนักงานที่ปรึกษา
+            </span>
+            {bypassReason && (
+              <p className="leading-relaxed pl-5.5 text-emerald-800 dark:text-emerald-200">
+                <strong>เหตุผล:</strong> {bypassReason}
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Rejection Banner if rejected */}
         {isRejected && (
@@ -528,11 +566,17 @@ const ReportOutline: React.FC = () => {
             <button
               type="button"
               data-testid="outline-submit"
-              disabled={submitting || isMentorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
-              title={isMentorApproved ? 'พี่เลี้ยงเห็นชอบแล้ว ส่งทับไม่ได้จนกว่าอาจารย์จะส่งกลับให้แก้' : undefined}
+              disabled={submitting || isMentorApproved || isAdvisorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+              title={
+                isAdvisorApproved
+                  ? 'โครงร่างได้รับความเห็นชอบแล้ว สามารถเริ่มเขียนรายงานฉบับจริงได้'
+                  : isMentorApproved
+                  ? 'พี่เลี้ยงเห็นชอบแล้ว ส่งทับไม่ได้จนกว่าอาจารย์จะส่งกลับให้แก้'
+                  : undefined
+              }
               onClick={() => handleSubmit(false)}
               className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                submitting || isMentorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'
+                submitting || isMentorApproved || isAdvisorApproved || calendarStatus === 'upcoming' || calendarStatus === 'closed'
                   ? 'bg-blue-400 cursor-not-allowed'
                   : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
               }`}
@@ -554,12 +598,14 @@ const ReportOutline: React.FC = () => {
           <div className="space-y-6">
             {data.versions.map((ver, idx) => {
               const vNum = data.versions.length - idx;
-              const isVerApproved = ver.status === 'approved';
+              const isVerApprovedWithoutMentor = ver.status === 'approved_without_mentor';
+              const isVerApproved = ver.status === 'approved' || isVerApprovedWithoutMentor;
               const isVerRejected = ver.status === 'rejected';
 
               let dotColor = 'bg-blue-600';
-              if (isVerApproved) dotColor = 'bg-emerald-500';
-              if (isVerRejected) dotColor = 'bg-rose-600';
+              if (isVerApprovedWithoutMentor) dotColor = 'bg-amber-500';
+              else if (isVerApproved) dotColor = 'bg-emerald-500';
+              else if (isVerRejected) dotColor = 'bg-rose-600';
 
               return (
                 <div
@@ -575,14 +621,18 @@ const ReportOutline: React.FC = () => {
                       </span>
                       <span
                         className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                          isVerApproved
+                          isVerApprovedWithoutMentor
+                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                            : isVerApproved
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
                             : isVerRejected
                             ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300'
                             : 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300'
                         }`}
                       >
-                        {isVerApproved
+                        {isVerApprovedWithoutMentor
+                          ? 'อาจารย์นิเทศเห็นชอบแทน'
+                          : isVerApproved
                           ? 'อนุมัติแล้ว'
                           : isVerRejected
                           ? 'ถูกส่งกลับมาแก้'
@@ -599,14 +649,24 @@ const ReportOutline: React.FC = () => {
                     {ver.rejection_comment && (
                       <div
                         data-testid="outline-rejection-comment"
-                        className="p-3.5 rounded-xl border border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100 text-xs leading-relaxed"
+                        className={`p-3.5 rounded-xl border text-xs leading-relaxed ${
+                          isVerApprovedWithoutMentor
+                            ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-100'
+                            : 'border-rose-200 dark:border-rose-800 bg-rose-50 dark:bg-rose-950/40 text-rose-900 dark:text-rose-100'
+                        }`}
                       >
                         <span className="font-bold block mb-1">
-                          {ver.reviewer_first_name
-                            ? `อาจารย์ ${ver.reviewer_first_name} ${ver.reviewer_last_name || ''}:`
-                            : ver.reviewer_mentor_name
-                            ? `คุณ${ver.reviewer_mentor_name}:`
-                            : 'ผู้ตรวจ:'}
+                          {isVerApprovedWithoutMentor ? (
+                            <>
+                              อาจารย์นิเทศเห็นชอบแทนพนักงานที่ปรึกษา ({ver.reviewer_first_name ? `อาจารย์ ${ver.reviewer_first_name} ${ver.reviewer_last_name || ''}`.trim() : 'อาจารย์นิเทศ'}):
+                            </>
+                          ) : ver.reviewer_first_name ? (
+                            `อาจารย์ ${ver.reviewer_first_name} ${ver.reviewer_last_name || ''}:`
+                          ) : ver.reviewer_mentor_name ? (
+                            `คุณ${ver.reviewer_mentor_name}:`
+                          ) : (
+                            'ผู้ตรวจ:'
+                          )}
                         </span>
                         <p className="whitespace-pre-wrap">{ver.rejection_comment}</p>
                       </div>

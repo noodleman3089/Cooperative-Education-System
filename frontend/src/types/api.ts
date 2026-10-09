@@ -180,6 +180,7 @@ export interface ReportOutlineRow {
   version_count?: number;
   waiting_since?: string | null;
   days_waiting?: number | null;
+  mentor_waiting_days?: number | null;
   status: string;
   created_at?: string;
   updated_at?: string;

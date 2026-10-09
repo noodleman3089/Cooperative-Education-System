@@ -13,6 +13,7 @@ interface ReasonModalProps {
   /** ข้อความใต้ช่องเหตุผล — บอกว่าเหตุผลนี้ใครจะได้อ่าน */
   hint?: ReactNode;
   submitLabel: string;
+  submitVariant?: 'primary' | 'secondary' | 'danger' | 'success' | 'ghost';
   /** `${testIdPrefix}-reason` ช่องเหตุผล · `${testIdPrefix}-submit` ปุ่มยืนยัน */
   testIdPrefix: string;
   /** โยน error = ข้อความขึ้น **ใน** กล่องนี้และกล่องไม่ปิด · สำเร็จ = ผู้เรียกปิดกล่องเอง */
@@ -29,6 +30,7 @@ export const ReasonModal: React.FC<ReasonModalProps> = ({
   intro,
   hint,
   submitLabel,
+  submitVariant = 'danger',
   testIdPrefix,
   onSubmit,
   onClose,
@@ -78,7 +80,7 @@ export const ReasonModal: React.FC<ReasonModalProps> = ({
           ยกเลิก
         </Button>
         <Button
-          variant="danger"
+          variant={submitVariant}
           loading={busy}
           disabled={!reason.trim()}
           data-testid={`${testIdPrefix}-submit`}

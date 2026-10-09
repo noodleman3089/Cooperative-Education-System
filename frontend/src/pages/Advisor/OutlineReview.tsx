@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
-import { FileText, ExternalLink, RefreshCw, CheckCircle2 } from 'lucide-react';
+import { FileText, ExternalLink, RefreshCw, CheckCircle2, Clock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ReasonModal from '../../components/ui/ReasonModal';
 import { getErrorMessage } from '../../utils/errors';
@@ -49,6 +49,7 @@ const OutlineReview: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
   const [showReopenModal, setShowReopenModal] = useState(false);
+  const [showApproveWithoutMentorModal, setShowApproveWithoutMentorModal] = useState(false);
 
   // Versions history for the selected student
   const [versionsData, setVersionsData] = useState<{
@@ -112,7 +113,7 @@ const OutlineReview: React.FC = () => {
       const parsed = parseInt(outlineIdParam, 10);
       if (!isNaN(parsed)) return parsed;
     }
-    if (activeTab === 'pending_advisor' && currentList.length > 0) {
+    if ((activeTab === 'pending_advisor' || activeTab === 'pending_mentor') && currentList.length > 0) {
       return currentList[0].outline_id;
     }
     return null;
@@ -151,7 +152,9 @@ const OutlineReview: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedOutline?.student_id]);
+    // สถานะของใบเปลี่ยน (เห็นชอบ · ส่งกลับ · เห็นชอบแทน) = ประวัติฉบับเปลี่ยนตาม ต้องดึงใหม่
+    // เดิมผูกแค่ student_id กดแล้วประวัติในแผงยังเป็นของเก่าจนกว่าจะโหลดหน้าใหม่
+  }, [selectedOutline?.student_id, selectedOutline?.status]);
 
   const versions = useMemo(() => {
     if (!selectedOutline?.student_id || versionsData?.studentId !== selectedOutline.student_id) {
@@ -172,7 +175,6 @@ const OutlineReview: React.FC = () => {
   };
 
   const handleSelectOutline = (outline: ReportOutlineRow) => {
-    if (activeTab === 'pending_mentor') return; // Cannot review in pending_mentor
     setOutlineComment('');
     setPanelError(null);
     setSearchParams((prev) => {
@@ -235,6 +237,28 @@ const OutlineReview: React.FC = () => {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set('tab', 'rejected');
+      next.set('outline', selectedOutline.outline_id.toString());
+      return next;
+    });
+  };
+
+  const handleApproveWithoutMentorSubmit = async (reason: string) => {
+    if (!selectedOutline) return;
+    await api.put(`/outlines/${selectedOutline.outline_id}/status`, {
+      status: 'approved',
+      comment: reason,
+    });
+
+    const studentName = selectedOutline.first_name
+      ? `${selectedOutline.first_name} ${selectedOutline.last_name || ''}`.trim()
+      : selectedOutline.student_code;
+
+    setSuccess(`เห็นชอบโครงร่างรายงานของ ${studentName} แทนพนักงานที่ปรึกษาเรียบร้อยแล้ว`);
+    setShowApproveWithoutMentorModal(false);
+    await loadOutlines(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'approved');
       next.set('outline', selectedOutline.outline_id.toString());
       return next;
     });
@@ -356,12 +380,10 @@ const OutlineReview: React.FC = () => {
                     key={item.outline_id}
                     data-testid={`outline-row-${item.outline_id}`}
                     onClick={() => handleSelectOutline(item)}
-                    className={`p-4 transition-all ${
-                      activeTab === 'pending_mentor'
-                        ? 'bg-gray-50/60 dark:bg-gray-800/30 cursor-default'
-                        : isSelected
-                          ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-brand-blue cursor-pointer'
-                          : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/50 cursor-pointer'
+                    className={`p-4 transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-blue-50/80 dark:bg-blue-950/40 border-l-4 border-brand-blue'
+                        : 'hover:bg-gray-50/80 dark:hover:bg-gray-800/50'
                     }`}
                   >
                     <div className="flex justify-between items-start gap-2">
@@ -377,9 +399,15 @@ const OutlineReview: React.FC = () => {
 
                       {/* Right Tag / Badge */}
                       {activeTab === 'pending_mentor' ? (
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700 shrink-0">
-                          รอพี่เลี้ยงเห็นชอบก่อน
-                        </span>
+                        item.mentor_waiting_days != null ? (
+                          <span className="text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0">
+                            รอมาแล้ว {item.mentor_waiting_days} วัน
+                          </span>
+                        ) : (
+                          <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700 shrink-0">
+                            รอพี่เลี้ยงเห็นชอบก่อน
+                          </span>
+                        )
                       ) : item.days_waiting != null ? (
                         <span className="text-xs font-bold text-amber-700 dark:text-amber-400 shrink-0">
                           รอ {item.days_waiting} วัน
@@ -470,14 +498,17 @@ const OutlineReview: React.FC = () => {
                   <div className="divide-y divide-gray-100 dark:divide-gray-800">
                     {versions.map((v, idx) => {
                       const versionNum = versions.length - idx;
-                      const isApproved = v.status === 'approved';
+                      const isApprovedWithoutMentor = v.status === 'approved_without_mentor';
+                      const isApproved = v.status === 'approved' || isApprovedWithoutMentor;
                       const isRejected = v.status === 'rejected';
 
                       return (
                         <div key={v.version_id || idx} className="p-3.5 flex items-start gap-3">
                           <span
                             className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-bold shrink-0 border ${
-                              isApproved
+                              isApprovedWithoutMentor
+                                ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
+                                : isApproved
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400 dark:border-emerald-800'
                                 : isRejected
                                   ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 dark:border-rose-800'
@@ -485,6 +516,7 @@ const OutlineReview: React.FC = () => {
                             }`}
                           >
                             ฉบับที่ {versionNum}
+                            {isApprovedWithoutMentor ? ' (เห็นชอบแทน)' : ''}
                           </span>
                           <div className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed min-w-0">
                             <span className="font-semibold text-gray-900 dark:text-white">
@@ -498,8 +530,12 @@ const OutlineReview: React.FC = () => {
                             )}
                             {v.reviewer_first_name && (
                               <div className="text-gray-600 dark:text-gray-400 mt-0.5">
-                                <strong>อาจารย์นิเทศ:</strong> {v.reviewer_first_name}{' '}
-                                {v.reviewer_last_name || ''}
+                                <strong>
+                                  {isApprovedWithoutMentor
+                                    ? 'อาจารย์นิเทศ (เห็นชอบแทนพนักงานที่ปรึกษา):'
+                                    : 'อาจารย์นิเทศ:'}
+                                </strong>{' '}
+                                {v.reviewer_first_name} {v.reviewer_last_name || ''}
                                 {v.rejection_comment ? ` · "${v.rejection_comment}"` : ''}
                               </div>
                             )}
@@ -569,8 +605,32 @@ const OutlineReview: React.FC = () => {
                 </div>
               )}
 
+              {/* Actions for pending_mentor: approve on behalf of mentor */}
+              {selectedOutline.status === 'pending_mentor' && (
+                <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <span>
+                      โครงร่างรายงานนี้อยู่ในสถานะ <strong>รอพนักงานที่ปรึกษา</strong>
+                      {selectedOutline.mentor_waiting_days != null
+                        ? ` (รอมาแล้ว ${selectedOutline.mentor_waiting_days} วัน)`
+                        : ''}{' '}
+                      · หากพนักงานที่ปรึกษายังไม่ตรวจ ท่านสามารถพิจารณาเห็นชอบแทนได้
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="outline-approve-without-mentor"
+                    onClick={() => setShowApproveWithoutMentorModal(true)}
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-700 hover:bg-emerald-800 text-white transition-colors cursor-pointer shrink-0 self-start sm:self-auto shadow-sm"
+                  >
+                    เห็นชอบแทนพนักงานที่ปรึกษา
+                  </button>
+                </div>
+              )}
+
               {/* Read-Only Status Notice or Reopen button if approved */}
-              {selectedOutline.status !== 'pending_advisor' && (
+              {selectedOutline.status !== 'pending_advisor' && selectedOutline.status !== 'pending_mentor' && (
                 <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
@@ -607,6 +667,18 @@ const OutlineReview: React.FC = () => {
           testIdPrefix="outline-reopen"
           onSubmit={handleReopenSubmit}
           onClose={() => setShowReopenModal(false)}
+        />
+      )}
+
+      {showApproveWithoutMentorModal && selectedOutline && (
+        <ReasonModal
+          title="เห็นชอบโครงร่างรายงานแทนพนักงานที่ปรึกษา"
+          intro="พนักงานที่ปรึกษายังไม่ได้ตรวจโครงร่างนี้ เมื่อท่านเห็นชอบแทน นักศึกษาจะเขียนเล่มต่อได้ทันที กรุณาระบุเหตุผล"
+          submitLabel="ยืนยันเห็นชอบแทน"
+          submitVariant="primary"
+          testIdPrefix="outline-approve-without-mentor"
+          onSubmit={handleApproveWithoutMentorSubmit}
+          onClose={() => setShowApproveWithoutMentorModal(false)}
         />
       )}
     </div>
