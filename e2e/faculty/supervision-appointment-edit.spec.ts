@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Page } from '@playwright/test';
 import crypto from 'crypto';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { dbExec, dbRow, dbValue, mentor1Id, withDb } from '../helpers/db';
-import { apiLoginAs } from '../helpers/auth';
+import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 
 /**
  * ขั้น 7 ข้อ ก — นัดนิเทศ (สหกิจ 12) แก้และลบได้ · ลิงก์ตอบนัดของพี่เลี้ยงตรวจสถานะ
@@ -345,5 +346,108 @@ test.describe('ขั้น 7 ก · ลิงก์ตอบนัดของ�
     expect(row!.status).toBe('accepted');
     // พี่เลี้ยงยืนยันวันที่อาจารย์แก้ ไม่ใช่วันเดิม
     expect(row!.appointment_date).toBe('2026-12-19');
+  });
+});
+
+test.describe('ขั้น 7 ก · หน้าจอ', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/maps.googleapis.com/**', (route) => route.abort());
+    await seedTestData();
+    await dbExec('DELETE FROM supervision_appointments');
+    await seedPlacedWithMentor();
+  });
+
+  const openSupervision = async (page: Page) => {
+    await loginAs(page, 'advisor1');
+    await page.getByTestId('role-btn-supervisor').click();
+    await goToMenu(page, 'supervision');
+  };
+
+  test('U1: อาจารย์แก้ไขนัดที่ยืนยันแล้ว — เห็นคำเตือน · บันทึกแล้วแถวแสดงวันใหม่และสถานะร่าง', async ({ page }) => {
+    test.setTimeout(120_000);
+    const id = await insertAppointment('accepted');
+    await openSupervision(page);
+
+    // นัดที่ส่งแล้วแก้ได้ แต่ลบไม่ได้ — ไม่มีปุ่มลบให้กด
+    await expect(page.getByTestId(`supervision-delete-${id}`)).toHaveCount(0);
+    await page.getByTestId(`supervision-edit-${id}`).click();
+
+    await expect(page.getByTestId('supervision-edit-warning')).toContainText('นัดจะกลับเป็นร่าง');
+    // กล่องเดิมเปิดพร้อมค่าเดิม ไม่ใช่กล่องว่าง
+    await expect(page.getByTestId('supervision-draft-date')).toHaveValue('2026-12-12');
+    await expect(page.getByTestId('supervision-draft-student-time')).toHaveValue('09:30');
+
+    await page.getByTestId('supervision-draft-date').fill('2026-12-19');
+    await page.getByTestId('supervision-draft-submit').click();
+    await expect(page.getByText(/นัดกลับเป็นร่าง รอเจ้าหน้าที่ตรวจและส่งถึงสถานประกอบการอีกครั้ง/)).toBeVisible();
+
+    const visit = page.getByTestId(`supervision-visit-${studentId}-1`);
+    await expect(visit).toContainText('ร่าง · รอเจ้าหน้าที่ตรวจและส่งอีเมล');
+    await expect(visit).toContainText('19 ธ.ค.');
+    expect(await rowOf(id)).toMatchObject({ status: 'draft', appointment_date: '2026-12-19' });
+  });
+
+  test('U2: อาจารย์ลบร่าง — กล่องยืนยันบอกชื่อนักศึกษาและครั้งที่ · ยืนยันแล้วแถวหาย', async ({ page }) => {
+    test.setTimeout(120_000);
+    const id = await insertAppointment('draft');
+    const firstName = (await dbValue<string>('SELECT first_name FROM students WHERE student_id = $1', [studentId]))!;
+    await openSupervision(page);
+
+    // ร่างที่ยังไม่ได้ส่ง แก้แล้วไม่มีอะไรต้องเตือน
+    await page.getByTestId(`supervision-edit-${id}`).click();
+    await expect(page.getByTestId('supervision-draft-date')).toHaveValue('2026-12-12');
+    await expect(page.getByTestId('supervision-edit-warning')).toHaveCount(0);
+
+    await page.getByTestId(`supervision-delete-${id}`).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('ครั้งที่ 1');
+    await expect(dialog).toContainText(firstName);
+    // ยังไม่ยืนยัน = ยังไม่ลบ
+    expect(Number(await dbValue('SELECT COUNT(*) FROM supervision_appointments'))).toBe(1);
+
+    await dialog.getByRole('button', { name: 'ลบร่างนัด' }).click();
+    await expect(page.getByText('ลบร่างนัดนิเทศแล้ว')).toBeVisible();
+    await expect(page.getByTestId(`supervision-edit-${id}`)).toHaveCount(0);
+    expect(Number(await dbValue('SELECT COUNT(*) FROM supervision_appointments'))).toBe(0);
+  });
+
+  test('U3: หน้าลิงก์ของพี่เลี้ยง — นัดที่ไม่ได้รอคำตอบไม่มีปุ่มตอบ · ขอเลื่อนค้างอยู่ไม่มีปุ่มยืนยันวันเดิม', async ({ page }) => {
+    test.setTimeout(120_000);
+    const id = await insertAppointment('accepted');
+    const acceptButton = page.getByRole('button', { name: 'ยืนยันการนัดหมายตามกำหนดการ' });
+    const rescheduleButton = page.getByRole('button', { name: 'ขอเลื่อนวัน/เวลานัดหมาย' });
+    const open = async () => {
+      await page.goto(`/appointment-response?token=${mentorToken(id)}`);
+      await expect(page.getByText('ตอบรับการนัดหมายนิเทศนักศึกษา')).toBeVisible();
+    };
+
+    await open();
+    await expect(page.getByTestId('appointment-closed-note')).toContainText('นัดหมายนี้ยืนยันแล้ว');
+    await expect(acceptButton).toHaveCount(0);
+    await expect(rescheduleButton).toHaveCount(0);
+
+    await dbExec("UPDATE supervision_appointments SET status = 'draft' WHERE appointment_id = $1", [id]);
+    await open();
+    await expect(page.getByTestId('appointment-closed-note')).toContainText('อาจารย์นิเทศกำลังแก้ไขวันนัด');
+    await expect(acceptButton).toHaveCount(0);
+    await expect(rescheduleButton).toHaveCount(0);
+
+    // ขอเลื่อนค้างอยู่: เสนอวันใหม่ได้ แต่เซิร์ฟเวอร์ไม่รับการยืนยันวันเดิม (L2) — หน้าจอต้องไม่มีปุ่มที่กดแล้วถูกปฏิเสธ
+    await dbExec(
+      `UPDATE supervision_appointments
+          SET status = 'rescheduled', proposed_reschedule_date = '2099-01-10', proposed_mentor_time = '13:00'
+        WHERE appointment_id = $1`,
+      [id]
+    );
+    await open();
+    await expect(page.getByTestId('appointment-closed-note')).toHaveCount(0);
+    await expect(rescheduleButton).toBeVisible();
+    await expect(acceptButton).toHaveCount(0);
+
+    // รอคำตอบ: สองปุ่มครบ
+    await dbExec("UPDATE supervision_appointments SET status = 'pending_company' WHERE appointment_id = $1", [id]);
+    await open();
+    await expect(acceptButton).toBeVisible();
+    await expect(rescheduleButton).toBeVisible();
   });
 });

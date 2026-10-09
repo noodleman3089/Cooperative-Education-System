@@ -139,6 +139,17 @@ const SupervisionTracking: React.FC = () => {
   const [draftSubmitting, setDraftSubmitting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
 
+  // Edit draft form state
+  const [editingAppointmentId, setEditingAppointmentId] = useState<number | null>(null);
+  const [editingAppointmentStatus, setEditingAppointmentStatus] = useState<string | null>(null);
+
+  // Deleting draft state
+  const [deletingAppointment, setDeletingAppointment] = useState<{
+    id: number;
+    studentName: string;
+    visitNumber: number;
+  } | null>(null);
+
   // Log form state (SupervisionLogForm modal)
   const [showLogForm, setShowLogForm] = useState<number | null>(null);
 
@@ -171,6 +182,8 @@ const SupervisionTracking: React.FC = () => {
   const handleOpenDraft = (studentId: number, visit: 1 | 2) => {
     setDraftStudentId(studentId);
     setDraftVisitNumber(visit);
+    setEditingAppointmentId(null);
+    setEditingAppointmentStatus(null);
     setDraftData({
       appointment_date: '',
       student_time: '09:00',
@@ -180,28 +193,82 @@ const SupervisionTracking: React.FC = () => {
     setDraftError(null);
   };
 
-  const handleCancelDraft = () => {
-    setDraftStudentId(null);
+  const handleOpenEdit = (student: SupervisedStudent, app: SupervisionAppointment) => {
+    setDraftStudentId(student.student_id);
+    setDraftVisitNumber((app.visit_number as 1 | 2) || 1);
+    setEditingAppointmentId(app.appointment_id);
+    setEditingAppointmentStatus(app.status);
+    const rawDate = app.appointment_date || '';
+    const dateStr = rawDate.includes('T') ? rawDate.split('T')[0] : rawDate;
+    setDraftData({
+      appointment_date: dateStr,
+      student_time: app.student_time ? app.student_time.slice(0, 5) : '',
+      mentor_time: app.mentor_time ? app.mentor_time.slice(0, 5) : '',
+      tour_requested: !!app.tour_requested,
+    });
     setDraftError(null);
   };
 
-  const handleCreateDraft = async () => {
+  const handleCancelDraft = () => {
+    setDraftStudentId(null);
+    setEditingAppointmentId(null);
+    setEditingAppointmentStatus(null);
+    setDraftError(null);
+  };
+
+  const handleSaveDraft = async () => {
     if (!draftStudentId) return;
     setDraftError(null);
     setDraftSubmitting(true);
     try {
-      await api.post('/appointments/draft', {
-        student_id: draftStudentId,
-        ...draftData
-      });
-      setSuccess(`บันทึกแบบร่างการนิเทศครั้งที่ ${draftVisitNumber} สำเร็จ ส่งให้เจ้าหน้าที่ประสานงานต่อไป`);
-      setDraftStudentId(null);
-      setDraftData({ appointment_date: '', student_time: '', mentor_time: '', tour_requested: false });
-      fetchData();
+      if (editingAppointmentId) {
+        const res = await api.put(`/appointments/${editingAppointmentId}`, draftData);
+        setSuccess(res?.message || 'บันทึกการแก้ไขนัดหมายสำเร็จ');
+        handleCancelDraft();
+        fetchData();
+      } else {
+        await api.post('/appointments/draft', {
+          student_id: draftStudentId,
+          ...draftData
+        });
+        setSuccess(`บันทึกแบบร่างการนิเทศครั้งที่ ${draftVisitNumber} สำเร็จ ส่งให้เจ้าหน้าที่ประสานงานต่อไป`);
+        handleCancelDraft();
+        fetchData();
+      }
     } catch (err) {
-      setDraftError(getErrorMessage(err, 'ไม่สามารถบันทึกแบบร่างนัดหมายได้'));
+      setDraftError(getErrorMessage(err, editingAppointmentId ? 'ไม่สามารถบันทึกการแก้ไขนัดหมายได้' : 'ไม่สามารถบันทึกแบบร่างนัดหมายได้'));
     } finally {
       setDraftSubmitting(false);
+    }
+  };
+
+  const handleOpenDelete = (student: SupervisedStudent, app: SupervisionAppointment) => {
+    const studentName = student.first_name ? `${student.first_name} ${student.last_name || ''}`.trim() : student.student_code;
+    setDeletingAppointment({
+      id: app.appointment_id,
+      studentName,
+      visitNumber: app.visit_number || 1,
+    });
+  };
+
+  const handleDeleteDraft = async () => {
+    if (!deletingAppointment) return;
+    setError(null);
+    setSuccess(null);
+    setConfirmBusy(true);
+    try {
+      await api.delete(`/appointments/${deletingAppointment.id}`);
+      if (editingAppointmentId === deletingAppointment.id) {
+        handleCancelDraft();
+      }
+      setDeletingAppointment(null);
+      setSuccess('ลบร่างนัดนิเทศแล้ว');
+      fetchData();
+    } catch (err) {
+      setDeletingAppointment(null);
+      setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการลบร่างนัดหมาย'));
+    } finally {
+      setConfirmBusy(false);
     }
   };
 
@@ -523,6 +590,26 @@ const SupervisionTracking: React.FC = () => {
 
                         {/* Action Buttons for Visit 1 */}
                         <div className="flex items-center gap-2 flex-wrap pt-1">
+                          <button
+                            type="button"
+                            data-testid={`supervision-edit-${visit1.appointment_id}`}
+                            onClick={() => handleOpenEdit(student, visit1)}
+                            className="px-3 py-1.5 text-xs font-bold rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                          >
+                            แก้ไขนัด
+                          </button>
+
+                          {visit1.status === 'draft' && (
+                            <button
+                              type="button"
+                              data-testid={`supervision-delete-${visit1.appointment_id}`}
+                              onClick={() => handleOpenDelete(student, visit1)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl border border-red-200 dark:border-red-800 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                            >
+                              ลบร่าง
+                            </button>
+                          )}
+
                           {visit1.status === 'rescheduled' && (
                             <>
                               <button
@@ -656,6 +743,26 @@ const SupervisionTracking: React.FC = () => {
 
                         {/* Action Buttons for Visit 2 */}
                         <div className="flex items-center gap-2 flex-wrap pt-1">
+                          <button
+                            type="button"
+                            data-testid={`supervision-edit-${visit2.appointment_id}`}
+                            onClick={() => handleOpenEdit(student, visit2)}
+                            className="px-3 py-1.5 text-xs font-bold rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                          >
+                            แก้ไขนัด
+                          </button>
+
+                          {visit2.status === 'draft' && (
+                            <button
+                              type="button"
+                              data-testid={`supervision-delete-${visit2.appointment_id}`}
+                              onClick={() => handleOpenDelete(student, visit2)}
+                              className="px-3 py-1.5 text-xs font-bold rounded-xl border border-red-200 dark:border-red-800 bg-white dark:bg-gray-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors cursor-pointer"
+                            >
+                              ลบร่าง
+                            </button>
+                          )}
+
                           {visit2.status === 'rescheduled' && (
                             <>
                               <button
@@ -758,8 +865,18 @@ const SupervisionTracking: React.FC = () => {
                 {isDraftingThisStudent && (
                   <div className="p-4 sm:p-5 bg-[#F8FAFF] dark:bg-blue-950/20 border-t border-gray-200 dark:border-gray-800 flex flex-col gap-3">
                     <span className="text-sm font-bold text-[#1E3A8A] dark:text-blue-300">
-                      ร่างนัดการนิเทศครั้งที่ {draftVisitNumber}
+                      {editingAppointmentId
+                        ? `แก้ไขนัดการนิเทศครั้งที่ ${draftVisitNumber}`
+                        : `ร่างนัดการนิเทศครั้งที่ ${draftVisitNumber}`}
                     </span>
+
+                    {editingAppointmentId && editingAppointmentStatus && editingAppointmentStatus !== 'draft' && (
+                      <AlertBanner
+                        data-testid="supervision-edit-warning"
+                        variant="warning"
+                        message="นัดนี้ส่งถึงพี่เลี้ยงแล้ว เมื่อแก้ นัดจะกลับเป็นร่าง เจ้าหน้าที่ต้องตรวจและส่งใหม่ และพี่เลี้ยงต้องตอบอีกครั้ง"
+                      />
+                    )}
 
                     {draftError && <AlertBanner variant="error" message={draftError} />}
 
@@ -816,7 +933,11 @@ const SupervisionTracking: React.FC = () => {
 
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pt-2 border-t border-gray-100 dark:border-gray-800">
                       <span className="text-xs text-gray-500 dark:text-gray-400">
-                        บันทึกแล้วเป็น “ร่าง · รอเจ้าหน้าที่ตรวจและส่งอีเมล” — ยังไม่มีอะไรถึงบริษัท
+                        {editingAppointmentId
+                          ? (editingAppointmentStatus !== 'draft'
+                              ? 'บันทึกแล้วนัดจะกลับเป็นร่าง เจ้าหน้าที่ต้องตรวจและส่งใหม่'
+                              : 'บันทึกการแก้ไขร่างนัดนิเทศ')
+                          : 'บันทึกแล้วเป็น “ร่าง · รอเจ้าหน้าที่ตรวจและส่งอีเมล” — ยังไม่มีอะไรถึงบริษัท'}
                       </span>
                       <div className="flex gap-2">
                         <button
@@ -830,11 +951,15 @@ const SupervisionTracking: React.FC = () => {
                           type="button"
                           data-testid="supervision-draft-submit"
                           disabled={draftSubmitting || !draftData.appointment_date || !draftData.student_time || !draftData.mentor_time}
-                          onClick={handleCreateDraft}
+                          onClick={handleSaveDraft}
                           className="px-3 py-1.5 text-xs font-bold rounded-xl bg-brand-blue text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer inline-flex items-center gap-1"
                         >
                           <Send className="w-3.5 h-3.5" />
-                          {draftSubmitting ? 'กำลังบันทึก...' : 'บันทึกร่างส่งเจ้าหน้าที่'}
+                          {draftSubmitting
+                            ? 'กำลังบันทึก...'
+                            : editingAppointmentId
+                            ? 'บันทึกการแก้ไข'
+                            : 'บันทึกร่างส่งเจ้าหน้าที่'}
                         </button>
                       </div>
                     </div>
@@ -1031,6 +1156,17 @@ const SupervisionTracking: React.FC = () => {
         busy={confirmBusy}
         onConfirm={handleBypass}
         onCancel={() => setBypassingId(null)}
+      />
+
+      <ConfirmDialog
+        open={deletingAppointment !== null}
+        title="ยืนยันการลบร่างนัดหมายนิเทศ"
+        message={`ต้องการลบร่างนัดหมายนิเทศครั้งที่ ${deletingAppointment?.visitNumber} ของ ${deletingAppointment?.studentName} ใช่หรือไม่?`}
+        confirmLabel="ลบร่างนัด"
+        destructive
+        busy={confirmBusy}
+        onConfirm={handleDeleteDraft}
+        onCancel={() => setDeletingAppointment(null)}
       />
     </div>
   );

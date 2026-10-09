@@ -55,6 +55,8 @@ const AppointmentResponse: React.FC = () => {
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('');
 
+  const isAwaitingResponse = Boolean(info && (info.status === 'pending_company' || info.status === 'rescheduled'));
+
   useEffect(() => {
     if (!token) {
       setInfoLoading(false);
@@ -187,81 +189,99 @@ const AppointmentResponse: React.FC = () => {
             </div>
           ) : null}
 
-          {info && info.status !== 'pending_company' && (
+          {info && !isAwaitingResponse ? (
             <AlertBanner
+              data-testid="appointment-closed-note"
               variant="info"
-              message="การนัดหมายนี้ได้รับการตอบกลับไปแล้ว หากต้องการเปลี่ยนคำตอบสามารถเลือกใหม่ได้ด้านล่าง"
+              message={
+                info.status === 'draft'
+                  ? 'อาจารย์นิเทศกำลังแก้ไขวันนัด ท่านจะได้รับอีเมลฉบับใหม่'
+                  : 'นัดหมายนี้ยืนยันแล้ว หากต้องการเปลี่ยนแปลงกรุณาติดต่ออาจารย์นิเทศ'
+              }
               className="mb-6"
             />
-          )}
+          ) : isAwaitingResponse ? (
+            <>
+              {info?.status === 'rescheduled' && (
+                <AlertBanner
+                  variant="info"
+                  message="ท่านได้ขอเลื่อนวันนัดหมายนี้แล้ว อยู่ระหว่างรออาจารย์นิเทศตอบ หากต้องการเสนอวันอื่น ส่งคำขอเลื่อนอีกครั้งได้ด้านล่าง"
+                  className="mb-6"
+                />
+              )}
 
-          <p className="text-gray-700 text-sm mb-6 text-center dark:text-gray-300">
-            กรุณาเลือกเพื่อยืนยันหรือขอเลื่อนวันนัดหมาย
-          </p>
+              {info?.status !== 'rescheduled' && (
+                <p className="text-gray-700 text-sm mb-6 text-center dark:text-gray-300">
+                  กรุณาเลือกเพื่อยืนยันหรือขอเลื่อนวันนัดหมาย
+                </p>
+              )}
 
-          <div className="space-y-4">
-            {action !== 'reschedule' && (
-              <Button
-                variant="success"
-                size="lg"
-                icon={<Check className="w-5 h-5" />}
-                loading={loading && action === 'accept'}
-                loadingLabel="กำลังยืนยัน..."
-                onClick={() => handleSubmit('accept')}
-              >
-                ยืนยันการนัดหมายตามกำหนดการ
-              </Button>
-            )}
-
-            {action !== 'reschedule' && (
-              <Button variant="secondary" size="lg" onClick={() => setAction('reschedule')}>
-                ขอเลื่อนวัน/เวลานัดหมาย
-              </Button>
-            )}
-
-            {action === 'reschedule' && (
-              <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4 animate-in fade-in slide-in-from-top-4 dark:bg-gray-800 dark:border-gray-800">
-                <h3 className="font-bold text-gray-900 flex items-center gap-2 dark:text-white">
-                  <Clock className="w-4 h-4 text-brand-blue dark:text-blue-400" /> เสนอวันและเวลาใหม่
-                </h3>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">วันที่ต้องการเลื่อนไป</label>
-                  <input
-                    type="date"
-                    value={newDate}
-                    min={todayIso()}
-                    onChange={e => setNewDate(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">เวลา</label>
-                  <input
-                    type="time"
-                    value={newTime}
-                    onChange={e => setNewTime(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <Button variant="secondary" className="flex-1" onClick={() => setAction(null)}>
-                    ยกเลิก
-                  </Button>
+              <div className="space-y-4">
+                {/* ขอเลื่อนค้างอยู่ = เซิร์ฟเวอร์ไม่รับการยืนยันวันเดิม (409) จึงไม่แสดงปุ่มที่กดแล้วถูกปฏิเสธ */}
+                {action !== 'reschedule' && info?.status !== 'rescheduled' && (
                   <Button
-                    className="flex-1"
-                    loading={loading}
-                    loadingLabel="กำลังส่ง..."
-                    onClick={() => handleSubmit('reschedule')}
+                    variant="success"
+                    size="lg"
+                    icon={<Check className="w-5 h-5" />}
+                    loading={loading && action === 'accept'}
+                    loadingLabel="กำลังยืนยัน..."
+                    onClick={() => handleSubmit('accept')}
                   >
-                    ส่งคำขอเลื่อน
+                    ยืนยันการนัดหมายตามกำหนดการ
                   </Button>
-                </div>
+                )}
+
+                {action !== 'reschedule' && (
+                  <Button variant="secondary" size="lg" onClick={() => setAction('reschedule')}>
+                    ขอเลื่อนวัน/เวลานัดหมาย
+                  </Button>
+                )}
+
+                {action === 'reschedule' && (
+                  <div className="bg-gray-50 p-6 rounded-2xl border border-gray-200 space-y-4 animate-in fade-in slide-in-from-top-4 dark:bg-gray-800 dark:border-gray-800">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2 dark:text-white">
+                      <Clock className="w-4 h-4 text-brand-blue dark:text-blue-400" /> เสนอวันและเวลาใหม่
+                    </h3>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">วันที่ต้องการเลื่อนไป</label>
+                      <input
+                        type="date"
+                        value={newDate}
+                        min={todayIso()}
+                        onChange={e => setNewDate(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1 dark:text-gray-300">เวลา</label>
+                      <input
+                        type="time"
+                        value={newTime}
+                        onChange={e => setNewTime(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:border-brand-blue focus:ring-1 focus:ring-brand-blue outline-none dark:border-gray-700 dark:bg-gray-900 dark:text-white"
+                      />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <Button variant="secondary" className="flex-1" onClick={() => setAction(null)}>
+                        ยกเลิก
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        loading={loading}
+                        loadingLabel="กำลังส่ง..."
+                        onClick={() => handleSubmit('reschedule')}
+                      >
+                        ส่งคำขอเลื่อน
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>
