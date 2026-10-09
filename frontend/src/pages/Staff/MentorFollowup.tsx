@@ -1,18 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { BellRing, Building2, Info, Mail, Pencil, PhoneCall, RefreshCw, Search, Users } from 'lucide-react';
+import { BellRing, Building2, Info, Mail, Pencil, PhoneCall, RefreshCw, Search, UserCheck, Users } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Input from '../../components/ui/Input';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
-import { formatThaiDateTime } from '../../utils/thaiDate';
+import { formatThaiDate, formatThaiDateTime } from '../../utils/thaiDate';
 
 /**
  * ติดตามพี่เลี้ยง — เจ้าหน้าที่/หัวหน้าสาขา/อาจารย์ เห็นว่าพี่เลี้ยงคนไหนยังมีงานค้าง
  * แล้วกดเตือนทางอีเมลได้จากหน้านี้ (นักศึกษาไม่ต้องตามเอง)
+ *
+ * พี่เลี้ยงถูกระบุหลังนักศึกษาเริ่มฝึก (ขั้น 5 · 2026-10-09) — หน้านี้จึงเห็นใบที่ตอบรับแล้วสามสภาพ:
+ * ยังไม่ระบุพี่เลี้ยง (`unassigned`) · ระบุแล้วรอยืนยัน (แถวที่ `is_active === false`) · ยืนยันแล้ว
+ * เจ้าหน้าที่กด "ยืนยันและส่งลิงก์" = จุดเดียวที่บัญชีพี่เลี้ยงเปิดและลิงก์แรกถูกส่ง (`POST /mentor-followup/:id/confirm`)
  *
  * สัญญากับ backend: `GET /mentor-followup` · `POST /mentor-followup/:id/remind`
  * · `POST /mentor-followup/:id/send-link` · `PUT /mentor-followup/:id/email`
@@ -66,6 +71,17 @@ export interface MentorFollowupResponse {
   /** ไม่มี = backend รุ่นเก่า → ไม่แสดงแถบบอกสถานะเตือนอัตโนมัติ */
   auto_remind?: AutoRemindConfig;
   mentors: MentorFollowupRow[];
+  /** ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง (ขอบเขตเดียวกับ `mentors`) */
+  unassigned?: MentorFollowupUnassigned[];
+}
+
+export interface MentorFollowupUnassigned {
+  form_id: number;
+  student_id: number;
+  student_code: string;
+  student_name: string;
+  company_name: string | null;
+  start_date: string | null;
 }
 
 const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> = [
@@ -77,15 +93,16 @@ const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> =
   ['report_draft', 'ร่างรายงาน'],
 ];
 
-type Filter = 'all' | 'pending' | 'never_login' | 'silent';
+type Filter = 'all' | 'unconfirmed' | 'pending' | 'never_login' | 'silent';
 
 // เซิร์ฟเวอร์ปฏิเสธเตือน/ส่งลิงก์ให้บัญชีที่ยังไม่เปิดใช้ (403 SEC-16) — ปิดปุ่มไว้ก่อนแทนที่จะให้กดแล้วเจอ "ถูกระงับ"
-const INACTIVE_MENTOR_HINT = 'บัญชียังไม่เปิดใช้ — รอเจ้าหน้าที่กดรับแบบตอบรับของสถานประกอบการ';
+const INACTIVE_MENTOR_HINT = 'ยังไม่ได้ยืนยันพี่เลี้ยง — เจ้าหน้าที่ต้องกด "ยืนยันและส่งลิงก์" ก่อน';
 
 const hasWork = (m: MentorFollowupRow) => m.pending_total > 0 || m.eval_missing_students > 0;
 
 const MentorFollowup: React.FC = () => {
   const [mentors, setMentors] = useState<MentorFollowupRow[]>([]);
+  const [unassigned, setUnassigned] = useState<MentorFollowupUnassigned[]>([]);
   const [canEdit, setCanEdit] = useState(false);
   const [autoRemind, setAutoRemind] = useState<AutoRemindConfig | null>(null);
   const [loading, setLoading] = useState(true);
@@ -97,6 +114,7 @@ const MentorFollowup: React.FC = () => {
 
   const [remindTarget, setRemindTarget] = useState<MentorFollowupRow | null>(null);
   const [linkTarget, setLinkTarget] = useState<MentorFollowupRow | null>(null);
+  const [confirmTarget, setConfirmTarget] = useState<MentorFollowupRow | null>(null);
   const [editTarget, setEditTarget] = useState<MentorFollowupRow | null>(null);
   const [emailDraft, setEmailDraft] = useState('');
   const [modalError, setModalError] = useState<string | null>(null);
@@ -111,6 +129,7 @@ const MentorFollowup: React.FC = () => {
       setLoadError(null);
       const res = (await api.get('/mentor-followup')) as MentorFollowupResponse;
       setMentors(res.mentors ?? []);
+      setUnassigned(res.unassigned ?? []);
       setCanEdit(!!res.can_edit);
       setAutoRemind(res.auto_remind ?? null);
     } catch (err) {
@@ -138,6 +157,7 @@ const MentorFollowup: React.FC = () => {
       pending: mentors.filter((m) => m.pending_total > 0).length,
       overdue: mentors.filter((m) => m.pending_overdue > 0).length,
       silent: mentors.filter((m) => m.silent_after_max).length,
+      unconfirmed: mentors.filter((m) => !m.is_active).length,
     }),
     [mentors]
   );
@@ -145,6 +165,7 @@ const MentorFollowup: React.FC = () => {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return mentors.filter((m) => {
+      if (filter === 'unconfirmed' && m.is_active) return false;
       if (filter === 'pending' && !hasWork(m)) return false;
       if (filter === 'never_login' && m.last_login_at) return false;
       if (filter === 'silent' && !m.silent_after_max) return false;
@@ -191,6 +212,35 @@ const MentorFollowup: React.FC = () => {
     } catch (err) {
       setLinkTarget(null);
       setActionError(getErrorMessage(err, `ส่งลิงก์เข้าระบบถึง ${target.name} ไม่สำเร็จ`));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ยืนยันพี่เลี้ยงที่นักศึกษาระบุ = เปิดบัญชี + ส่งลิงก์เข้าระบบฉบับแรก (เรียกคืนไม่ได้)
+  const handleConfirmMentor = async () => {
+    const target = confirmTarget;
+    if (!target) return;
+    try {
+      setBusy(true);
+      setActionError(null);
+      setSuccess(null);
+      const res = (await api.post(`/mentor-followup/${target.mentor_id}/confirm`)) as {
+        mentor_email_sent?: boolean;
+        message?: string;
+      };
+      setConfirmTarget(null);
+      // บัญชีเปิดแล้วแต่อีเมลไม่ออก = ต้องบอกตามจริง ไม่ใช่ขึ้นเขียวว่าสำเร็จ
+      if (res?.mentor_email_sent === false) {
+        setActionError(res.message ?? `ยืนยัน ${target.name} แล้ว แต่ส่งอีเมลลิงก์ไม่สำเร็จ — กด "ส่งลิงก์เข้าระบบใหม่"`);
+      } else {
+        setSuccess(`ยืนยัน ${target.name} เป็นพี่เลี้ยงแล้ว ระบบส่งลิงก์เข้าระบบไปที่ ${target.email}`);
+      }
+      await load(true);
+    } catch (err) {
+      setConfirmTarget(null);
+      setActionError(getErrorMessage(err, `ยืนยันพี่เลี้ยง ${target.name} ไม่สำเร็จ`));
+      await load(true);
     } finally {
       setBusy(false);
     }
@@ -315,6 +365,39 @@ const MentorFollowup: React.FC = () => {
         />
       )}
 
+      {/* ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง — ยังไม่มีพี่เลี้ยงให้ตาม จึงเป็นรายการแยกจากรายการพี่เลี้ยง */}
+      {!loadError && unassigned.length > 0 && (
+        <section
+          data-testid="mf-unassigned"
+          className="rounded-2xl border border-amber-200 bg-amber-50 p-4 sm:p-5 dark:border-amber-800/50 dark:bg-amber-950/30"
+        >
+          <h2 className="text-sm font-bold text-amber-900 dark:text-amber-200">
+            ตอบรับแล้ว ยังไม่ระบุพี่เลี้ยง · {unassigned.length} คน
+          </h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-amber-900 dark:text-amber-200">
+            นักศึกษาเป็นคนระบุพี่เลี้ยงเองจากหน้าแรกของตัวเองเมื่อเริ่มฝึกแล้ว — ระบุแล้วจะขึ้นในรายการด้านล่างให้ยืนยัน
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {unassigned.map((u) => (
+              <li
+                key={u.form_id}
+                data-testid={`mf-unassigned-${u.form_id}`}
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-xl bg-white px-3.5 py-2.5 text-sm text-gray-900 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <span className="font-semibold">{u.student_name || '—'}</span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">{u.student_code}</span>
+                <span className="min-w-0 break-words text-xs text-gray-600 dark:text-gray-400">
+                  {u.company_name || '—'}
+                </span>
+                <span className="text-xs text-gray-600 dark:text-gray-400">
+                  {u.start_date ? `เริ่มฝึก ${formatThaiDate(u.start_date)}` : 'ยังไม่มีวันเริ่มฝึก'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {!loadError && mentors.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 p-10 text-center text-sm text-gray-600 dark:text-gray-400">
           ยังไม่มีพี่เลี้ยงในความดูแลของท่าน
@@ -362,6 +445,7 @@ const MentorFollowup: React.FC = () => {
               />
             </div>
             {filterBtn('all', 'ทั้งหมด')}
+            {filterBtn('unconfirmed', `รอยืนยัน (${summary.unconfirmed})`)}
             {filterBtn('pending', 'มีงานค้าง')}
             {filterBtn('never_login', 'ไม่เคยเปิดลิงก์')}
             {filterBtn('silent', 'เงียบหลังเตือนครบ')}
@@ -391,9 +475,9 @@ const MentorFollowup: React.FC = () => {
                             <span
                               data-testid={`mf-inactive-${m.mentor_id}`}
                               title={INACTIVE_MENTOR_HINT}
-                              className="rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
+                              className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200"
                             >
-                              บัญชียังไม่เปิดใช้
+                              รอยืนยัน
                             </span>
                           )}
                         </div>
@@ -501,6 +585,18 @@ const MentorFollowup: React.FC = () => {
 
                     {/* ปุ่ม */}
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:mt-0 lg:w-56 lg:shrink-0 lg:flex-col">
+                      {/* รอยืนยัน: เจ้าหน้าที่เท่านั้นที่ยืนยันได้ (เซิร์ฟเวอร์ 403 กับบทบาทอื่น) — ปุ่มนี้มาก่อนปุ่มเตือนที่ยังกดไม่ได้ */}
+                      {canEdit && !m.is_active && (
+                        <Button
+                          size="sm"
+                          data-testid={`mf-confirm-${m.mentor_id}`}
+                          icon={<UserCheck className="h-4 w-4" />}
+                          onClick={() => setConfirmTarget(m)}
+                          className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"
+                        >
+                          ยืนยันและส่งลิงก์
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         data-testid={`mf-remind-${m.mentor_id}`}
@@ -540,6 +636,30 @@ const MentorFollowup: React.FC = () => {
           )}
         </>
       ) : null}
+
+      <ConfirmDialog
+        open={confirmTarget !== null}
+        title="ยืนยันพี่เลี้ยงและส่งลิงก์เข้าระบบ"
+        confirmLabel="ยืนยัน เปิดบัญชีและส่งลิงก์"
+        cancelLabel="กลับไปตรวจ"
+        confirmTestId="mf-confirm-submit"
+        cancelTestId="mf-confirm-cancel"
+        busy={busy}
+        onConfirm={handleConfirmMentor}
+        onCancel={() => setConfirmTarget(null)}
+        message={
+          <ConfirmSummary
+            lead="ข้อมูลนี้นักศึกษาเป็นคนพิมพ์ — ตรวจว่าเป็นพนักงานของสถานประกอบการจริงก่อนยืนยัน คนนี้จะตรวจงานและประเมินผลนักศึกษาได้"
+            rows={[
+              { label: 'พี่เลี้ยง', value: confirmTarget?.name ?? '' },
+              { label: 'ส่งลิงก์ไปที่อีเมล', value: confirmTarget?.email ?? '' },
+              { label: 'สถานประกอบการ', value: confirmTarget?.company_name ?? '—' },
+              { label: 'นักศึกษา', value: confirmTarget?.students.map((s) => s.student_name).join(', ') ?? '' },
+            ]}
+            lockNote="ยืนยันแล้วนักศึกษาแก้พี่เลี้ยงเองไม่ได้ · อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้"
+          />
+        }
+      />
 
       <ConfirmDialog
         open={remindTarget !== null}

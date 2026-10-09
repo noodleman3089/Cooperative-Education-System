@@ -215,18 +215,11 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await expect(companyPage.getByTestId('al-gone')).toBeVisible();
       await walk.step(companyPage, 'บริษัท(ลิงก์)', 'เปิดลิงก์เดิมซ้ำ — หน้า "ลิงก์ถูกใช้ตอบไปแล้ว"');
 
-      // ───────── นักศึกษา: ระบุพี่เลี้ยง (บริษัทตอบทางลิงก์ไม่ได้ระบุมา) ─────────
+      // ───────── นักศึกษา: รอเจ้าหน้าที่ยืนยัน (ไม่ถามพี่เลี้ยงในขั้นนี้ — ระบุหลังได้ที่ฝึกงาน) ─────────
       await loginAs(page, 'student2');
-      await expect(page.getByTestId('mentor-form')).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — บริษัทตอบรับแล้ว การ์ดให้ระบุพี่เลี้ยงก่อนเจ้าหน้าที่จะรับเข้าฝึก');
-
-      await page.getByTestId('mentor-name').fill('สุรเดช ใจดี');
-      await page.getByTestId('mentor-email').fill('mentor-walk@example.com');
-      await page.getByTestId('mentor-phone').fill('0812223333');
-      await page.getByTestId('mentor-position').fill('Supervisor');
-      await page.getByTestId('mentor-submit').click();
       await expect(page.getByTestId('status-card')).toHaveAttribute('data-state', 'wait-confirm');
-      await walk.step(page, 'นักศึกษา', 'กรอกพี่เลี้ยงแล้วกดบันทึก — การ์ดเปลี่ยนเป็นรอเจ้าหน้าที่ยืนยัน');
+      await expect(page.getByTestId('mentor-form')).toHaveCount(0);
+      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — บริษัทตอบรับแล้ว การ์ดบอกว่ารอเจ้าหน้าที่ยืนยัน ไม่ต้องทำอะไร');
       await logout(page);
 
       // ───────── เจ้าหน้าที่: รับแบบตอบรับ ─────────
@@ -236,11 +229,11 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
 
       await page.getByTestId(`review-acceptance-${formId}`).click();
       await expect(page.getByTestId('acceptance-source-link')).toBeVisible();
-      await walk.step(page, 'เจ้าหน้าที่', 'กด "ตรวจแบบตอบรับ" — เห็นว่าบริษัทตอบผ่านลิงก์ พร้อมข้อมูลพี่เลี้ยงที่นักศึกษาระบุ');
+      await walk.step(page, 'เจ้าหน้าที่', 'กด "ตรวจแบบตอบรับ" — เห็นว่าบริษัทตอบผ่านลิงก์ รับได้เลยโดยไม่ต้องมีพี่เลี้ยง');
 
       await page.getByTestId('acceptance-approve-submit').click();
       await expect(page.getByTestId('acceptance-approve-confirm')).toBeVisible();
-      await walk.step(page, 'เจ้าหน้าที่', 'กด "รับแบบตอบรับ" — กล่องยืนยัน (เปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญ)');
+      await walk.step(page, 'เจ้าหน้าที่', 'กด "รับแบบตอบรับ" — กล่องยืนยัน (นักศึกษา บริษัท วันเริ่มงาน)');
 
       await page.getByTestId('acceptance-approve-confirm').click();
       await expect(page.getByText(/รับแบบตอบรับเรียบร้อยแล้ว/)).toBeVisible();
@@ -250,7 +243,43 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       // ───────── นักศึกษา: เห็นผล ─────────
       await loginAs(page, 'student2');
       await expect(placementCard(page).getByText('สถานประกอบการตอบรับแล้ว', { exact: false })).toBeVisible();
-      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — การ์ดแสดงว่าสถานประกอบการตอบรับแล้ว เข้าสู่ขั้นเตรียมปฏิบัติงาน');
+      await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'none');
+      await page.getByTestId('mentor-card').scrollIntoViewIfNeeded();
+      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — ได้ที่ฝึกงานแล้ว การ์ด "ที่ฝึกงานของคุณ" เตือนเรื่องระบบทะเบียนและให้ระบุพี่เลี้ยงเมื่อเริ่มฝึก');
+
+      // ───────── นักศึกษา: ระบุพี่เลี้ยง (หลังเริ่มฝึก) ─────────
+      await page.getByTestId('mentor-open').click();
+      await page.getByTestId('mentor-name').fill('สุรเดช ใจดี');
+      await page.getByTestId('mentor-email').fill('mentor-walk@example.com');
+      await page.getByTestId('mentor-phone').fill('0812223333');
+      await page.getByTestId('mentor-position').fill('Supervisor');
+      await walk.step(page, 'นักศึกษา', 'กด "ระบุพี่เลี้ยง" — กรอกชื่อ อีเมล เบอร์โทรของพี่เลี้ยง');
+      await page.getByTestId('mentor-submit').click();
+      await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'unconfirmed');
+      await walk.step(page, 'นักศึกษา', 'บันทึกแล้ว — การ์ดบอกว่ารอเจ้าหน้าที่ยืนยันพี่เลี้ยง ยังแก้ได้');
+      await logout(page);
+
+      // ───────── เจ้าหน้าที่: ยืนยันพี่เลี้ยง ─────────
+      await loginAs(page, 'staff1');
+      await goToMenu(page, 'mentor_followup');
+      const mentorId = await dbValue<number>('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [formId]);
+      await expect(page.getByTestId(`mf-inactive-${mentorId}`)).toHaveText('รอยืนยัน');
+      await walk.step(page, 'เจ้าหน้าที่', 'เมนู "ติดตามพี่เลี้ยง" — พี่เลี้ยงที่นักศึกษาระบุขึ้นป้ายรอยืนยัน');
+
+      await page.getByTestId(`mf-confirm-${mentorId}`).click();
+      await expect(page.getByTestId('mf-confirm-submit')).toBeVisible();
+      await walk.step(page, 'เจ้าหน้าที่', 'กด "ยืนยันและส่งลิงก์" — กล่องยืนยันบอกชื่อ อีเมล บริษัท นักศึกษา');
+
+      await page.getByTestId('mf-confirm-submit').click();
+      await expect(page.getByTestId(`mf-inactive-${mentorId}`)).toHaveCount(0);
+      await walk.step(page, 'เจ้าหน้าที่', 'ยืนยันแล้ว — บัญชีพี่เลี้ยงเปิด ระบบส่งลิงก์เข้าระบบไปที่อีเมลพี่เลี้ยง');
+      await logout(page);
+
+      // ───────── นักศึกษา: เห็นว่าพี่เลี้ยงถูกยืนยันแล้ว ─────────
+      await loginAs(page, 'student2');
+      await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'confirmed');
+      await page.getByTestId('mentor-card').scrollIntoViewIfNeeded();
+      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — พี่เลี้ยงถูกยืนยันแล้ว แก้เองไม่ได้อีก');
     } finally {
       await walk.finish();
       await companyCtx.close();

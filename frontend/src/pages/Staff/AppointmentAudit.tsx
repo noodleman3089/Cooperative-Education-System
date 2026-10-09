@@ -31,6 +31,8 @@ interface AppointmentRow {
   student_time?: string;
   mentor_time?: string;
   mentor_email?: string | null;
+  /** ทำไมยังไม่มีปลายทางอีเมล — `mentor_email` มีค่าเฉพาะ `confirmed` */
+  mentor_status?: 'none' | 'unconfirmed' | 'confirmed';
   tour_requested?: boolean;
   visit_number?: number;
   // ชื่อสถานะต้องตรงกับ supervision_appointments.status ใน backend — เดิมหน้านี้ใช้ชื่อที่
@@ -325,8 +327,13 @@ export const AppointmentAudit: React.FC = () => {
                         {/* ปลายทางอีเมล */}
                         <td className="p-3.5 font-mono">
                           {hasNoEmail ? (
-                            <span className="text-red-600 dark:text-red-400 font-semibold">
-                              — ไม่มีอีเมลในทะเบียน
+                            <span className="font-sans text-red-600 dark:text-red-400 font-semibold">
+                              {/* เหตุที่ส่งไม่ได้มาจากเซิร์ฟเวอร์ (`mentor_status`) — พี่เลี้ยงถูกระบุหลังเริ่มฝึกและต้องผ่านเจ้าหน้าที่ยืนยันก่อน */}
+                              {a.mentor_status === 'unconfirmed'
+                                ? '— พี่เลี้ยงยังรอยืนยัน (หน้าติดตามพี่เลี้ยง)'
+                                : a.mentor_status === 'none'
+                                  ? '— นักศึกษายังไม่ระบุพี่เลี้ยง'
+                                  : '— ไม่มีอีเมลในทะเบียน'}
                             </span>
                           ) : (
                             <span className="text-gray-700 dark:text-gray-300">

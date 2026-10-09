@@ -145,10 +145,9 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
     await page.getByTestId('proof-open').click();
 
-    // Fill the Placement Reporting form
-    await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('สุรเดช ใจดี'); // Mentor Name
-    await page.locator('input[placeholder="mentor@company.com"]').fill('suradech@seagate.com'); // Mentor Email
-    await page.locator('input[type="tel"]').fill('0812223333'); // Mentor Phone
+    // Fill the Placement Reporting form — ไม่มีช่องพี่เลี้ยงแล้ว (พี่เลี้ยงระบุหลังได้ที่ฝึกงาน · ขั้น 5 2026-10-09)
+    await expect(page.getByTestId('proof-form').locator('input[type="email"], input[type="tel"]')).toHaveCount(0);
+    await expect(page.getByTestId('proof-form')).not.toContainText('ชื่อ-นามสกุล พี่เลี้ยง');
     await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
@@ -156,8 +155,6 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     await page.getByTestId('proof-signed-date').fill(
       new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
     );
-    await page.locator('input[placeholder*="Supervisor"]').fill('Engineering Supervisor'); // Mentor Position
-    await page.locator('input[placeholder*="Engineering"]').fill('QA Department'); // Mentor Dept
 
     // Prepare mock evidence file for upload
     const evidencePath = path.resolve(process.cwd(), 'e2e/fixtures/mock_evidence.png');
@@ -167,8 +164,8 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     await page.locator('button:has-text("ส่งรายงานตัวเข้าปฏิบัติงาน")').click();
     // ส่งแล้วแก้เองไม่ได้ — ต้องผ่านกล่องยืนยันที่แสดงค่าที่จะส่งจริง (2026-09-21)
     const summary = page.getByTestId('confirm-summary');
-    await expect(summary).toContainText('suradech@seagate.com'); // ระบบส่งลิงก์เชิญไปที่อีเมลนี้
-    await expect(summary).toContainText('คุณสมชาย ผู้จัดการฝ่ายบุคคล'); // พิมพ์ลงหนังสือส่งตัว
+    await expect(summary).not.toContainText('พี่เลี้ยง'); // การส่งแบบตอบรับไม่เกี่ยวกับพี่เลี้ยง ไม่มีลิงก์เชิญออก
+    await expect(summary).toContainText('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await expect(summary).toContainText('mock_evidence.png');
     // กลับไปแก้ = ไม่มีอะไรถูกส่ง ข้อมูลที่กรอกยังอยู่
     await page.getByTestId('proof-confirm-cancel').click();
@@ -179,7 +176,7 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
         [studentId]
       )).rowCount
     ).toBe(0);
-    await expect(page.locator('input[placeholder="mentor@company.com"]')).toHaveValue('suradech@seagate.com');
+    await expect(page.getByTestId('proof-signer-name')).toHaveValue('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
 
     await page.locator('button:has-text("ส่งรายงานตัวเข้าปฏิบัติงาน")').click();
     await page.getByTestId('proof-confirm').click();

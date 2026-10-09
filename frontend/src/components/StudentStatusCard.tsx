@@ -23,7 +23,6 @@ export type StatusCardState =
   | 'returned'
   | 'send'
   | 'wait-company'
-  | 'add-mentor'
   | 'wait-confirm'
   | 'company-rejected'
   | 'rejected';
@@ -38,6 +37,8 @@ export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm,
     phone?: string | null;
     position?: string | null;
     department?: string | null;
+    /** เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว (บัญชีเปิด) — false = รอยืนยัน นักศึกษายังแก้ได้ */
+    confirmed?: boolean;
   } | null;
 };
 
@@ -47,7 +48,6 @@ const TONE: Record<StatusCardState, Tone> = {
   'submit-paper': 'act',
   returned: 'act',
   send: 'act',
-  'add-mentor': 'act',
   'company-rejected': 'act',
   rejected: 'act',
   'wait-staff': 'wait',
@@ -77,20 +77,19 @@ const ACTIVE_STEP: Record<StatusCardState, number> = {
   send: 3,
   'wait-company': 4,
   returned: 4,
-  'add-mentor': 5,
-  'wait-confirm': 6,
+  'wait-confirm': 5,
   // เริ่มขั้น 1 ใหม่ — ใบเดิมปิดแล้ว
   'company-rejected': 0,
   rejected: 0,
 };
 
+// ⛔ ไม่มีขั้น "ระบุพี่เลี้ยง" — พี่เลี้ยงระบุหลังได้ที่ฝึกงานแล้ว (การ์ด "ที่ฝึกงานของคุณ") ไม่ขวางการขอที่ฝึกงาน
 const STEPS = [
   'ยื่นคำร้อง (เอกสาร 1)',
   'เจ้าหน้าที่รับคำร้อง ออกเลขหนังสือ',
   'คณบดีลงนาม',
   'ส่งหนังสือให้บริษัท',
   'บริษัทตอบรับ',
-  'ระบุพี่เลี้ยง',
   'เจ้าหน้าที่ยืนยัน',
 ];
 
@@ -155,10 +154,6 @@ interface StudentStatusCardProps {
   requestForm: ReactNode;
   /** กล่องส่งอีเมล `company-mail-*` — หน้าจอเลือกแบบเปิด/พับตามสถานะเอง */
   mailBox: ReactNode;
-  /** ฟอร์มระบุพี่เลี้ยง `mentor-*` — บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยงมา (add-mentor เปิดเสมอ · wait-confirm เปิดเมื่อกดแก้) */
-  mentorForm: ReactNode;
-  /** ปุ่ม "แก้ข้อมูลพี่เลี้ยง" ของ wait-confirm — null เมื่อแก้ไม่ได้ (นักศึกษาส่งเอกสารเอง พี่เลี้ยงมากับแบบตอบรับแล้ว) */
-  mentorEditToggle: ReactNode;
   /** ฟอร์มรายงานผลของนักศึกษา `proof-*` — ต้องส่งเป็น null ถ้ายังไม่ควรเห็น */
   proofForm: ReactNode;
   proofOpen: boolean;
@@ -176,8 +171,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   evidenceHref,
   requestForm,
   mailBox,
-  mentorForm,
-  mentorEditToggle,
   proofForm,
   proofOpen,
   onOpenProof,
@@ -198,7 +191,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
     switch (state) {
       case 'wait-dean':
         return intent.officer_document_no ? <Pill>เลขที่หนังสือ {intent.officer_document_no}</Pill> : null;
-      case 'add-mentor':
       case 'wait-confirm':
         return intent.acceptance_source === 'link' ? (
           <Pill tone="good">บริษัทตอบรับผ่านลิงก์</Pill>
@@ -310,52 +302,21 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
             {mailBox}
           </>
         );
-      case 'add-mentor':
-        return (
-          <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
-              {company} ตอบรับแล้ว ระบุพี่เลี้ยงของคุณ
-            </h2>
-            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-              บริษัทตอบรับทางลิงก์โดยไม่ได้ระบุพนักงานที่ปรึกษา (พี่เลี้ยง) — กรอกชื่อและอีเมลของพี่เลี้ยงที่คุณจะทำงานด้วย
-              เจ้าหน้าที่ต้องเห็นข้อมูลนี้ก่อนจึงจะรับเข้าฝึกงานได้ · ระบบจะส่งลิงก์เข้าระบบให้พี่เลี้ยงหลังเจ้าหน้าที่รับเท่านั้น
-            </p>
-            {mentorForm}
-            {evidenceHref && (
-              <a
-                href={evidenceHref}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="open-acceptance-evidence"
-                className="text-sm font-semibold text-brand-blue underline dark:text-blue-400"
-              >
-                ดูเอกสาร 2 ที่บริษัทแนบ
-              </a>
-            )}
-          </>
-        );
-      case 'wait-confirm': {
-        const tiles = [
-          intent.acceptance_signer_name && { label: 'ผู้อนุมัติ', value: intent.acceptance_signer_name },
-          intent.mentor?.name && { label: 'พี่เลี้ยง', value: intent.mentor.name },
-        ].filter((t): t is { label: string; value: string } => !!t);
+      case 'wait-confirm':
         return (
           <>
             <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
               บริษัทตอบรับแล้ว รอเจ้าหน้าที่ยืนยัน
             </h2>
-            {tiles.length > 0 && (
+            {intent.acceptance_signer_name && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {tiles.map((t) => (
-                  <Tile key={t.label} label={t.label} value={t.value} />
-                ))}
+                <Tile label="ผู้อนุมัติ" value={intent.acceptance_signer_name} />
               </div>
             )}
             <p className="text-sm text-gray-600 dark:text-gray-400">
               เจ้าหน้าที่ตรวจเอกสาร 2 ที่แนบมา แล้วรับเข้าฝึกงาน · ไม่ต้องทำอะไรตอนนี้
+              (พี่เลี้ยงระบุทีหลังได้เมื่อเริ่มฝึกแล้ว)
             </p>
-            {mentorEditToggle}
-            {mentorForm}
             {evidenceHref && (
               <a
                 href={evidenceHref}
@@ -369,7 +330,6 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
             )}
           </>
         );
-      }
       case 'company-rejected':
         return (
           <>
@@ -429,7 +389,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
               className="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-left transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
             >
               <span className="text-sm font-semibold text-gray-900 dark:text-white">บริษัทคืนเอกสารตอบรับมาที่ฉัน</span>
-              <span className="text-xs text-gray-600 dark:text-gray-400">กรอกพี่เลี้ยง + แนบเอกสาร 2 แทนบริษัท</span>
+              <span className="text-xs text-gray-600 dark:text-gray-400">แนบเอกสาร 2 แทนบริษัท</span>
             </button>
             <button
               type="button"
@@ -449,7 +409,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
   );
 };
 
-/** รายการ "ความคืบหน้าการขอที่ฝึกงาน" 7 ขั้น — ขั้นที่ทำแล้ว ✓ · ขั้นปัจจุบัน ● · ที่เหลือ ○ */
+/** รายการ "ความคืบหน้าการขอที่ฝึกงาน" 6 ขั้น — ขั้นที่ทำแล้ว ✓ · ขั้นปัจจุบัน ● · ที่เหลือ ○ */
 export const RequestProgress: React.FC<{ state: StatusCardState }> = ({ state }) => {
   const active = ACTIVE_STEP[state];
   return (

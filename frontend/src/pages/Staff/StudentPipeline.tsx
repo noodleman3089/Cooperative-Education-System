@@ -107,7 +107,6 @@ const STAGE_BAR: Record<string, string> = {
   await_dean: 'bg-purple-600',
   await_send: 'bg-amber-600',
   await_company: 'bg-gray-500',
-  await_mentor: 'bg-amber-600',
   await_officer_accept: 'bg-blue-800',
   accepted_prep: 'bg-emerald-600',
   on_placement: 'bg-emerald-600',

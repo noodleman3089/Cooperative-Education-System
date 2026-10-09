@@ -283,10 +283,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
     await page.getByTestId('proof-open').click();
 
-    // 4. Fill mentor onboarding form
-    await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('วิโรจน์ แสนดี');
-    await page.locator('input[placeholder="mentor@company.com"]').fill('wiroj@seagate.com');
-    await page.locator('input[type="tel"]').fill('0815554444');
+    // 4. Fill the placement reporting form (ไม่มีช่องพี่เลี้ยงแล้ว — ระบุหลังได้ที่ฝึกงาน)
     await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
@@ -294,8 +291,6 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await page.getByTestId('proof-signed-date').fill(
       new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
     );
-    await page.locator('input[placeholder*="Supervisor"]').fill('Senior Engineer');
-    await page.locator('input[placeholder*="Engineering"]').fill('Manufacturing');
 
     // ไฟล์ปลอม: ข้อความล้วนที่ตั้งชื่อลงท้าย .pdf — คุมด่าน magic bytes ของ multer
     // ซึ่งเป็นด่านเดียวกับที่การอัปโหลดคำร้อง (เอกสาร 1) จะพึ่ง ไม่เกี่ยวกับใบยินยอม
@@ -601,10 +596,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
       await page.getByTestId('proof-open').click();
 
-      // Fill in details
-      await page.locator('input[placeholder*="นายสมชาย ดีใจ"]').fill('สุรเดช ใจดี');
-      await page.locator('input[placeholder="mentor@company.com"]').fill('suradech@seagate.com');
-      await page.locator('input[type="tel"]').fill('0812223333');
+      // Fill in details (ไม่มีช่องพี่เลี้ยงแล้ว — ระบุหลังได้ที่ฝึกงาน)
       await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
       // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
       await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
@@ -612,8 +604,6 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       await page.getByTestId('proof-signed-date').fill(
         new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
       );
-      await page.locator('input[placeholder*="Supervisor"]').fill('Engineering Supervisor');
-      await page.locator('input[placeholder*="Engineering"]').fill('QA Department');
 
       // Upload oversized file
       await page.locator('input[type="file"]').setInputFiles(bigFilePath);

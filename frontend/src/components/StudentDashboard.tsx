@@ -49,8 +49,8 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
       if (intent.reject_reason) return 'returned';
       return intent.company_mail_sent_at ? 'wait-company' : 'send';
     case 'pending_officer_approval':
-      // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง — เจ้าหน้าที่กดรับไม่ได้จนกว่านักศึกษาจะระบุ
-      return intent.mentor?.name ? 'wait-confirm' : 'add-mentor';
+      // ได้แบบตอบรับแล้ว รอเจ้าหน้าที่ยืนยัน — พี่เลี้ยงไม่เกี่ยวกับขั้นนี้ (ระบุหลังได้ที่ฝึกงานแล้ว)
+      return 'wait-confirm';
     case 'company_rejected':
       return 'company-rejected';
     case 'rejected':
@@ -89,21 +89,16 @@ const StudentDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Manual Acceptance States
-  const [mentorName, setMentorName] = useState('');
-  const [mentorEmail, setMentorEmail] = useState('');
-  const [mentorPhone, setMentorPhone] = useState('');
-  const [mentorPosition, setMentorPosition] = useState('');
-  const [mentorDept, setMentorDept] = useState('');
   const [startDate, setStartDate] = useState('');
-  // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตามกระดาษ (ถูกพิมพ์ลงหนังสือส่งตัว · เจ้าหน้าที่ไม่ต้องคีย์ซ้ำ)
+  // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตามกระดาษ (เจ้าหน้าที่ไม่ต้องคีย์ซ้ำ)
   const [signerName, setSignerName] = useState('');
   const [signerPosition, setSignerPosition] = useState('');
   const [signedDate, setSignedDate] = useState('');
   const [proofError, setProofError] = useState<string | null>(null);
-  // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ + ระบบส่งลิงก์เชิญถึงอีเมลพี่เลี้ยง — ตรวจก่อนส่ง
+  // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ — ตรวจก่อนส่ง
   const [confirmingProof, setConfirmingProof] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
-  // ระบุพี่เลี้ยงหลังบริษัทตอบรับทางลิงก์ (`POST /intents/:id/mentor`)
+  // ระบุพี่เลี้ยงหลังได้ที่ฝึกงานแล้ว (ใบ `accepted` · `POST /intents/:id/mentor`) — แก้ได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง
   const [mentorSet, setMentorSet] = useState({ name: '', email: '', phone: '', position: '', department: '' });
   const [mentorSetOpen, setMentorSetOpen] = useState(false);
   const [mentorSetBusy, setMentorSetBusy] = useState(false);
@@ -283,8 +278,8 @@ const StudentDashboard: React.FC = () => {
     e.preventDefault();
     if (!activeIntent || !evidenceFile) return;
 
-    if (!mentorName || !mentorEmail || !mentorPhone || !startDate) {
-      setProofError('กรุณากรอกข้อมูลพี่เลี้ยงและระบุวันเริ่มงานให้ครบถ้วน');
+    if (!startDate) {
+      setProofError('กรุณาระบุวันเริ่มปฏิบัติงาน');
       return;
     }
     if (!signerName.trim() || !signerPosition.trim() || !signedDate) {
@@ -299,11 +294,6 @@ const StudentDashboard: React.FC = () => {
     if (!activeIntent || !evidenceFile) return;
 
     const formData = new FormData();
-    formData.append('name', mentorName);
-    formData.append('email', mentorEmail);
-    formData.append('phone', mentorPhone);
-    formData.append('position', mentorPosition);
-    formData.append('department', mentorDept);
     formData.append('start_date', startDate);
     formData.append('signer_name', signerName.trim());
     formData.append('signer_position', signerPosition.trim());
@@ -318,11 +308,6 @@ const StudentDashboard: React.FC = () => {
       setConfirmingProof(false);
       setProofOpen(false);
       // Reset states
-      setMentorName('');
-      setMentorEmail('');
-      setMentorPhone('');
-      setMentorPosition('');
-      setMentorDept('');
       setStartDate('');
       setSignerName('');
       setSignerPosition('');
@@ -748,7 +733,7 @@ const StudentDashboard: React.FC = () => {
         {
           id: '1.5',
           title: '1.5 สถานประกอบการตอบรับเข้าทำงาน',
-          description: 'เมื่อบริษัทตอบรับ ให้กรอกข้อมูลพี่เลี้ยงและอัปโหลดหลักฐานการตอบรับ',
+          description: 'บริษัทตอบรับผ่านลิงก์ในอีเมล หรือคุณอัปโหลดแบบตอบรับที่บริษัทคืนมา แล้วเจ้าหน้าที่ยืนยัน',
           status: step1_5Done ? 'completed' : step1_4Done ? 'active' : 'pending'
         }
       ]
@@ -1203,93 +1188,28 @@ const StudentDashboard: React.FC = () => {
           การรายงานผลการตอบรับเข้าปฏิบัติสหกิจศึกษา (Placement Reporting)
         </span>
         <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-          หากสถานประกอบการคืนเอกสารตอบรับกระดาษมาให้คุณ (นอกระบบ) กรุณากรอกรายละเอียดพี่เลี้ยง (Mentor)
-          กำหนดวันเริ่มงาน และอัปโหลดไฟล์หลักฐานเพื่อขึ้นทะเบียนแทนบริษัท
+          หากสถานประกอบการคืนเอกสารตอบรับกระดาษมาให้คุณ (นอกระบบ) กรุณาระบุวันเริ่มงาน
+          และอัปโหลดไฟล์หลักฐานเพื่อขึ้นทะเบียนแทนบริษัท · พี่เลี้ยงระบุทีหลังได้เมื่อเริ่มฝึกแล้ว
         </p>
       </div>
 
                   <form onSubmit={handleProofSubmit} className="space-y-3">
-                    <h4 className="text-xs font-bold text-gray-700 dark:text-gray-300">รายละเอียดพี่เลี้ยงผู้ดูแลสหกิจศึกษา</h4>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ชื่อ-นามสกุล พี่เลี้ยง *</label>
-                        <Input
-                          type="text"
-                          required
-                          disabled={submittingProof || reportingFail}
-                          value={mentorName}
-                          onChange={(e) => setMentorName(e.target.value)}
-                          placeholder="เช่น นายสมชาย ดีใจ" size="sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">อีเมล พี่เลี้ยง *</label>
-                        <Input
-                          type="email"
-                          required
-                          disabled={submittingProof || reportingFail}
-                          value={mentorEmail}
-                          onChange={(e) => setMentorEmail(e.target.value)}
-                          placeholder="mentor@company.com" size="sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">เบอร์โทรศัพท์ พี่เลี้ยง *</label>
-                        <Input
-                          type="tel"
-                          required
-                          disabled={submittingProof || reportingFail}
-                          value={mentorPhone}
-                          onChange={(e) => setMentorPhone(e.target.value)}
-                          placeholder="เช่น 0812345678" size="sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
-                        <Input
-                          type="date"
-                          required
-                          data-testid="proof-start-date"
-                          disabled={submittingProof || reportingFail}
-                          value={startDate}
-                          onChange={(e) => setStartDate(e.target.value)} size="sm"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ตำแหน่งงาน พี่เลี้ยง (ไม่บังคับ)</label>
-                        <Input
-                          type="text"
-                          disabled={submittingProof || reportingFail}
-                          value={mentorPosition}
-                          onChange={(e) => setMentorPosition(e.target.value)}
-                          placeholder="เช่น Supervisor / HR Specialist" size="sm"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ฝ่าย / แผนก (ไม่บังคับ)</label>
-                        <Input
-                          type="text"
-                          disabled={submittingProof || reportingFail}
-                          value={mentorDept}
-                          onChange={(e) => setMentorDept(e.target.value)}
-                          placeholder="เช่น Engineering / Human Resources" size="sm"
-                        />
-                      </div>
+                    {/* ⛔ ไม่ถามพี่เลี้ยงที่นี่ — คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก ระบุที่การ์ด "ที่ฝึกงานของคุณ" เมื่อใบ accepted */}
+                    <div className="sm:max-w-xs">
+                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
+                      <Input
+                        type="date"
+                        required
+                        data-testid="proof-start-date"
+                        disabled={submittingProof || reportingFail}
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)} size="sm"
+                      />
                     </div>
 
                     <div className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
                       <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                        ผู้ลงนามบนแบบตอบรับ (กรอกตามที่ปรากฏบนกระดาษ) — ชื่อนี้จะถูกพิมพ์ลงหนังสือส่งตัว
+                        ผู้ลงนามบนแบบตอบรับ (กรอกตามที่ปรากฏบนกระดาษ)
                       </p>
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
@@ -1362,8 +1282,28 @@ const StudentDashboard: React.FC = () => {
     </div>
   );
 
-  // ฟอร์มระบุพี่เลี้ยง — บริษัทตอบรับทางลิงก์ไม่ได้ระบุพี่เลี้ยงมา (ตัดสหกิจ 07 ฝั่งบริษัท 2026-10-05)
-  // ส่งได้จนกว่าเจ้าหน้าที่จะกดรับ · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่กดรับเท่านั้น จึงไม่มีอีเมลออกจากการกดตรงนี้
+  // ฟอร์มระบุพี่เลี้ยง — คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก จึงระบุได้เมื่อใบ `accepted` เท่านั้น (ขั้น 5 · 2026-10-09)
+  // แก้ได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่ยืนยันเท่านั้น จึงไม่มีอีเมลออกจากการกดตรงนี้
+  // สามสภาพ (`mentor-card` data-state): none = ยังไม่ระบุ · unconfirmed = รอเจ้าหน้าที่ยืนยัน · confirmed = ยืนยันแล้ว แก้เองไม่ได้
+  const mentorCardState: 'none' | 'unconfirmed' | 'confirmed' | null =
+    activeIntent?.status !== 'accepted'
+      ? null
+      : !intentMentor?.name
+        ? 'none'
+        : intentMentor.confirmed
+          ? 'confirmed'
+          : 'unconfirmed';
+  const openMentorForm = () => {
+    setMentorSet({
+      name: intentMentor?.name ?? '',
+      email: intentMentor?.email ?? '',
+      phone: intentMentor?.phone ?? '',
+      position: intentMentor?.position ?? '',
+      department: intentMentor?.department ?? '',
+    });
+    setMentorSetError(null);
+    setMentorSetOpen(true);
+  };
   const mentorFieldKeys = ['name', 'email', 'phone', 'position', 'department'] as const;
   const submitMentorSet = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1394,7 +1334,7 @@ const StudentDashboard: React.FC = () => {
     department: 'ฝ่าย / แผนก (ไม่บังคับ)',
   };
   const mentorFormEl =
-    statusState === 'add-mentor' || (statusState === 'wait-confirm' && mentorSetOpen) ? (
+    mentorSetOpen && (mentorCardState === 'none' || mentorCardState === 'unconfirmed') ? (
       <form
         data-testid="mentor-form"
         onSubmit={submitMentorSet}
@@ -1424,38 +1364,55 @@ const StudentDashboard: React.FC = () => {
           <Button type="submit" size="sm" data-testid="mentor-submit" disabled={mentorSetBusy}>
             {mentorSetBusy ? 'กำลังบันทึก...' : 'บันทึกข้อมูลพี่เลี้ยง'}
           </Button>
-          {statusState === 'wait-confirm' && (
-            <Button variant="secondary" size="sm" disabled={mentorSetBusy} onClick={() => setMentorSetOpen(false)}>
-              ยกเลิก
-            </Button>
-          )}
+          <Button variant="secondary" size="sm" disabled={mentorSetBusy} onClick={() => setMentorSetOpen(false)}>
+            ยกเลิก
+          </Button>
         </div>
       </form>
     ) : null;
-  // wait-confirm: แก้พี่เลี้ยงได้จนกว่าเจ้าหน้าที่จะกดรับ — เฉพาะใบที่บริษัทตอบทางลิงก์ (ทางนักศึกษาอัปโหลดเอง พี่เลี้ยงมากับแบบตอบรับแล้ว)
-  const mentorEditToggleEl =
-    statusState === 'wait-confirm' && statusIntent?.acceptance_source === 'link' && !mentorSetOpen ? (
-      <div>
-        <Button
-          variant="secondary"
-          size="sm"
-          data-testid="mentor-edit"
-          onClick={() => {
-            setMentorSet({
-              name: intentMentor?.name ?? '',
-              email: intentMentor?.email ?? '',
-              phone: intentMentor?.phone ?? '',
-              position: intentMentor?.position ?? '',
-              department: intentMentor?.department ?? '',
-            });
-            setMentorSetError(null);
-            setMentorSetOpen(true);
-          }}
-        >
-          แก้ข้อมูลพี่เลี้ยง
-        </Button>
-      </div>
-    ) : null;
+  // บล็อกพี่เลี้ยงในการ์ด "ที่ฝึกงานของคุณ" — โผล่เมื่อได้ที่ฝึกงานแล้วเท่านั้น และไม่ขวางขั้นไหนของเส้นทาง
+  const mentorCardEl = mentorCardState ? (
+    <div
+      data-testid="mentor-card"
+      data-state={mentorCardState}
+      className="flex flex-col gap-2.5 border-t border-gray-200 pt-3.5 dark:border-gray-700"
+    >
+      {mentorCardState === 'none' && (
+        <>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white">ยังไม่ได้ระบุพี่เลี้ยง</p>
+          <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+            เมื่อเริ่มปฏิบัติงานและทราบชื่อพนักงานที่ปรึกษา (พี่เลี้ยง) แล้ว ให้ระบุที่นี่ —
+            เจ้าหน้าที่จะยืนยันก่อนระบบส่งลิงก์เข้าใช้งานให้พี่เลี้ยง
+          </p>
+        </>
+      )}
+      {mentorCardState === 'unconfirmed' && (
+        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+          <span className="font-semibold text-amber-700 dark:text-amber-400">รอเจ้าหน้าที่ยืนยันพี่เลี้ยง</span> —
+          พี่เลี้ยงจะได้รับลิงก์เข้าใช้งานหลังเจ้าหน้าที่ยืนยัน · ข้อมูลผิดแก้ได้จนกว่าจะถูกยืนยัน
+        </p>
+      )}
+      {mentorCardState === 'confirmed' && (
+        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+          <span className="font-semibold text-emerald-700 dark:text-emerald-400">เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว</span> —
+          หากข้อมูลไม่ถูกต้อง กรุณาแจ้งเจ้าหน้าที่สหกิจศึกษา
+        </p>
+      )}
+      {mentorCardState !== 'confirmed' && !mentorSetOpen && (
+        <div>
+          <Button
+            variant={mentorCardState === 'none' ? 'primary' : 'secondary'}
+            size="sm"
+            data-testid={mentorCardState === 'none' ? 'mentor-open' : 'mentor-edit'}
+            onClick={openMentorForm}
+          >
+            {mentorCardState === 'none' ? 'ระบุพี่เลี้ยง' : 'แก้ข้อมูลพี่เลี้ยง'}
+          </Button>
+        </div>
+      )}
+      {mentorFormEl}
+    </div>
+  ) : null;
 
   return (
     <div className="space-y-6 page-enter">
@@ -1503,8 +1460,6 @@ const StudentDashboard: React.FC = () => {
                     ? renderMailBox(activeIntent, 'wait')
                     : null
           }
-          mentorForm={mentorFormEl}
-          mentorEditToggle={mentorEditToggleEl}
           proofForm={proofFormEl}
           proofOpen={proofOpen}
           onOpenProof={() => setProofOpen((open) => !open)}
@@ -1538,6 +1493,7 @@ const StudentDashboard: React.FC = () => {
         <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white">ที่ฝึกงานของคุณ</h3>
           {activeIntent?.company_name_th ? (
+            <>
             <div className="flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
                 <Building2 className="h-5 w-5" />
@@ -1574,6 +1530,17 @@ const StudentDashboard: React.FC = () => {
                 />
               </div>
             </div>
+            {/* ระบบทะเบียนเป็นของมหาวิทยาลัย ระบบนี้ไม่ตรวจว่าลงแล้วหรือยัง — เตือนอย่างเดียว (เจ้าหน้าที่สหกิจยืนยันเหตุผล 2026-10-09) */}
+            {activeIntent.status === 'accepted' && (
+              <p
+                data-testid="registry-reminder"
+                className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้
+              </p>
+            )}
+            {mentorCardEl}
+            </>
           ) : (
             <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
               ยังไม่ได้เลือกสถานประกอบการ — ยื่นได้จากเมนู “ยื่นคำร้องขอหนังสือ”
@@ -1779,15 +1746,7 @@ const StudentDashboard: React.FC = () => {
               lead={`${activeIntent?.company_name_th ?? ''} · เริ่มงาน ${startDate ? formatThaiDate(startDate) : '—'}`}
               groups={[
                 {
-                  title: 'พนักงานที่ปรึกษา (พี่เลี้ยง) · ระบบจะส่งลิงก์เชิญไปที่อีเมลนี้',
-                  rows: [
-                    { label: 'ชื่อ', value: mentorName.trim() },
-                    { label: 'อีเมล', value: mentorEmail.trim() },
-                    { label: 'โทรศัพท์', value: mentorPhone.trim() },
-                  ],
-                },
-                {
-                  title: 'ผู้ลงนามบนแบบตอบรับ · พิมพ์ลงหนังสือส่งตัว',
+                  title: 'ผู้ลงนามบนแบบตอบรับ',
                   rows: [
                     { label: 'ชื่อ', value: signerName.trim() },
                     { label: 'ตำแหน่ง', value: signerPosition.trim() },

@@ -1024,13 +1024,13 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     test.setTimeout(120_000);
     await addMentor1Work(fx);
     await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor1]);
-    const hint = 'บัญชียังไม่เปิดใช้ — รอเจ้าหน้าที่กดรับแบบตอบรับของสถานประกอบการ';
+    const hint = 'ยังไม่ได้ยืนยันพี่เลี้ยง — เจ้าหน้าที่ต้องกด "ยืนยันและส่งลิงก์" ก่อน';
 
     await loginAs(page, 'staff1');
     await goToMenu(page, 'mentor_followup');
 
-    // mentor1 มีงานค้าง ปุ่มเตือนจึงเคยกดได้ — ตอนนี้ต้องปิดเพราะบัญชียังไม่เปิดใช้
-    await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('บัญชียังไม่เปิดใช้');
+    // mentor1 มีงานค้าง ปุ่มเตือนจึงเคยกดได้ — ตอนนี้ต้องปิดเพราะบัญชียังไม่เปิดใช้ (= รอเจ้าหน้าที่ยืนยัน)
+    await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');
     await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toBeDisabled();
     await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toHaveAttribute('title', hint);
     await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toBeDisabled();
@@ -1039,5 +1039,61 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     // ตัวควบคุม: พี่เลี้ยงที่เปิดใช้แล้ว ไม่มีป้าย และปุ่มส่งลิงก์กดได้
     await expect(page.getByTestId(`mf-inactive-${fx.mentor2}`)).toHaveCount(0);
     await expect(page.getByTestId(`mf-sendlink-${fx.mentor2}`)).toBeEnabled();
+    await expect(page.getByTestId(`mf-confirm-${fx.mentor2}`)).toHaveCount(0);
+  });
+
+  test('F14: หน้าจอ — เจ้าหน้าที่ยืนยันพี่เลี้ยงที่รอยืนยัน (ผ่านกล่องยืนยัน · ยกเลิก = ไม่เกิดอะไร) · รายการ "ยังไม่ระบุพี่เลี้ยง" · บทบาทอื่นไม่มีปุ่มยืนยัน', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    // mentor1 = นักศึกษาระบุแล้ว รอยืนยัน (บัญชีปิด) · ใบของ mentor2 = ยังไม่ระบุพี่เลี้ยง
+    await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor1]);
+    await dbExec('DELETE FROM mentor_login_tokens');
+    const unassignedForms = await dbRows<{ form_id: number }>(
+      `UPDATE intent_forms SET mentor_id = NULL WHERE mentor_id = $1 AND status = 'accepted' RETURNING form_id`,
+      [fx.mentor2]
+    );
+    expect(unassignedForms.length).toBeGreaterThan(0);
+    const mentor1 = (await dbRow<{ name: string; email: string }>(
+      'SELECT m.name, u.email FROM mentors m JOIN users u ON u.user_id = m.mentor_id WHERE m.mentor_id = $1',
+      [fx.mentor1]
+    ))!;
+    const tokens = async () =>
+      Number(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens WHERE user_id = $1', [fx.mentor1]));
+
+    // อาจารย์และหัวหน้าสาขาเห็นป้ายรอยืนยัน แต่ไม่มีปุ่มยืนยัน (เซิร์ฟเวอร์ 403 อยู่แล้ว)
+    for (const who of ['advisor1', 'head1'] as const) {
+      await loginAs(page, who);
+      await goToMenu(page, 'mentor_followup');
+      await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');
+      await expect(page.locator('[data-testid^="mf-confirm-"]')).toHaveCount(0);
+    }
+
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'mentor_followup');
+
+    // ใบที่ตอบรับแล้วแต่ยังไม่ระบุพี่เลี้ยง ขึ้นเป็นรายการแยก ครบทุกใบ
+    await expect(page.getByTestId('mf-unassigned')).toContainText(`ยังไม่ระบุพี่เลี้ยง · ${unassignedForms.length} คน`);
+    for (const f of unassignedForms) await expect(page.getByTestId(`mf-unassigned-${f.form_id}`)).toBeVisible();
+
+    // กดยืนยัน → กล่องยืนยันบอกว่าทำกับใคร ส่งลิงก์ไปไหน · ยกเลิก = ยังไม่มีอะไรเกิด
+    await page.getByTestId(`mf-confirm-${fx.mentor1}`).click();
+    const summary = page.getByTestId('confirm-summary');
+    await expect(summary).toContainText(mentor1.name);
+    await expect(summary).toContainText(mentor1.email);
+    await page.getByTestId('mf-confirm-cancel').click();
+    await expect(page.getByTestId('mf-confirm-submit')).toHaveCount(0);
+    expect(await dbValue<boolean>('SELECT is_active FROM users WHERE user_id = $1', [fx.mentor1])).toBe(false);
+    expect(await tokens()).toBe(0);
+
+    // ยืนยันจริง → บัญชีเปิด มีลิงก์หนึ่งใบ ป้ายหาย ปุ่มยืนยันหาย ปุ่มส่งลิงก์ใหม่กดได้
+    await page.getByTestId(`mf-confirm-${fx.mentor1}`).click();
+    await page.getByTestId('mf-confirm-submit').click();
+    await expect(page.getByText(`ยืนยัน ${mentor1.name} เป็นพี่เลี้ยงแล้ว`, { exact: false })).toBeVisible();
+    await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveCount(0);
+    await expect(page.getByTestId(`mf-confirm-${fx.mentor1}`)).toHaveCount(0);
+    await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toBeEnabled();
+    expect(await dbValue<boolean>('SELECT is_active FROM users WHERE user_id = $1', [fx.mentor1])).toBe(true);
+    expect(await tokens()).toBe(1);
   });
 });

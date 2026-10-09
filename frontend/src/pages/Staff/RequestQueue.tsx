@@ -677,7 +677,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                   className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
                   data-testid="acceptance-signer"
                 >
-                  <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ (ชื่อนี้ถูกพิมพ์ลงหนังสือส่งตัว)</p>
+                  <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ</p>
                   <p>ชื่อผู้อนุมัตินักศึกษา: <strong>{reviewingAcceptance.acceptance_signer_name || '—'}</strong></p>
                   <p>ตำแหน่ง: <strong>{reviewingAcceptance.acceptance_signer_position || '—'}</strong></p>
                   <p>วันที่บนแบบตอบรับ: <strong>{reviewingAcceptance.acceptance_signed_date ? formatThaiDate(reviewingAcceptance.acceptance_signed_date.slice(0, 10)) : '—'}</strong></p>
