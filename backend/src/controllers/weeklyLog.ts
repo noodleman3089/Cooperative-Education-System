@@ -280,15 +280,23 @@ export class WeeklyLogController {
 
       const log = checkRes.rows[0];
 
-      await query(
+      const updated = await query(
         `UPDATE weekly_logs
          SET mentor_certified_by = $1,
              mentor_certified_at = CURRENT_TIMESTAMP,
              returned_comment = NULL,
              updated_at = CURRENT_TIMESTAMP
-         WHERE weekly_log_id = $2`,
+         WHERE weekly_log_id = $2 AND status = 'submitted'
+         RETURNING weekly_log_id`,
         [mentorUserId, logId]
       );
+
+      // เดิมไม่ดูสถานะ — ยิง API ตรงแล้วรับรอง/ส่งกลับใบร่างได้ (รายวันตรวจอยู่แล้ว)
+      // ใบที่รับรองแล้วสถานะยังเป็น submitted จึงยังส่งกลับได้ — ทางแก้เดียวเมื่อพี่เลี้ยงกดรับรองผิด
+      if ((updated.rowCount ?? 0) === 0) {
+        res.status(409).json({ message: 'บันทึกนี้ยังไม่ได้ส่ง หรือถูกส่งกลับให้แก้ไขแล้ว' });
+        return;
+      }
 
       await writeAudit(
         {
@@ -351,16 +359,24 @@ export class WeeklyLogController {
 
       const log = checkRes.rows[0];
 
-      await query(
+      const updated = await query(
         `UPDATE weekly_logs
          SET status = 'returned',
              returned_comment = $1,
              mentor_certified_by = NULL,
              mentor_certified_at = NULL,
              updated_at = CURRENT_TIMESTAMP
-         WHERE weekly_log_id = $2`,
+         WHERE weekly_log_id = $2 AND status = 'submitted'
+         RETURNING weekly_log_id`,
         [returned_comment.trim(), logId]
       );
+
+      // เดิมไม่ดูสถานะ — ยิง API ตรงแล้วรับรอง/ส่งกลับใบร่างได้ (รายวันตรวจอยู่แล้ว)
+      // ใบที่รับรองแล้วสถานะยังเป็น submitted จึงยังส่งกลับได้ — ทางแก้เดียวเมื่อพี่เลี้ยงกดรับรองผิด
+      if ((updated.rowCount ?? 0) === 0) {
+        res.status(409).json({ message: 'บันทึกนี้ยังไม่ได้ส่ง หรือถูกส่งกลับให้แก้ไขแล้ว' });
+        return;
+      }
 
       await writeAudit(
         {
