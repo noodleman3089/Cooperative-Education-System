@@ -6,30 +6,27 @@ import { query } from '../config/database';
  *   · บริษัทตอบผ่านลิงก์  `PublicAcceptanceController.accept`
  * ⛔ ห้ามคัดลอกไปตรวจซ้ำที่อื่น — สองทางต้องตรวจเท่ากันทุกข้อ แก้ที่นี่แล้วมีผลทั้งคู่
  *
- * ตรวจตามลำดับ: มีไฟล์ → ช่องพี่เลี้ยง/วันเริ่มงาน → ใบมีอยู่ + คณบดีลงนามหนังสือแล้ว (409)
+ * ตรวจตามลำดับ: มีไฟล์ → วันเริ่มงาน → ใบมีอยู่ + คณบดีลงนามหนังสือแล้ว (409)
  * → ผู้ลงนาม (ชื่อ · ตำแหน่ง · วันที่ รูปแบบ ไม่อนาคต ไม่ก่อนวันคณบดีลงนาม)
  * · คืนธง `submittedLate` (เลยกำหนด ๑๕ วันทำการ) ให้ผู้เรียกเก็บลงใบ — เลยกำหนดยังรับ แต่ติดธง
+ * ⛔ ไม่ตรวจและไม่รับช่องพี่เลี้ยงทั้งสองทาง — นักศึกษาระบุหลังใบ `accepted` ที่ `POST /intents/:id/mentor`
  */
 
 export interface AcceptanceInputMessages {
   noFile: string;
   requiredFields: string;
-  badEmail: string;
   badStartDate: string;
 }
 
-/** ข้อความเดิมของทางนักศึกษา — ห้ามเปลี่ยน (เทสต์เดิมอ้างอิง) */
+/** ข้อความของทางนักศึกษา */
 const DEFAULT_MESSAGES: AcceptanceInputMessages = {
   noFile: 'Required file upload: evidence.',
-  requiredFields: 'Required fields: name, email, phone, start_date.',
-  badEmail: 'Invalid email address format.',
+  requiredFields: 'Required field: start_date.',
   badStartDate: 'Invalid start_date format.',
 };
 
 export interface AcceptanceInputRaw {
   hasFile: boolean;
-  /** ไม่ส่ง = ไม่ตรวจพี่เลี้ยง (ทางลิงก์ของบริษัท — นักศึกษาระบุพี่เลี้ยงเองทีหลังที่ `POST /intents/:id/mentor`) */
-  mentor?: { name?: string; email?: string; phone?: string };
   start_date?: string;
   /** ค่าดิบของช่องผู้ลงนามจาก body */
   signer: Record<string, unknown>;
@@ -48,13 +45,6 @@ export async function validateAcceptanceInput(
 
   if (!input.hasFile) return fail(400, messages.noFile);
 
-  if (input.mentor) {
-    const { name, email, phone } = input.mentor;
-    if (!name || !email || !phone || !input.start_date) return fail(400, messages.requiredFields);
-
-    // Basic email validation
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return fail(400, messages.badEmail);
-  }
   if (!input.start_date) return fail(400, messages.requiredFields);
 
   // Date validation

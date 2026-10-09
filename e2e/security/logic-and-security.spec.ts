@@ -98,13 +98,29 @@ test.describe('Cooperative Education System Logic & Security Audits', () => {
     });
     expect(approveRes.status()).toBe(200);
 
-    // Verify the mentor is now ACTIVE in database
-    await withDb(async (db) => {
-      const mentorUser = await db.query("SELECT is_active FROM users WHERE email = 'newmentor@test.com'");
-      expect(mentorUser.rows[0].is_active).toBe(true);
+    // การกดรับไม่เปิดบัญชีพี่เลี้ยงอีกแล้ว — ใบเป็น accepted แต่บัญชียังปิด (เปิดตอนเจ้าหน้าที่ยืนยันพี่เลี้ยงเท่านั้น)
+    const mentorUserId = await withDb(async (db) => {
+      const mentorUser = await db.query("SELECT user_id, is_active FROM users WHERE email = 'newmentor@test.com'");
+      expect(mentorUser.rows[0].is_active).toBe(false);
 
       const intent = await db.query("SELECT status FROM intent_forms WHERE form_id = $1", [intentId]);
       expect(intent.rows[0].status).toBe('accepted');
+      return mentorUser.rows[0].user_id as number;
+    });
+
+    // ยืนยันพี่เลี้ยง: ไม่ล็อกอิน = 401 · เจ้าหน้าที่ = บัญชีเปิด รหัสผ่านเดิมถูกล้าง (SEC-15)
+    const anonymous2 = await playwright.request.newContext();
+    expect((await anonymous2.post(`${API_URL}/mentor-followup/${mentorUserId}/confirm`)).status()).toBe(401);
+    await anonymous2.dispose();
+
+    const confirmRes = await request.post(`${API_URL}/mentor-followup/${mentorUserId}/confirm`);
+    expect(confirmRes.status(), await confirmRes.text()).toBe(200);
+    await withDb(async (db) => {
+      const mentorUser = await db.query(
+        "SELECT is_active, password_hash FROM users WHERE email = 'newmentor@test.com'"
+      );
+      expect(mentorUser.rows[0].is_active).toBe(true);
+      expect(mentorUser.rows[0].password_hash).toBeNull();
     });
   });
 

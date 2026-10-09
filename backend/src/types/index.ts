@@ -226,11 +226,6 @@ export interface Mentor {
 // Sprint 4 Request Bodies
 
 export interface StudentAcceptPayload {
-  name: string;
-  email: string;
-  phone: string;
-  position?: string;
-  department?: string;
   start_date: string; // YYYY-MM-DD
 }
 

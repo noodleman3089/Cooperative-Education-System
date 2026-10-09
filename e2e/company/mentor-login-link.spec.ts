@@ -7,7 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec, grantRoleBypassingMentorTrigger } from '../helpers/db';
 import { apiLoginAs } from '../helpers/auth';
-import { walkToSigned } from '../helpers/intent';
+import { walkToSigned, confirmMentor } from '../helpers/intent';
 
 /**
  * พี่เลี้ยงเข้าสู่ระบบด้วยลิงก์ในอีเมลครั้งเดียว (ขั้นทดลอง 2026-10-02) — ไม่มีรหัสผ่าน
@@ -18,7 +18,7 @@ import { walkToSigned } from '../helpers/intent';
  *   · ขอลิงก์ตอบ 200 เหมือนกันทุกกรณี (ไม่เปิดช่อง enumerate อีเมล)
  *
  * M1 ขอลิงก์ · M2 SEC-03 · M3 ใช้ลิงก์สำเร็จ · M4 token ใช้ไม่ได้ · M5 target · M6 cooldown/ขอใหม่
- * M7 เจ้าหน้าที่กดรับ → ออกลิงก์ 7 วัน (ไม่มีรหัสผ่าน/reset token) · M8 หน้า /m · M9 หน้า /login/mentor
+ * M7 เจ้าหน้าที่ยืนยันพี่เลี้ยง → ออกลิงก์ 7 วัน (ไม่มีรหัสผ่าน/reset token) · M8 หน้า /m · M9 หน้า /login/mentor
  *
  * การส่งเมลไม่ออกเน็ต (`MAIL_DRY_RUN=true` ใน playwright.config.ts) · ข้อมูลทั้งหมดเป็นของปลอม
  */
@@ -350,7 +350,7 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
     expect(await tokenCountFor(MENTOR1)).toBe(2);
   });
 
-  test('M7: เจ้าหน้าที่กดรับแบบตอบรับ — บัญชีพี่เลี้ยงใหม่เปิดใช้ ไม่มีรหัสผ่าน ไม่มี reset token · มีลิงก์เข้าระบบ 7 วัน 1 ใบ', async ({
+  test('M7: เจ้าหน้าที่ยืนยันพี่เลี้ยง (ไม่ใช่ตอนกดรับแบบตอบรับ) — บัญชีพี่เลี้ยงใหม่เปิดใช้ ไม่มีรหัสผ่าน ไม่มี reset token · มีลิงก์เข้าระบบ 7 วัน 1 ใบ', async ({
     request,
   }) => {
     test.setTimeout(180_000);
@@ -405,28 +405,34 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
       await company.dispose();
     }
 
-    // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง (ตัดสหกิจ 07 ฝั่งบริษัท 2026-10-05) — นักศึกษาระบุเอง
+    // เจ้าหน้าที่กดรับแบบตอบรับ — ไม่เกี่ยวกับพี่เลี้ยงแล้ว: ไม่มีบัญชีพี่เลี้ยงเกิด ไม่มีลิงก์ออก
+    await apiLoginAs(request, 'staff1');
+    const approved = await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, {
+      data: { action: 'accepted' },
+    });
+    expect(approved.status(), await approved.text()).toBe(200);
+    expect(await totalTokens()).toBe(0);
+
+    // นักศึกษาระบุพี่เลี้ยงบนใบที่ตอบรับแล้ว (คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก)
     await apiLoginAs(request, 'student2');
     const mentorSet = await request.post(`${API_URL}/intents/${formId}/mentor`, {
       data: { name: 'สุรเดช ใจดี', email: mentorEmail, phone: '0812223333', position: 'Supervisor', department: 'QA' },
     });
     expect(mentorSet.status(), await mentorSet.text()).toBe(200);
 
-    // ก่อนเจ้าหน้าที่กดรับ: บัญชียังปิด และยังไม่มีลิงก์เข้าระบบใดๆ
-    const mentorBefore = await dbRow<{ is_active: boolean }>('SELECT is_active FROM users WHERE email = $1', [
-      mentorEmail,
-    ]);
+    // ก่อนเจ้าหน้าที่ยืนยัน: บัญชียังปิด ยังไม่มีลิงก์เข้าระบบใดๆ และพี่เลี้ยงขอลิงก์เองก็ไม่ได้
+    const mentorBefore = await dbRow<{ user_id: number; is_active: boolean }>(
+      'SELECT user_id, is_active FROM users WHERE email = $1',
+      [mentorEmail]
+    );
     expect(mentorBefore?.is_active).toBe(false);
+    expect((await requestLink(mentorEmail)).status()).toBe(200);
     expect(await tokenCountFor(mentorEmail)).toBe(0);
 
     await apiLoginAs(request, 'staff1');
-    const approved = await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, {
-      data: { action: 'accepted' },
-    });
-    expect(approved.status(), await approved.text()).toBe(200);
-    const approvedBody = await approved.json();
-    expect(approvedBody.success).toBe(true);
-    expect(approvedBody.mentor_email_sent, JSON.stringify(approvedBody)).not.toBe(false);
+    const confirmed = await confirmMentor(request, mentorBefore!.user_id);
+    expect(confirmed.status(), await confirmed.text()).toBe(200);
+    expect((await confirmed.json()).mentor_email_sent).toBe(true);
 
     const mentor = await dbRow<{
       is_active: boolean;

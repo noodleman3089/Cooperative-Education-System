@@ -9,6 +9,8 @@ import { MENTOR_QUEUE_KINDS, MentorQueueKind, MentorQueueModel } from './mentorQ
  * ⛔ ขอบเขต fail closed (SEC-06): หัวหน้าสาขาไม่มีโปรไฟล์ = 403 · บทบาทอื่นนอกสามบทบาท = 403
  *    · ผู้ใช้หลายบทบาทได้ขอบเขตกว้างสุดตามลำดับ staff > dept_head > advisor
  * ⛔ "การจัดวาง (placement)" = `intent_forms` สถานะ 'accepted' ที่มี mentor_id — ที่เดียวกับที่ MentorQueueModel ใช้
+ * ⛔ ใบ 'accepted' มีได้สามสภาพ: ยังไม่ระบุพี่เลี้ยง (`unassignedInScope`) · ระบุแล้วรอเจ้าหน้าที่ยืนยัน
+ *    (แถวใน `list` ที่ `is_active = false`) · ยืนยันแล้ว — หน้าติดตามต้องเห็นครบทั้งสาม
  */
 
 /**
@@ -30,11 +32,22 @@ export interface FollowupPlacement {
   student_name: string;
 }
 
+export interface FollowupUnassigned {
+  form_id: number;
+  student_id: number;
+  student_code: string;
+  student_name: string;
+  company_name: string | null;
+  /** วันเริ่มฝึก `YYYY-MM-DD` · null = ใบไม่มีวันเริ่ม */
+  start_date: string | null;
+}
+
 export interface FollowupMentorRow {
   mentor_id: number;
   name: string;
   email: string;
   company_name: string | null;
+  /** false = นักศึกษาระบุแล้วแต่เจ้าหน้าที่ยังไม่ยืนยัน (บัญชียังปิด ยังไม่มีลิงก์) — หรือบัญชีถูกระงับ */
   is_active: boolean;
   student_count: number;
   students: { student_id: number; student_name: string }[];
@@ -78,17 +91,51 @@ export class MentorFollowupModel {
     throw new AccessDeniedError('Forbidden. You do not have access to this resource.');
   }
 
+  /** เงื่อนไข SQL ของขอบเขต (alias `s` = students) — ที่เดียว ใช้ทั้งรายการพี่เลี้ยงและรายการใบที่ยังไม่ระบุพี่เลี้ยง */
+  private static scopeSql(scope: FollowupScope, params: unknown[]): string {
+    if (scope.kind === 'dept_head') {
+      params.push(scope.majorId);
+      return ` AND s.major_id = $${params.length}`;
+    }
+    if (scope.kind === 'advisor') {
+      params.push(scope.userId);
+      return ` AND (s.advisor_id = $${params.length} OR s.supervisor_id = $${params.length})`;
+    }
+    return '';
+  }
+
+  /**
+   * ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง (ในขอบเขตของผู้เรียก) — ยังไม่มีพี่เลี้ยงให้ตาม จึงเป็นรายการแยก
+   * ใบที่ระบุแล้วแต่รอเจ้าหน้าที่ยืนยัน อยู่ใน `list` ตามปกติ (แถวที่ `is_active = false`)
+   */
+  static async unassignedInScope(scope: FollowupScope): Promise<FollowupUnassigned[]> {
+    const params: unknown[] = [];
+    const scopeSql = MentorFollowupModel.scopeSql(scope, params);
+    const res = await query(
+      `SELECT i.form_id, s.student_id, s.student_code,
+              btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS student_name,
+              c.name_th AS company_name, i.start_date::text AS start_date
+         FROM intent_forms i
+         JOIN students s ON s.student_id = i.student_id
+         JOIN companies c ON c.company_id = i.company_id
+        WHERE i.status = 'accepted' AND i.mentor_id IS NULL${scopeSql}
+        ORDER BY i.start_date ASC NULLS LAST, i.form_id`,
+      params
+    );
+    return res.rows.map((r) => ({
+      form_id: Number(r.form_id),
+      student_id: Number(r.student_id),
+      student_code: r.student_code as string,
+      student_name: r.student_name as string,
+      company_name: (r.company_name as string | null) ?? null,
+      start_date: (r.start_date as string | null) ?? null,
+    }));
+  }
+
   /** นักศึกษาที่ฝึกงานอยู่กับพี่เลี้ยง (ในขอบเขตของผู้เรียก) — ใส่ `mentorId` เพื่อจำกัดเหลือพี่เลี้ยงคนเดียว */
   static async placementsInScope(scope: FollowupScope, mentorId?: number): Promise<FollowupPlacement[]> {
     const params: unknown[] = [];
-    let scopeSql = '';
-    if (scope.kind === 'dept_head') {
-      params.push(scope.majorId);
-      scopeSql = ` AND s.major_id = $${params.length}`;
-    } else if (scope.kind === 'advisor') {
-      params.push(scope.userId);
-      scopeSql = ` AND (s.advisor_id = $${params.length} OR s.supervisor_id = $${params.length})`;
-    }
+    const scopeSql = MentorFollowupModel.scopeSql(scope, params);
     let mentorSql = '';
     if (mentorId !== undefined) {
       params.push(mentorId);

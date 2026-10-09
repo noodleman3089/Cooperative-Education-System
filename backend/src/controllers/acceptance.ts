@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import { IntentFormModel } from '../models/intent';
+import { IntentConflictError, IntentFormModel } from '../models/intent';
 import { StudentAcceptPayload } from '../types';
-import { notifyStudentStatusChange, sendMentorLoginLinkEmail } from '../utils/email';
-import { issueMentorLoginLink, revokeMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
+import { notifyStudentStatusChange } from '../utils/email';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { getErrorMessage } from '../utils/httpError';
@@ -13,9 +12,10 @@ import { recordStageEvent } from '../utils/stageEvents';
 
 export class AcceptanceController {
   /**
-   * Student uploads manual acceptance proof and onboard the mentor.
+   * Student uploads manual acceptance proof.
    * Route: POST /api/acceptances/student/:intent_id/upload-proof
    * Access: student
+   * ⛔ ไม่รับข้อมูลพี่เลี้ยง — ช่องพี่เลี้ยงที่ส่งมาถูกเมิน (แบบเดียวกับทางลิงก์ของบริษัท)
    */
   static async acceptByStudent(req: Request, res: Response): Promise<void> {
     // multer เขียนไฟล์ลงดิสก์ไปแล้วก่อนถึงตรงนี้ — ล้มตรงไหนหลังจากนี้ต้องลบทิ้ง ไม่งั้นค้างเป็นไฟล์กำพร้า
@@ -40,14 +40,12 @@ export class AcceptanceController {
         return;
       }
 
-      const body = req.body as StudentAcceptPayload;
-      const { name, email, phone, position, department, start_date } = body;
+      const { start_date } = req.body as StudentAcceptPayload;
 
       // ด่านตรวจร่วมกับทางลิงก์ของบริษัท (utils/acceptanceInput.ts) — ห้ามคัดลอกไปตรวจซ้ำที่นี่
-      // ไฟล์ · ช่องพี่เลี้ยง · วันเริ่มงาน · หนังสือถูกลงนามแล้ว (409) · ผู้ลงนามบนแบบตอบรับ
+      // ไฟล์ · วันเริ่มงาน · หนังสือถูกลงนามแล้ว (409) · ผู้ลงนามบนแบบตอบรับ
       const input = await validateAcceptanceInput(intentId, {
         hasFile: !!req.file,
-        mentor: { name, email, phone },
         start_date,
         signer: req.body as Record<string, unknown>,
       });
@@ -65,7 +63,6 @@ export class AcceptanceController {
       const updatedIntent = await IntentFormModel.acceptByStudentWithTransaction(
         intentId,
         studentUserId,
-        { name, email, phone, position, department },
         start_date,
         evidencePath,
         submittedLate,
@@ -91,10 +88,11 @@ export class AcceptanceController {
   }
 
   /**
-   * นักศึกษาระบุพี่เลี้ยง หลังบริษัทตอบรับทางลิงก์แล้ว (ลิงก์ไม่ถามพี่เลี้ยง) — ระบุซ้ำได้จนกว่าเจ้าหน้าที่จะกดรับ
+   * นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — ระบุซ้ำได้จนกว่าเจ้าหน้าที่จะยืนยันพี่เลี้ยง (ยืนยันแล้ว = 409)
    * Route: POST /api/intents/:id/mentor
-   * Access: student เจ้าของใบ · เฉพาะใบ `pending_officer_approval` (ตรวจในโมเดล)
-   * ⛔ ไม่เปิดบัญชี ไม่ส่งอีเมล — บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่กดรับเท่านั้น (SEC-03 · SEC-15)
+   * Access: student เจ้าของใบ · เฉพาะใบ `accepted` (ตรวจในโมเดล)
+   * ⛔ ไม่เปิดบัญชี ไม่ส่งอีเมล — บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่ยืนยันเท่านั้น
+   *    (`POST /api/mentor-followup/:mentorId/confirm` · SEC-03 · SEC-15)
    */
   static async setMentor(req: Request, res: Response): Promise<void> {
     try {
@@ -145,8 +143,12 @@ export class AcceptanceController {
         req
       );
 
-      res.status(200).json({ message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว รอเจ้าหน้าที่ตรวจสอบและรับเข้าฝึก' });
+      res.status(200).json({ message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว รอเจ้าหน้าที่ยืนยันก่อนระบบส่งลิงก์เข้าใช้งานให้พี่เลี้ยง' });
     } catch (error) {
+      if (error instanceof IntentConflictError) {
+        res.status(409).json({ message: error.message, code: error.code });
+        return;
+      }
       // ข้อความจากโมเดลเป็นภาษาไทยและอธิบายสาเหตุอยู่แล้ว (SEC-03 · สถานะไม่ถูก · ไม่ใช่ของตัวเอง)
       res.status(400).json({ message: getErrorMessage(error, 'บันทึกข้อมูลพี่เลี้ยงไม่สำเร็จ') });
     }
@@ -224,7 +226,7 @@ export class AcceptanceController {
 
       // 1. Fetch and lock intent form
       const intentRes = await client.query(
-        `SELECT i.form_id, i.student_id, i.company_id, i.mentor_id, i.status,
+        `SELECT i.form_id, i.student_id, i.company_id, i.status,
                 (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today,
                 (SELECT d.dean_signature_date::date::text
                    FROM official_documents d
@@ -246,11 +248,9 @@ export class AcceptanceController {
       }
 
       if (action === 'accepted') {
-        // ⛔ ต้องมีพี่เลี้ยงก่อน — การกดรับคือจุดที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบถูกส่ง (SEC-03/15)
-        //    บริษัทที่ตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยงมาด้วย นักศึกษาต้องระบุเองก่อน (`POST /intents/:id/mentor`)
-        if (!intent.mentor_id) {
-          throw new Error('นักศึกษายังไม่ได้ระบุพี่เลี้ยง จึงยังรับเข้าฝึกไม่ได้ — รอนักศึกษากรอกข้อมูลพี่เลี้ยงก่อน');
-        }
+        // ⛔ การกดรับไม่เกี่ยวกับพี่เลี้ยงแล้ว — ไม่ต้องมีพี่เลี้ยง ไม่เปิดบัญชี ไม่ส่งลิงก์
+        //    คณะรู้ตัวพี่เลี้ยงหลังนักศึกษาเริ่มฝึก: นักศึกษาระบุบนใบ `accepted` แล้วเจ้าหน้าที่ยืนยันที่
+        //    `POST /api/mentor-followup/:mentorId/confirm` (ด่าน SEC-03/15 ย้ายไปอยู่ที่นั่นทั้งก้อน)
 
         // ผู้ลงนามบนแบบตอบรับ นักศึกษากรอกตอนอัปโหลดแล้ว (ตรวจวันที่ไว้ตรงนั้น) — เจ้าหน้าที่แค่ดูเทียบกับกระดาษ
         // ⛔ ไม่รับชื่อ/ตำแหน่ง/วันที่จากเจ้าหน้าที่แล้ว (เจ้าของตัดสิน 2026-09-21) · ส่งมาก็เมิน
@@ -266,76 +266,6 @@ export class AcceptanceController {
         await client.query(`UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1`, [intentId]);
         await recordStageEvent(client, intentId, 'accepted');
 
-        // 3. Activate mentor account if it's currently inactive
-        let mentorMail: { email: string; url: string; expiresAt: Date; tokenId: number } | null = null;
-        if (intent.mentor_id) {
-          // Lock the row first — PostgreSQL rejects FOR UPDATE alongside GROUP BY,
-          // so the role aggregation is a separate read.
-          const mentorUserRes = await client.query(
-            `SELECT user_id, email, is_active,
-                    EXISTS (SELECT 1 FROM mentors m WHERE m.mentor_id = users.user_id) AS has_mentor_profile
-             FROM users WHERE user_id = $1 FOR UPDATE`,
-            [intent.mentor_id]
-          );
-
-          if ((mentorUserRes.rowCount ?? 0) > 0) {
-            const mentorUser = mentorUserRes.rows[0];
-            const rolesRes = await client.query(
-              'SELECT role_name FROM user_roles WHERE user_id = $1',
-              [intent.mentor_id]
-            );
-            const mentorRoles: string[] = rolesRes.rows.map((row: { role_name: string }) => row.role_name);
-
-            // SEC-03: this branch resets a password and re-activates an account.
-            // Restrict it to accounts that exist purely to be a mentor, so
-            // approving a placement can never overwrite the credentials of a staff
-            // member, advisor or student whose address was supplied as the mentor
-            // email. An account qualifies when it has a mentor profile and carries
-            // no role other than 'mentor'.
-            const hasForeignRole = mentorRoles.some((r) => r !== 'mentor');
-            if (hasForeignRole || !mentorUser.has_mentor_profile) {
-              throw new Error(
-                'บัญชีพี่เลี้ยงที่ผูกกับใบตอบรับนี้ไม่ใช่บัญชีพี่เลี้ยงโดยเฉพาะ ไม่สามารถออกรหัสผ่านใหม่ให้อัตโนมัติได้ กรุณาตรวจสอบข้อมูลพี่เลี้ยง'
-              );
-            }
-
-            // Heal records created before the mentor role was consistently written.
-            if (!mentorRoles.includes('mentor')) {
-              await client.query(
-                `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
-                [intent.mentor_id]
-              );
-            }
-
-            if (!mentorUser.is_active) {
-              // No password is ever set (SEC-15): the mentor enters through a
-              // one-time emailed login link. The token row is written on the
-              // same client, so a rollback discards it too; the email itself
-              // is sent only after COMMIT.
-              await client.query(
-                `UPDATE users SET password_hash = NULL, is_active = TRUE WHERE user_id = $1`,
-                [intent.mentor_id]
-              );
-
-              const issued = await issueMentorLoginLink(
-                { userId: intent.mentor_id, ttlMs: MENTOR_LINK_TTL_SYSTEM_MS, skipCooldown: true },
-                client
-              );
-              // SEC-03 above already guarantees eligibility — null/cooldown here is a bug, roll back
-              if (!issued || 'cooledDown' in issued) {
-                throw new Error('ออกลิงก์เข้าสู่ระบบให้พี่เลี้ยงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
-              }
-              mentorMail = {
-                email: mentorUser.email,
-                url: issued.url,
-                expiresAt: issued.expiresAt,
-                tokenId: issued.tokenId,
-              };
-              console.log(`Activated mentor account ${mentorUser.email} and issued a login link.`);
-            }
-          }
-        }
-
         await writeAudit({
           action: AuditAction.ACCEPTANCE_OFFICER_DECISION,
           entityType: 'intent_form',
@@ -343,7 +273,6 @@ export class AcceptanceController {
           subjectId: intent.student_id,
           detail: {
             decision: 'accepted',
-            mentor_id: intent.mentor_id,
             acceptance_signer_name: signerName,
             acceptance_signed_date: signedDate,
           },
@@ -354,29 +283,7 @@ export class AcceptanceController {
         // Notify student of approval
         notifyStudentStatusChange(intentId, 'accepted').catch(console.error);
 
-        // ส่งเมลหลัง COMMIT เท่านั้น — ลิงก์ในเมลต้องมีแถวอยู่จริงในฐานตอนพี่เลี้ยงกด
-        if (mentorMail) {
-          const sent = await sendMentorLoginLinkEmail(mentorMail.email, mentorMail.url, {
-            expiresAt: mentorMail.expiresAt,
-            kind: 'welcome',
-          });
-          if (!sent) {
-            // ลิงก์ที่ไม่เคยถึงมือพี่เลี้ยงต้องไม่ค้างในฐาน · บอกตามจริง ไม่กลืน
-            await revokeMentorLoginLink(mentorMail.tokenId);
-            res.status(200).json({
-              success: true,
-              mentor_email_sent: false,
-              message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว แต่ส่งอีเมลลิงก์เข้าสู่ระบบถึงพี่เลี้ยงไม่สำเร็จ พี่เลี้ยงขอลิงก์เองได้ที่หน้า /login/mentor',
-            });
-            return;
-          }
-        }
-
-        res.status(200).json({
-          success: true,
-          ...(mentorMail ? { mentor_email_sent: true } : {}),
-          message: 'อนุมัติเอกสารตอบรับและเปิดใช้งานบัญชีพี่เลี้ยงเรียบร้อยแล้ว',
-        });
+        res.status(200).json({ success: true, message: 'อนุมัติเอกสารตอบรับเรียบร้อยแล้ว' });
       } else {
         // Action is 'rejected' — ตีกลับ "แบบตอบรับ" ไม่ใช่ปฏิเสธที่ฝึก
         // ใบกลับไปรอแบบตอบรับ (ขั้นก่อนอัปโหลด) ไฟล์เดิมถูกล้าง นักศึกษาส่งใหม่ในใบเดิมได้

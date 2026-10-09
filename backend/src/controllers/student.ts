@@ -107,6 +107,7 @@ export class StudentController {
                   i.acceptance_signer_name,
                   i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, m.phone as mentor_phone,
                   m.position as mentor_position, m.department as mentor_department,
+                  COALESCE(u_men.is_active, FALSE) AS mentor_confirmed,
                   doc.status AS cover_letter_status
            FROM intent_forms i
            JOIN companies c ON i.company_id = c.company_id
@@ -166,13 +167,16 @@ export class StudentController {
               ...(await IntentFormModel.resolveRequestSigners(userId)),
               candidates: await IntentFormModel.listSignerCandidates(userId),
             },
+            // พี่เลี้ยงระบุได้เมื่อใบ `accepted` — null = ยังไม่ระบุ · `confirmed: false` = รอเจ้าหน้าที่ยืนยัน (ยังแก้เองได้)
+            // · `confirmed: true` = บัญชีพี่เลี้ยงเปิดแล้ว นักศึกษาแก้ไม่ได้ (POST /intents/:id/mentor ตอบ 409)
             mentor: row.mentor_id ? {
               mentor_id: row.mentor_id,
               name: row.mentor_name,
               email: row.mentor_email,
               phone: row.mentor_phone,
               position: row.mentor_position,
-              department: row.mentor_department
+              department: row.mentor_department,
+              confirmed: row.mentor_confirmed === true
             } : null
           };
         } else {

@@ -423,10 +423,15 @@ export class FinalReportController {
 
       const sent = await FinalReportController.sendMentorNotificationHelper(studentId, req.user.userId);
 
-      if (sent) {
+      if (sent === 'sent') {
         res.status(200).json({
           success: true,
           message: 'ส่งอีเมลแจ้งเตือนพนักงานที่ปรึกษา (พี่เลี้ยง) สำเร็จแล้ว'
+        });
+      } else if (sent === 'no_mentor') {
+        res.status(409).json({
+          code: 'mentor_not_ready',
+          message: 'ยังแจ้งเตือนไม่ได้ เพราะนักศึกษายังไม่ได้ระบุพี่เลี้ยง หรือพี่เลี้ยงยังรอเจ้าหน้าที่ยืนยัน'
         });
       } else {
         res.status(429).json({
@@ -441,8 +446,14 @@ export class FinalReportController {
 
   /**
    * Helper function for sending mentor notification email with rate limiting
+   *
+   * ⛔ ส่งถึงพี่เลี้ยงที่เจ้าหน้าที่ยืนยันแล้วเท่านั้น (`is_active`) — ทางนี้นักศึกษากระตุ้นได้เองตอนอัปโหลดเล่ม
+   *    อีเมลของพี่เลี้ยงที่ยังไม่ยืนยันคือที่อยู่ที่นักศึกษาพิมพ์ ระบบต้องไม่ส่งอะไรไป (SEC-03 · แนวเดียวกับ SEC-13)
    */
-  private static async sendMentorNotificationHelper(studentId: number, sentBy: number | null = null): Promise<boolean> {
+  private static async sendMentorNotificationHelper(
+    studentId: number,
+    sentBy: number | null = null
+  ): Promise<'sent' | 'cooldown' | 'no_mentor'> {
     // 1. Fetch mentor credentials and student name
     const infoRes = await query(
       `SELECT i.mentor_id, m.name as mentor_name, u_men.email as mentor_email, s.first_name || ' ' || s.last_name as student_name, s.student_code
@@ -450,13 +461,13 @@ export class FinalReportController {
        JOIN mentors m ON i.mentor_id = m.mentor_id
        JOIN users u_men ON i.mentor_id = u_men.user_id
        JOIN students s ON i.student_id = s.student_id
-       WHERE i.student_id = $1 AND i.status = 'accepted'`,
+       WHERE i.student_id = $1 AND i.status = 'accepted' AND u_men.is_active = TRUE`,
       [studentId]
     );
 
     if ((infoRes.rowCount ?? 0) === 0) {
-      console.warn(`[FinalReport] No active accepted mentor found for student ID: ${studentId}`);
-      return false;
+      console.warn(`[FinalReport] No confirmed mentor on an accepted placement for student ID: ${studentId}`);
+      return 'no_mentor';
     }
 
     const { mentor_id, mentor_name, mentor_email, student_name, student_code } = infoRes.rows[0];
@@ -474,7 +485,7 @@ export class FinalReportController {
 
       if (now - lastNotified < cooldownMs) {
         console.log(`[FinalReport] Notification skipped. Still in cooldown for student ID ${studentId}.`);
-        return false;
+        return 'cooldown';
       }
 
       // Update notification record
@@ -520,6 +531,6 @@ export class FinalReportController {
     } catch (error) {
       console.error('[FinalReport] Failed to record mentor reminder', error);
     }
-    return true;
+    return 'sent';
   }
 }

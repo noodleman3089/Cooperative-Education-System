@@ -29,7 +29,6 @@ export type StageKey =
   | 'await_dean'
   | 'await_send'
   | 'await_company'
-  | 'await_mentor'
   | 'await_officer_accept'
   | 'accepted_prep'
   | 'on_placement'
@@ -42,7 +41,10 @@ export type Holder = 'student' | 'staff' | 'company' | 'dean' | 'clear';
 
 /**
  * ลำดับ = ลำดับที่แสดงบนจอ · `label` เป็นถ้อยคำที่หน้าจอใช้ตรง ๆ (ที่เดียว)
- * `short` = ชื่อย่อสำหรับแถบท่อ 14 ช่องท้ายหน้าแรกเจ้าหน้าที่ (ช่องแคบ ใส่ชื่อเต็มไม่พอ) — คนอ่านคือเจ้าหน้าที่ จึงเขียนว่า "รอคุณ…"
+ * `short` = ชื่อย่อสำหรับแถบท่อท้ายหน้าแรกเจ้าหน้าที่ (ช่องแคบ ใส่ชื่อเต็มไม่พอ) — คนอ่านคือเจ้าหน้าที่ จึงเขียนว่า "รอคุณ…"
+ *
+ * ⛔ ไม่มีขั้น "รอนักศึกษาระบุพี่เลี้ยง" — พี่เลี้ยงถูกระบุหลังใบ `accepted` และไม่ขวางขั้นไหน
+ *    ใบที่ยังไม่ระบุ/รอยืนยันพี่เลี้ยงนับเป็น "ช่องว่าง" (`gaps`) ของใบที่ตอบรับแล้วแทน
  */
 export const STAGES: { key: StageKey; label: string; short: string }[] = [
   { key: 'not_registered', label: 'ยังไม่เข้าระบบ (ยังไม่ตั้งโปรไฟล์)', short: 'ยังไม่เข้าระบบ' },
@@ -52,7 +54,6 @@ export const STAGES: { key: StageKey; label: string; short: string }[] = [
   { key: 'await_dean', label: 'รอคณบดีลงนามหนังสือ', short: 'รอคณบดี' },
   { key: 'await_send', label: 'รอนักศึกษาส่งหนังสือให้บริษัท', short: 'รอส่งหนังสือ' },
   { key: 'await_company', label: 'รอบริษัทตอบรับ', short: 'รอบริษัทตอบ' },
-  { key: 'await_mentor', label: 'รอนักศึกษาระบุพี่เลี้ยง', short: 'รอระบุพี่เลี้ยง' },
   { key: 'await_officer_accept', label: 'รอเจ้าหน้าที่ยืนยันแบบตอบรับ', short: 'รอคุณยืนยันตอบรับ' },
   { key: 'accepted_prep', label: 'ตอบรับแล้ว · เตรียมเอกสารก่อนฝึก', short: 'เตรียมเอกสาร' },
   { key: 'on_placement', label: 'ระหว่างปฏิบัติงานและนิเทศ', short: 'ระหว่างฝึก' },
@@ -83,6 +84,8 @@ interface Row {
   has_accommodation: boolean;
   final_report_approved: boolean;
   mentor_evaluations: number;
+  /** บัญชีพี่เลี้ยงของใบเปิดใช้แล้ว = เจ้าหน้าที่ยืนยันแล้ว · ไม่มีพี่เลี้ยง = false */
+  mentor_active: boolean;
   mentor_logged_in: boolean;
   age_created: number | null;
   age_doc: number | null;
@@ -91,7 +94,6 @@ interface Row {
   age_upload: number | null;
   age_request: number | null;
   age_submitted: number | null;
-  age_mentor: number | null;
   age_accepted: number | null;
   age_start: number | null;
   age_end: number | null;
@@ -127,11 +129,8 @@ export function deriveStage(r: Row, today: string): Derived {
       }
       return { stage: 'await_company', holder: 'company', age: r.age_mail };
     case 'pending_officer_approval':
-      // บริษัทตอบทางลิงก์ไม่ได้ระบุพี่เลี้ยง — นักศึกษาต้องระบุก่อนเจ้าหน้าที่กดรับได้
-      // รอเจ้าหน้าที่ = นับจากเหตุการณ์ล่าสุดของสองอย่าง (ได้แบบตอบรับ · นักศึกษาระบุพี่เลี้ยง) = อายุที่น้อยกว่า
-      return r.mentor_id === null
-        ? { stage: 'await_mentor', holder: 'student', age: r.age_submitted }
-        : { stage: 'await_officer_accept', holder: 'staff', age: minKnown(r.age_submitted, r.age_mentor) };
+      // ได้แบบตอบรับแล้ว = รอเจ้าหน้าที่ทันที — พี่เลี้ยงไม่เกี่ยวกับขั้นนี้แล้ว (ระบุหลังใบ `accepted`)
+      return { stage: 'await_officer_accept', holder: 'staff', age: r.age_submitted };
     case 'accepted': {
       const finished = r.final_report_approved && r.mentor_evaluations >= 2;
       if (finished) return { stage: 'done', holder: 'clear', age: null };
@@ -151,10 +150,6 @@ export function deriveStage(r: Row, today: string): Derived {
       return { stage: 'await_officer_request', holder: 'staff', age: null };
   }
 }
-
-/** อายุที่น้อยกว่าของสองค่าที่รู้ · ไม่รู้สักค่า = null (ห้ามเดา) */
-const minKnown = (a: number | null, b: number | null): number | null =>
-  a === null ? b : b === null ? a : Math.min(a, b);
 
 const median = (xs: number[]): number | null => {
   if (xs.length === 0) return null;
@@ -179,6 +174,7 @@ const ROW_SQL = `
          (acc.student_id IS NOT NULL) AS has_accommodation,
          COALESCE(fr.ok, FALSE) AS final_report_approved,
          COALESCE(ev.n, 0)::int AS mentor_evaluations,
+         COALESCE(mu.is_active, FALSE) AS mentor_active,
          COALESCE(ml.ok, FALSE) AS mentor_logged_in,
          -- อายุเป็นวันปฏิทินเวลาไทย · NULL = ระบบไม่เก็บเวลาของขั้นนั้น (ห้ามเดา)
          ($2::date - (i.created_at AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_created,
@@ -189,7 +185,6 @@ const ROW_SQL = `
          ($2::date - (se.t_upload AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_upload,
          ($2::date - (se.t_request AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_request,
          ($2::date - (se.t_submitted AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_submitted,
-         ($2::date - (se.t_mentor AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_mentor,
          ($2::date - (se.t_accepted AT TIME ZONE 'Asia/Bangkok')::date)::int AS age_accepted,
          ($2::date - i.start_date)::int AS age_start,
          ($2::date - i.end_date)::int AS age_end
@@ -221,11 +216,11 @@ const ROW_SQL = `
         MAX(e.entered_at) FILTER (WHERE e.stage IN ('form_created', 'request_returned')) AS t_upload,
         MAX(e.entered_at) FILTER (WHERE e.stage IN ('request_uploaded', 'dean_returned', 'staff_recalled')) AS t_request,
         MAX(e.entered_at) FILTER (WHERE e.stage = 'acceptance_submitted') AS t_submitted,
-        MAX(e.entered_at) FILTER (WHERE e.stage = 'mentor_set') AS t_mentor,
         MAX(e.entered_at) FILTER (WHERE e.stage = 'accepted') AS t_accepted
         FROM intent_stage_events e WHERE e.form_id = i.form_id
     ) se ON TRUE
     LEFT JOIN accommodations acc ON acc.student_id = s.student_id
+    LEFT JOIN users mu ON mu.user_id = i.mentor_id
     LEFT JOIN LATERAL (
       SELECT TRUE AS ok FROM final_reports f
        WHERE f.student_id = s.student_id AND f.reviewer_kind = 'advisor' AND f.status = 'approved' LIMIT 1
@@ -334,7 +329,10 @@ export class StaffPipelineController {
         { key: 'no_accommodation', label: 'ตอบรับแล้วแต่ยังไม่แจ้งที่พัก (สหกิจ 06)', count: acceptedRows.filter((x) => !x.r.has_accommodation).length },
         { key: 'no_dispatch', label: 'ตอบรับแล้วแต่ยังไม่ได้ออกหนังสือส่งตัว', count: acceptedRows.filter((x) => x.r.dispatch_document_no === null).length },
         { key: 'no_faculty', label: 'ตอบรับแล้วแต่ไม่มีอาจารย์ที่ปรึกษาหรืออาจารย์นิเทศ', count: acceptedRows.filter((x) => x.r.advisor_id === null || x.r.supervisor_id === null).length },
-        { key: 'mentor_never_logged_in', label: 'พี่เลี้ยงยังไม่เคยเข้าระบบด้วยลิงก์', count: acceptedRows.filter((x) => x.r.mentor_id !== null && !x.r.mentor_logged_in).length },
+        // พี่เลี้ยงสามสภาพของใบที่ตอบรับแล้ว — แยกกันขาด ไม่นับซ้ำ: ยังไม่ระบุ → รอยืนยัน → ยืนยันแล้วแต่ยังไม่เคยเข้า
+        { key: 'no_mentor', label: 'ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง', count: acceptedRows.filter((x) => x.r.mentor_id === null).length },
+        { key: 'mentor_unconfirmed', label: 'ระบุพี่เลี้ยงแล้ว รอเจ้าหน้าที่ยืนยัน', count: acceptedRows.filter((x) => x.r.mentor_id !== null && !x.r.mentor_active).length },
+        { key: 'mentor_never_logged_in', label: 'พี่เลี้ยงยังไม่เคยเข้าระบบด้วยลิงก์', count: acceptedRows.filter((x) => x.r.mentor_active && !x.r.mentor_logged_in).length },
       ];
 
       // ค้างนานที่สุด — เฉพาะที่รู้อายุ และยังมีคนต้องขยับ (clear/ออกจากท่อไม่ต้องตาม)

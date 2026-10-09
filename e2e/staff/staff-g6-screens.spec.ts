@@ -111,8 +111,9 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
     await expect(page.locator('[data-testid^="staff-home-timeline-"]')).toHaveCount(0);
     await expect(page.getByTestId('staff-home-season-action')).toHaveCount(0);
 
-    // ท่อย่อ 14 ช่อง — จำนวนและชื่อช่องมาจาก /api/staff/pipeline ตรง ๆ
-    expect(pipeline.stages).toHaveLength(14);
+    // ท่อย่อ 13 ช่อง — จำนวนและชื่อช่องมาจาก /api/staff/pipeline ตรง ๆ
+    // (เดิม 14 · ขั้น "รอนักศึกษาระบุพี่เลี้ยง" ถอดออก 2026-10-09 — พี่เลี้ยงระบุหลังใบ accepted ไม่ขวางขั้นไหน)
+    expect(pipeline.stages).toHaveLength(13);
     await expect(page.getByTestId('staff-home-pipeline')).toContainText(
       `นักศึกษาทั้งรุ่น ${pipeline.cohort_total} คน อยู่ขั้นไหน`
     );

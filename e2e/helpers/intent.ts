@@ -125,6 +125,20 @@ export async function walkToSigned(request: APIRequestContext, formId: number): 
   await deanSign(request, await coverLetterDocId());
 }
 
+/** พี่เลี้ยงตัวอย่างที่นักศึกษาระบุ — ข้อมูลปลอมทั้งหมด */
+export const SAMPLE_MENTOR = {
+  name: 'สุรเดช ใจดี',
+  email: 'mentor-sample@example.com',
+  phone: '0812223333',
+  position: 'Supervisor',
+  department: 'QA',
+};
+
+/** เจ้าหน้าที่ยืนยันพี่เลี้ยง (ต้องล็อกอินก่อนเรียก) — คืน response ให้เทสต์ตัดสินเอง */
+export function confirmMentor(request: APIRequestContext, mentorId: number) {
+  return request.post(`${API_URL}/mentor-followup/${mentorId}/confirm`);
+}
+
 /**
  * ทำให้นักศึกษา "ส่งเอกสารก่อนออกฝึกครบ" — สหกิจ 03 ครบช่องบังคับ และมีแถวสหกิจ 06 (แจ้งที่พัก)
  * ซึ่งเป็นด่านของ `POST /intents/:id/dispatch-letter` ตั้งแต่ขั้น 6 (ไม่ครบ = 409 `prep_incomplete`)

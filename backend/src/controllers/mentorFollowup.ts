@@ -18,12 +18,13 @@ import {
   issueMentorLoginLink,
   revokeMentorLoginLink,
 } from '../utils/mentorLoginLink';
+import { recordStageEvent } from '../utils/stageEvents';
 
 /**
  * คณะตามพี่เลี้ยง (Phase 2) — เห็นว่าพี่เลี้ยงคนไหนมีงานค้าง เตือนได้ และเจ้าหน้าที่แก้อีเมลได้
  *
  * ขอบเขตการมองเห็น (SEC-06 fail closed): staff ทั้งหมด · dept_head เฉพาะสาขาตัวเอง · advisor เฉพาะพี่เลี้ยงของนักศึกษาที่ดูแล
- * ⛔ แก้อีเมล/ส่งลิงก์เปล่า = เจ้าหน้าที่เท่านั้น (route + ตรวจซ้ำที่นี่)
+ * ⛔ ยืนยันพี่เลี้ยง/แก้อีเมล/ส่งลิงก์เปล่า = เจ้าหน้าที่เท่านั้น (route + ตรวจซ้ำที่นี่)
  * ⛔ ปลายทางของเมลมาจากทะเบียน (`users.email`) เสมอ ไม่รับจากคำขอ ยกเว้น PUT /email ที่เป็นตัวแก้ทะเบียนเอง
  * ⛔ ทุก endpoint ไม่ส่งข้อมูลส่วนตัวของพี่เลี้ยงเกินที่ระบุ (ไม่มีเบอร์โทร)
  */
@@ -51,6 +52,8 @@ export class MentorFollowupController {
       res.status(200).json({
         can_edit: req.user.roles.includes('staff'),
         mentors,
+        // ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง (ขอบเขตเดียวกับ `mentors`)
+        unassigned: await MentorFollowupModel.unassignedInScope(scope),
         // เฟส 3: ให้หน้าจอรู้ว่าระบบเตือนเองอยู่หรือไม่ + กติกา (ค่าเดียวกับที่ตัวเตือนใช้จริง)
         auto_remind: {
           enabled: isAutoRemindEnabled(),
@@ -159,6 +162,144 @@ export class MentorFollowupController {
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Mentor followup remind error', 'ไม่สามารถส่งอีเมลเตือนได้');
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่ยืนยันพี่เลี้ยงที่นักศึกษาระบุ — จุดเดียวที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบฉบับแรกถูกส่ง
+   * Route: POST /api/mentor-followup/:mentorId/confirm · เจ้าหน้าที่เท่านั้น
+   *
+   * ⛔ ก้อนนี้ย้ายมาจาก `AcceptanceController.approveByOfficer` (เดิมเปิดบัญชีตอนกดรับแบบตอบรับ) — ด่าน SEC-03/15 ต้องอยู่ครบ:
+   *    ล็อกแถวบัญชี · ปฏิเสธเมื่อมีบทบาทอื่นหรือไม่มีแถว `mentors` · ไม่ตั้งรหัสผ่าน · อีเมลออกหลัง COMMIT เท่านั้น
+   * ⛔ ด่านอยู่ระดับบัญชี ไม่ใช่ระดับใบ — บัญชีที่เปิดอยู่แล้ว = 409 (ไม่มีอะไรต้องยืนยัน · ต้องการส่งลิงก์ใช้ send-link)
+   *    ต้องมีใบ `accepted` ที่ระบุพี่เลี้ยงคนนี้อย่างน้อยหนึ่งใบ ไม่งั้นเป็นทางเปิดบัญชีพี่เลี้ยงที่ไม่มีนักศึกษา
+   */
+  static async confirm(req: Request, res: Response): Promise<void> {
+    const client = await pool.connect();
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      if (!req.user.roles.includes('staff')) {
+        throw new AccessDeniedError('Forbidden. You do not have access to this resource.');
+      }
+      const mentorId = parseMentorId(req.params.mentorId);
+      if (mentorId === null) {
+        res.status(400).json({ message: 'Invalid mentor ID.' });
+        return;
+      }
+
+      await client.query('BEGIN');
+
+      // ล็อกใบก่อนบัญชี — `setMentorWithTransaction` ล็อกใบเดียวกันก่อนอ่าน `is_active`
+      // นักศึกษาจึงเปลี่ยนพี่เลี้ยงสวนกับการยืนยันไม่ได้
+      const forms = await client.query(
+        `SELECT form_id FROM intent_forms
+          WHERE mentor_id = $1 AND status = 'accepted'
+          ORDER BY form_id FOR UPDATE`,
+        [mentorId]
+      );
+      if ((forms.rowCount ?? 0) === 0) {
+        await client.query('ROLLBACK');
+        res.status(409).json({
+          message: 'ไม่มีคำร้องที่ตอบรับแล้วซึ่งระบุพี่เลี้ยงคนนี้ — นักศึกษาอาจเปลี่ยนพี่เลี้ยงไปแล้ว กรุณาโหลดหน้าใหม่',
+        });
+        return;
+      }
+      const formIds: number[] = forms.rows.map((r: { form_id: number }) => Number(r.form_id));
+
+      const found = await client.query(
+        `SELECT u.email, u.is_active,
+                EXISTS (SELECT 1 FROM mentors m WHERE m.mentor_id = u.user_id) AS has_mentor_profile,
+                ARRAY(SELECT r.role_name FROM user_roles r WHERE r.user_id = u.user_id) AS roles
+           FROM users u WHERE u.user_id = $1 FOR UPDATE OF u`,
+        [mentorId]
+      );
+      const row = found.rows[0];
+      if (!row) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ message: 'ไม่พบบัญชีนี้' });
+        return;
+      }
+
+      // SEC-03: การยืนยันเปิดใช้บัญชีและส่งลิงก์ที่ออก session ได้ — ใช้ได้กับบัญชีที่มีไว้เป็นพี่เลี้ยงอย่างเดียวเท่านั้น
+      // ไม่งั้นอีเมลของเจ้าหน้าที่/อาจารย์/นักศึกษาที่ถูกระบุเป็นพี่เลี้ยงจะถูกเปิดทางเข้าให้
+      const roles = row.roles as string[];
+      if (roles.some((r) => r !== 'mentor') || row.has_mentor_profile !== true) {
+        await client.query('ROLLBACK');
+        res.status(403).json({ message: 'บัญชีนี้ไม่ใช่บัญชีพี่เลี้ยงโดยเฉพาะ จึงยืนยันและส่งลิงก์เข้าสู่ระบบให้ไม่ได้ กรุณาตรวจสอบข้อมูลพี่เลี้ยง' });
+        return;
+      }
+      if (row.is_active === true) {
+        await client.query('ROLLBACK');
+        res.status(409).json({
+          message: 'บัญชีพี่เลี้ยงคนนี้เปิดใช้งานอยู่แล้ว ไม่มีอะไรต้องยืนยัน — หากต้องการส่งลิงก์อีกครั้ง ใช้ปุ่ม "ส่งลิงก์เข้าระบบใหม่"',
+        });
+        return;
+      }
+
+      // Heal records created before the mentor role was consistently written.
+      if (!roles.includes('mentor')) {
+        await client.query(
+          `INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'mentor') ON CONFLICT DO NOTHING`,
+          [mentorId]
+        );
+      }
+
+      // No password is ever set (SEC-15): the mentor enters through a one-time emailed login link.
+      // The token row is written on the same client, so a rollback discards it too.
+      await client.query(`UPDATE users SET password_hash = NULL, is_active = TRUE WHERE user_id = $1`, [mentorId]);
+      const issued = await issueMentorLoginLink(
+        { userId: mentorId, ttlMs: MENTOR_LINK_TTL_SYSTEM_MS, skipCooldown: true },
+        client
+      );
+      // ด่าน SEC-03 ข้างบนรับประกันสิทธิ์แล้ว — ได้ null/cooldown ตรงนี้คือบั๊ก ให้ rollback ทั้งหมด
+      if (!issued || 'cooledDown' in issued) {
+        throw new Error('issueMentorLoginLink refused a mentor that passed the SEC-03 gate');
+      }
+
+      for (const formId of formIds) {
+        await recordStageEvent(client, formId, 'mentor_confirmed');
+      }
+      await writeAudit(
+        {
+          action: AuditAction.MENTOR_CONFIRMED,
+          entityType: 'user',
+          entityId: mentorId,
+          subjectId: mentorId,
+          detail: { mentor_id: mentorId, form_ids: formIds, token_id: issued.tokenId },
+        },
+        req,
+        client
+      );
+
+      await client.query('COMMIT');
+
+      // ส่งเมลหลัง COMMIT เท่านั้น — ลิงก์ในเมลต้องมีแถวอยู่จริงในฐานตอนพี่เลี้ยงกด
+      const sent = await sendMentorLoginLinkEmail(row.email as string, issued.url, {
+        expiresAt: issued.expiresAt,
+        kind: 'welcome',
+      });
+      if (!sent) {
+        // ลิงก์ที่ไม่เคยถึงมือพี่เลี้ยงต้องไม่ค้างในฐาน · บอกตามจริง ไม่กลืน (บัญชีเปิดแล้ว ยืนยันซ้ำไม่ได้)
+        await revokeMentorLoginLink(issued.tokenId);
+        res.status(200).json({
+          mentor_email_sent: false,
+          message: 'ยืนยันพี่เลี้ยงและเปิดใช้งานบัญชีแล้ว แต่ส่งอีเมลลิงก์เข้าสู่ระบบไม่สำเร็จ — กด "ส่งลิงก์เข้าระบบใหม่" เพื่อส่งอีกครั้ง',
+        });
+        return;
+      }
+      res.status(200).json({
+        mentor_email_sent: true,
+        message: 'ยืนยันพี่เลี้ยงแล้ว ระบบส่งลิงก์เข้าสู่ระบบไปที่อีเมลของพี่เลี้ยง',
+      });
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(res, error, 'Mentor followup confirm error', 'ไม่สามารถยืนยันพี่เลี้ยงได้');
+    } finally {
+      client.release();
     }
   }
 

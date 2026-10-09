@@ -163,7 +163,8 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
     await put({ status: 'approved_by_dept_head', cover: { status: 'signed', ageDays: 14 }, mailAgeDays: 12 });
     // เจ้าหน้าที่ตีกลับแบบตอบรับ = นักศึกษาต้องส่งลิงก์ใหม่ (กลับไปขั้นส่งให้บริษัท)
     await put({ status: 'approved_by_dept_head', cover: { status: 'signed', ageDays: 20 }, mailAgeDays: 15, rejectReason: 'ตราประทับไม่ชัด' });
-    await put({ status: 'pending_officer_approval' }); // บริษัทตอบแล้ว ยังไม่มีพี่เลี้ยง
+    // ได้แบบตอบรับแล้ว = รอเจ้าหน้าที่ทั้งคู่ — มีหรือไม่มีพี่เลี้ยงไม่เปลี่ยนขั้น (พี่เลี้ยงระบุหลังใบ accepted)
+    await put({ status: 'pending_officer_approval' });
     await put({ status: 'pending_officer_approval', mentor: true });
     await put({ status: 'accepted', mentor: true, start: 30, end: 140 }); // ขาดหนังสือส่งตัว → เจ้าหน้าที่
     await put({ status: 'accepted', mentor: true, start: 30, end: 140, dispatch: true }); // ขาดที่พัก → นักศึกษา
@@ -185,8 +186,7 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
       await_dean: 1,
       await_send: 2,
       await_company: 1,
-      await_mentor: 1,
-      await_officer_accept: 1,
+      await_officer_accept: 2,
       accepted_prep: 3,
       on_placement: 1,
       post_placement: 2,
@@ -203,11 +203,16 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
     expect(prep.holders).toMatchObject({ staff: 1, student: 1, clear: 1 });
 
     // ใครถือเรื่อง (ไม่นับคนที่ "ครบ")
-    expect(holderCount(body, 'staff')).toBe(3); // รอรับคำร้อง · รอยืนยันตอบรับ · ขาดหนังสือส่งตัว
+    expect(holderCount(body, 'staff')).toBe(4); // รอรับคำร้อง · รอยืนยันตอบรับ 2 · ขาดหนังสือส่งตัว
     expect(holderCount(body, 'dean')).toBe(1);
     expect(holderCount(body, 'company')).toBe(2); // รอบริษัท · หลังฝึกขาดประเมิน
     expect(holderCount(body, 'clear')).toBe(2); // เตรียมเอกสารครบ · กำลังฝึก
-    expect(holderCount(body, 'student')).toBe(10);
+    expect(holderCount(body, 'student')).toBe(9);
+
+    // ช่องว่างเรื่องพี่เลี้ยงของใบที่ตอบรับแล้ว: ทั้ง 7 ใบมีพี่เลี้ยงที่บัญชีเปิดอยู่ (mentor1 ของ seed)
+    const gap = (key: string) => body.gaps.find((g: any) => g.key === key).count;
+    expect(gap('no_mentor')).toBe(0);
+    expect(gap('mentor_unconfirmed')).toBe(0);
 
     expect(body.kpis).toMatchObject({ total: body.cohort_total, placed: 7, awaiting_company: 1, exited: 2, no_intent: 2 });
   });
@@ -229,7 +234,7 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
     expect(stage('await_company').median_age_days).toBe(16); // มัธยฐานของ 12 กับ 20
     expect(stage('await_company').known_age).toBe(2);
     // ⛔ ระบบไม่เก็บเวลาที่นักศึกษาอัปโหลดแบบตอบรับ / ที่เตรียมเอกสาร — ต้องเป็น null ไม่ใช่ 0
-    expect(stage('await_mentor').median_age_days).toBeNull();
+    expect(stage('await_officer_accept').median_age_days).toBeNull();
     expect(stage('accepted_prep').median_age_days).toBeNull();
 
     expect(body.kpis.awaiting_company_overdue).toBe(2); // ค้างเกิน 10 วัน = 12 กับ 20
@@ -238,8 +243,8 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
     const ages = body.longest.map((r: any) => r.age_days);
     expect(ages).toEqual([20, 12, 9, 3]);
     expect(body.longest[0]).toMatchObject({ stage: 'await_company', holder: 'company' });
-    // คนที่ยังมีเรื่องค้างแต่ไม่รู้อายุ (ยืนยันแบบตอบรับ/ระบุพี่เลี้ยง/เตรียมเอกสาร) บอกจำนวน ไม่ซ่อน
-    expect(body.unknown_age).toBe(2); // await_mentor + accepted_prep (เจ้าหน้าที่ถือ)
+    // คนที่ยังมีเรื่องค้างแต่ไม่รู้อายุ (ยืนยันแบบตอบรับ/เตรียมเอกสาร) บอกจำนวน ไม่ซ่อน
+    expect(body.unknown_age).toBe(2); // await_officer_accept + accepted_prep (เจ้าหน้าที่ถือทั้งคู่)
   });
 
   test('P5: ตัวกรองและพารามิเตอร์ผิด', async ({ request }) => {
@@ -312,13 +317,15 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
     await expect(page.getByTestId('pipeline-stage-await_company-count')).toHaveText('1');
     await expect(page.getByTestId('pipeline-stage-await_company')).toContainText('ค้าง 12 วัน');
     // ขั้นที่ระบบไม่เก็บเวลา: ต้องบอกว่าไม่ทราบ ไม่ใช่เขียนตัวเลขให้
-    await expect(page.getByTestId('pipeline-stage-await_mentor')).toContainText('ไม่ทราบว่าค้างนานเท่าไร');
+    await expect(page.getByTestId('pipeline-stage-await_officer_accept')).toContainText('ไม่ทราบว่าค้างนานเท่าไร');
+    // ไม่มีขั้น "รอนักศึกษาระบุพี่เลี้ยง" แล้ว — พี่เลี้ยงระบุหลังใบ accepted ไม่ขวางขั้นไหน
+    await expect(page.getByTestId('pipeline-stage-await_mentor')).toHaveCount(0);
     // ขั้นที่ว่างต้องยังแสดง (เหตุผลเดียวกับกองงาน 0 บนหน้าแรก)
     await expect(page.getByTestId('pipeline-stage-on_placement')).toContainText('ยังไม่มีใคร');
-    // ใครถือเรื่อง: รอบริษัท 1 · นักศึกษา 2 (รอระบุพี่เลี้ยง · ออกจากท่อ + ยังไม่ยื่น) · เจ้าหน้าที่ 0 · ครบไม่นับ
+    // ใครถือเรื่อง: รอบริษัท 1 · นักศึกษา 2 (ออกจากท่อ · ยังไม่ยื่น) · เจ้าหน้าที่ 1 (รอยืนยันแบบตอบรับ) · ครบไม่นับ
     await expect(page.getByTestId('pipeline-holder-company-count')).toContainText('1 คน');
-    await expect(page.getByTestId('pipeline-holder-student-count')).toContainText('3 คน');
-    await expect(page.getByTestId('pipeline-holder-staff-count')).toContainText('0 คน');
+    await expect(page.getByTestId('pipeline-holder-student-count')).toContainText('2 คน');
+    await expect(page.getByTestId('pipeline-holder-staff-count')).toContainText('1 คน');
 
     // ค้างนานที่สุด: มีคนที่รอบริษัท · ไม่มีคนที่ครบ/ออกจากท่อ
     await expect(page.getByTestId(`pipeline-longest-${waiting}`)).toContainText('12 วัน');

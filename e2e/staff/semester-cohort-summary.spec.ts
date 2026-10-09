@@ -228,8 +228,8 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
   test('C5: ระบุพี่เลี้ยง → mentor_set · นักศึกษายกเลิก → exited · เจ้าหน้าที่ตีกลับคำร้อง → request_returned', async ({ request }) => {
     const { a } = await twoSemesters();
 
-    // ระบุพี่เลี้ยง (ใบรอเจ้าหน้าที่ยืนยันและยังไม่มีพี่เลี้ยง)
-    const formId = await putForm('student2@test.com', a, 'pending_officer_approval');
+    // ระบุพี่เลี้ยง (ใบที่ตอบรับแล้วและยังไม่มีพี่เลี้ยง — ระบุได้ที่ขั้นนี้ขั้นเดียว)
+    const formId = await putForm('student2@test.com', a, 'accepted');
     await apiLoginAs(request, 'student2');
     const mentor = await request.post(`${API_URL}/intents/${formId}/mentor`, {
       data: { name: 'สมศักดิ์ พี่เลี้ยง', email: 'mentor-c5@example.com', phone: '0811112222' },
@@ -269,14 +269,14 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     await putEvent(waiting, 'request_uploaded', 3);
     // ใบเก่าไม่มีเหตุการณ์อัปโหลด → ถอยไปวันสร้างใบ = 20
     await mk('pending_officer_request');
-    // รอพี่เลี้ยง: ไม่มีพี่เลี้ยง · ได้แบบตอบรับเมื่อ 6 วันก่อน
-    const awaitMentor = await mk('pending_officer_approval');
-    await putEvent(awaitMentor, 'acceptance_submitted', 6);
-    // รอเจ้าหน้าที่ยืนยัน: ได้แบบตอบรับ 8 วันก่อน ระบุพี่เลี้ยง 2 วันก่อน → นับจากเหตุการณ์ล่าสุด = 2
-    const awaitAccept = await mk('pending_officer_approval');
-    await dbExec(`UPDATE intent_forms SET mentor_id = (SELECT user_id FROM users WHERE email = 'mentor1@test.com') WHERE form_id = $1`, [awaitAccept]);
-    await putEvent(awaitAccept, 'acceptance_submitted', 8);
-    await putEvent(awaitAccept, 'mentor_set', 2);
+    // รอเจ้าหน้าที่ยืนยันแบบตอบรับ: นับจากวันที่ได้แบบตอบรับเท่านั้น — พี่เลี้ยงไม่เกี่ยวกับขั้นนี้แล้ว
+    // (ใบที่สองมีพี่เลี้ยงและเหตุการณ์ mentor_set ค้างจากทางเก่า ต้องไม่ถูกนับเป็นอายุ)
+    const noMentor = await mk('pending_officer_approval');
+    await putEvent(noMentor, 'acceptance_submitted', 6);
+    const withMentor = await mk('pending_officer_approval');
+    await dbExec(`UPDATE intent_forms SET mentor_id = (SELECT user_id FROM users WHERE email = 'mentor1@test.com') WHERE form_id = $1`, [withMentor]);
+    await putEvent(withMentor, 'acceptance_submitted', 8);
+    await putEvent(withMentor, 'mentor_set', 2);
     // ไม่มีเหตุการณ์เลย (ใบเก่า) → ไม่ทราบ
     await mk('pending_officer_approval');
 
@@ -288,12 +288,13 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     expect(stage('await_officer_request').count).toBe(2);
     expect(stage('await_officer_request').known_age).toBe(2);
     expect(stage('await_officer_request').median_age_days).toBe(12);
-    expect(stage('await_mentor').known_age).toBe(1);
-    expect(stage('await_mentor').median_age_days).toBe(6);
+    // ทั้งสามใบอยู่ขั้นเดียวกัน (ไม่มีขั้น "รอระบุพี่เลี้ยง" แล้ว) · รู้อายุ 2 ใบ = 6 กับ 8 → มัธยฐาน 7
+    expect(stage('await_mentor')).toBeUndefined();
+    expect(stage('await_officer_accept').count).toBe(3);
+    expect(stage('await_officer_accept').known_age).toBe(2);
+    expect(stage('await_officer_accept').median_age_days).toBe(7);
 
     // ใบที่ไม่มีเหตุการณ์และไม่มีวันในใบ = ไม่ทราบ ไม่ใช่ 0 วัน
-    const noAge = stage('await_mentor').count + stage('await_officer_accept').count;
-    expect(noAge).toBeGreaterThanOrEqual(2);
     expect(body.unknown_age).toBeGreaterThanOrEqual(1);
   });
 

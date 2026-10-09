@@ -378,14 +378,12 @@ export class PublicAcceptanceController {
       }
 
       // ด่านตรวจร่วมกับทางนักศึกษาอัปโหลดเอง (utils/acceptanceInput.ts) — ไม่มีสำเนาตรรกะที่นี่
-      // ⛔ ไม่ส่ง `mentor` = ไม่ถามพี่เลี้ยงบนลิงก์ (ตัด สหกิจ 07 ฝั่งบริษัท 2026-10-05) · นักศึกษาระบุทีหลัง
       const input = await validateAcceptanceInput(
         gate.form_id,
         { hasFile: !!file, start_date: startDate, signer: body },
         {
           noFile: 'กรุณาแนบไฟล์แบบตอบรับ (เอกสารหมายเลข ๒) ที่ลงนามและประทับตราแล้ว',
           requiredFields: 'กรุณาระบุวันเริ่มปฏิบัติงาน',
-          badEmail: '',
           badStartDate: 'รูปแบบวันเริ่มปฏิบัติงานไม่ถูกต้อง',
         }
       );

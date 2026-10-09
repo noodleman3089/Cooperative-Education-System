@@ -117,60 +117,28 @@ test.describe('Security hardening regressions', () => {
       await client.query('DELETE FROM intent_forms WHERE student_id = 2');
       intentId = (await client.query(
         `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
-         VALUES (2, 1, $1, 'approved_by_dept_head') RETURNING form_id`,
+         VALUES (2, 1, $1, 'accepted') RETURNING form_id`,
         [semesterId]
       )).rows[0].form_id;
     } finally {
       client.release();
     }
 
-    // ⛔ `acceptance_due_date` = ด่านที่บอกว่าคณบดีลงนามหนังสือแล้ว (รอบ 53)
-    //    ไม่ตั้งไว้ อัปโหลดแบบตอบรับจะได้ 409 ก่อนถึงด่านที่เทสต์นี้ตั้งใจตรวจ
-    await withDb(async (db) => {
-      await db.query(
-        `UPDATE intent_forms
-            SET acceptance_due_date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date + 15
-          WHERE form_id = $1`,
-        [intentId]
-      );
-    });
-
+    // ทางเดียวที่นักศึกษาระบุพี่เลี้ยงได้ตั้งแต่ 2026-10-09 คือ `POST /intents/:id/mentor` บนใบที่ตอบรับแล้ว
+    // (การอัปโหลดแบบตอบรับไม่รับช่องพี่เลี้ยงแล้ว — คุมที่ `company/mentor-after-acceptance` A1)
     await apiLoginAs(request, 'student2');
-    const pdf = Buffer.from('%PDF-1.4 mock acceptance evidence');
+    const nominate = (name: string, email: string) =>
+      request.post(`${API_URL}/intents/${intentId}/mentor`, { data: { name, email, phone: '0812345678' } });
 
-    const asSelf = await request.post(`${API_URL}/acceptances/student/${intentId}/upload-proof`, {
-      multipart: {
-        evidence: { name: 'proof.pdf', mimeType: 'application/pdf', buffer: pdf },
-        name: 'ตัวเอง',
-        email: 'student2@test.com',
-        phone: '0812345678',
-        start_date: '2026-11-02',
-        // ผู้ลงนามครบ — ให้คำขอไปตกที่ด่าน SEC-03 จริง ไม่ใช่ตกเพราะขาดช่องผู้ลงนาม
-        signer_name: 'คุณสมชาย ผู้จัดการฝ่ายบุคคล',
-        signer_position: 'ผู้จัดการฝ่ายบุคคล',
-        signed_date: '2026-09-02',
-      },
-    });
-    expect(asSelf.status()).toBe(400);
-    expect(await asSelf.text()).not.toContain('ผู้ลงนาม');
+    const asSelf = await nominate('ตัวเอง', 'student2@test.com');
+    expect(asSelf.status(), await asSelf.text()).toBe(400);
 
-    const asDean = await request.post(`${API_URL}/acceptances/student/${intentId}/upload-proof`, {
-      multipart: {
-        evidence: { name: 'proof.pdf', mimeType: 'application/pdf', buffer: pdf },
-        name: 'คณบดี',
-        email: 'dean1@test.com',
-        phone: '0812345678',
-        start_date: '2026-11-02',
-        // ผู้ลงนามครบ — ให้คำขอไปตกที่ด่าน SEC-03 จริง ไม่ใช่ตกเพราะขาดช่องผู้ลงนาม
-        signer_name: 'คุณสมชาย ผู้จัดการฝ่ายบุคคล',
-        signer_position: 'ผู้จัดการฝ่ายบุคคล',
-        signed_date: '2026-09-02',
-      },
-    });
-    expect(asDean.status()).toBe(400);
-    expect(await asDean.text()).not.toContain('ผู้ลงนาม');
+    const asDean = await nominate('คณบดี', 'dean1@test.com');
+    expect(asDean.status(), await asDean.text()).toBe(400);
 
     await withDb(async (db) => {
+      const linked = await db.query('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [intentId]);
+      expect(linked.rows[0].mentor_id).toBeNull();
       const deanRoles = await db.query(
         `SELECT role_name FROM user_roles WHERE user_id = (SELECT user_id FROM users WHERE email = 'dean1@test.com')`
       );

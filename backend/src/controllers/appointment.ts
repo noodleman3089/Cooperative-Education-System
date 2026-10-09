@@ -86,7 +86,7 @@ export class AppointmentController {
         SELECT a.*, s.first_name, s.last_name, s.student_code, c.name_th as company_name,
                v.visit_number,
                NULLIF(TRIM(CONCAT_WS(' ', p.first_name, p.last_name)), '') AS advisor_name,
-               m.mentor_email
+               m.mentor_email, COALESCE(m.mentor_status, 'none') AS mentor_status
         FROM supervision_appointments a
         JOIN (
           SELECT appointment_id,
@@ -99,10 +99,15 @@ export class AppointmentController {
         -- ปลายทางอีเมลตัวเดียวกับที่ auditSend ส่งจริง (พี่เลี้ยงบนใบที่ตอบรับแล้ว)
         -- ⛔ หน้าจอเจ้าหน้าที่ใช้ค่านี้ตัดสินว่า "ส่งได้/ส่งไม่ได้" — เดิมไม่ได้ส่งมา
         --    ทุกแถวเลยขึ้นว่าไม่มีอีเมลและกดส่งไม่ได้เลย
+        -- ⛔ mentor_email มีค่าเฉพาะพี่เลี้ยงที่เจ้าหน้าที่ยืนยันแล้ว (บัญชีเปิดใช้) — ด่านเดียวกับ auditSend
+        --    mentor_status บอกเหตุที่ยังส่งไม่ได้: none = นักศึกษายังไม่ระบุ · unconfirmed = รอเจ้าหน้าที่ยืนยัน
         LEFT JOIN LATERAL (
-          SELECT u.email AS mentor_email
+          SELECT CASE WHEN u.is_active THEN u.email END AS mentor_email,
+                 CASE WHEN u.user_id IS NULL THEN 'none'
+                      WHEN u.is_active THEN 'confirmed'
+                      ELSE 'unconfirmed' END AS mentor_status
             FROM intent_forms i
-            JOIN users u ON u.user_id = i.mentor_id
+            LEFT JOIN users u ON u.user_id = i.mentor_id
            WHERE i.student_id = a.student_id AND i.company_id = a.company_id AND i.status = 'accepted'
            ORDER BY i.form_id DESC
            LIMIT 1
@@ -408,14 +413,26 @@ export class AppointmentController {
         return;
       }
 
+      // นัดนิเทศส่งถึงพี่เลี้ยงเท่านั้น — พี่เลี้ยงถูกระบุหลังเริ่มฝึก จึงมีช่วงที่ใบยังไม่มีพี่เลี้ยง
       if (!app.mentor_id) {
-        res.status(400).json({ message: 'No mentor assigned for this student.' });
+        res.status(409).json({
+          code: 'mentor_missing',
+          message: 'ยังส่งนัดไม่ได้ เพราะนักศึกษายังไม่ได้ระบุพี่เลี้ยง — รอนักศึกษาระบุพี่เลี้ยงก่อน',
+        });
         return;
       }
 
-      const mentorRes = await query(`SELECT email FROM users WHERE user_id = $1`, [app.mentor_id]);
+      const mentorRes = await query(`SELECT email, is_active FROM users WHERE user_id = $1`, [app.mentor_id]);
       if ((mentorRes.rowCount ?? 0) === 0) {
         res.status(400).json({ message: 'Mentor email not found.' });
+        return;
+      }
+      // ⛔ อีเมลของพี่เลี้ยงที่ยังไม่ยืนยันคือที่อยู่ที่นักศึกษาพิมพ์เอง — ระบบต้องไม่ส่งอะไรไปก่อนเจ้าหน้าที่ยืนยัน (SEC-03)
+      if (mentorRes.rows[0].is_active !== true) {
+        res.status(409).json({
+          code: 'mentor_unconfirmed',
+          message: 'ยังส่งนัดไม่ได้ เพราะพี่เลี้ยงที่นักศึกษาระบุยังไม่ได้รับการยืนยัน — ยืนยันพี่เลี้ยงที่หน้า "ติดตามพี่เลี้ยง" ก่อน',
+        });
         return;
       }
 
