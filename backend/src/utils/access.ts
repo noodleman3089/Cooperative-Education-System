@@ -125,8 +125,8 @@ export async function assertCanReviewStudentWork(
  * Assert that an advisor holds one *specific* duty for this student (SB-F9).
  *
  * `assertCanReviewStudentWork` accepts either column, which is right for reading but
- * wrong for writing: the forms split the work. สหกิจ 11 · 14 and the final-report
- * check belong to the อาจารย์ที่ปรึกษา (`advisor_id`); สหกิจ 12 · 13 and the travel
+ * wrong for writing: the forms split the work. สหกิจ 14 and the final-report
+ * check belong to the อาจารย์ที่ปรึกษา (`advisor_id`); สหกิจ 11 · 12 · 13 and the travel
  * request belong to the อาจารย์นิเทศ (`supervisor_id`). With the loose check, an
  * advisor who was not the supervisor could draft visits for the same student and
  * use up the two-visit limit the real supervisor needed.

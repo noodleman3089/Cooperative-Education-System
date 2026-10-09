@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { assertCanReviewStudentWork, assertMentorOwnsStudent, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
+import { AuditAction, writeAudit } from '../utils/audit';
 
 const PERSONNEL_REVIEW_ROLES = ['advisor', 'dept_head', 'staff', 'dean'];
 
@@ -55,7 +56,7 @@ export class ReportOutlineController {
         if (['pending_advisor', 'approved'].includes(existingRes.rows[0].status)) {
           res.status(409).json({
             message:
-              'โครงร่างนี้พี่เลี้ยงเห็นชอบแล้ว ส่งฉบับใหม่ทับไม่ได้ จนกว่าอาจารย์ที่ปรึกษาจะส่งกลับให้แก้ไข',
+              'โครงร่างนี้พี่เลี้ยงเห็นชอบแล้ว ส่งฉบับใหม่ทับไม่ได้ จนกว่าอาจารย์นิเทศจะส่งกลับให้แก้ไข',
           });
           return;
         }
@@ -120,6 +121,8 @@ export class ReportOutlineController {
       // ⛔ บทบาท `company` ถูกลบออกจากระบบแล้ว (บริษัทไม่มีบัญชี) — มีแค่พี่เลี้ยงกับอาจารย์
       const isMentor = roles.includes('mentor');
       const isAdvisor = roles.includes('advisor');
+      // ใบที่อนุมัติแล้วถูกส่งกลับ — มีด่านเพิ่มและลง audit แยกจากการตีกลับปกติ
+      let reopening = false;
 
       if (!isMentor && !isAdvisor) {
         res.status(403).json({ message: 'Forbidden. Only mentor or advisor can update status.' });
@@ -164,14 +167,15 @@ export class ReportOutlineController {
           res.status(400).json({ message: 'Cannot approve outline unless current status is pending_advisor (after mentor review).' });
           return;
         }
-        // Must be the assigned advisor
+        // สหกิจ 11 เป็นงานของอาจารย์นิเทศ (`supervisor_id`) ตามคู่มือคณะ — เดิมผูกกับอาจารย์ที่ปรึกษา (เจ้าของตัดสิน 2026-10-09)
+        // route ยังเปิดให้ role `advisor` เพราะอาจารย์นิเทศถือ role นั้น · ชื่อสถานะ `pending_advisor` คงเดิม
         if (!isAdvisor) {
           res.status(403).json({ message: 'Forbidden. Only advisors can approve outlines.' });
           return;
         }
-        const studentCheck = await query('SELECT advisor_id FROM students WHERE student_id = $1', [student_id]);
-        if ((studentCheck.rowCount ?? 0) === 0 || studentCheck.rows[0].advisor_id !== userId) {
-          res.status(403).json({ message: 'Forbidden. You are not the assigned advisor for this student.' });
+        const studentCheck = await query('SELECT supervisor_id FROM students WHERE student_id = $1', [student_id]);
+        if ((studentCheck.rowCount ?? 0) === 0 || studentCheck.rows[0].supervisor_id !== userId) {
+          res.status(403).json({ message: 'งานนี้เป็นของอาจารย์นิเทศของนักศึกษาคนนี้เท่านั้น' });
           return;
         }
       } else if (status === 'rejected') {
@@ -181,8 +185,11 @@ export class ReportOutlineController {
          * ของเดิมสายนี้ไม่ตรวจ `current_status` เลย แปลว่า:
          *   · อาจารย์ตีกลับใบที่ **เห็นชอบไปแล้ว** ได้ (นักศึกษาเริ่มเขียนเล่มไปแล้ว ใบย้อนกลับเงียบ ๆ)
          *   · อาจารย์ตีกลับใบที่ยัง `pending_mentor` ได้ = ข้ามขั้นพี่เลี้ยง (สหกิจ 11 ต้องผ่าน 2 คนตามลำดับ)
+         *
+         * 2026-10-09: อาจารย์นิเทศส่งใบที่อนุมัติแล้วกลับได้ (ทางแก้เมื่ออนุมัติผิด) — เฉพาะตอนนักศึกษา
+         * ยังไม่ส่งเล่มสมบูรณ์ และต้องมีเหตุผล · ส่งกลับแล้วนักศึกษาส่งฉบับใหม่ ซึ่งต้องผ่านพี่เลี้ยงอีกรอบ
          */
-        const allowedFrom = isAdvisor && current_status === 'pending_advisor'
+        const allowedFrom = isAdvisor && (current_status === 'pending_advisor' || current_status === 'approved')
           ? 'advisor'
           : isMentor && current_status === 'pending_mentor'
             ? 'mentor'
@@ -191,7 +198,7 @@ export class ReportOutlineController {
           res.status(400).json({
             message:
               current_status === 'approved'
-                ? 'โครงร่างนี้ผ่านการเห็นชอบแล้ว ตีกลับไม่ได้ — ให้นักศึกษาส่งฉบับใหม่เข้ามาแทน'
+                ? 'โครงร่างนี้อนุมัติแล้ว ส่งกลับได้เฉพาะอาจารย์นิเทศของนักศึกษา'
                 : `ตีกลับโครงร่างในสถานะ ${current_status} ไม่ได้`,
           });
           return;
@@ -200,8 +207,8 @@ export class ReportOutlineController {
         // Can be either, check whichever role is making the request
         let allowed = false;
         if (isAdvisor) {
-          const studentCheck = await query('SELECT advisor_id FROM students WHERE student_id = $1', [student_id]);
-          if ((studentCheck.rowCount ?? 0) > 0 && studentCheck.rows[0].advisor_id === userId) {
+          const studentCheck = await query('SELECT supervisor_id FROM students WHERE student_id = $1', [student_id]);
+          if ((studentCheck.rowCount ?? 0) > 0 && studentCheck.rows[0].supervisor_id === userId) {
             allowed = true;
           }
         }
@@ -227,6 +234,22 @@ export class ReportOutlineController {
           res.status(400).json({ message: 'กรุณาระบุข้อเสนอแนะในการส่งกลับแก้ไขโครงร่างรายงาน' });
           return;
         }
+
+        if (current_status === 'approved') {
+          // เล่มสมบูรณ์ส่งเข้ามาแล้ว = เล่มถูกเขียนตามโครงร่างนี้ไปแล้ว ถอนการอนุมัติไม่ได้
+          const reportRes = await query(
+            `SELECT 1 FROM final_reports WHERE student_id = $1 AND reviewer_kind = 'advisor' LIMIT 1`,
+            [student_id]
+          );
+          if ((reportRes.rowCount ?? 0) > 0) {
+            res.status(409).json({
+              code: 'final_report_submitted',
+              message: 'นักศึกษาส่งเล่มรายงานฉบับสมบูรณ์แล้ว จึงส่งโครงร่างกลับไม่ได้',
+            });
+            return;
+          }
+          reopening = true;
+        }
       }
 
       // State Machine Enforcement
@@ -244,10 +267,17 @@ export class ReportOutlineController {
         }
       }
 
-      await query(
-        `UPDATE report_outlines SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE outline_id = $2`,
-        [status, outlineId]
+      // เงื่อนไขสถานะเดิมอยู่ใน UPDATE — สองคนกดพร้อมกัน คนที่สองต้องไม่เขียนทับผลของคนแรก
+      const updated = await query(
+        `UPDATE report_outlines SET status = $1, updated_at = CURRENT_TIMESTAMP
+          WHERE outline_id = $2 AND status = $3
+          RETURNING outline_id`,
+        [status, outlineId, current_status]
       );
+      if ((updated.rowCount ?? 0) === 0) {
+        res.status(409).json({ message: 'สถานะของโครงร่างนี้เพิ่งเปลี่ยน กรุณาโหลดหน้าใหม่แล้วลองอีกครั้ง' });
+        return;
+      }
 
       const versionRes = await query(
         `SELECT version_id FROM report_outline_versions WHERE outline_id = $1 ORDER BY submitted_at DESC LIMIT 1`,
@@ -261,6 +291,16 @@ export class ReportOutlineController {
           `UPDATE report_outline_versions SET status = $1, rejection_comment = $2, reviewed_by = $3 WHERE version_id = $4`,
           [versionStatus, comment || null, userId, versionId]
         );
+      }
+
+      if (reopening) {
+        writeAudit({
+          action: AuditAction.OUTLINE_REOPENED,
+          entityType: 'report_outline',
+          entityId: outlineId,
+          subjectId: student_id,
+          detail: { reason: String(comment).trim() },
+        }, req).catch(() => undefined);
       }
 
       res.status(200).json({
@@ -316,9 +356,10 @@ export class ReportOutlineController {
       const metaRes = await query(
         `SELECT i.start_date, i.end_date,
                 m.name as mentor_name,
+                -- ผู้พิจารณาโครงร่างคืออาจารย์นิเทศ (supervisor_id) — ชื่อคีย์ advisor_* คงไว้เพราะหน้าจอใช้อยู่
                 p.first_name as advisor_first_name, p.last_name as advisor_last_name
          FROM students s
-         LEFT JOIN personnel p ON s.advisor_id = p.personnel_id
+         LEFT JOIN personnel p ON s.supervisor_id = p.personnel_id
          LEFT JOIN intent_forms i ON s.student_id = i.student_id AND i.status = 'accepted'
          LEFT JOIN mentors m ON i.mentor_id = m.mentor_id
          WHERE s.student_id = $1
@@ -439,7 +480,7 @@ export class ReportOutlineController {
   }
 
   /**
-   * Get report outlines for advisor's students
+   * โครงร่างของนักศึกษาที่ผู้เรียกเป็นอาจารย์นิเทศ (สหกิจ 11 เป็นงานของอาจารย์นิเทศ — ชื่อ route คงเดิม)
    * Route: GET /api/outlines/advisor
    * Access: advisor
    */
@@ -487,7 +528,7 @@ export class ReportOutlineController {
           ORDER BY submitted_at DESC
           LIMIT 1
         ) v ON true
-        WHERE s.advisor_id = $1
+        WHERE s.supervisor_id = $1
         ORDER BY ro.updated_at DESC`,
         [userId]
       );

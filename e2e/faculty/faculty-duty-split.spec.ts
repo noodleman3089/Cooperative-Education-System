@@ -13,7 +13,8 @@ import { apiLoginAs } from '../helpers/auth';
  *
  * สิ่งที่ชุดนี้คุม:
  *   1. **ฝ่ายบนตัวสลับ (`views`) มาจากการจัดสรรจริง** — นิเทศอย่างเดียวไม่มีฝ่ายที่ปรึกษาที่ว่างตลอด
- *   2. **งานเขียนแยกตามแบบฟอร์ม** — สหกิจ 12 · 13 = นิเทศ · ตรวจรับเล่ม · สหกิจ 11 · 14 = ที่ปรึกษา
+ *   2. **งานเขียนแยกตามแบบฟอร์ม** — สหกิจ 11 · 12 · 13 = นิเทศ · ตรวจรับเล่ม · สหกิจ 14 = ที่ปรึกษา
+ *      (สหกิจ 11 ย้ายจากที่ปรึกษาไปนิเทศ 2026-10-09 ตามคู่มือคณะ — ขั้น 7 ข้อ ข1)
  *      ที่ปรึกษายังอ่านสหกิจ 13 ได้ (เป็นข้อมูลของนักศึกษาที่ตัวเองดูแล)
  *   3. **`views` ไม่ใช่ด่าน** — ด่านจริงคือการตรวจต่อหัวนักศึกษาที่เซิร์ฟเวอร์
  *
@@ -131,7 +132,7 @@ test.describe('SB-F8 · SB-F9 · ฝ่ายที่ปรึกษา / ฝ�
     expect((await request.get(`${API_URL}/supervision-records/student/${studentId}`)).status()).toBe(200);
   });
 
-  test('D3: งานที่ปรึกษา — อาจารย์นิเทศเห็นชอบโครงร่าง/ตรวจรับเล่ม/ลงนาม สหกิจ 14 ไม่ได้ (403) · ที่ปรึกษาทำได้', async ({ request }) => {
+  test('D3: โครงร่าง (สหกิจ 11) เป็นงานนิเทศ — ที่ปรึกษาที่ไม่ได้นิเทศเห็นชอบไม่ได้ (403) · ตรวจรับเล่ม/สหกิจ 14 ยังเป็นงานที่ปรึกษา นิเทศทำไม่ได้ (403)', async ({ request }) => {
     await assign(advisor1, advisor2);
 
     const outlineId = await dbValue<number>(
@@ -144,13 +145,28 @@ test.describe('SB-F8 · SB-F9 · ฝ่ายที่ปรึกษา / ฝ�
       [studentId]
     );
 
+    const approveOutline = () => request.put(`${API_URL}/outlines/${outlineId}/status`, { data: { status: 'approved' } });
+    const outlineQueue = async () =>
+      ((await (await request.get(`${API_URL}/outlines/advisor`)).json()).data as Array<{ outline_id: number }>).map((o) => o.outline_id);
+
+    // ที่ปรึกษา (advisor1) ไม่ได้นิเทศ — โครงร่างไม่ใช่งานของตัวเอง ไม่อยู่ในคิว และเห็นชอบไม่ได้
+    await apiLoginAs(request, 'advisor1');
+    expect(await outlineQueue()).not.toContain(outlineId);
+    const deniedOutline = await approveOutline();
+    expect(deniedOutline.status(), await deniedOutline.text()).toBe(403);
+    expect((await deniedOutline.json()).message).toContain('อาจารย์นิเทศ');
+    expect(await dbValue('SELECT status FROM report_outlines WHERE outline_id = $1', [outlineId])).toBe('pending_advisor');
+
+    // นิเทศ (advisor2) — ตรวจรับเล่มไม่ได้ (ยังเป็นงานที่ปรึกษา) แต่เห็นชอบโครงร่างได้
     await apiLoginAs(request, 'advisor2');
-    expect((await request.put(`${API_URL}/outlines/${outlineId}/status`, { data: { status: 'approved' } })).status()).toBe(403);
     const deniedReport = await request.patch(`${API_URL}/final-reports/${reportId}/status`, { data: { status: 'approved' } });
     expect(deniedReport.status(), await deniedReport.text()).toBe(403);
     expect((await deniedReport.json()).message).toContain('อาจารย์ที่ปรึกษา');
-    expect(await dbValue('SELECT status FROM report_outlines WHERE outline_id = $1', [outlineId])).toBe('pending_advisor');
     expect(await dbValue('SELECT status FROM final_reports WHERE report_id = $1', [reportId])).toBe('submitted');
+    expect(await outlineQueue()).toContain(outlineId);
+    const okOutline = await approveOutline();
+    expect(okOutline.status(), await okOutline.text()).toBe(200);
+    expect(await dbValue('SELECT status FROM report_outlines WHERE outline_id = $1', [outlineId])).toBe('approved');
 
     await apiLoginAs(request, 'advisor1');
     const approved = await request.patch(`${API_URL}/final-reports/${reportId}/status`, { data: { status: 'approved' } });

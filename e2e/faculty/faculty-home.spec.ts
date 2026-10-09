@@ -24,7 +24,10 @@ async function companyAndSemester(): Promise<{ companyId: number; semesterId: nu
   };
 }
 
-/** SB-F8 — หน้าแรกแยกฝ่าย: ที่ปรึกษาได้ outline/report/confirmation · นิเทศได้ reschedule/unrecorded_visit/no_appointment */
+/**
+ * SB-F8 — หน้าแรกแยกฝ่าย: ที่ปรึกษาได้ report/confirmation · นิเทศได้ outline/reschedule/unrecorded_visit/no_appointment
+ * (กอง outline ย้ายไปฝ่ายนิเทศ 2026-10-09 — สหกิจ 11 เป็นงานของอาจารย์นิเทศ · ⛔ ห้ามส่งให้ทั้งสองฝ่าย)
+ */
 async function advisorHome(request: APIRequestContext, view: 'advisor' | 'supervisor') {
   const res = await request.get(`${API_URL}/faculty/home/advisor?view=${view}`);
   expect(res.status(), await res.text()).toBe(200);
@@ -72,8 +75,8 @@ test.describe('SB-F1 · หน้าแรกอาจารย์', () => {
     await apiLoginAs(request, 'advisor1');
     await dbExec('INSERT INTO supervision_appointments (advisor_id, student_id, company_id, appointment_date, student_time, mentor_time, status) SELECT $1, $2, company_id, CURRENT_DATE + 30, \'09:00\', \'10:00\', \'draft\' FROM intent_forms WHERE student_id = $2', [advisor, s2]);
     const tilesOf = {
-      advisor: ['outline', 'report', 'confirmation'],
-      supervisor: ['reschedule', 'unrecorded_visit', 'no_appointment'],
+      advisor: ['report', 'confirmation'],
+      supervisor: ['outline', 'reschedule', 'unrecorded_visit', 'no_appointment'],
     } as const;
     for (const view of ['advisor', 'supervisor'] as const) {
       const home = await advisorHome(request, view);
@@ -128,8 +131,9 @@ test.describe('SB-F1 · หน้าแรกอาจารย์', () => {
     const adv = await advisorHome(request, 'advisor');
     const sup = await advisorHome(request, 'supervisor');
 
-    expect(adv.tiles.outline.count).toBe(1);
-    expect(adv.tiles.outline.items[0]).toMatchObject({ ref_id: outlineId, student_id: s2, detail: 'หัวข้อทดสอบ', days: 2 });
+    expect(sup.tiles.outline.count).toBe(1);
+    expect(sup.tiles.outline.items[0]).toMatchObject({ ref_id: outlineId, student_id: s2, detail: 'หัวข้อทดสอบ', days: 2 });
+    expect(adv.tiles.outline).toBeUndefined();
     expect(sup.tiles.reschedule.count).toBe(1);
     expect(sup.tiles.reschedule.items[0].visit_number).toBe(2);
     expect(sup.tiles.unrecorded_visit.count).toBe(1);

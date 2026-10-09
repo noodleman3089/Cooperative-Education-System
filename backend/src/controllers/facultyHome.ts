@@ -56,8 +56,8 @@ export class FacultyHomeController {
    * Route: GET /api/faculty/home/advisor?view=advisor|supervisor
    * Access: advisor
    *
-   * `view` เลือกฝ่าย (SB-F8 · `utils/facultyViews.ts`) — ฝ่ายที่ปรึกษาได้กองของสหกิจ 11 · เล่ม · สหกิจ 14
-   * ฝ่ายนิเทศได้กองของสหกิจ 12 · 13 · นักศึกษาที่ยังไม่มีนัด · ⛔ ไม่ส่งปนกัน อาจารย์นิเทศอย่างเดียว
+   * `view` เลือกฝ่าย (SB-F8 · `utils/facultyViews.ts`) — ฝ่ายที่ปรึกษาได้กองของเล่ม · สหกิจ 14
+   * ฝ่ายนิเทศได้กองของสหกิจ 11 · 12 · 13 · นักศึกษาที่ยังไม่มีนัด · ⛔ ไม่ส่งปนกัน อาจารย์นิเทศอย่างเดียว
    * ต้องไม่เห็นกองของที่ปรึกษาที่ว่างตลอด
    */
   static async getAdvisorHome(req: Request, res: Response): Promise<void> {
@@ -77,8 +77,7 @@ export class FacultyHomeController {
       const today = await CoopCalendarModel.today();
 
       if (view === 'advisor') {
-        const [outline, report, confirmation, paper] = await Promise.all([
-          FacultyHomeController.outlineRows(me, today),
+        const [report, confirmation, paper] = await Promise.all([
           FacultyHomeController.reportRows(me, today),
           FacultyHomeController.confirmationRows(me, today),
           // เอกสารหมายเลข 1 ในสาขาที่ยังรอลงนามบนกระดาษ — แถบข้อมูล ไม่ใช่กองงาน (SEC-04)
@@ -93,7 +92,6 @@ export class FacultyHomeController {
           today,
           view,
           tiles: {
-            outline: tile(outline.rows, 'ไม่มีโครงร่างที่รอคุณเห็นชอบ'),
             report: tile(report.rows, 'ยังไม่มีเล่มที่ส่งเข้ามารอตรวจรับ'),
             confirmation: tile(confirmation.rows, 'ยังไม่มีนักศึกษายื่นขอ'),
           },
@@ -102,7 +100,8 @@ export class FacultyHomeController {
         return;
       }
 
-      const [reschedule, unrecorded, noAppointment] = await Promise.all([
+      const [outline, reschedule, unrecorded, noAppointment] = await Promise.all([
+        FacultyHomeController.outlineRows(me, today),
         FacultyHomeController.rescheduleRows(me, today),
         FacultyHomeController.unrecordedRows(me, today),
         FacultyHomeController.noAppointmentRows(me),
@@ -111,6 +110,7 @@ export class FacultyHomeController {
         today,
         view,
         tiles: {
+          outline: tile(outline.rows, 'ไม่มีโครงร่างที่รอคุณเห็นชอบ'),
           reschedule: tile(reschedule.rows, 'ไม่มีนัดที่พี่เลี้ยงขอเลื่อน'),
           unrecorded_visit: tile(unrecorded.rows, 'ไม่มีการนิเทศที่ค้างบันทึก'),
           no_appointment: tile(noAppointment.rows, 'นักศึกษาที่คุณนิเทศและได้ที่ฝึกแล้วมีนัดนิเทศทุกคน'),
@@ -122,7 +122,7 @@ export class FacultyHomeController {
     }
   }
 
-  // สหกิจ 11 — ใบที่พี่เลี้ยงเห็นชอบแล้วและรออาจารย์ที่ปรึกษา (updateStatus ตรวจ advisor_id)
+  // สหกิจ 11 — ใบที่พี่เลี้ยงเห็นชอบแล้วและรออาจารย์นิเทศ (updateStatus ตรวจ supervisor_id)
   private static outlineRows(me: number, today: string) {
     return query(
           `SELECT ro.outline_id AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
@@ -136,7 +136,7 @@ export class FacultyHomeController {
                SELECT report_title FROM report_outline_versions
                 WHERE outline_id = ro.outline_id ORDER BY submitted_at DESC LIMIT 1
              ) v ON TRUE
-            WHERE ro.status = 'pending_advisor' AND s.advisor_id = $1
+            WHERE ro.status = 'pending_advisor' AND s.supervisor_id = $1
             ORDER BY ro.updated_at ASC`,
           [me, today]
         );

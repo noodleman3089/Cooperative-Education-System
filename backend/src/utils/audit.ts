@@ -117,6 +117,9 @@ export const AuditAction = {
   APPOINTMENT_UPDATED: 'appointment.updated',
   // ลบร่างนัด — แถวหายทั้งแถว บรรทัดนี้คือร่องรอยเดียวที่เหลือ
   APPOINTMENT_DRAFT_DELETED: 'appointment.draft_deleted',
+  // สหกิจ 11: อาจารย์นิเทศส่งโครงร่างที่อนุมัติแล้วกลับให้แก้ — การอนุมัติถูกถอน ด่านอัปโหลดเล่มกลับมาล็อก
+  // detail เก็บเหตุผล (เหตุผลบนแถวฉบับไม่ติดไปกับฉบับใหม่ที่นักศึกษาส่ง)
+  OUTLINE_REOPENED: 'outline.reopened',
   // สหกิจ 03: การพิมพ์ใบสมัครเป็นครั้งเดียวที่ระบบถอดรหัสเลขบัตร/เชื้อชาติ/ศาสนา
   // ออกมาเป็นค่าจริง (SEC-12) — ต้องรู้เสมอว่าค่าจริงถูกเปิดออกมาเมื่อไหร่ จากเครื่องไหน
   COOP_APPLICATION_PRINTED: 'student.coop_application_printed',
