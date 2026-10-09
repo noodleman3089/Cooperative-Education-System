@@ -5,6 +5,7 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
 import { FileText, ExternalLink, RefreshCw, CheckCircle2 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import ReasonModal from '../../components/ui/ReasonModal';
 import { getErrorMessage } from '../../utils/errors';
 import type { ReportOutlineRow, ReportOutlineVersion } from '../../types/api';
 
@@ -47,6 +48,7 @@ const OutlineReview: React.FC = () => {
   const [outlineComment, setOutlineComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [panelError, setPanelError] = useState<string | null>(null);
+  const [showReopenModal, setShowReopenModal] = useState(false);
 
   // Versions history for the selected student
   const [versionsData, setVersionsData] = useState<{
@@ -216,8 +218,30 @@ const OutlineReview: React.FC = () => {
     }
   };
 
+  const handleReopenSubmit = async (reason: string) => {
+    if (!selectedOutline) return;
+    await api.put(`/outlines/${selectedOutline.outline_id}/status`, {
+      status: 'rejected',
+      comment: reason,
+    });
+
+    const studentName = selectedOutline.first_name
+      ? `${selectedOutline.first_name} ${selectedOutline.last_name || ''}`.trim()
+      : selectedOutline.student_code;
+
+    setSuccess(`ส่งกลับโครงร่างรายงานของ ${studentName} ให้แก้ไขเรียบร้อยแล้ว`);
+    setShowReopenModal(false);
+    await loadOutlines(false);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('tab', 'rejected');
+      next.set('outline', selectedOutline.outline_id.toString());
+      return next;
+    });
+  };
+
   if (loading) {
-    return <PageSkeleton variant={skeletonFor('advisor', 'report_outlines')} />;
+    return <PageSkeleton variant={skeletonFor('supervisor', 'report_outlines')} />;
   }
 
   return (
@@ -233,7 +257,7 @@ const OutlineReview: React.FC = () => {
             <strong className="font-semibold text-gray-800 dark:text-gray-200">
               พนักงานที่ปรึกษาเห็นชอบก่อน
             </strong>{' '}
-            → อาจารย์ที่ปรึกษาตรวจ ให้คำแนะนำ และเห็นชอบ · ส่งภายใน 3 สัปดาห์แรก
+            → อาจารย์นิเทศตรวจ ให้คำแนะนำ และเห็นชอบ · ส่งภายใน 3 สัปดาห์แรก
           </p>
         </div>
 
@@ -474,7 +498,7 @@ const OutlineReview: React.FC = () => {
                             )}
                             {v.reviewer_first_name && (
                               <div className="text-gray-600 dark:text-gray-400 mt-0.5">
-                                <strong>อาจารย์ที่ปรึกษา:</strong> {v.reviewer_first_name}{' '}
+                                <strong>อาจารย์นิเทศ:</strong> {v.reviewer_first_name}{' '}
                                 {v.reviewer_last_name || ''}
                                 {v.rejection_comment ? ` · "${v.rejection_comment}"` : ''}
                               </div>
@@ -545,23 +569,46 @@ const OutlineReview: React.FC = () => {
                 </div>
               )}
 
-              {/* Read-Only Status Notice if not pending_advisor */}
+              {/* Read-Only Status Notice or Reopen button if approved */}
               {selectedOutline.status !== 'pending_advisor' && (
-                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400 flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
-                  <span>
-                    โครงร่างรายงานนี้อยู่ในสถานะ{' '}
-                    <strong className="text-gray-800 dark:text-gray-200">
-                      {TAB_CONFIG[selectedOutline.status as OutlineTab]?.label || selectedOutline.status}
-                    </strong>{' '}
-                    (อ่านอย่างเดียว)
-                  </span>
+                <div className="p-4 rounded-xl bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 text-xs text-gray-600 dark:text-gray-400 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" />
+                    <span>
+                      โครงร่างรายงานนี้อยู่ในสถานะ{' '}
+                      <strong className="text-gray-800 dark:text-gray-200">
+                        {TAB_CONFIG[selectedOutline.status as OutlineTab]?.label || selectedOutline.status}
+                      </strong>{' '}
+                      {selectedOutline.status === 'approved' ? '' : '(อ่านอย่างเดียว)'}
+                    </span>
+                  </div>
+                  {selectedOutline.status === 'approved' && (
+                    <button
+                      type="button"
+                      data-testid="outline-reopen"
+                      onClick={() => setShowReopenModal(true)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+                    >
+                      ส่งกลับให้แก้ไข
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           )}
         </div>
       </div>
+
+      {showReopenModal && selectedOutline && (
+        <ReasonModal
+          title="ส่งกลับโครงร่างรายงานที่อนุมัติแล้ว"
+          intro="โครงร่างนี้อนุมัติแล้ว เมื่อส่งกลับ นักศึกษาต้องส่งฉบับใหม่ และผ่านพนักงานที่ปรึกษาอีกครั้งก่อนกลับมาถึงท่าน"
+          submitLabel="ยืนยันส่งกลับให้แก้ไข"
+          testIdPrefix="outline-reopen"
+          onSubmit={handleReopenSubmit}
+          onClose={() => setShowReopenModal(false)}
+        />
+      )}
     </div>
   );
 };

@@ -8,7 +8,7 @@ import { Textarea } from './ui/Input';
 import { API_BASE_URL } from '../services/api';
 
 /**
- * โมดัลตรวจโครงร่างรายงาน (สหกิจ 11) — ใช้ร่วมกันระหว่างพี่เลี้ยงกับอาจารย์ที่ปรึกษา
+ * โมดัลตรวจโครงร่างรายงาน (สหกิจ 11) — ใช้ร่วมกันระหว่างพี่เลี้ยงกับอาจารย์นิเทศ
  *
  * เดิมโมดัลนี้ถูกเขียนไว้สองที่ (`AdvisorDashboard` กับ `CompanyDashboard`) ซึ่ง
  * เหมือนกันราว 85% แต่ค่อยๆ ห่างกันขึ้นเรื่อยๆ — ไอคอนเปิดไฟล์ฝั่งหนึ่งใช้ lucide
@@ -50,8 +50,8 @@ interface ReportOutlineReviewModalProps {
  */
 const mentorStatusMessage: Record<string, string> = {
   pending_advisor:
-    'ท่านได้ให้ความเห็นชอบโครงร่างฉบับนี้แล้ว ขณะนี้อยู่ระหว่างการพิจารณาของอาจารย์ที่ปรึกษา',
-  approved: 'โครงร่างฉบับนี้ได้รับการอนุมัติสมบูรณ์จากอาจารย์ที่ปรึกษาแล้ว',
+    'ท่านได้ให้ความเห็นชอบโครงร่างฉบับนี้แล้ว ขณะนี้อยู่ระหว่างการพิจารณาของอาจารย์นิเทศ',
+  approved: 'โครงร่างฉบับนี้ได้รับการอนุมัติสมบูรณ์จากอาจารย์นิเทศแล้ว',
   rejected:
     'โครงร่างฉบับนี้ถูกตีกลับให้นักศึกษาแก้ไข เมื่อนักศึกษาส่งฉบับใหม่จะกลับเข้ามาให้ท่านพิจารณาอีกครั้ง',
 };
@@ -152,7 +152,7 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
               canReview
                 ? isMentor
                   ? 'กรอกข้อเสนอแนะในการปรับปรุงหัวข้อ วัตถุประสงค์ หรือโครงสร้างรายงาน...'
-                  : 'กรอกคำแนะนำของอาจารย์ที่ปรึกษาเพิ่มเติม...'
+                  : 'กรอกคำแนะนำของอาจารย์นิเทศเพิ่มเติม...'
                 : 'ไม่มีความคิดเห็นบันทึกไว้'
             }
           />
@@ -178,7 +178,7 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
               loadingLabel="กำลังส่งข้อมูล..."
               onClick={() => (isMentor ? setConfirmingApprove(true) : onDecision('approve'))}
             >
-              {isMentor ? 'อนุมัติและส่งต่ออาจารย์ที่ปรึกษา' : 'อนุมัติโครงร่างรายงาน'}
+              {isMentor ? 'อนุมัติและส่งต่ออาจารย์นิเทศ' : 'อนุมัติโครงร่างรายงาน'}
             </Button>
           </>
         ) : (
@@ -198,7 +198,7 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
               <strong>
                 {studentLabel} ({outline.student_code})
               </strong>{' '}
-              และส่งต่อให้อาจารย์ที่ปรึกษา
+              และส่งต่อให้อาจารย์นิเทศ
             </p>
             <p>ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้</p>
           </div>

@@ -101,7 +101,7 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     );
     await expectNow(page, 'ส่งโครงร่างรายงาน (สหกิจ 11)');
     await dbExec(`UPDATE report_outlines SET status = 'pending_advisor' WHERE student_id = $1`, [studentId]);
-    await expectNow(page, 'อาจารย์อนุมัติโครงร่างรายงาน');
+    await expectNow(page, 'อาจารย์นิเทศอนุมัติโครงร่างรายงาน');
     await dbExec(`UPDATE report_outlines SET status = 'approved' WHERE student_id = $1`, [studentId]);
 
     // นิเทศ 2 ครั้งตามคู่มือ — ครั้งเดียวยังไม่ครบ และต้องบอกว่าไปแล้วกี่ครั้ง

@@ -167,7 +167,7 @@ const FinalReportSubmission: React.FC = () => {
     }
 
     if (!data?.outline_approved) {
-      setError('โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน');
+      setError('โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์นิเทศก่อน');
       return;
     }
 
@@ -463,7 +463,7 @@ const FinalReportSubmission: React.FC = () => {
               <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div className="text-sm text-amber-800 dark:text-amber-300 space-y-1">
                 <p className="font-semibold">
-                  โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์ที่ปรึกษาก่อน
+                  โครงร่างรายงาน (สหกิจ 11) ต้องได้รับการอนุมัติจากอาจารย์นิเทศก่อน
                 </p>
                 <p>
                   โปรดตรวจสอบความคืบหน้าของโครงร่างรายงาน หรือปรับปรุงเนื้อหาให้เรียบร้อย

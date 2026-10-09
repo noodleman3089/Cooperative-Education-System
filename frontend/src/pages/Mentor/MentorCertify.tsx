@@ -1271,10 +1271,10 @@ const MentorCertify: React.FC = () => {
             <div className="border border-blue-200 dark:border-blue-800/80 bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
                 <span className="text-xs font-bold text-brand-blue dark:text-blue-400 block">
-                  หัวข้อรายงานที่อาจารย์ที่ปรึกษาเห็นชอบในโครงร่าง (สหกิจ 11)
+                  หัวข้อรายงานที่อาจารย์นิเทศเห็นชอบในโครงร่าง (สหกิจ 11)
                 </span>
                 <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white">
-                  {outlineTopic || 'ยังไม่มีโครงร่างที่อาจารย์ที่ปรึกษาอนุมัติ'}
+                  {outlineTopic || 'ยังไม่มีโครงร่างที่อาจารย์นิเทศอนุมัติ'}
                 </h3>
               </div>
               <span className="shrink-0 px-3 py-1 rounded-full text-xs font-bold bg-white text-brand-blue dark:bg-gray-800 dark:text-blue-300 border border-blue-200 dark:border-blue-700">

@@ -237,7 +237,7 @@ const ReportOutline: React.FC = () => {
 
   const advisorFullName = data?.meta?.advisor_first_name
     ? `อาจารย์ ${data.meta.advisor_first_name} ${data.meta.advisor_last_name || ''}`
-    : 'อาจารย์ที่ปรึกษา';
+    : 'อาจารย์นิเทศ';
   const mentorFullName = data?.meta?.mentor_name ? `คุณ${data.meta.mentor_name}` : 'พี่เลี้ยง';
 
   if (loading) {
@@ -257,7 +257,7 @@ const ReportOutline: React.FC = () => {
             โครงร่างรายงาน (สหกิจ 11)
           </h1>
           <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-            เลือกหัวข้อรายงานร่วมกับพี่เลี้ยงก่อน แล้วให้อาจารย์ที่ปรึกษาเห็นชอบ จึงเริ่มเขียนรายงานฉบับจริงได้
+            เลือกหัวข้อรายงานร่วมกับพี่เลี้ยงก่อน แล้วให้อาจารย์นิเทศเห็นชอบ จึงเริ่มเขียนรายงานฉบับจริงได้
           </p>
         </div>
         <div className="shrink-0">
@@ -343,7 +343,7 @@ const ReportOutline: React.FC = () => {
             </div>
             <div className="space-y-0.5 text-xs">
               <span className="font-bold text-gray-900 dark:text-white block text-sm">
-                อาจารย์ที่ปรึกษาลงนามเห็นชอบ
+                อาจารย์นิเทศลงนามเห็นชอบ
               </span>
               <span className="text-gray-600 dark:text-gray-400 block font-medium">
                 {advisorFullName}
@@ -352,7 +352,7 @@ const ReportOutline: React.FC = () => {
                 {isAdvisorApproved
                   ? 'ลงนามเห็นชอบแล้ว'
                   : currentStatus === 'pending_advisor'
-                  ? 'รออาจารย์ลงนาม'
+                  ? 'รออาจารย์นิเทศลงนาม'
                   : 'รอพี่เลี้ยงเห็นชอบก่อน'}
               </span>
             </div>

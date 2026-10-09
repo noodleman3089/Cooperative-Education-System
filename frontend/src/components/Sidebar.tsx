@@ -241,7 +241,6 @@ const Sidebar: React.FC<SidebarProps> = ({
     advisor: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
       { id: 'students', label: 'นักศึกษาในสาขา', icon: icons.students, group: 'ระหว่างปฏิบัติงาน' },
-      { id: 'report_outlines', label: 'เห็นชอบโครงร่าง (สหกิจ 11)', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'final_evaluation', label: 'ตรวจรับเล่มรายงาน (สหกิจ 14)', icon: icons.evaluation, group: 'ปลายภาค' },
@@ -250,6 +249,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     supervisor: [
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
       { id: 'students', label: 'นักศึกษาที่ฉันนิเทศ', icon: icons.students, group: 'การนิเทศ' },
+      { id: 'report_outlines', label: 'เห็นชอบโครงร่าง (สหกิจ 11)', icon: icons.report_outline, group: 'การนิเทศ' },
       { id: 'supervision', label: 'นัดหมายนิเทศ (สหกิจ 12)', icon: icons.supervision, group: 'การนิเทศ' },
       { id: 'supervision_record', label: 'บันทึกการนิเทศ (สหกิจ 13)', icon: icons.evaluation, group: 'การนิเทศ' },
       { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'การนิเทศ' },

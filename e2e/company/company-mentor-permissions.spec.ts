@@ -149,10 +149,10 @@ test.describe('สิทธิ์ฝ่ายสถานประกอบก�
     await goToMenu(page, 'report_outlines');
 
     await page.getByRole('button', { name: 'ตรวจอนุมัติ' }).click();
-    await page.getByRole('button', { name: 'อนุมัติและส่งต่ออาจารย์ที่ปรึกษา' }).click();
+    await page.getByRole('button', { name: 'อนุมัติและส่งต่ออาจารย์นิเทศ' }).click();
     await page.getByTestId('outline-mentor-approve-confirm').click();
 
-    await expect(page.getByText('อนุมัติโครงร่างรายงาน (สหกิจ 11) และส่งต่อให้อาจารย์ที่ปรึกษาพิจารณาเรียบร้อยแล้ว')).toBeVisible();
+    await expect(page.getByText('อนุมัติโครงร่างรายงาน (สหกิจ 11) และส่งต่อให้อาจารย์นิเทศพิจารณาเรียบร้อยแล้ว')).toBeVisible();
   });
 
   test('คิวรอรับรองเป็นของพี่เลี้ยง เจ้าหน้าที่เปิดไม่ได้', async ({ request }) => {

@@ -134,7 +134,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
               อาจารย์ที่ปรึกษา *
             </label>
             <p className="text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">
-              เห็นชอบโครงร่าง (สหกิจ 11) · ตรวจรับเล่ม · ลงนาม สหกิจ 14
+              ตรวจรับเล่ม · ลงนาม สหกิจ 14
             </p>
             <Select
               value={selectedAdvisorId}
@@ -157,7 +157,7 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
               อาจารย์นิเทศ *
             </label>
             <p className="text-[11px] text-gray-600 dark:text-gray-400 mb-1.5">
-              นัดนิเทศ (สหกิจ 12) · บันทึกการนิเทศ (สหกิจ 13) · อาจารย์คนนี้จะเห็นเมนูฝ่ายนิเทศหลังเข้าระบบใหม่
+              เห็นชอบโครงร่าง (สหกิจ 11) · นัดนิเทศ (สหกิจ 12) · บันทึกการนิเทศ (สหกิจ 13) · อาจารย์คนนี้จะเห็นเมนูฝ่ายนิเทศหลังเข้าระบบใหม่
             </p>
             <Select
               value={selectedSupervisorId}

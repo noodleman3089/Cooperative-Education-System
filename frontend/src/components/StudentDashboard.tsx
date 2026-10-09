@@ -800,8 +800,8 @@ const StudentDashboard: React.FC = () => {
         },
         {
           id: '3.2',
-          title: '3.2 อาจารย์อนุมัติโครงร่างรายงาน',
-          description: 'อาจารย์ที่ปรึกษาพิจารณาและกดอนุมัติหัวข้อรายงาน',
+          title: '3.2 อาจารย์นิเทศอนุมัติโครงร่างรายงาน',
+          description: 'อาจารย์นิเทศพิจารณาและกดอนุมัติหัวข้อรายงาน',
           status: step3_2Done ? 'completed' : step3_1Done ? 'active' : 'pending'
         },
         {

@@ -129,21 +129,10 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         if (res && res.tiles) {
           const items: NotificationItem[] = [];
           if (currentRole === 'advisor') {
-            const outlineCount = res.tiles.outline?.count ?? 0;
             const reportCount = res.tiles.report?.count ?? 0;
             const confirmationCount = res.tiles.confirmation?.count ?? 0;
-            setFacultyCount(outlineCount + reportCount + confirmationCount);
+            setFacultyCount(reportCount + confirmationCount);
 
-            (res.tiles.outline?.items || []).forEach(
-              (it: { ref_id: number; full_name: string; detail?: string; student_code?: string }) => {
-                items.push({
-                  id: `outline_${it.ref_id}`,
-                  title: it.full_name,
-                  description: `โครงร่างรอเห็นชอบ: ${it.detail || 'สหกิจ 11'} (${it.student_code})`,
-                  url: `/dashboard?menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`,
-                });
-              }
-            );
             (res.tiles.report?.items || []).forEach(
               (it: { student_id: number; full_name: string; student_code?: string }) => {
                 items.push({
@@ -165,10 +154,21 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               }
             );
           } else {
+            const outlineCount = res.tiles.outline?.count ?? 0;
             const rescheduleCount = res.tiles.reschedule?.count ?? 0;
             const unrecordedCount = res.tiles.unrecorded_visit?.count ?? 0;
-            setFacultyCount(rescheduleCount + unrecordedCount);
+            setFacultyCount(outlineCount + rescheduleCount + unrecordedCount);
 
+            (res.tiles.outline?.items || []).forEach(
+              (it: { ref_id: number; full_name: string; detail?: string; student_code?: string }) => {
+                items.push({
+                  id: `outline_${it.ref_id}`,
+                  title: it.full_name,
+                  description: `โครงร่างรอเห็นชอบ: ${it.detail || 'สหกิจ 11'} (${it.student_code})`,
+                  url: `/dashboard?role=supervisor&menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`,
+                });
+              }
+            );
             (res.tiles.reschedule?.items || []).forEach(
               (it: { ref_id: number; student_id: number; full_name: string; visit_number?: number }) => {
                 items.push({

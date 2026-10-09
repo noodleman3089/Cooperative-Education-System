@@ -115,8 +115,8 @@ const SUB_QUERIES_TO_CLEAR = [
   'tile', 'scope', 'student', 'outline', 'visit', 'type', 'doc', 'view', 'major',
   'filter', 'stage'
 ];
-const SUPERVISOR_EXCLUSIVE_MENUS = ['supervision', 'supervision_record'];
-const ADVISOR_EXCLUSIVE_MENUS = ['report_outlines', 'memos', 'final_evaluation'];
+const SUPERVISOR_EXCLUSIVE_MENUS = ['report_outlines', 'supervision', 'supervision_record'];
+const ADVISOR_EXCLUSIVE_MENUS = ['memos', 'final_evaluation'];
 
 const Dashboard: React.FC = () => {
   const auth = useContext(AuthContext);
@@ -408,7 +408,6 @@ const Dashboard: React.FC = () => {
         }
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'students') return <AdvisorStudents />;
-        if (activeMenu === 'report_outlines') return <OutlineReview />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
         if (activeMenu === 'mentor_followup') return <MentorFollowup />;
@@ -427,6 +426,7 @@ const Dashboard: React.FC = () => {
         }
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'students') return <AdvisorStudents />;
+        if (activeMenu === 'report_outlines') return <OutlineReview />;
         if (activeMenu === 'supervision') return <SupervisionTracking />;
         if (activeMenu === 'supervision_record') return <SupervisionRecord />;
         if (activeMenu === 'mentor_followup') return <MentorFollowup />;

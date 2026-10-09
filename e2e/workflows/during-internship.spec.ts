@@ -180,13 +180,13 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
 
     // Fill comment and approve
     await page.locator('textarea').fill('เนื้อหาโครงร่างสมบูรณ์ พี่เลี้ยงเห็นชอบตามนี้');
-    await page.click('button:has-text("อนุมัติและส่งต่ออาจารย์ที่ปรึกษา")');
+    await page.click('button:has-text("อนุมัติและส่งต่ออาจารย์นิเทศ")');
     // ส่งต่อแล้วดึงกลับเองไม่ได้ — ต้องผ่านกล่องยืนยันที่บอกชื่อนักศึกษาก่อน
     await expect(page.getByText('ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้')).toBeVisible();
     await page.getByTestId('outline-mentor-approve-confirm').click();
 
-    // Verify success banner and status change to "พี่เลี้ยงอนุมัติแล้ว (รอ อ.ที่ปรึกษา)"
-    await expect(page.locator('text="พี่เลี้ยงอนุมัติแล้ว (รอ อ.ที่ปรึกษา)"')).toBeVisible();
+    // Verify success banner and status change to "พี่เลี้ยงอนุมัติแล้ว (รอ อ.นิเทศ)"
+    await expect(page.locator('text="พี่เลี้ยงอนุมัติแล้ว (รอ อ.นิเทศ)"')).toBeVisible();
 
     // Check DB status directly
     await withDb(async (db) => {
@@ -195,7 +195,7 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
     });
   });
 
-  test('4. Advisor reviews and approves student report outline (Part 1.2)', async ({ page }) => {
+  test('4. Supervisor reviews and approves student report outline (Part 1.2)', async ({ page }) => {
     test.setTimeout(120000);
     await seedTestData();
     await injectAcceptedIntent();
@@ -223,8 +223,10 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
       client.release();
     }
 
-    // 2. Advisor logs in
+    // 2. อาจารย์นิเทศเข้าระบบ — สหกิจ 11 เป็นงานของฝ่ายนิเทศ (2026-10-09) เมนูไม่อยู่ในฝ่ายที่ปรึกษาแล้ว
     await loginAs(page, 'advisor1');
+    await expect(page.getByTestId('nav-report_outlines')).toHaveCount(0);
+    await page.getByTestId('role-btn-supervisor').click();
 
     // Navigate to Report Outlines tab — หน้ารีเมค: แท็บซ้าย + แผงตรวจขวา (spec-F ข้อ 5)
     // แท็บ pending_advisor เป็นค่าตั้งต้น และเลือกแถวแรกให้อัตโนมัติเมื่อไม่มี ?outline=
@@ -234,7 +236,7 @@ test.describe('Phase 3: Operation & Supervision Workflow', () => {
     await expect(page.getByTestId('outline-review-panel')).toBeVisible();
 
     // Fill comment and approve
-    await page.getByTestId('outline-review-comment').fill('อาจารย์ที่ปรึกษาพิจารณาแล้วอนุมัติโครงร่างรายงาน');
+    await page.getByTestId('outline-review-comment').fill('อาจารย์นิเทศพิจารณาแล้วอนุมัติโครงร่างรายงาน');
     await page.getByTestId('outline-approve').click();
 
     // Verify success status — ข้อความสำเร็จบอกชื่อนักศึกษา ไม่ใช่ป้ายตายตัว

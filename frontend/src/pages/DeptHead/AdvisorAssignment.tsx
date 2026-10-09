@@ -315,13 +315,13 @@ const AdvisorAssignment: React.FC = () => {
                   <th className="p-3.5 font-bold">
                     <div>อาจารย์ที่ปรึกษา</div>
                     <div className="text-[11px] font-normal text-gray-600 dark:text-gray-400 mt-0.5">
-                      เห็นชอบโครงร่าง (สหกิจ 11) · ตรวจรับเล่ม · ลงนาม สหกิจ 14
+                      ตรวจรับเล่ม · ลงนาม สหกิจ 14
                     </div>
                   </th>
                   <th className="p-3.5 font-bold">
                     <div>อาจารย์นิเทศ</div>
                     <div className="text-[11px] font-normal text-gray-600 dark:text-gray-400 mt-0.5">
-                      นัดนิเทศ (สหกิจ 12) · บันทึกการนิเทศ (สหกิจ 13) · อาจารย์คนนี้จะเห็นเมนูฝ่ายนิเทศหลังเข้าระบบใหม่
+                      เห็นชอบโครงร่าง (สหกิจ 11) · นัดนิเทศ (สหกิจ 12) · บันทึกการนิเทศ (สหกิจ 13) · อาจารย์คนนี้จะเห็นเมนูฝ่ายนิเทศหลังเข้าระบบใหม่
                     </div>
                   </th>
                   <th className="p-3.5 font-bold text-right"></th>

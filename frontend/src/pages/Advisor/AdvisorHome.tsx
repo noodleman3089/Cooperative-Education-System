@@ -63,8 +63,8 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
   const [error, setError] = useState<string | null>(null);
 
   // Order of tiles per spec section 3.2
-  const advisorTileOrder = ['outline', 'report', 'confirmation'];
-  const supervisorTileOrder = ['reschedule', 'unrecorded_visit', 'no_appointment'];
+  const advisorTileOrder = ['report', 'confirmation'];
+  const supervisorTileOrder = ['outline', 'reschedule', 'unrecorded_visit', 'no_appointment'];
   const tileOrder = currentView === 'advisor' ? advisorTileOrder : supervisorTileOrder;
 
   // Determine active tile kind: URL param -> first tile with count > 0 -> fallback first tile
@@ -159,7 +159,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     outline: {
       title: 'โครงร่างรอเห็นชอบ',
       defaultSubtitle: 'สหกิจ 11 ที่พนักงานที่ปรึกษาเห็นชอบแล้ว เรียงตามวันที่ส่งมาถึงคุณ',
-      viewAllUrl: '/dashboard?menu=report_outlines&tab=pending_advisor',
+      viewAllUrl: '/dashboard?role=supervisor&menu=report_outlines&tab=pending_advisor',
     },
     report: {
       title: 'เล่มรายงานรอตรวจรับ',
@@ -237,49 +237,11 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
       )}
 
       {/* 3 Work Piles (Tiles) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+      {/* Work Piles (Tiles) */}
+      <div className={`grid gap-3.5 ${currentView === 'advisor' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
         {currentView === 'advisor' ? (
           <>
-            {/* Tile 1: outline */}
-            <button
-              type="button"
-              data-testid="advisor-home-tile-outline"
-              data-count={tiles.outline?.count ?? 0}
-              onClick={() => handleTileClick('outline')}
-              className={`p-4 rounded-2xl text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
-                activeTileKind === 'outline'
-                  ? 'border-2 border-brand-blue bg-white dark:bg-gray-900 shadow-sm ring-2 ring-blue-100 dark:ring-blue-950/40'
-                  : 'border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'
-              }`}
-            >
-              <div className="flex items-baseline justify-between w-full">
-                <span
-                  className={`text-xs font-bold ${
-                    activeTileKind === 'outline'
-                      ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-700 dark:text-gray-300'
-                  }`}
-                >
-                  โครงร่างรอเห็นชอบ
-                </span>
-                <span
-                  className={`text-3xl font-extrabold leading-none ${
-                    (tiles.outline?.count ?? 0) > 0
-                      ? 'text-brand-blue dark:text-blue-400'
-                      : 'text-gray-500 dark:text-gray-400'
-                  }`}
-                >
-                  {tiles.outline?.count ?? 0}
-                </span>
-              </div>
-              <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
-                {(tiles.outline?.count ?? 0) === 0 && tiles.outline?.note
-                  ? tiles.outline.note
-                  : 'สหกิจ 11 · พี่เลี้ยงเห็นชอบแล้ว'}
-              </span>
-            </button>
-
-            {/* Tile 2: report */}
+            {/* Tile 1: report */}
             <button
               type="button"
               data-testid="advisor-home-tile-report"
@@ -318,7 +280,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
               </span>
             </button>
 
-            {/* Tile 3: confirmation */}
+            {/* Tile 2: confirmation */}
             <button
               type="button"
               data-testid="advisor-home-tile-confirmation"
@@ -359,7 +321,46 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
           </>
         ) : (
           <>
-            {/* Tile 1: reschedule */}
+            {/* Tile 1: outline */}
+            <button
+              type="button"
+              data-testid="advisor-home-tile-outline"
+              data-count={tiles.outline?.count ?? 0}
+              onClick={() => handleTileClick('outline')}
+              className={`p-4 rounded-2xl text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                activeTileKind === 'outline'
+                  ? 'border-2 border-brand-blue bg-white dark:bg-gray-900 shadow-sm ring-2 ring-blue-100 dark:ring-blue-950/40'
+                  : 'border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'
+              }`}
+            >
+              <div className="flex items-baseline justify-between w-full">
+                <span
+                  className={`text-xs font-bold ${
+                    activeTileKind === 'outline'
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-gray-700 dark:text-gray-300'
+                  }`}
+                >
+                  โครงร่างรอเห็นชอบ
+                </span>
+                <span
+                  className={`text-3xl font-extrabold leading-none ${
+                    (tiles.outline?.count ?? 0) > 0
+                      ? 'text-brand-blue dark:text-blue-400'
+                      : 'text-gray-500 dark:text-gray-400'
+                  }`}
+                >
+                  {tiles.outline?.count ?? 0}
+                </span>
+              </div>
+              <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+                {(tiles.outline?.count ?? 0) === 0 && tiles.outline?.note
+                  ? tiles.outline.note
+                  : 'สหกิจ 11 · พี่เลี้ยงเห็นชอบแล้ว'}
+              </span>
+            </button>
+
+            {/* Tile 2: reschedule */}
             <button
               type="button"
               data-testid="advisor-home-tile-reschedule"
@@ -398,7 +399,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
               </span>
             </button>
 
-            {/* Tile 2: unrecorded_visit */}
+            {/* Tile 3: unrecorded_visit */}
             <button
               type="button"
               data-testid="advisor-home-tile-unrecorded_visit"
@@ -437,7 +438,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
               </span>
             </button>
 
-            {/* Tile 3: no_appointment (Informational) */}
+            {/* Tile 4: no_appointment (Informational) */}
             <button
               type="button"
               data-testid="advisor-home-tile-no_appointment"
@@ -531,10 +532,10 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400">
                   <th className="px-4 py-3 font-bold">นักศึกษา</th>
-                  {currentView === 'advisor' && (
+                  {(currentView === 'advisor' || activeTileKind === 'outline') && (
                     <th className="px-4 py-3 font-bold">หัวข้อรายงาน</th>
                   )}
-                  {currentView === 'advisor' && (
+                  {(currentView === 'advisor' || activeTileKind === 'outline') && (
                     <th className="px-4 py-3 font-bold">
                       {activeTileKind === 'outline'
                         ? 'พี่เลี้ยงเห็นชอบเมื่อ'
@@ -546,7 +547,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   {currentView === 'advisor' && (
                     <th className="px-4 py-3 font-bold">บทบาทของคุณ</th>
                   )}
-                  {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && (
+                  {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && (
                     <th className="px-4 py-3 font-bold">ครั้งที่</th>
                   )}
                   {currentView === 'supervisor' && activeTileKind === 'reschedule' && (
@@ -577,13 +578,13 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                       </span>
                     </td>
 
-                    {/* Advisor columns */}
-                    {currentView === 'advisor' && (
+                    {/* Advisor / Outline columns */}
+                    {(currentView === 'advisor' || activeTileKind === 'outline') && (
                       <td className="px-4 py-3 align-top text-gray-800 dark:text-gray-200">
                         {it.detail || '–'}
                       </td>
                     )}
-                    {currentView === 'advisor' && (
+                    {(currentView === 'advisor' || activeTileKind === 'outline') && (
                       <td className="px-4 py-3 align-top">
                         <span className="text-gray-700 dark:text-gray-300 block">
                           {formatDisplayDate(it.since)}
@@ -604,7 +605,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                     )}
 
                     {/* Supervisor columns */}
-                    {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && (
+                    {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && (
                       <td className="px-4 py-3 align-top text-gray-700 dark:text-gray-300">
                         ครั้งที่ {it.visit_number || 1}
                       </td>
@@ -643,12 +644,12 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
 
                     {/* Actions column */}
                     <td className="px-4 py-3 align-top text-right">
-                      {currentView === 'advisor' && activeTileKind === 'outline' && (
+                      {activeTileKind === 'outline' && (
                         <button
                           type="button"
                           onClick={() =>
                             navigate(
-                              `/dashboard?menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`
+                              `/dashboard?role=supervisor&menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`
                             )
                           }
                           className="px-3 py-1.5 rounded-xl bg-brand-blue hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"

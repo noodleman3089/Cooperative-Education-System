@@ -27,11 +27,11 @@ export const STATUS_LABELS: Record<string, { text: string; tone: Tone }> = {
   // tell whether their advisor has looked at it yet, and that is the question
   // they open the page to answer.
   // ⚠️ `pending_advisor` ถูกใช้ **สองโดเมน**: intent_forms (ใบความจำนง) · report_outlines
-  // (สหกิจ 11) — โครงร่างยังรออาจารย์กดจริง มีแต่ใบความจำนงที่ย้ายไปลงนามบนกระดาษเมื่อ 2026-08-26
+  // (สหกิจ 11) — โครงร่างย้ายไปให้อาจารย์นิเทศกด ส่วนใบความจำนงย้ายไปลงนามบนกระดาษเมื่อ 2026-08-26
   // (เดิมมีโดเมนที่สามคือ coop_applications ของ สหกิจ 01 ซึ่งถูกตัดทั้งชุด 2026-09-14)
-  // ข้อความกลางจึงต้องเป็นของ "รออาจารย์" ต่อไป และให้ใบความจำนงทับด้วย
+  // ข้อความกลางจึงเป็นของโครงร่าง "รออาจารย์นิเทศ" และให้ใบความจำนงทับด้วย
   // `DOMAIN_OVERRIDES` ข้างล่างแทน (นี่คือกับดัก key ชนข้ามโดเมนที่ CLAUDE.md เตือนไว้)
-  pending_advisor: { text: 'รออาจารย์ที่ปรึกษาพิจารณา', tone: 'waiting' },
+  pending_advisor: { text: 'รออาจารย์นิเทศพิจารณา', tone: 'waiting' },
   pending_officer_request: { text: 'ส่งคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ', tone: 'review' },
   approved_by_dept_head: { text: 'สาขาวิชาอนุมัติแล้ว · รอออกหนังสือ', tone: 'waiting' },
   pending_sign: { text: 'ออกหนังสือแล้ว · รอคณบดีลงนาม', tone: 'waiting' },
