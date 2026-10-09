@@ -59,11 +59,6 @@ export interface AcceptanceRow {
   acceptance_signed_date?: string | null;
   /** ที่มาของคำตอบรับ — 'link' = บริษัทตอบผ่านลิงก์ในอีเมล · 'student' = นักศึกษาอัปโหลดเอง */
   acceptance_source?: 'link' | 'student' | null;
-  mentor_name?: string | null;
-  mentor_email?: string | null;
-  mentor_phone?: string | null;
-  mentor_position?: string | null;
-  mentor_department?: string | null;
 }
 
 export interface DispatchRow {
@@ -78,7 +73,6 @@ export interface DispatchRow {
   coop03_missing_count?: number;
   start_date?: string | null;
   end_date?: string | null;
-  mentor_name?: string | null;
   acceptance_signer_name?: string | null;
   acceptance_signer_position?: string | null;
   acceptance_signed_date?: string | null;
@@ -659,10 +653,9 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                 <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบตอบรับในระบบ" />
               )}
 
-              {/* จอกว้าง: ผู้ลงนามกับพี่เลี้ยง/งานวางคู่กัน · กล่องเดียวก็กินเต็มแถว */}
-              <div className="flex flex-col gap-4 md:flex-row md:items-start">
+              {/* ⛔ ไม่มีกล่องพี่เลี้ยงที่นี่ — พี่เลี้ยงถูกระบุหลังใบ accepted และยืนยันที่หน้า "ติดตามพี่เลี้ยง" การรับไม่ต้องรอพี่เลี้ยง */}
               {rejectingAcceptance ? (
-                <div className="md:flex-1">
+                <div>
                   <label
                     htmlFor="acceptance-reject-reason"
                     className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
@@ -681,7 +674,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               ) : (
                 // ⛔ เจ้าหน้าที่ไม่ต้องคีย์ผู้ลงนามอีก (เจ้าของตัดสิน 2026-09-21) — นักศึกษากรอกตอนอัปโหลด แสดงให้เทียบกับกระดาษ
                 <div
-                  className="md:flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
+                  className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
                   data-testid="acceptance-signer"
                 >
                   <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ (ชื่อนี้ถูกพิมพ์ลงหนังสือส่งตัว)</p>
@@ -690,34 +683,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                   <p>วันที่บนแบบตอบรับ: <strong>{reviewingAcceptance.acceptance_signed_date ? formatThaiDate(reviewingAcceptance.acceptance_signed_date.slice(0, 10)) : '—'}</strong></p>
                 </div>
               )}
-
-              {/* พี่เลี้ยง: ทางลิงก์บริษัทไม่ได้ระบุมา นักศึกษาระบุเอง — ยังไม่มี = กดรับไม่ได้ (ปุ่มด้านล่างล็อก) */}
-              {!rejectingAcceptance && (
-                <div
-                  className="md:flex-1 rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
-                  data-testid="acceptance-job-mentor"
-                >
-                  <p className="text-gray-600 dark:text-gray-400">พนักงานที่ปรึกษา (พี่เลี้ยง) — บัญชีจะเปิดใช้และส่งลิงก์เข้าระบบเมื่อกดรับ</p>
-                  {reviewingAcceptance.mentor_name ? (
-                    <>
-                      <p>
-                        ชื่อ: <strong>{reviewingAcceptance.mentor_name}</strong>
-                        {reviewingAcceptance.mentor_position ? ` · ${reviewingAcceptance.mentor_position}` : ''}
-                        {reviewingAcceptance.mentor_department ? ` · ${reviewingAcceptance.mentor_department}` : ''}
-                      </p>
-                      <p>
-                        อีเมล: <strong>{reviewingAcceptance.mentor_email || '—'}</strong> · โทรศัพท์:{' '}
-                        <strong>{reviewingAcceptance.mentor_phone || '—'}</strong>
-                      </p>
-                    </>
-                  ) : (
-                    <p data-testid="acceptance-mentor-missing" className="font-bold text-amber-700 dark:text-amber-400">
-                      นักศึกษายังไม่ได้ระบุพี่เลี้ยง — รอนักศึกษากรอกก่อนจึงจะรับได้
-                    </p>
-                  )}
-                </div>
-              )}
-              </div>
             </div>
           </ModalBody>
           <ModalFooter>
@@ -745,7 +710,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                 <Button
                   size="sm"
                   loading={acceptanceBusy}
-                  disabled={!reviewingAcceptance.mentor_name}
                   data-testid="acceptance-approve-submit"
                   onClick={() => setConfirmingAcceptanceApprove(true)}
                 >
@@ -809,12 +773,6 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                     ]
                       .filter(Boolean)
                       .join(' ')}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-gray-500 dark:text-gray-400">พนักงานที่ปรึกษา (พี่เลี้ยง)</dt>
-                  <dd className="font-bold text-gray-800 dark:text-gray-200">
-                    {reviewingDispatch.mentor_name || '— ยังไม่มีในระบบ —'}
                   </dd>
                 </div>
                 <div>
@@ -922,7 +880,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
         onCancel={() => setConfirmingDispatch(false)}
       />
 
-      {/* ══ ConfirmDialog สำหรับรับแบบตอบรับ — กดแล้วเปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญออกนอกระบบ ══ */}
+      {/* ══ ConfirmDialog สำหรับรับแบบตอบรับ — รับแล้วใบเป็น "ตอบรับแล้ว" ย้อนกลับไปตีกลับไม่ได้ และระบบแจ้งนักศึกษาทางอีเมล ══ */}
       <ConfirmDialog
         open={confirmingAcceptanceApprove && !!reviewingAcceptance}
         title="ยืนยันการรับแบบตอบรับ"
@@ -935,17 +893,19 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
         onConfirm={() => submitAcceptanceDecision('accepted')}
         message={
           <ConfirmSummary
-            lead="ระบบจะเปิดบัญชีพี่เลี้ยงและส่งอีเมลเชิญออกไปนอกระบบทันที"
+            lead="นักศึกษาจะได้ที่ฝึกงานนี้ และระบบจะส่งอีเมลแจ้งนักศึกษาทันที"
             rows={[
               {
                 label: 'นักศึกษา',
                 value: `${[reviewingAcceptance?.first_name, reviewingAcceptance?.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance?.student_code || '-'})`,
               },
               { label: 'สถานประกอบการ', value: reviewingAcceptance?.company_name_th ?? '' },
-              { label: 'พี่เลี้ยง', value: reviewingAcceptance?.mentor_name ?? '' },
-              { label: 'ส่งลิงก์เชิญไปที่อีเมล', value: reviewingAcceptance?.mentor_email ?? '' },
+              {
+                label: 'วันเริ่มปฏิบัติงาน',
+                value: reviewingAcceptance?.start_date ? formatThaiDate(reviewingAcceptance.start_date.slice(0, 10)) : '-',
+              },
             ]}
-            lockNote="อีเมลที่ส่งออกไปแล้วเรียกคืนไม่ได้"
+            lockNote="รับแล้วตีกลับแบบตอบรับไม่ได้อีก · พี่เลี้ยงนักศึกษาระบุทีหลังเมื่อเริ่มฝึก"
           />
         }
       />

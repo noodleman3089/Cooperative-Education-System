@@ -1178,7 +1178,7 @@ test.describe('นักศึกษาเปิดไฟล์ที่บร�
 });
 
 // รอบแก้จากการทดสอบบนจอจริง — ป้ายภาคเรียนเป็น พ.ศ. · หน้า 410 ย่อหน้าเดียว · radio อ่านออกเสียงเป็นไทย
-// · เจ้าหน้าที่ต้องยืนยันก่อนรับแบบตอบรับ (กดแล้วเปิดบัญชีพี่เลี้ยงและส่งอีเมลออกนอกระบบ)
+// · เจ้าหน้าที่ต้องยืนยันก่อนรับแบบตอบรับ (รับแล้วตีกลับไม่ได้อีก และระบบส่งอีเมลแจ้งนักศึกษา)
 test.describe('หน้าลิงก์ตอบรับ — ภาษาและกล่องยืนยันของเจ้าหน้าที่', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/maps.googleapis.com/**', (route) => route.abort());
@@ -1216,7 +1216,7 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
     await expect(gone).not.toContainText('ลิงก์อาจใช้ตอบไปแล้ว');
   });
 
-  test('L14: เจ้าหน้าที่กดรับแบบตอบรับ — ต้องผ่านกล่องยืนยันที่บอกนักศึกษา บริษัท พี่เลี้ยง อีเมล · ยกเลิก = ไม่เกิดอะไร', async ({
+  test('L14: เจ้าหน้าที่กดรับแบบตอบรับได้โดยไม่ต้องมีพี่เลี้ยง — ต้องผ่านกล่องยืนยันที่บอกนักศึกษา บริษัท วันเริ่ม · ยกเลิก = ไม่เกิดอะไร', async ({
     page,
     request,
   }) => {
@@ -1238,27 +1238,27 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
       [formId]
     );
 
-    // ยังไม่มีพี่เลี้ยง (นักศึกษายังไม่ระบุ) → เจ้าหน้าที่เห็นเหตุผลและปุ่มรับถูกล็อก
+    // ใบยังไม่มีพี่เลี้ยง (คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก) → ปุ่มรับกดได้ทันที ไม่มีกล่อง/ข้อความพี่เลี้ยงมาขวาง
+    const usersBefore = await dbValue<string>('SELECT COUNT(*) FROM users');
     await loginAs(page, 'staff1');
     await page.getByTestId(`review-acceptance-${formId}`).click();
-    await expect(page.getByTestId('acceptance-mentor-missing')).toContainText('นักศึกษายังไม่ได้ระบุพี่เลี้ยง');
-    await expect(page.getByTestId('acceptance-approve-submit')).toBeDisabled();
-    await expect(page.locator('body')).not.toContainText('สหกิจ 07');
-
-    expect((await postMentor(request, formId)).status()).toBe(200);
-    // reload แล้วแผงตรวจเปิดเองจาก deep link (?form=) พร้อมข้อมูลล่าสุด — ไม่ต้องคลิกเปิดอีก
-    await page.reload();
-    await expect(page.getByTestId('acceptance-job-mentor')).toBeVisible();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByTestId('acceptance-signer')).toBeVisible();
     await expect(page.getByTestId('acceptance-mentor-missing')).toHaveCount(0);
-    await expect(page.getByTestId('acceptance-job-mentor')).toContainText(MENTOR_EMAIL);
+    await expect(page.getByTestId('acceptance-job-mentor')).toHaveCount(0);
+    await expect(dialog).not.toContainText('พี่เลี้ยง');
+    await expect(page.locator('body')).not.toContainText('สหกิจ 07');
+    await expect(page.getByTestId('acceptance-approve-submit')).toBeEnabled();
     await page.getByTestId('acceptance-approve-submit').click();
 
-    // กล่องยืนยัน — ระบุชัดว่าทำกับใคร และอีเมลเชิญไปที่ไหน · ระหว่างนี้ยังไม่มีอะไรเกิดขึ้น
+    // กล่องยืนยัน — ระบุชัดว่าทำกับใคร เริ่มงานวันไหน · ไม่อ้างว่าจะเปิดบัญชีพี่เลี้ยง/ส่งลิงก์เชิญ · ระหว่างนี้ยังไม่มีอะไรเกิดขึ้น
     const confirm = page.getByTestId('confirm-summary');
     await expect(confirm).toContainText(who!.code);
     await expect(confirm).toContainText(who!.company);
-    await expect(confirm).toContainText('สุรเดช ใจดี');
-    await expect(confirm).toContainText(MENTOR_EMAIL);
+    await expect(confirm).toContainText('วันเริ่มปฏิบัติงาน');
+    await expect(confirm).toContainText('2569');
+    await expect(confirm).not.toContainText('เปิดบัญชีพี่เลี้ยง');
+    await expect(confirm).not.toContainText('ลิงก์เชิญ');
     await expect(confirm).not.toContainText('สหกิจ 07');
     expect(await formStatus(formId)).toBe('pending_officer_approval');
 
@@ -1270,5 +1270,8 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
     await page.getByTestId('acceptance-approve-confirm').click();
     await expect(page.getByText(/รับแบบตอบรับเรียบร้อยแล้ว/)).toBeVisible();
     expect(await formStatus(formId)).toBe('accepted');
+    // การรับจากหน้าจอไม่สร้างบัญชีพี่เลี้ยงและไม่ออกลิงก์เข้าระบบ
+    expect(await dbValue<string>('SELECT COUNT(*) FROM users')).toBe(usersBefore);
+    expect(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens')).toBe('0');
   });
 });
