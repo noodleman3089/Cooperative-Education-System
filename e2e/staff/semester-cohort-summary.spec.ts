@@ -362,6 +362,28 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     const fn2 = await putForm(n[1].email, newer, 'accepted');
     const fn3 = await putForm(n[2].email, newer, 'pending_officer_request');
     await dbExec(`UPDATE intent_forms SET submitted_late = TRUE, late_reason = 'ทดสอบ' WHERE form_id = $1`, [fn3]);
+    // แยกตามสาขา/สถานประกอบการ: n[1] อยู่อีกสาขาหนึ่ง และได้ที่ฝึกที่บริษัทที่สอง (ข้อมูลติดต่อของบริษัทต้องไม่หลุดออกไป)
+    const majors = await dbRows<{ major_id: number; major_name_th: string }>(
+      'SELECT major_id, major_name_th FROM master_major ORDER BY major_id LIMIT 2'
+    );
+    await dbExec('UPDATE students SET major_id = $2 WHERE student_id = (SELECT user_id FROM users WHERE email = $1)', [
+      n[1].email,
+      majors[1].major_id,
+    ]);
+    const firstCompany = (await dbValue<string>(
+      'SELECT c.name_th FROM companies c JOIN intent_forms i ON i.company_id = c.company_id WHERE i.form_id = $1',
+      [fn1]
+    ))!;
+    await dbExec(
+      `WITH c AS (
+         INSERT INTO companies (name_th, address, province, district, postal_code, phone, email, contact_person, is_verified, created_by)
+         SELECT 'บริษัท ทดสอบที่สอง จำกัด', '1 ถนนลับ เขตลับ', province, district, postal_code, '029990000', 'secret-hr@example.com', 'คุณลับ ผู้ประสานงาน', TRUE, created_by
+           FROM companies ORDER BY company_id LIMIT 1
+         RETURNING company_id
+       )
+       UPDATE intent_forms SET company_id = (SELECT company_id FROM c) WHERE form_id = $1`,
+      [fn2]
+    );
 
     // เวลาต่อขั้น: fn1 ยื่น→อัปโหลด 2 วัน · fn2 ยื่น→อัปโหลด 4 วัน · fn3 มีแค่ยื่น (ไม่มีปลายทาง → ไม่นับ)
     await putEvent(fn1, 'form_created', 10);
@@ -381,6 +403,9 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     const m = (key: string) => body.metrics.find((x: { key: string }) => x.key === key);
     expect([m('cohort_total').current, m('cohort_total').previous]).toEqual([4, 2]);
     expect([m('submitted').current, m('submitted').previous]).toEqual([3, 2]);
+    // ยังไม่ยื่นคำร้อง = นักศึกษาในรุ่น − ยื่นแล้ว (ภาคใหม่ 4 − 3 · ภาคเก่า 2 − 2)
+    expect([m('not_filed').current, m('not_filed').previous]).toEqual([1, 0]);
+    expect(m('not_filed')).toMatchObject({ label: 'ยังไม่ยื่นคำร้อง', unit: 'คน' });
     expect([m('placed').current, m('placed').previous]).toEqual([2, 1]);
     expect([m('placement_rate').current, m('placement_rate').previous]).toEqual([50, 50]);
     expect([m('exited').current, m('exited').previous]).toEqual([0, 1]);
@@ -393,10 +418,43 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     // ขั้นที่ไม่มีใบไหนรู้เวลาทั้งสองปลาย = null ไม่ใช่ 0
     expect(d('dean')).toMatchObject({ current_median_days: null, current_n: 0 });
 
+    // แยกตามสาขา — เรียงตามจำนวนในรุ่นมากไปน้อย · รวมทุกแถวเท่ากับ cohort_total
+    expect(body.by_major).toEqual([
+      { major_name_th: majors[0].major_name_th, cohort: 3, submitted: 2, placed: 1 },
+      { major_name_th: majors[1].major_name_th, cohort: 1, submitted: 1, placed: 1 },
+    ]);
+    const sum = (rows: { cohort: number }[]) => rows.reduce((t, r) => t + r.cohort, 0);
+    expect(sum(body.by_major)).toBe(m('cohort_total').current);
+
+    // สถานประกอบการไหนรับกี่คน — เฉพาะใบ accepted (ใบที่ยังรอผลไม่นับ) · ส่งแค่ชื่อกับจำนวน
+    expect(body.by_company).toHaveLength(2);
+    expect(body.by_company).toEqual(
+      expect.arrayContaining([
+        { company_name: firstCompany, placed: 1 },
+        { company_name: 'บริษัท ทดสอบที่สอง จำกัด', placed: 1 },
+      ])
+    );
+    for (const row of body.by_company) expect(Object.keys(row).sort()).toEqual(['company_name', 'placed']);
+    for (const secret of ['secret-hr@example.com', 'คุณลับ ผู้ประสานงาน', '029990000', 'ถนนลับ']) {
+      expect(JSON.stringify(body), secret).not.toContain(secret);
+    }
+
+    // สมาชิกในรายชื่อรุ่นที่ยังไม่ลงทะเบียน (ไม่มีแถว students) = ไม่รู้สาขา → แถว major_name_th: null · ผลรวมยังเท่า cohort_total
+    await dbExec(`INSERT INTO semester_cohort (semester_id, student_code) VALUES ($1, 'NOREG-C8')`, [newer]);
+    const withUnregistered = await (await request.get(`${API_URL}/staff/semester-summary?semester_id=${newer}`)).json();
+    const total = withUnregistered.metrics.find((x: { key: string }) => x.key === 'cohort_total').current;
+    expect(total).toBe(5);
+    expect(withUnregistered.by_major).toContainEqual({ major_name_th: null, cohort: 1, submitted: 0, placed: 0 });
+    expect(sum(withUnregistered.by_major)).toBe(total);
+    expect(withUnregistered.metrics.find((x: { key: string }) => x.key === 'not_filed').current).toBe(2);
+
     // ภาคที่เก่าที่สุดไม่มีภาคก่อน
     const oldest = await (await request.get(`${API_URL}/staff/semester-summary?semester_id=${older}`)).json();
     expect(oldest.previous).toBeNull();
     expect(oldest.metrics.find((x: { key: string }) => x.key === 'cohort_total').previous).toBeNull();
+    expect(oldest.metrics.find((x: { key: string }) => x.key === 'not_filed').previous).toBeNull();
+    // ภาคเก่า: ได้ที่ฝึก 1 คน (ใบ company_rejected ไม่นับ)
+    expect(oldest.by_company).toEqual([{ company_name: firstCompany, placed: 1 }]);
 
     // ไม่ระบุภาค = ภาคที่เปิดอยู่
     expect((await (await request.get(`${API_URL}/staff/semester-summary`)).json()).semester.semester_id).toBe(a);

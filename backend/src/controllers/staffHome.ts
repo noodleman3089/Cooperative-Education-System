@@ -11,6 +11,7 @@ import {
 import { sendUnexpectedError } from '../utils/httpError';
 import { semesterLabel } from '../utils/semesterLabel';
 import { REQUEST_OVERDUE_DAYS, requestQueuedAtSql } from '../utils/stageEvents';
+import { loadCohortTotal } from './staffSemesterSummary';
 
 /**
  * หน้าแรกของเจ้าหน้าที่งานสหกิจศึกษา — “คิวงานวันนี้” (spec-E ข้อ 4 · SB8)
@@ -50,6 +51,10 @@ export class StaffHomeController {
       const overdueTotal = tiles.request.overdue + tiles.acceptance.overdue;
       const extra = await loadSeasonExtras(today, semester?.semester_id ?? null);
       const otherSemesters = await loadOtherSemesters(today, semester?.semester_id ?? null);
+      // แถว 5 ช่องของหน้าแรก — ผูกกับภาคที่เปิดอยู่ (ไม่มีภาค = null ไม่ใช่ศูนย์ที่ดูเหมือนยังไม่มีใครยื่น)
+      const [cohortSteps, cohortTotal] = semester
+        ? await Promise.all([loadCohortSteps(semester.semester_id), loadCohortTotal(semester.semester_id)])
+        : [null, null];
 
       let season: Season;
       if (!semester) {
@@ -91,6 +96,9 @@ export class StaffHomeController {
         // ภาคอื่นที่ยังมีเรื่องค้าง (เฟส 1 R1-3) — การ์ดฤดูกาลผูกกับภาคที่เปิดอยู่ภาคเดียว จึงต้องมีแถวนี้แยก
         // ไม่งั้นนักศึกษาภาคเก่าที่ยังฝึก/รอประเมินหายจากหน้าแรกพอเปิดภาคใหม่ (F7)
         other_semesters: otherSemesters,
+        // นักศึกษาในรุ่นของภาคที่เปิดอยู่ไปถึงขั้นไหนแล้ว (5 ช่อง) + ขนาดรุ่น — หน้าจอห้ามบวกเอง
+        cohort_total: cohortTotal,
+        cohort_steps: cohortSteps,
         season_detail: seasonDetail(season, today, tiles, windows, extra),
         // ใบที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี — ไม่มีใครเห็นถ้าไม่ขึ้นที่นี่ (แถวแดงบนสุดของหน้าแรก)
         missing_cover_letters: missingCoverLetters,
@@ -475,6 +483,50 @@ async function loadSeasonExtras(
     studentsOnPlacement: r.students_on_placement,
     evaluationsMissing: r.evaluations_missing,
   };
+}
+
+/* ── แถว 5 ช่องของหน้าแรก ────────────────────────────────────────────
+ *
+ * ต่างจาก "กองงาน" ข้างบน: กองงานไม่กรองภาค (งานค้างคืองานค้าง) ส่วนแถวนี้ตอบว่า
+ * **รุ่นของภาคที่เปิดอยู่** ไปถึงขั้นไหนแล้ว จึงผูกกับภาคเดียว
+ * · หนังสือขอความอนุเคราะห์จับคู่กับใบด้วยสามค่า (นักศึกษา · บริษัท · เลขที่หนังสือ) แบบเดียวกับที่อื่นทั้งระบบ
+ */
+interface CohortSteps {
+  /** ยื่นคำร้องมาแล้ว — นักศึกษา (รายคน) ที่มีใบคำร้องในภาคนี้ ไม่ว่าสถานะใด */
+  filed: number;
+  /** รอคณบดีลงนาม — หนังสือขอความอนุเคราะห์ที่ค้าง `pending_sign` อยู่ตอนนี้ (ฉบับ · ไม่ใช่ยอดสะสม) */
+  awaiting_dean: number;
+  /** ส่งหนังสือให้นักศึกษาแล้ว — นักศึกษา (รายคน) ที่มีหนังสือขอความอนุเคราะห์ลงนามแล้ว */
+  letter_signed: number;
+  /** บริษัทตอบรับแล้ว — นักศึกษา (รายคน) ที่มีใบ `pending_officer_approval` หรือ `accepted` */
+  company_accepted: number;
+  /** ออกหนังสือส่งตัวแล้ว — ใบ `accepted` ที่มีเลขที่หนังสือส่งตัว */
+  dispatch_issued: number;
+}
+
+async function loadCohortSteps(semesterId: number): Promise<CohortSteps> {
+  const res = await query(
+    `WITH letters AS (
+       SELECT i.student_id, d.doc_id, d.status
+         FROM intent_forms i
+         JOIN official_documents d
+           ON d.student_id = i.student_id
+          AND d.company_id = i.company_id
+          AND d.type = 'cover_letter'
+          AND d.document_number IS NOT DISTINCT FROM i.officer_document_no
+        WHERE i.semester_id = $1
+     )
+     SELECT
+       (SELECT COUNT(DISTINCT student_id)::int FROM intent_forms WHERE semester_id = $1) AS filed,
+       (SELECT COUNT(DISTINCT doc_id)::int FROM letters WHERE status = 'pending_sign') AS awaiting_dean,
+       (SELECT COUNT(DISTINCT student_id)::int FROM letters WHERE status = 'signed') AS letter_signed,
+       (SELECT COUNT(DISTINCT student_id)::int FROM intent_forms
+         WHERE semester_id = $1 AND status IN ('pending_officer_approval', 'accepted')) AS company_accepted,
+       (SELECT COUNT(*)::int FROM intent_forms
+         WHERE semester_id = $1 AND status = 'accepted' AND dispatch_document_no IS NOT NULL) AS dispatch_issued`,
+    [semesterId]
+  );
+  return res.rows[0] as CohortSteps;
 }
 
 /**

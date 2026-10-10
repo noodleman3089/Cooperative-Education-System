@@ -13,7 +13,7 @@ import { semesterLabel } from '../utils/semesterLabel';
  * ⛔ **คำนวณสดจากข้อมูลจริงทุกครั้ง** ไม่มีภาพนิ่ง (R2-3 ยังไม่ทำ) — ภาคเก่าไม่ถูกลบ/ไม่ถูกย้าย จึงอ่านย้อนหลังได้เสมอ
  * ⛔ "ผลประเมินครบ" = มีครบทั้งสองใบ (สหกิจ 15 + 16) **ไม่ใช่ "ผ่าน"** — ระบบไม่รู้ว่าใครผ่าน อาจารย์เป็นผู้ตัดเกรด
  * ⛔ เวลาในแต่ละขั้นมาจาก intent_stage_events เท่านั้น · ใบที่ไม่มีเวลาของสองปลายทางไม่ถูกนับ (บอกจำนวน n) — ห้ามเดา
- * ⛔ ไม่มีเกรด/เลขบัตร/ข้อมูล SEC-12 — มีแต่จำนวนนับ
+ * ⛔ ไม่มีเกรด/เลขบัตร/ข้อมูล SEC-12 — มีแต่จำนวนนับ (`by_major` · `by_company` ก็เป็นชื่อกับจำนวนเท่านั้น)
  */
 
 const TERMINAL = `'rejected', 'company_rejected', 'superseded'`;
@@ -40,12 +40,23 @@ interface Counts {
   reports_approved: number;
 }
 
-const COUNTS_SQL = `
+/**
+ * สมาชิกรุ่นของภาค ($1) = รายชื่อรุ่นที่นำเข้า ∪ นักศึกษาที่มีใบคำร้องในภาคนั้น (คนที่ยื่นแต่ไม่อยู่ในรายชื่อก็นับ)
+ * ⛔ นิยามนี้มีที่เดียว — `cohort_total` · `by_major` · หน้าแรกเจ้าหน้าที่ (`loadCohortTotal`) ใช้ก้อนนี้ทั้งหมด ห้ามเขียนสูตรที่สอง
+ */
+const MEMBERS_CTE = `
   WITH members AS (
     SELECT student_code FROM semester_cohort WHERE semester_id = $1
     UNION
     SELECT s.student_code FROM intent_forms i JOIN students s ON s.student_id = i.student_id WHERE i.semester_id = $1
-  )
+  )`;
+
+/** จำนวนนักศึกษาในรุ่นของภาค — ตัวเดียวกับ metric `cohort_total` ของหน้าสรุปภาคเรียน */
+export async function loadCohortTotal(semesterId: number): Promise<number> {
+  return (await query(`${MEMBERS_CTE} SELECT COUNT(*)::int AS n FROM members`, [semesterId])).rows[0].n as number;
+}
+
+const COUNTS_SQL = `${MEMBERS_CTE}
   SELECT
     (SELECT COUNT(*)::int FROM members) AS cohort_total,
     (SELECT COUNT(DISTINCT student_id)::int FROM intent_forms WHERE semester_id = $1) AS submitted,
@@ -75,6 +86,36 @@ const DURATION_SQL = `
        GROUP BY e.form_id
     ) x
    WHERE x.ta IS NOT NULL AND x.tb IS NOT NULL AND x.tb >= x.ta`;
+
+/**
+ * แยกตามสาขา — แถวต่อสาขา นับเป็นรายคนจากสมาชิกรุ่นชุดเดียวกับ `cohort_total` (รวมทุกแถว = `cohort_total` เสมอ)
+ * สมาชิกในรายชื่อรุ่นที่ยังไม่ลงทะเบียน (ไม่มีแถว `students`) ไม่รู้สาขา → แถว `major_name_th: null` ไม่เดาสาขาให้
+ */
+const BY_MAJOR_SQL = `${MEMBERS_CTE}
+  SELECT mj.major_name_th,
+         COUNT(*)::int AS cohort,
+         COUNT(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM intent_forms i WHERE i.student_id = s.student_id AND i.semester_id = $1))::int AS submitted,
+         COUNT(*) FILTER (WHERE EXISTS (
+           SELECT 1 FROM intent_forms i WHERE i.student_id = s.student_id AND i.semester_id = $1
+              AND i.status = 'accepted'))::int AS placed
+    FROM members m
+    LEFT JOIN students s ON s.student_code = m.student_code
+    LEFT JOIN master_major mj ON mj.major_id = s.major_id
+   GROUP BY mj.major_id, mj.major_name_th
+   ORDER BY cohort DESC, mj.major_name_th NULLS LAST`;
+
+/**
+ * สถานประกอบการไหนรับกี่คน — นับนักศึกษา (รายคน) ที่ใบ `accepted` ในภาคนั้น · เฉพาะที่รับอย่างน้อยหนึ่งคน
+ * ⛔ ส่งแค่ชื่อกับจำนวน — ไม่มีที่อยู่ ผู้ประสานงาน เบอร์โทร หรืออีเมลของบริษัท
+ */
+const BY_COMPANY_SQL = `
+  SELECT c.name_th AS company_name, COUNT(DISTINCT i.student_id)::int AS placed
+    FROM intent_forms i
+    JOIN companies c ON c.company_id = i.company_id
+   WHERE i.semester_id = $1 AND i.status = 'accepted'
+   GROUP BY c.company_id, c.name_th
+   ORDER BY placed DESC, c.name_th`;
 
 async function loadCounts(semesterId: number): Promise<Counts> {
   return (await query(COUNTS_SQL, [semesterId])).rows[0] as Counts;
@@ -126,7 +167,9 @@ export class StaffSemesterSummaryController {
         return;
       }
       if (semesters.length === 0) {
-        res.status(200).json({ today, semester: null, previous: null, semesters: list, metrics: [], durations: [] });
+        res.status(200).json({
+          today, semester: null, previous: null, semesters: list, metrics: [], durations: [], by_major: [], by_company: [],
+        });
         return;
       }
 
@@ -142,6 +185,11 @@ export class StaffSemesterSummaryController {
         loadDurations(current.semester_id),
         prev ? loadDurations(prev.semester_id) : Promise.resolve(null),
       ]);
+      // สองตารางนี้เป็นของภาคที่เลือกภาคเดียว ไม่มีค่าเทียบภาคก่อน
+      const [byMajor, byCompany] = await Promise.all([
+        query(BY_MAJOR_SQL, [current.semester_id]),
+        query(BY_COMPANY_SQL, [current.semester_id]),
+      ]);
 
       const metric = (
         key: string,
@@ -155,6 +203,10 @@ export class StaffSemesterSummaryController {
       const metrics = [
         metric('cohort_total', 'นักศึกษาในรุ่น', 'รายชื่อรุ่น รวมคนที่มีใบคำร้องในภาคนั้น', 'คน', now.cohort_total, before?.cohort_total),
         metric('submitted', 'ยื่นคำร้องแล้ว', 'นับเป็นรายคน', 'คน', now.submitted, before?.submitted),
+        metric(
+          'not_filed', 'ยังไม่ยื่นคำร้อง', 'นักศึกษาในรุ่น − ยื่นคำร้องแล้ว', 'คน',
+          now.cohort_total - now.submitted, before ? before.cohort_total - before.submitted : undefined
+        ),
         metric('placed', 'ได้ที่ฝึกแล้ว (ตอบรับ)', 'นับเป็นรายคน', 'คน', now.placed, before?.placed),
         metric('placement_rate', 'สัดส่วนที่ได้ที่ฝึก', 'ได้ที่ฝึก ÷ นักศึกษาในรุ่น', '%', pct(now.placed, now.cohort_total), before ? pct(before.placed, before.cohort_total) : null),
         metric('exited', 'ออกจากท่อ (บริษัทไม่รับ / ยกเลิก)', 'นับเป็นใบคำร้อง', 'ใบ', now.exited, before?.exited),
@@ -180,6 +232,8 @@ export class StaffSemesterSummaryController {
         semesters: list,
         metrics,
         durations,
+        by_major: byMajor.rows,
+        by_company: byCompany.rows,
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Staff semester summary error', 'ไม่สามารถโหลดสรุปภาคเรียนได้');

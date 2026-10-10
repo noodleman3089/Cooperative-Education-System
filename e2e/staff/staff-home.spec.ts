@@ -150,6 +150,8 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
       'missing_cover_letters',
       'timeline',
       'calendar_warnings',
+      'cohort_total',
+      'cohort_steps',
     ]) {
       expect(body, `คีย์ ${key} หายไป`).toHaveProperty(key);
     }
@@ -316,5 +318,84 @@ test.describe('หน้าแรกเจ้าหน้าที่ — คิ
     // ⛔ จอว่างต้องบอกเหตุผลและทางออก ห้ามขึ้นแค่ "ไม่มีข้อมูล"
     expect(body.calendar_warnings).toHaveLength(1);
     expect(body.calendar_warnings[0].label).toContain('ยังไม่ได้เปิดภาคเรียน');
+    // แถว 5 ช่องผูกกับภาคที่เปิดอยู่ — ไม่มีภาค = null ไม่ใช่ศูนย์ห้าตัวที่อ่านว่า "ยังไม่มีใครยื่น"
+    expect(body.cohort_steps).toBeNull();
+    expect(body.cohort_total).toBeNull();
+  });
+
+  test('แถว 5 ช่อง (cohort_steps) — นับจากใบและหนังสือจริงของภาคที่เปิดอยู่ · รายคนไม่นับซ้ำ · ภาคอื่นไม่ปน · ขนาดรุ่นตรงกับหน้าสรุปภาคเรียน', async ({
+    request,
+  }) => {
+    await apiLoginAs(request, 'staff1');
+    // seed ไม่มีใบคำร้อง = ศูนย์ทุกช่อง (ภาคเปิดอยู่จึงเป็นเลข ไม่ใช่ null)
+    expect((await home(request)).cohort_steps).toEqual({
+      filed: 0,
+      awaiting_dean: 0,
+      letter_signed: 0,
+      company_accepted: 0,
+      dispatch_issued: 0,
+    });
+
+    /** หนังสือขอความอนุเคราะห์ของใบ — จับคู่ด้วยนักศึกษา · บริษัท · เลขที่หนังสือ แบบเดียวกับระบบจริง */
+    const letter = (formId: number, status: string) =>
+      dbExec(
+        `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
+         SELECT officer_document_no, 'cover_letter', student_id, company_id, $2 FROM intent_forms WHERE form_id = $1`,
+        [formId, status]
+      );
+
+    // ยื่นแล้ว ยังไม่ถึงเจ้าหน้าที่
+    await makeIntent('pending_advisor');
+    // เจ้าหน้าที่รับแล้ว หนังสือค้างที่คณบดี
+    await letter(await makeIntent('approved_by_dept_head', { officer_document_no: 'CS/1' }), 'pending_sign');
+    // คณบดีลงนามแล้ว รอบริษัท
+    await letter(await makeIntent('approved_by_dept_head', { officer_document_no: 'CS/2' }), 'signed');
+    // บริษัทตอบรับแล้ว รอเจ้าหน้าที่ตรวจ
+    await letter(await makeIntent('pending_officer_approval', { officer_document_no: 'CS/3' }), 'signed');
+    // เจ้าหน้าที่รับแบบตอบรับแล้ว ยังไม่ออกหนังสือส่งตัว
+    await letter(await makeIntent('accepted', { officer_document_no: 'CS/4' }), 'signed');
+    // ออกหนังสือส่งตัวแล้ว
+    await letter(await makeIntent('accepted', { officer_document_no: 'CS/5', dispatch_document_no: 'CS/ส่งตัว-5' }), 'signed');
+    // บริษัทไม่รับ แล้วนักศึกษาคนเดิมยื่นใบใหม่ — "ยื่นคำร้องมาแล้ว" นับเป็นคน ไม่ใช่ใบ
+    const rejected = await makeIntent('company_rejected');
+    await dbExec(
+      `INSERT INTO intent_forms (student_id, company_id, semester_id, status)
+       SELECT student_id, company_id, semester_id, 'pending_advisor' FROM intent_forms WHERE form_id = $1`,
+      [rejected]
+    );
+    // ใบของภาคอื่นที่ไปถึงปลายทางแล้ว — ต้องไม่ถูกนับในแถวของภาคที่เปิดอยู่
+    const otherSemester = await makeIntent('accepted', { officer_document_no: 'CS/9', dispatch_document_no: 'CS/ส่งตัว-9' });
+    await letter(otherSemester, 'signed');
+    await dbExec(
+      `UPDATE intent_forms SET semester_id = (SELECT semester_id FROM coop_semesters WHERE NOT is_active ORDER BY semester_id LIMIT 1)
+        WHERE form_id = $1`,
+      [otherSemester]
+    );
+    // รายชื่อรุ่น: หนึ่งคนที่ยังไม่ยื่นอะไรเลย
+    await dbExec(`INSERT INTO semester_cohort (semester_id, student_code) VALUES ($1, 'HOME-NOFORM-1')`, [
+      await activeSemesterId(),
+    ]);
+
+    const body = await home(request);
+    expect(body.cohort_steps).toEqual({
+      filed: 7,
+      awaiting_dean: 1,
+      letter_signed: 4,
+      company_accepted: 3,
+      dispatch_issued: 1,
+    });
+    // ขนาดรุ่น = 7 คนที่ยื่น + 1 คนในรายชื่อที่ยังไม่ยื่น · ตัวเดียวกับ cohort_total ของหน้าสรุปภาคเรียน (สูตรเดียว)
+    expect(body.cohort_total).toBe(8);
+    const summary = await (await request.get(`${API_URL}/staff/semester-summary`)).json();
+    expect(summary.metrics.find((m: { key: string }) => m.key === 'cohort_total').current).toBe(body.cohort_total);
+    expect(summary.metrics.find((m: { key: string }) => m.key === 'submitted').current).toBe(body.cohort_steps.filed);
+
+    // ป้าย "มีงานรอ" ของแถวนี้ใช้ตัวนับกองงานเดิม — ยังส่งครบ ไม่มีอะไรถูกถอดออกจาก payload
+    expect(body.tiles.acceptance.count).toBe(1);
+    expect(body.tiles.dispatch.count).toBe(1);
+    expect(body.tiles.dean.count).toBeGreaterThanOrEqual(1);
+    for (const key of ['season', 'season_detail', 'missing_cover_letters', 'other_semesters', 'timeline']) {
+      expect(body, key).toHaveProperty(key);
+    }
   });
 });
