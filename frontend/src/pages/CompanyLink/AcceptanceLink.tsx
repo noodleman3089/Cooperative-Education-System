@@ -19,9 +19,9 @@ import { formatThaiDate } from '../../utils/thaiDate';
  *
  * ⛔ ไม่มีสหกิจ 03 บนหน้านี้ (ใบสั่งงาน D3) · ⛔ ไม่มีปุ่ม "ขอลิงก์ใหม่" — ลิงก์ต้องมาจากนักศึกษา
  *
- * ทาง "รับ" (2026-10-07): กรอกผู้ประสานงาน + ผู้อนุมัติบนหน้าเว็บ → กดสร้างเอกสาร 2 ที่กรอกแล้ว → พิมพ์
- * → **ลงนามและประทับตราด้วยมือ** → แนบไฟล์ + วันเริ่มงาน → ส่ง · ค่าที่กรอกลงกระดาษอย่างเดียว เซิร์ฟเวอร์ไม่เก็บ
- * (สิ่งที่บันทึกจริงยังเป็นชุดเดิมของ `POST /accept`: ผู้ลงนาม · วันเริ่มงาน · ไฟล์)
+ * ทาง "รับ" (2026-10-10): กรอกผู้ประสานงาน + ผู้อนุมัติบนหน้าเว็บ → กดสร้างเอกสาร 2 ที่กรอกแล้ว → พิมพ์
+ * → **ลงนามและประทับตราด้วยมือ** → แนบไฟล์ → ส่ง · ข้อมูลผู้ประสานงานและข้อมูลเพิ่มเติมถูกบันทึกลงระบบ
+ * (สิ่งที่บันทึกจริงของ `POST /accept`: ผู้ลงนาม · ไฟล์ · ข้อมูลผู้ประสานงาน · ข้อมูลเพิ่มเติม · ไม่มีวันเริ่มงาน)
  */
 
 interface StudentCard {
@@ -147,7 +147,6 @@ const AcceptanceLink: React.FC = () => {
   /** เอกสาร 2 ที่ระบบพิมพ์ค่าที่กรอกลงไปแล้ว (blob URL) — ยังไม่กดสร้าง = null */
   const [filledUrl, setFilledUrl] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [startDate, setStartDate] = useState('');
   const [evidence, setEvidence] = useState<File | null>(null);
 
   const [docTab, setDocTab] = useState<'cover' | 'form' | 'student'>('cover');
@@ -283,7 +282,6 @@ const AcceptanceLink: React.FC = () => {
     if (decision === 'decline') return declineReason.trim() ? null : 'กรุณาระบุเหตุผลที่ไม่รับนักศึกษา';
     const approver = approverProblem();
     if (approver) return approver;
-    if (!startDate) return 'กรุณาเลือกวันเริ่มปฏิบัติงาน';
     if (!evidence) return 'กรุณาแนบเอกสาร 2 ที่ลงนามและประทับตราแล้ว';
     if (evidence.size > MAX_FILE_BYTES) return 'ไฟล์ใหญ่เกิน 10 MB กรุณาลดขนาดไฟล์แล้วแนบใหม่';
     return null;
@@ -309,7 +307,10 @@ const AcceptanceLink: React.FC = () => {
         fd.append('signer_name', signerName.trim());
         fd.append('signer_position', signerPosition.trim());
         fd.append('signed_date', signedDate);
-        fd.append('start_date', startDate);
+        for (const [k, v] of Object.entries(contact)) {
+          if (typeof v === 'string' && v.trim()) fd.append(k, v.trim());
+        }
+        if (additionalInfo.trim()) fd.append('additional_info', additionalInfo.trim());
         const res = await api.post(`/public/acceptance/accept?${q}`, fd);
         remember();
         setSentInfo({
@@ -668,9 +669,6 @@ const AcceptanceLink: React.FC = () => {
                   <div className="border-t border-gray-200 pt-4 dark:border-gray-700">
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-white">2. แนบเอกสาร 2 ที่ลงนามแล้ว แล้วส่งคำตอบ</h3>
                   </div>
-                  <Field id="al-start-date" label="วันเริ่มปฏิบัติงาน" required>
-                    <Input id="al-start-date" type="date" data-testid="al-start-date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-                  </Field>
                   <div className="flex flex-col gap-2 rounded-xl border-2 border-dashed border-blue-300 bg-gray-50 p-4 dark:border-blue-800 dark:bg-gray-900/50">
                     <span className="text-sm font-semibold">แนบเอกสาร 2 ที่ลงนามและประทับตรา <span className="text-red-600 dark:text-red-400">*</span></span>
                     <span className="text-xs text-gray-600 dark:text-gray-400">
@@ -747,7 +745,6 @@ const AcceptanceLink: React.FC = () => {
                 { label: 'ผลการพิจารณา', value: 'รับ' },
                 { label: 'ผู้ลงนาม', value: `${signerName.trim()} (${signerPosition.trim()})` },
                 { label: 'วันที่ลงนาม', value: signedDate ? formatThaiDate(signedDate) : '' },
-                { label: 'วันเริ่มปฏิบัติงาน', value: startDate ? formatThaiDate(startDate) : '' },
                 { label: 'ไฟล์เอกสาร 2', value: evidence?.name ?? '' },
               ]}
               lockNote="ส่งแล้วแก้เองไม่ได้ และลิงก์นี้จะใช้ต่อไม่ได้"

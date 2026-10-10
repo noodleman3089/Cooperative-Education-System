@@ -283,8 +283,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
     await page.getByTestId('proof-open').click();
 
-    // 4. Fill the placement reporting form (ไม่มีช่องพี่เลี้ยงแล้ว — ระบุหลังได้ที่ฝึกงาน)
-    await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
+    // 4. Fill the placement reporting form (ไม่มีช่องพี่เลี้ยงและไม่มีช่องวันเริ่มงานแล้ว — วันเริ่มมาจากปฏิทินสหกิจ)
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
@@ -596,8 +595,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       // ฟอร์มรายงานผลพับอยู่หลังปุ่ม "บริษัทคืนเอกสารตอบรับมาที่ฉัน" — ต้องกดเปิดก่อน
       await page.getByTestId('proof-open').click();
 
-      // Fill in details (ไม่มีช่องพี่เลี้ยงแล้ว — ระบุหลังได้ที่ฝึกงาน)
-      await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
+      // Fill in details (ไม่มีช่องพี่เลี้ยงและไม่มีช่องวันเริ่มงานแล้ว — วันเริ่มมาจากปฏิทินสหกิจ)
       // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
       await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
       await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');

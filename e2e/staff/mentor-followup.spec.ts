@@ -1024,12 +1024,12 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     test.setTimeout(120_000);
     await addMentor1Work(fx);
     await dbExec('UPDATE users SET is_active = FALSE WHERE user_id = $1', [fx.mentor1]);
-    const hint = 'ยังไม่ได้ยืนยันพี่เลี้ยง — เจ้าหน้าที่ต้องกด "ยืนยันและส่งลิงก์" ก่อน';
+    const hint = 'ยังไม่ได้ยืนยันพี่เลี้ยง — อาจารย์นิเทศของนักศึกษาต้องกด "ยืนยันและส่งลิงก์" ก่อน';
 
     await loginAs(page, 'staff1');
     await goToMenu(page, 'mentor_followup');
 
-    // mentor1 มีงานค้าง ปุ่มเตือนจึงเคยกดได้ — ตอนนี้ต้องปิดเพราะบัญชียังไม่เปิดใช้ (= รอเจ้าหน้าที่ยืนยัน)
+    // mentor1 มีงานค้าง ปุ่มเตือนจึงเคยกดได้ — ตอนนี้ต้องปิดเพราะบัญชียังไม่เปิดใช้ (= รออาจารย์นิเทศยืนยัน)
     await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');
     await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toBeDisabled();
     await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toHaveAttribute('title', hint);
@@ -1042,7 +1042,7 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     await expect(page.getByTestId(`mf-confirm-${fx.mentor2}`)).toHaveCount(0);
   });
 
-  test('F14: หน้าจอ — เจ้าหน้าที่ยืนยันพี่เลี้ยงที่รอยืนยัน (ผ่านกล่องยืนยัน · ยกเลิก = ไม่เกิดอะไร) · รายการ "ยังไม่ระบุพี่เลี้ยง" · บทบาทอื่นไม่มีปุ่มยืนยัน', async ({
+  test('F14: หน้าจอ — อาจารย์นิเทศยืนยันพี่เลี้ยงที่รอยืนยัน (ผ่านกล่องยืนยัน · ยกเลิก = ไม่เกิดอะไร) · รายการ "ยังไม่ระบุพี่เลี้ยง" · เจ้าหน้าที่และหัวหน้าสาขาไม่มีปุ่มยืนยัน · กองบนหน้าแรกฝ่ายนิเทศ', async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -1061,20 +1061,34 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     const tokens = async () =>
       Number(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens WHERE user_id = $1', [fx.mentor1]));
 
-    // อาจารย์และหัวหน้าสาขาเห็นป้ายรอยืนยัน แต่ไม่มีปุ่มยืนยัน (เซิร์ฟเวอร์ 403 อยู่แล้ว)
-    for (const who of ['advisor1', 'head1'] as const) {
+    // เจ้าหน้าที่และหัวหน้าสาขาเห็นป้ายรอยืนยัน แต่ไม่มีปุ่มยืนยัน — เห็นข้อความว่ารอใคร (เซิร์ฟเวอร์ 403 อยู่แล้ว)
+    for (const who of ['head1', 'staff1'] as const) {
       await loginAs(page, who);
       await goToMenu(page, 'mentor_followup');
       await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');
       await expect(page.locator('[data-testid^="mf-confirm-"]')).toHaveCount(0);
+      await expect(page.getByTestId(`mf-await-confirm-${fx.mentor1}`)).toHaveText('รออาจารย์นิเทศยืนยัน');
     }
 
-    await loginAs(page, 'staff1');
-    await goToMenu(page, 'mentor_followup');
-
-    // ใบที่ตอบรับแล้วแต่ยังไม่ระบุพี่เลี้ยง ขึ้นเป็นรายการแยก ครบทุกใบ
+    // (ยังอยู่ที่หน้าของเจ้าหน้าที่) ใบที่ตอบรับแล้วแต่ยังไม่ระบุพี่เลี้ยง ขึ้นเป็นรายการแยก ครบทุกใบ
     await expect(page.getByTestId('mf-unassigned')).toContainText(`ยังไม่ระบุพี่เลี้ยง · ${unassignedForms.length} คน`);
     for (const f of unassignedForms) await expect(page.getByTestId(`mf-unassigned-${f.form_id}`)).toBeVisible();
+
+    // อาจารย์นิเทศของนักศึกษา (advisor1): หน้าแรกฝ่ายนิเทศมีกอง "พี่เลี้ยงรอยืนยัน" → พาไปหน้าติดตามพี่เลี้ยง
+    const waiting = Number(
+      await dbValue<string>(
+        `SELECT COUNT(*) FROM intent_forms i JOIN students s ON s.student_id = i.student_id JOIN users u ON u.user_id = i.mentor_id
+          WHERE i.status = 'accepted' AND u.is_active = FALSE
+            AND s.supervisor_id = (SELECT user_id FROM users WHERE email = 'advisor1@test.com')`
+      )
+    );
+    expect(waiting).toBeGreaterThan(0);
+    await loginAs(page, 'advisor1');
+    await page.goto('/dashboard?role=supervisor');
+    await expect(page.getByTestId('advisor-home-tile-mentor_confirm')).toHaveAttribute('data-count', String(waiting));
+    await page.goto('/dashboard?role=supervisor&menu=mentor_followup');
+    await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');
+    await expect(page.getByTestId(`mf-await-confirm-${fx.mentor1}`)).toHaveCount(0);
 
     // กดยืนยัน → กล่องยืนยันบอกว่าทำกับใคร ส่งลิงก์ไปไหน · ยกเลิก = ยังไม่มีอะไรเกิด
     await page.getByTestId(`mf-confirm-${fx.mentor1}`).click();
@@ -1086,14 +1100,20 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     expect(await dbValue<boolean>('SELECT is_active FROM users WHERE user_id = $1', [fx.mentor1])).toBe(false);
     expect(await tokens()).toBe(0);
 
-    // ยืนยันจริง → บัญชีเปิด มีลิงก์หนึ่งใบ ป้ายหาย ปุ่มยืนยันหาย ปุ่มส่งลิงก์ใหม่กดได้
+    // ยืนยันจริง → บัญชีเปิด มีลิงก์หนึ่งใบ ป้ายหาย ปุ่มยืนยันหาย · อาจารย์ไม่มีปุ่มส่งลิงก์ใหม่/แก้อีเมล (ของเจ้าหน้าที่เท่านั้น)
     await page.getByTestId(`mf-confirm-${fx.mentor1}`).click();
     await page.getByTestId('mf-confirm-submit').click();
     await expect(page.getByText(`ยืนยัน ${mentor1.name} เป็นพี่เลี้ยงแล้ว`, { exact: false })).toBeVisible();
     await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveCount(0);
     await expect(page.getByTestId(`mf-confirm-${fx.mentor1}`)).toHaveCount(0);
-    await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toBeEnabled();
+    await expect(page.locator('[data-testid^="mf-sendlink-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="mf-edit-email-"]')).toHaveCount(0);
     expect(await dbValue<boolean>('SELECT is_active FROM users WHERE user_id = $1', [fx.mentor1])).toBe(true);
     expect(await tokens()).toBe(1);
+
+    // เจ้าหน้าที่: หลังยืนยันแล้วปุ่มส่งลิงก์ใหม่กดได้ (ทางเดียวที่ส่งลิงก์ซ้ำ)
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'mentor_followup');
+    await expect(page.getByTestId(`mf-sendlink-${fx.mentor1}`)).toBeEnabled();
   });
 });

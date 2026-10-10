@@ -199,7 +199,6 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await companyPage.getByTestId('al-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
       await companyPage.getByTestId('al-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
       await companyPage.getByTestId('al-signed-date').fill(today);
-      await companyPage.getByTestId('al-start-date').fill('2026-11-02');
       await companyPage.getByTestId('al-evidence').setInputFiles(PDF);
       await walk.step(companyPage, 'บริษัท(ลิงก์)', `กรอกผู้ลงนาม วันที่ และแนบแบบตอบรับ ${SHORTCUT_PDF} — ฟอร์มเดียวจบ ไม่ต้องกรอกข้อมูลบริษัทหรือพี่เลี้ยง`);
 
@@ -243,40 +242,43 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       // ───────── นักศึกษา: เห็นผล ─────────
       await loginAs(page, 'student2');
       await expect(placementCard(page).getByText('สถานประกอบการตอบรับแล้ว', { exact: false })).toBeVisible();
-      await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'none');
-      await page.getByTestId('mentor-card').scrollIntoViewIfNeeded();
-      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — ได้ที่ฝึกงานแล้ว การ์ด "ที่ฝึกงานของคุณ" เตือนเรื่องระบบทะเบียนและให้ระบุพี่เลี้ยงเมื่อเริ่มฝึก');
+      await expect(page.getByTestId('intent-mentor-hint')).toBeVisible();
+      await page.getByTestId('intent-mentor-hint').scrollIntoViewIfNeeded();
+      await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — ได้ที่ฝึกงานแล้ว การ์ด "ที่ฝึกงานของคุณ" เตือนเรื่องระบบทะเบียน และบอกว่าระบุพี่เลี้ยงได้ที่เมนู "พี่เลี้ยงของฉัน" เมื่อเริ่มฝึก');
 
-      // ───────── นักศึกษา: ระบุพี่เลี้ยง (หลังเริ่มฝึก) ─────────
-      await page.getByTestId('mentor-open').click();
+      // ───────── นักศึกษา: ระบุพี่เลี้ยง (หลังเริ่มฝึก · เมนู "พี่เลี้ยงของฉัน") ─────────
+      // ปฏิทินสหกิจของ seed ไม่ได้ตั้งวันเริ่ม ใบจึงไม่ถูกล็อกด้วยวันที่ — ของจริงเมนูนี้ล็อกจนถึงวันเริ่มฝึก
+      await goToMenu(page, 'my_mentor');
+      await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'none');
       await page.getByTestId('mentor-name').fill('สุรเดช ใจดี');
       await page.getByTestId('mentor-email').fill('mentor-walk@example.com');
       await page.getByTestId('mentor-phone').fill('0812223333');
       await page.getByTestId('mentor-position').fill('Supervisor');
-      await walk.step(page, 'นักศึกษา', 'กด "ระบุพี่เลี้ยง" — กรอกชื่อ อีเมล เบอร์โทรของพี่เลี้ยง');
+      await walk.step(page, 'นักศึกษา', 'เมนู "พี่เลี้ยงของฉัน" — กรอกชื่อ อีเมล เบอร์โทรของพี่เลี้ยง');
       await page.getByTestId('mentor-submit').click();
       await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'unconfirmed');
-      await walk.step(page, 'นักศึกษา', 'บันทึกแล้ว — การ์ดบอกว่ารอเจ้าหน้าที่ยืนยันพี่เลี้ยง ยังแก้ได้');
+      await walk.step(page, 'นักศึกษา', 'บันทึกแล้ว — การ์ดบอกว่ารออาจารย์นิเทศยืนยันพี่เลี้ยง ยังแก้ได้');
       await logout(page);
 
-      // ───────── เจ้าหน้าที่: ยืนยันพี่เลี้ยง ─────────
-      await loginAs(page, 'staff1');
-      await goToMenu(page, 'mentor_followup');
+      // ───────── อาจารย์นิเทศ: ยืนยันพี่เลี้ยง (เจ้าหน้าที่ยืนยันไม่ได้) ─────────
+      await loginAs(page, 'advisor1');
+      await page.goto('/dashboard?role=supervisor&menu=mentor_followup');
       const mentorId = await dbValue<number>('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [formId]);
       await expect(page.getByTestId(`mf-inactive-${mentorId}`)).toHaveText('รอยืนยัน');
-      await walk.step(page, 'เจ้าหน้าที่', 'เมนู "ติดตามพี่เลี้ยง" — พี่เลี้ยงที่นักศึกษาระบุขึ้นป้ายรอยืนยัน');
+      await walk.step(page, 'อาจารย์นิเทศ', 'เมนู "ติดตามพี่เลี้ยง" — พี่เลี้ยงที่นักศึกษาระบุขึ้นป้ายรอยืนยัน');
 
       await page.getByTestId(`mf-confirm-${mentorId}`).click();
       await expect(page.getByTestId('mf-confirm-submit')).toBeVisible();
-      await walk.step(page, 'เจ้าหน้าที่', 'กด "ยืนยันและส่งลิงก์" — กล่องยืนยันบอกชื่อ อีเมล บริษัท นักศึกษา');
+      await walk.step(page, 'อาจารย์นิเทศ', 'กด "ยืนยันและส่งลิงก์" — กล่องยืนยันบอกชื่อ อีเมล บริษัท นักศึกษา');
 
       await page.getByTestId('mf-confirm-submit').click();
       await expect(page.getByTestId(`mf-inactive-${mentorId}`)).toHaveCount(0);
-      await walk.step(page, 'เจ้าหน้าที่', 'ยืนยันแล้ว — บัญชีพี่เลี้ยงเปิด ระบบส่งลิงก์เข้าระบบไปที่อีเมลพี่เลี้ยง');
+      await walk.step(page, 'อาจารย์นิเทศ', 'ยืนยันแล้ว — บัญชีพี่เลี้ยงเปิด ระบบส่งลิงก์เข้าระบบไปที่อีเมลพี่เลี้ยง');
       await logout(page);
 
       // ───────── นักศึกษา: เห็นว่าพี่เลี้ยงถูกยืนยันแล้ว ─────────
       await loginAs(page, 'student2');
+      await goToMenu(page, 'my_mentor');
       await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'confirmed');
       await page.getByTestId('mentor-card').scrollIntoViewIfNeeded();
       await walk.step(page, 'นักศึกษา', 'ล็อกอินนักศึกษา — พี่เลี้ยงถูกยืนยันแล้ว แก้เองไม่ได้อีก');

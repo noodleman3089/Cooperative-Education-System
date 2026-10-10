@@ -7,6 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 import { walkToSigned, placementCard, confirmMentor, setCoopStart } from '../helpers/intent';
 
 /**
@@ -861,7 +862,8 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     await page.getByTestId('al-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('al-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('al-signed-date').fill(await todayTh());
-    await page.getByTestId('al-start-date').fill('2026-11-02');
+    // เอกสารหมายเลข 2 ไม่มีช่องวันเริ่มปฏิบัติงาน — หน้าลิงก์ไม่ถามแล้ว
+    await expect(page.getByTestId('al-start-date')).toHaveCount(0);
     await page.getByTestId('al-submit').click();
     await expect(page.getByTestId('al-error')).toContainText('กรุณาแนบเอกสาร 2');
     await page.getByTestId('al-evidence').setInputFiles(PDF_FIXTURE);
@@ -1041,11 +1043,13 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     // กดเปิด → ฟอร์มโผล่ · ค่าที่กรอกไว้ไม่หายเมื่อปิดแล้วเปิดใหม่
     await page.getByTestId('proof-open').click();
     await expect(page.getByTestId('proof-form')).toBeVisible();
-    await page.getByTestId('proof-start-date').fill('2026-11-02');
+    // ฟอร์มไม่ถามวันเริ่มปฏิบัติงานแล้ว (ใช้วันตามปฏิทินสหกิจ)
+    await expect(page.getByTestId('proof-start-date')).toHaveCount(0);
+    await page.getByTestId('proof-signer-name').fill('คุณสมชาย ทรงชัย');
     await page.getByTestId('proof-close').click();
     await expect(page.getByTestId('proof-form')).toHaveCount(0);
     await page.getByTestId('proof-open').click();
-    await expect(page.getByTestId('proof-start-date')).toHaveValue('2026-11-02');
+    await expect(page.getByTestId('proof-signer-name')).toHaveValue('คุณสมชาย ทรงชัย');
 
     // รอบริษัท: ส่งเมลแล้ว
     await putIntent({ status: 'approved_by_dept_head', due: 15, mailSent: true });
@@ -1147,13 +1151,26 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     // วันเริ่มงานย้ายมาอยู่การ์ด "ที่ฝึกงานของคุณ" · ยังไม่มีพี่เลี้ยงบนใบ = ไม่มีบรรทัดพี่เลี้ยง
     await expect(page.getByTestId('intent-start-date')).toContainText('2569');
     await expect(page.getByTestId('intent-mentor')).toHaveCount(0);
-    // ได้ที่ฝึกงานแล้ว: เตือนเรื่องระบบทะเบียน (ข้อความอย่างเดียว) · บล็อกพี่เลี้ยงบอกว่ายังไม่ระบุ ฟอร์มพับไว้จนกดปุ่ม
+    // ได้ที่ฝึกงานแล้ว: เตือนเรื่องระบบทะเบียน (ข้อความอย่างเดียว)
     await expect(page.getByTestId('registry-reminder')).toHaveText(
       'กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้'
     );
-    await expect(page.getByTestId('mentor-card')).toHaveAttribute('data-state', 'none');
+    // ฟอร์มพี่เลี้ยงไม่อยู่บนหน้าแรกแล้ว — เหลือบรรทัดเดียวบอกว่าระบุได้เมื่อไหร่ (ยังไม่ถึงวันเริ่มฝึก = ไม่มีลิงก์)
+    await expect(page.getByTestId('mentor-card')).toHaveCount(0);
     await expect(page.getByTestId('mentor-form')).toHaveCount(0);
+    await expect(page.getByTestId('intent-mentor-hint')).toHaveText('ระบุพี่เลี้ยงได้ตั้งแต่วันเริ่มฝึก (2 พ.ย. 2569)');
+    await expect(page.getByTestId('intent-mentor-link')).toHaveCount(0);
     await expect(page.locator('#my-documents')).toBeVisible();
+
+    // เมนู "พี่เลี้ยงของฉัน" ล็อกจนถึงวันเริ่มฝึก — กดแล้วได้หน้าอธิบายพร้อมวันที่เปิด ไม่ใช่ฟอร์ม
+    await goToMenu(page, 'my_mentor');
+    await expect(page.getByTestId('stage-locked')).toContainText('ระบุพี่เลี้ยงได้ตั้งแต่วันเริ่มฝึก (2 พ.ย. 2569)');
+    await expect(page.getByTestId('mentor-form')).toHaveCount(0);
+
+    // ใบที่ยังไม่ accepted = ล็อกด้วยเหตุผลอีกแบบ (ยังไม่รู้วันเริ่ม)
+    await dbExec("UPDATE intent_forms SET status = 'pending_officer_approval' WHERE form_id = $1", [formId]);
+    await page.goto('/dashboard?menu=my_mentor');
+    await expect(page.getByTestId('stage-locked')).toContainText('ระบุพี่เลี้ยงได้หลังได้ที่ฝึกงานแล้ว');
   });
 
   test('L11d: wait-confirm — ลิงก์ "ดูเอกสาร 2 ที่บริษัทแนบ" ขึ้นเมื่อใบมีไฟล์เท่านั้น', async ({ page }) => {
@@ -1175,7 +1192,7 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await expect(link).toHaveAttribute('target', '_blank');
   });
 
-  test('L15: นักศึกษาระบุพี่เลี้ยงบนการ์ด "ที่ฝึกงานของคุณ" หลังได้ที่ฝึกงาน — กรอกครบถึงส่งได้ · ส่งแล้วรอเจ้าหน้าที่ยืนยัน · แก้ได้จนกว่าจะถูกยืนยัน · ยืนยันแล้วไม่มีปุ่มแก้', async ({
+  test('L15: นักศึกษาระบุพี่เลี้ยงที่เมนู "พี่เลี้ยงของฉัน" หลังเริ่มฝึก (หน้าแรกเหลือบรรทัดเดียว) — กรอกครบถึงส่งได้ · ส่งแล้วรออาจารย์นิเทศยืนยัน ·แก้ได้จนกว่าจะถูกยืนยัน · ยืนยันแล้วไม่มีปุ่มแก้', async ({
     page,
     request,
   }) => {
@@ -1186,12 +1203,16 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await dbExec("UPDATE intent_forms SET start_date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date WHERE form_id = $1", [formId]);
     await loginAs(page, 'student2');
     const mentorCard = page.getByTestId('mentor-card');
-    // ได้ที่ฝึกงานแล้ว = ไม่มีการ์ดสถานะช่วงขอที่ฝึกงาน · บล็อกพี่เลี้ยงอยู่ในการ์ด "ที่ฝึกงานของคุณ" และไม่ใช่การ์ด "ทำอะไรตอนนี้" ใบที่สอง
+    // ได้ที่ฝึกงานแล้ว = ไม่มีการ์ดสถานะช่วงขอที่ฝึกงาน · หน้าแรกไม่มีฟอร์มพี่เลี้ยง มีแค่บรรทัดเดียวพร้อมลิงก์ไปเมนู "พี่เลี้ยงของฉัน"
     await expect(card(page)).toHaveCount(0);
     await expect(page.getByTestId('now-card')).toHaveCount(1);
+    await expect(mentorCard).toHaveCount(0);
+    await expect(page.getByTestId('intent-mentor-hint')).toContainText('ระบุพี่เลี้ยงได้ที่เมนู');
+    await page.getByTestId('intent-mentor-link').click();
+    await expect(page).toHaveURL(/menu=my_mentor/);
     await expect(mentorCard).toHaveAttribute('data-state', 'none');
     await expect(mentorCard).toContainText('ยังไม่ได้ระบุพี่เลี้ยง');
-    await page.getByTestId('mentor-open').click();
+    await expect(page.getByTestId('mentor-form')).toBeVisible();
 
     // ช่องบังคับว่าง = ส่งไม่ได้ (เบราว์เซอร์กันไว้) · ไม่มีอะไรลงฐาน
     await page.getByTestId('mentor-submit').click();
@@ -1208,33 +1229,45 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     await page.getByTestId('mentor-email').fill(MENTOR_EMAIL);
     await page.getByTestId('mentor-submit').click();
     await expect(mentorCard).toHaveAttribute('data-state', 'unconfirmed');
-    await expect(mentorCard).toContainText('รอเจ้าหน้าที่ยืนยันพี่เลี้ยง');
-    await expect(page.getByTestId('intent-mentor')).toContainText('สุรเดช ใจดี');
+    await expect(mentorCard).toContainText('รออาจารย์นิเทศยืนยันพี่เลี้ยง');
+    await expect(mentorCard).toContainText('สุรเดช ใจดี');
     await expect(page.getByTestId('mentor-form')).toHaveCount(0);
     // ระบุแล้วบัญชียังปิด ไม่มีลิงก์เข้าระบบออก
     expect(await dbValue<boolean>('SELECT is_active FROM users WHERE email = $1', [MENTOR_EMAIL])).toBe(false);
     expect(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens')).toBe('0');
 
-    // ยังแก้ได้จนกว่าเจ้าหน้าที่จะยืนยันพี่เลี้ยง — เปิดมาพร้อมค่าเดิม
+    // ยังแก้ได้จนกว่าอาจารย์นิเทศจะยืนยันพี่เลี้ยง — เปิดมาพร้อมค่าเดิม
     await page.getByTestId('mentor-edit').click();
     await expect(page.getByTestId('mentor-email')).toHaveValue(MENTOR_EMAIL);
     await page.getByTestId('mentor-name').fill('สุรเดช แก้ชื่อแล้ว');
     await page.getByTestId('mentor-submit').click();
     await expect(page.getByTestId('mentor-form')).toHaveCount(0);
+    await expect(mentorCard).toContainText('สุรเดช แก้ชื่อแล้ว');
+    // หน้าแรก: บรรทัดเดียวบอกชื่อพี่เลี้ยง ไม่มีลิงก์ชวนระบุซ้ำ
+    await goToMenu(page, 'dashboard');
     await expect(page.getByTestId('intent-mentor')).toContainText('สุรเดช แก้ชื่อแล้ว');
+    await expect(page.getByTestId('intent-mentor-hint')).toHaveCount(0);
+
+    // นักศึกษายังไม่มีอาจารย์นิเทศ = ข้อความรอบอกเหตุที่ค้างตามจริง
+    await dbExec("UPDATE students SET supervisor_id = NULL WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')");
+    await goToMenu(page, 'my_mentor');
+    await expect(mentorCard).toContainText('รอหัวหน้าสาขาจัดสรรอาจารย์นิเทศ แล้วอาจารย์นิเทศจะเป็นผู้ยืนยันพี่เลี้ยง');
+    await dbExec(
+      `UPDATE students SET supervisor_id = (SELECT user_id FROM users WHERE email = 'advisor1@test.com')
+        WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')`
+    );
     const mentorId = (await dbValue<number>('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [formId])) as number;
     expect(await dbValue<string>('SELECT name FROM mentors WHERE mentor_id = $1', [mentorId])).toBe('สุรเดช แก้ชื่อแล้ว');
 
     // อาจารย์นิเทศยืนยันพี่เลี้ยงแล้ว: การ์ดบอกว่ายืนยันแล้ว ไม่มีปุ่มแก้/ปุ่มระบุ (เซิร์ฟเวอร์ตอบ 409 อยู่แล้ว — หน้าจอไม่ชวนให้กด)
-    // ⚠️ ถ้อยคำบนการ์ดยังเป็นของหน้าจอเดิม ("เจ้าหน้าที่ยืนยัน…") — แก้พร้อมหน้าจอของรอบแก้ขั้น 5 (PROMPT-step5-round2-frontend)
     await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, mentorId);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     await page.reload();
     await expect(mentorCard).toHaveAttribute('data-state', 'confirmed');
-    await expect(mentorCard).toContainText('เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว');
+    await expect(mentorCard).toContainText('อาจารย์นิเทศยืนยันพี่เลี้ยงแล้ว');
+    await expect(mentorCard).toContainText('สุรเดช แก้ชื่อแล้ว');
     await expect(page.getByTestId('mentor-edit')).toHaveCount(0);
-    await expect(page.getByTestId('mentor-open')).toHaveCount(0);
     await expect(page.getByTestId('mentor-form')).toHaveCount(0);
   });
 });
@@ -1336,7 +1369,7 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
     const anon = await playwrightRequest.newContext();
     try {
       const res = await anon.post(`${PUB}/accept?token=${encodeURIComponent(token)}`, {
-        multipart: { evidence: pdfPart(), ...(await acceptFields()) },
+        multipart: { evidence: pdfPart(), ...(await acceptFields(FORM_FILL)) },
       });
       expect(res.status(), await res.text()).toBe(200);
     } finally {
@@ -1355,6 +1388,11 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
     await page.getByTestId(`review-acceptance-${formId}`).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByTestId('acceptance-signer')).toBeVisible();
+    // แบบตอบรับเปิดดูได้ในหน้าตรวจเลย (ไม่ต้องเปิดแท็บใหม่) · ข้างเอกสารคือข้อมูลผู้ประสานงานที่บริษัทพิมพ์บนหน้าลิงก์
+    await expect(dialog.locator('iframe[title="แบบตอบรับ"]')).toBeVisible();
+    await expect(dialog.getByTestId('open-acceptance-evidence')).toBeVisible();
+    await expect(dialog.getByTestId('acceptance-source-link')).toBeVisible();
+    for (const value of Object.values(FORM_FILL)) await expect(dialog.getByTestId('acceptance-fill')).toContainText(value);
     await expect(page.getByTestId('acceptance-mentor-missing')).toHaveCount(0);
     await expect(page.getByTestId('acceptance-job-mentor')).toHaveCount(0);
     await expect(dialog).not.toContainText('พี่เลี้ยง');

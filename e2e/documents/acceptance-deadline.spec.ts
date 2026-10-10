@@ -582,7 +582,8 @@ test.describe('ขั้น 4 — กำหนด ๑๕ วันทำกา�
 
     // ขั้นส่ง — ผู้อนุมัติใช้ค่าที่กรอกไว้ ไม่มีช่องให้พิมพ์ซ้ำ
     await expect(page.getByTestId('al-signer-name')).toHaveCount(1);
-    await page.getByTestId('al-start-date').fill('2026-11-02');
+    // เอกสารหมายเลข 2 ไม่มีช่องวันเริ่มปฏิบัติงาน — หน้าลิงก์ไม่ถามแล้ว (2026-10-10)
+    await expect(page.getByTestId('al-start-date')).toHaveCount(0);
     await page.getByTestId('al-evidence').setInputFiles(PDF_FIXTURE);
     await page.getByTestId('al-submit').click();
     await expect(page.getByRole('dialog')).toContainText('คุณสมชาย ทรงชัย');
@@ -594,6 +595,12 @@ test.describe('ขั้น 4 — กำหนด ๑๕ วันทำกา�
       [formId]
     );
     expect(saved).toEqual({ status: 'pending_officer_approval', signer: 'คุณสมชาย ทรงชัย', source: 'link' });
+    // ช่องผู้ประสานงานที่พิมพ์บนหน้าลิงก์ไปกับคำตอบและถูกเก็บบนใบ (ช่องที่เว้นว่างไม่ถูกส่ง · ผู้อนุมัติไม่เก็บซ้ำ)
+    expect(await dbValue('SELECT acceptance_form_fill FROM intent_forms WHERE form_id = $1', [formId])).toEqual({
+      coordinator_name: 'คุณวิภา ใจดี',
+      office_phone: '02-555-0101',
+      email: 'hr-d8@example.com',
+    });
 
     // ลิงก์ถัดไป (เจ้าหน้าที่ตีกลับ → นักศึกษาส่งลิงก์ใหม่) บนเบราว์เซอร์เดิม — ค่าที่จำไว้ไม่ผูกกับ token
     await officerReturnsAcceptance(request, formId, 'ตราประทับไม่ชัดเจน');
@@ -607,7 +614,6 @@ test.describe('ขั้น 4 — กำหนด ๑๕ วันทำกา�
     await expect(page.getByTestId('al-signer-position')).toHaveValue('ผู้จัดการฝ่ายบุคคล');
     // ⛔ ไม่จำวันที่ ไฟล์ หรือข้อมูลของนักศึกษา
     await expect(page.getByTestId('al-signed-date')).toHaveValue('');
-    await expect(page.getByTestId('al-start-date')).toHaveValue('');
     const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }));
     expect(stored).not.toContain(today);
     expect(stored).not.toContain('student2');

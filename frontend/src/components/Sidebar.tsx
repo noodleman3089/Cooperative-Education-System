@@ -44,7 +44,7 @@ interface MenuItem {
 const PARKED_MENUS: Record<string, string[]> = {
   staff: ['semester_summary', 'announcements'],
   advisor: ['mentor_followup'],
-  supervisor: ['mentor_followup'],
+  supervisor: [],
   dept_head: ['mentor_followup'],
 };
 const SHOW_ALL_MENUS = import.meta.env.VITE_SHOW_ALL_MENUS === 'true';
@@ -225,6 +225,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
       { id: 'accommodation_plan', label: 'แจ้งที่พัก (สหกิจ 06)', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
+      { id: 'my_mentor', label: 'พี่เลี้ยงของฉัน', icon: icons.mentor_followup, group: 'ระหว่างฝึก' },
       { id: 'weekly_log', label: 'บันทึกการปฏิบัติงาน', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
       { id: 'report_outline', label: 'โครงร่างรายงาน', icon: icons.report_outline, group: 'ระหว่างฝึก' },
       // บันทึกข้อความกรณียกเว้น — ไม่ล็อกตามขั้นตอนหรือปฏิทิน เพราะเหตุจำเป็น

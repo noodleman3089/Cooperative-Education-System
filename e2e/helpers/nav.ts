@@ -23,6 +23,8 @@ export type NavId =
   | 'report_outline'
   | 'weekly_log'
   | 'final_report'
+  // พี่เลี้ยงของฉัน — ล็อกจนกว่าใบ accepted และถึงวันเริ่มฝึก (ล็อกอยู่ = หน้าจอ `stage-locked`)
+  | 'my_mentor'
   | 'evaluation_result'
   | 'memos'
   | 'profile'

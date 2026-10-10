@@ -58,6 +58,7 @@ const MentorFollowup = lazy(() => import('./Staff/MentorFollowup'));
 const CompanyDirectory = lazy(() => import('./Staff/CompanyDirectory'));
 const CoopCalendarManager = lazy(() => import('./Staff/CoopCalendarManager'));
 const StudentMemo = lazy(() => import('./Student/StudentMemo'));
+const MyMentor = lazy(() => import('./Student/MyMentor'));
 const MentorHome = lazy(() => import('./Mentor/MentorHome'));
 const MentorCertify = lazy(() => import('./Mentor/MentorCertify'));
 const ReportOutlineQueue = lazy(() => import('./Mentor/ReportOutlineQueue'));
@@ -85,6 +86,8 @@ const STAGE_GATED_STUDENT_MENUS = [
 interface StudentStage {
   hasProfile: boolean;
   intentStatus: string | null;
+  mentorLocked?: boolean;
+  mentorOpensOn?: string | null;
 }
 
 /** Full-screen version of the padlock in the sidebar, with the way forward. */
@@ -96,7 +99,7 @@ const StageLockedScreen: React.FC<{
   actionLabel: string;
   onAction: () => void;
 }> = ({ heading, reason, actionLabel, onAction }) => (
-  <div className="page-enter mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
+  <div data-testid="stage-locked" className="page-enter mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white p-10 text-center dark:border-gray-800 dark:bg-gray-900">
     <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
       <Lock className="h-7 w-7" />
     </div>
@@ -219,12 +222,14 @@ const Dashboard: React.FC = () => {
         setStage({
           hasProfile: true,
           intentStatus: stageRes.value?.activeIntent?.status ?? null,
+          mentorLocked: stageRes.value?.activeIntent?.mentor_locked ?? true,
+          mentorOpensOn: stageRes.value?.activeIntent?.mentor_opens_on ?? null,
         });
       } else if (getErrorStatus(stageRes.reason) === 404) {
         // 404 is the student who has not filled the profile in yet. Anything
         // else is the server having a bad day, and a bad day must not invent a
         // padlock — leave the menus as they were.
-        setStage({ hasProfile: false, intentStatus: null });
+        setStage({ hasProfile: false, intentStatus: null, mentorLocked: true, mentorOpensOn: null });
       }
 
       if (calRes.status === 'fulfilled') {
@@ -303,15 +308,32 @@ const Dashboard: React.FC = () => {
 
   /** ล็อกตามขั้นตอนของนักศึกษาคนนั้น — ของเดิม ไม่เกี่ยวกับเวลา */
   const stageLocks = useMemo<Record<string, string>>(() => {
-    if (currentRole !== 'student' || !stage || stage.intentStatus === 'accepted') return {};
+    if (currentRole !== 'student' || !stage) return {};
 
-    const reason = !stage.hasProfile
-      ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่มีข้อมูลประวัตินักศึกษาในระบบ กรุณากรอกประวัติให้ครบก่อน'
-      : stage.intentStatus === null
-        ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่ได้ยื่นแบบแจ้งความจำนงไปที่สถานประกอบการใด'
-        : `เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว สถานะใบความจำนงตอนนี้: ${statusText(stage.intentStatus, 'intent')}`;
+    const locks: Record<string, string> = {};
 
-    return Object.fromEntries(STAGE_GATED_STUDENT_MENUS.map((id) => [id, reason]));
+    if (stage.intentStatus !== 'accepted') {
+      const reason = !stage.hasProfile
+        ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่มีข้อมูลประวัตินักศึกษาในระบบ กรุณากรอกประวัติให้ครบก่อน'
+        : stage.intentStatus === null
+          ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่ได้ยื่นแบบแจ้งความจำนงไปที่สถานประกอบการใด'
+          : `เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว สถานะใบความจำนงตอนนี้: ${statusText(stage.intentStatus, 'intent')}`;
+
+      for (const id of STAGE_GATED_STUDENT_MENUS) {
+        locks[id] = reason;
+      }
+    }
+
+    // กฎล็อกเมนู "พี่เลี้ยงของฉัน" (คำสั่งเจ้าของ 2026-10-10):
+    // ล็อกจนกว่า BOTH: ใบ accepted AND ถึงวันเริ่มฝึกแล้ว (อ่านจาก mentor_locked และ mentor_opens_on)
+    if (stage.mentorLocked) {
+      locks['my_mentor'] =
+        stage.intentStatus !== 'accepted'
+          ? 'ระบุพี่เลี้ยงได้หลังได้ที่ฝึกงานแล้ว'
+          : `ระบุพี่เลี้ยงได้ตั้งแต่วันเริ่มฝึก (${stage.mentorOpensOn ? formatThaiDate(stage.mentorOpensOn) : '—'})`;
+    }
+
+    return locks;
   }, [currentRole, stage]);
 
   /**
@@ -388,6 +410,7 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'profile') return <StudentProfile />;
         if (activeMenu === 'job_application') return <CoopJobApplication />;
         if (activeMenu === 'accommodation_plan') return <AccommodationWorkPlan />;
+        if (activeMenu === 'my_mentor') return <MyMentor />;
         if (activeMenu === 'report_outline') return <ReportOutline />;
         if (activeMenu === 'weekly_log') return <WeeklyLog />;
         if (activeMenu === 'final_report') return <FinalReportSubmission />;

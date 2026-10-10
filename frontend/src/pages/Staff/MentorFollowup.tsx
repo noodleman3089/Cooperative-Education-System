@@ -17,12 +17,12 @@ import { formatThaiDate, formatThaiDateTime } from '../../utils/thaiDate';
  *
  * พี่เลี้ยงถูกระบุหลังนักศึกษาเริ่มฝึก (ขั้น 5 · 2026-10-09) — หน้านี้จึงเห็นใบที่ตอบรับแล้วสามสภาพ:
  * ยังไม่ระบุพี่เลี้ยง (`unassigned`) · ระบุแล้วรอยืนยัน (แถวที่ `is_active === false`) · ยืนยันแล้ว
- * เจ้าหน้าที่กด "ยืนยันและส่งลิงก์" = จุดเดียวที่บัญชีพี่เลี้ยงเปิดและลิงก์แรกถูกส่ง (`POST /mentor-followup/:id/confirm`)
+ * อาจารย์นิเทศกด "ยืนยันและส่งลิงก์" = จุดเดียวที่บัญชีพี่เลี้ยงเปิดและลิงก์แรกถูกส่ง (`POST /mentor-followup/:id/confirm`)
  *
  * สัญญากับ backend: `GET /mentor-followup` · `POST /mentor-followup/:id/remind`
  * · `POST /mentor-followup/:id/send-link` · `PUT /mentor-followup/:id/email`
- * ปุ่มส่งลิงก์ใหม่และแก้อีเมลขึ้นเฉพาะเมื่อ `can_edit` (เซิร์ฟเวอร์ปฏิเสธ 403 อยู่แล้ว
- * ปุ่มที่ซ่อนไว้เป็นแค่ไม่ให้กดแล้วเจอ error)
+ * ปุ่มยืนยันขึ้นเฉพาะเมื่อ `can_confirm` (อาจารย์นิเทศของนักศึกษาในแถว) · เจ้าหน้าที่เห็นข้อความ "รออาจารย์นิเทศยืนยัน"
+ * ปุ่มส่งลิงก์ใหม่และแก้อีเมลขึ้นเฉพาะเมื่อ `can_edit` (เจ้าหน้าที่เท่านั้น)
  */
 
 export interface MentorFollowupStudent {
@@ -36,6 +36,8 @@ export interface MentorFollowupRow {
   email: string;
   company_name: string | null;
   is_active: boolean;
+  can_confirm?: boolean;
+  awaiting_supervisor?: boolean;
   student_count: number;
   students: MentorFollowupStudent[];
   pending_total: number;
@@ -96,7 +98,7 @@ const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> =
 type Filter = 'all' | 'unconfirmed' | 'pending' | 'never_login' | 'silent';
 
 // เซิร์ฟเวอร์ปฏิเสธเตือน/ส่งลิงก์ให้บัญชีที่ยังไม่เปิดใช้ (403 SEC-16) — ปิดปุ่มไว้ก่อนแทนที่จะให้กดแล้วเจอ "ถูกระงับ"
-const INACTIVE_MENTOR_HINT = 'ยังไม่ได้ยืนยันพี่เลี้ยง — เจ้าหน้าที่ต้องกด "ยืนยันและส่งลิงก์" ก่อน';
+const INACTIVE_MENTOR_HINT = 'ยังไม่ได้ยืนยันพี่เลี้ยง — อาจารย์นิเทศของนักศึกษาต้องกด "ยืนยันและส่งลิงก์" ก่อน';
 
 const hasWork = (m: MentorFollowupRow) => m.pending_total > 0 || m.eval_missing_students > 0;
 
@@ -477,7 +479,7 @@ const MentorFollowup: React.FC = () => {
                               title={INACTIVE_MENTOR_HINT}
                               className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-200"
                             >
-                              รอยืนยัน
+                              {m.awaiting_supervisor ? 'รอหัวหน้าสาขาจัดสรรอาจารย์นิเทศ' : 'รอยืนยัน'}
                             </span>
                           )}
                         </div>
@@ -585,17 +587,23 @@ const MentorFollowup: React.FC = () => {
 
                     {/* ปุ่ม */}
                     <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:mt-0 lg:w-56 lg:shrink-0 lg:flex-col">
-                      {/* รอยืนยัน: เจ้าหน้าที่เท่านั้นที่ยืนยันได้ (เซิร์ฟเวอร์ 403 กับบทบาทอื่น) — ปุ่มนี้มาก่อนปุ่มเตือนที่ยังกดไม่ได้ */}
-                      {canEdit && !m.is_active && (
-                        <Button
-                          size="sm"
-                          data-testid={`mf-confirm-${m.mentor_id}`}
-                          icon={<UserCheck className="h-4 w-4" />}
-                          onClick={() => setConfirmTarget(m)}
-                          className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"
-                        >
-                          ยืนยันและส่งลิงก์
-                        </Button>
+                      {/* รอยืนยัน: อาจารย์นิเทศเท่านั้นที่ยืนยันได้ (can_confirm) · เจ้าหน้าที่/บทบาทอื่นขึ้นข้อความอ่านอย่างเดียว */}
+                      {!m.is_active && (
+                        m.can_confirm ? (
+                          <Button
+                            size="sm"
+                            data-testid={`mf-confirm-${m.mentor_id}`}
+                            icon={<UserCheck className="h-4 w-4" />}
+                            onClick={() => setConfirmTarget(m)}
+                            className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"
+                          >
+                            ยืนยันและส่งลิงก์
+                          </Button>
+                        ) : (
+                          <span data-testid={`mf-await-confirm-${m.mentor_id}`} className="text-xs font-semibold text-amber-700 dark:text-amber-400 py-1">
+                            {m.awaiting_supervisor ? 'รอหัวหน้าสาขาจัดสรรอาจารย์นิเทศ' : 'รออาจารย์นิเทศยืนยัน'}
+                          </span>
+                        )
                       )}
                       <Button
                         size="sm"

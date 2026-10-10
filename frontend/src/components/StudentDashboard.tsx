@@ -88,8 +88,6 @@ const StudentDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Manual Acceptance States
-  const [startDate, setStartDate] = useState('');
   // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตามกระดาษ (เจ้าหน้าที่ไม่ต้องคีย์ซ้ำ)
   const [signerName, setSignerName] = useState('');
   const [signerPosition, setSignerPosition] = useState('');
@@ -98,11 +96,6 @@ const StudentDashboard: React.FC = () => {
   // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ — ตรวจก่อนส่ง
   const [confirmingProof, setConfirmingProof] = useState(false);
   const [evidenceFile, setEvidenceFile] = useState<File | null>(null);
-  // ระบุพี่เลี้ยงหลังได้ที่ฝึกงานแล้ว (ใบ `accepted` · `POST /intents/:id/mentor`) — แก้ได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง
-  const [mentorSet, setMentorSet] = useState({ name: '', email: '', phone: '', position: '', department: '' });
-  const [mentorSetOpen, setMentorSetOpen] = useState(false);
-  const [mentorSetBusy, setMentorSetBusy] = useState(false);
-  const [mentorSetError, setMentorSetError] = useState<string | null>(null);
   const [uploadingRequestForm, setUploadingRequestForm] = useState(false);
   // ไฟล์แบบคำร้องที่เลือกแล้วแต่ยังไม่ส่ง — มีค่า = กล่องยืนยันเปิดอยู่
   const [pendingRequestForm, setPendingRequestForm] = useState<{ file: File; formId: number } | null>(null);
@@ -278,10 +271,6 @@ const StudentDashboard: React.FC = () => {
     e.preventDefault();
     if (!activeIntent || !evidenceFile) return;
 
-    if (!startDate) {
-      setProofError('กรุณาระบุวันเริ่มปฏิบัติงาน');
-      return;
-    }
     if (!signerName.trim() || !signerPosition.trim() || !signedDate) {
       setProofError('กรุณากรอกชื่อ ตำแหน่ง และวันที่ของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับ');
       return;
@@ -294,7 +283,6 @@ const StudentDashboard: React.FC = () => {
     if (!activeIntent || !evidenceFile) return;
 
     const formData = new FormData();
-    formData.append('start_date', startDate);
     formData.append('signer_name', signerName.trim());
     formData.append('signer_position', signerPosition.trim());
     formData.append('signed_date', signedDate);
@@ -308,7 +296,6 @@ const StudentDashboard: React.FC = () => {
       setConfirmingProof(false);
       setProofOpen(false);
       // Reset states
-      setStartDate('');
       setSignerName('');
       setSignerPosition('');
       setSignedDate('');
@@ -1194,18 +1181,6 @@ const StudentDashboard: React.FC = () => {
       </div>
 
                   <form onSubmit={handleProofSubmit} className="space-y-3">
-                    {/* ⛔ ไม่ถามพี่เลี้ยงที่นี่ — คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก ระบุที่การ์ด "ที่ฝึกงานของคุณ" เมื่อใบ accepted */}
-                    <div className="sm:max-w-xs">
-                      <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันเริ่มปฏิบัติงานสหกิจ *</label>
-                      <Input
-                        type="date"
-                        required
-                        data-testid="proof-start-date"
-                        disabled={submittingProof || reportingFail}
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)} size="sm"
-                      />
-                    </div>
 
                     <div className="space-y-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700">
                       <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
@@ -1282,137 +1257,7 @@ const StudentDashboard: React.FC = () => {
     </div>
   );
 
-  // ฟอร์มระบุพี่เลี้ยง — คณะรู้ตัวพี่เลี้ยงหลังเริ่มฝึก จึงระบุได้เมื่อใบ `accepted` เท่านั้น (ขั้น 5 · 2026-10-09)
-  // แก้ได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่ยืนยันเท่านั้น จึงไม่มีอีเมลออกจากการกดตรงนี้
-  // สามสภาพ (`mentor-card` data-state): none = ยังไม่ระบุ · unconfirmed = รอเจ้าหน้าที่ยืนยัน · confirmed = ยืนยันแล้ว แก้เองไม่ได้
-  const mentorCardState: 'none' | 'unconfirmed' | 'confirmed' | null =
-    activeIntent?.status !== 'accepted'
-      ? null
-      : !intentMentor?.name
-        ? 'none'
-        : intentMentor.confirmed
-          ? 'confirmed'
-          : 'unconfirmed';
-  const openMentorForm = () => {
-    setMentorSet({
-      name: intentMentor?.name ?? '',
-      email: intentMentor?.email ?? '',
-      phone: intentMentor?.phone ?? '',
-      position: intentMentor?.position ?? '',
-      department: intentMentor?.department ?? '',
-    });
-    setMentorSetError(null);
-    setMentorSetOpen(true);
-  };
-  const mentorFieldKeys = ['name', 'email', 'phone', 'position', 'department'] as const;
-  const submitMentorSet = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeIntent) return;
-    setMentorSetBusy(true);
-    setMentorSetError(null);
-    try {
-      await api.post(`/intents/${activeIntent.form_id}/mentor`, {
-        name: mentorSet.name.trim(),
-        email: mentorSet.email.trim(),
-        phone: mentorSet.phone.trim(),
-        position: mentorSet.position.trim(),
-        department: mentorSet.department.trim(),
-      });
-      setMentorSetOpen(false);
-      await loadDashboardData(true);
-    } catch (err) {
-      setMentorSetError(getErrorMessage(err, 'บันทึกข้อมูลพี่เลี้ยงไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
-    } finally {
-      setMentorSetBusy(false);
-    }
-  };
-  const mentorFieldLabels: Record<(typeof mentorFieldKeys)[number], string> = {
-    name: 'ชื่อ-นามสกุล พี่เลี้ยง *',
-    email: 'อีเมล พี่เลี้ยง *',
-    phone: 'เบอร์โทรศัพท์ พี่เลี้ยง *',
-    position: 'ตำแหน่ง (ไม่บังคับ)',
-    department: 'ฝ่าย / แผนก (ไม่บังคับ)',
-  };
-  const mentorFormEl =
-    mentorSetOpen && (mentorCardState === 'none' || mentorCardState === 'unconfirmed') ? (
-      <form
-        data-testid="mentor-form"
-        onSubmit={submitMentorSet}
-        className="space-y-3 rounded-xl border border-gray-200 p-4 dark:border-gray-700"
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {mentorFieldKeys.map((key) => (
-            <div key={key}>
-              <label htmlFor={`mentor-set-${key}`} className="mb-1 block text-xs text-gray-600 dark:text-gray-400">
-                {mentorFieldLabels[key]}
-              </label>
-              <Input
-                id={`mentor-set-${key}`}
-                data-testid={`mentor-${key}`}
-                type={key === 'email' ? 'email' : key === 'phone' ? 'tel' : 'text'}
-                required={key === 'name' || key === 'email' || key === 'phone'}
-                disabled={mentorSetBusy}
-                value={mentorSet[key]}
-                onChange={(e) => setMentorSet((prev) => ({ ...prev, [key]: e.target.value }))}
-                size="sm"
-              />
-            </div>
-          ))}
-        </div>
-        <AlertBanner variant="error" message={mentorSetError} />
-        <div className="flex gap-2">
-          <Button type="submit" size="sm" data-testid="mentor-submit" disabled={mentorSetBusy}>
-            {mentorSetBusy ? 'กำลังบันทึก...' : 'บันทึกข้อมูลพี่เลี้ยง'}
-          </Button>
-          <Button variant="secondary" size="sm" disabled={mentorSetBusy} onClick={() => setMentorSetOpen(false)}>
-            ยกเลิก
-          </Button>
-        </div>
-      </form>
-    ) : null;
-  // บล็อกพี่เลี้ยงในการ์ด "ที่ฝึกงานของคุณ" — โผล่เมื่อได้ที่ฝึกงานแล้วเท่านั้น และไม่ขวางขั้นไหนของเส้นทาง
-  const mentorCardEl = mentorCardState ? (
-    <div
-      data-testid="mentor-card"
-      data-state={mentorCardState}
-      className="flex flex-col gap-2.5 border-t border-gray-200 pt-3.5 dark:border-gray-700"
-    >
-      {mentorCardState === 'none' && (
-        <>
-          <p className="text-sm font-semibold text-gray-900 dark:text-white">ยังไม่ได้ระบุพี่เลี้ยง</p>
-          <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-            เมื่อเริ่มปฏิบัติงานและทราบชื่อพนักงานที่ปรึกษา (พี่เลี้ยง) แล้ว ให้ระบุที่นี่ —
-            เจ้าหน้าที่จะยืนยันก่อนระบบส่งลิงก์เข้าใช้งานให้พี่เลี้ยง
-          </p>
-        </>
-      )}
-      {mentorCardState === 'unconfirmed' && (
-        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-          <span className="font-semibold text-amber-700 dark:text-amber-400">รอเจ้าหน้าที่ยืนยันพี่เลี้ยง</span> —
-          พี่เลี้ยงจะได้รับลิงก์เข้าใช้งานหลังเจ้าหน้าที่ยืนยัน · ข้อมูลผิดแก้ได้จนกว่าจะถูกยืนยัน
-        </p>
-      )}
-      {mentorCardState === 'confirmed' && (
-        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-          <span className="font-semibold text-emerald-700 dark:text-emerald-400">เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว</span> —
-          หากข้อมูลไม่ถูกต้อง กรุณาแจ้งเจ้าหน้าที่สหกิจศึกษา
-        </p>
-      )}
-      {mentorCardState !== 'confirmed' && !mentorSetOpen && (
-        <div>
-          <Button
-            variant={mentorCardState === 'none' ? 'primary' : 'secondary'}
-            size="sm"
-            data-testid={mentorCardState === 'none' ? 'mentor-open' : 'mentor-edit'}
-            onClick={openMentorForm}
-          >
-            {mentorCardState === 'none' ? 'ระบุพี่เลี้ยง' : 'แก้ข้อมูลพี่เลี้ยง'}
-          </Button>
-        </div>
-      )}
-      {mentorFormEl}
-    </div>
-  ) : null;
+
 
   return (
     <div className="space-y-6 page-enter">
@@ -1503,11 +1348,31 @@ const StudentDashboard: React.FC = () => {
                   {activeIntent.company_name_th}
                 </span>
                 {/* ข้อมูลที่เดิมอยู่บนการ์ดสถานะตอน "ได้ที่ฝึกงานแล้ว" — ขึ้นเมื่อมีเท่านั้น */}
-                {intentMentor?.name && (
-                  <span data-testid="intent-mentor" className="text-xs text-gray-600 dark:text-gray-400">
-                    พี่เลี้ยง {intentMentor.name}
-                    {intentMentor.email ? ` · ${intentMentor.email}` : ''}
-                  </span>
+                {activeIntent.status === 'accepted' && (
+                  intentMentor?.name ? (
+                    <span data-testid="intent-mentor" className="text-xs text-gray-600 dark:text-gray-400">
+                      พี่เลี้ยง {intentMentor.name}
+                      {intentMentor.email ? ` · ${intentMentor.email}` : ''}
+                    </span>
+                  ) : activeIntent.mentor_locked ? (
+                    // วันที่เปิดมาจากเซิร์ฟเวอร์เท่านั้น (`mentor_opens_on`) — ห้ามคิดจาก start_date ที่หน้าจอ
+                    <span data-testid="intent-mentor-hint" className="text-xs text-gray-600 dark:text-gray-400">
+                      ระบุพี่เลี้ยงได้ตั้งแต่วันเริ่มฝึก ({activeIntent.mentor_opens_on ? formatThaiDate(activeIntent.mentor_opens_on) : '—'})
+                    </span>
+                  ) : (
+                    <span data-testid="intent-mentor-hint" className="text-xs text-gray-600 dark:text-gray-400">
+                      ระบุพี่เลี้ยงได้ที่เมนู{' '}
+                      <button
+                        type="button"
+                        data-testid="intent-mentor-link"
+                        onClick={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'my_mentor' }))}
+                        className="underline text-brand-blue dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
+                      >
+                        พี่เลี้ยงของฉัน
+                      </button>{' '}
+                      เมื่อเริ่มฝึกแล้ว
+                    </span>
+                  )
                 )}
                 {data.mentor_reminders && data.mentor_reminders.count > 0 && (
                   <span data-testid="student-mentor-reminders" className="text-xs text-gray-600 dark:text-gray-400">
@@ -1539,7 +1404,6 @@ const StudentDashboard: React.FC = () => {
                 กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้
               </p>
             )}
-            {mentorCardEl}
             </>
           ) : (
             <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
@@ -1743,7 +1607,7 @@ const StudentDashboard: React.FC = () => {
           onConfirm={submitProof}
           message={
             <ConfirmSummary
-              lead={`${activeIntent?.company_name_th ?? ''} · เริ่มงาน ${startDate ? formatThaiDate(startDate) : '—'}`}
+              lead={activeIntent?.company_name_th ?? ''}
               groups={[
                 {
                   title: 'ผู้ลงนามบนแบบตอบรับ',

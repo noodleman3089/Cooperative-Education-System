@@ -59,6 +59,16 @@ export interface AcceptanceRow {
   acceptance_signed_date?: string | null;
   /** ที่มาของคำตอบรับ — 'link' = บริษัทตอบผ่านลิงก์ในอีเมล · 'student' = นักศึกษาอัปโหลดเอง */
   acceptance_source?: 'link' | 'student' | null;
+  /** ข้อมูลที่บริษัทกรอกลงเอกสาร 2 (เฉพาะ `GET /intents?status=pending_officer_approval` ของเจ้าหน้าที่) */
+  acceptance_form_fill?: {
+    coordinator_name?: string | null;
+    coordinator_position?: string | null;
+    office_phone?: string | null;
+    mobile_phone?: string | null;
+    fax?: string | null;
+    email?: string | null;
+    additional_info?: string | null;
+  } | null;
 }
 
 export interface DispatchRow {
@@ -197,6 +207,11 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
   const [rejectingAcceptance, setRejectingAcceptance] = useState(false);
   const [confirmingAcceptanceApprove, setConfirmingAcceptanceApprove] = useState(false);
   const [acceptanceRejectReason, setAcceptanceRejectReason] = useState('');
+
+  const evidenceUrl = reviewingAcceptance?.acceptance_evidence_path
+    ? `${API_BASE_URL}/files/${reviewingAcceptance.acceptance_evidence_path}`
+    : null;
+  const isPdf = !!evidenceUrl && /\.pdf($|\?)/i.test(evidenceUrl);
 
   // Modal Review States - Dispatch
   const [reviewingDispatch, setReviewingDispatch] = useState<DispatchRow | null>(null);
@@ -603,88 +618,173 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
       {reviewingAcceptance && (
         <Modal
           onClose={closeAcceptanceReview}
-          title={`ตรวจแบบตอบรับ — ${[reviewingAcceptance.first_name, reviewingAcceptance.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance.student_code || '-'})`}
-          size="3xl"
-          closeOnBackdrop={false}
-        >
-          <ModalBody>
-            <div className="space-y-4">
-              <AlertBanner variant="error" message={error} />
+              title={`ตรวจแบบตอบรับ — ${[reviewingAcceptance.first_name, reviewingAcceptance.last_name].filter(Boolean).join(' ')} (${reviewingAcceptance.student_code || '-'})`}
+              size="7xl"
+              closeOnBackdrop={false}
+            >
+              <ModalBody>
+                <div className="space-y-4">
+                  <AlertBanner variant="error" message={error} />
 
-              {reviewingAcceptance.acceptance_submitted_late && (
-                <AlertBanner
-                  variant="warning"
-                  message={`แบบตอบรับนี้ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ${
-                    reviewingAcceptance.acceptance_due_date
-                      ? ` (ครบกำหนดวันที่ ${formatThaiDate(reviewingAcceptance.acceptance_due_date)})`
-                      : ''
-                  } — ผ่อนผันได้ แต่ระบบบันทึกไว้แล้วว่าเป็นเคสส่งช้า`}
-                />
-              )}
+                  {reviewingAcceptance.acceptance_submitted_late && (
+                    <AlertBanner
+                      variant="warning"
+                      message={`แบบตอบรับนี้ส่งกลับหลังพ้นกำหนด ๑๕ วันทำการ${
+                        reviewingAcceptance.acceptance_due_date
+                          ? ` (ครบกำหนดวันที่ ${formatThaiDate(reviewingAcceptance.acceptance_due_date)})`
+                          : ''
+                      } — ผ่อนผันได้ แต่ระบบบันทึกไว้แล้วว่าเป็นเคสส่งช้า`}
+                    />
+                  )}
 
-              {reviewingAcceptance.acceptance_source === 'link' && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    data-testid="acceptance-source-link"
-                    className="inline-flex items-center rounded-full bg-[#EFF6FF] px-2.5 py-0.5 text-[11px] font-bold text-[#1E3A8A] dark:bg-blue-950/60 dark:text-blue-300"
-                  >
-                    บริษัทตอบผ่านลิงก์
-                  </span>
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
-                    สถานประกอบการตอบรับและแนบแบบตอบรับเองทางลิงก์ในอีเมล
-                  </span>
+                  <div className="flex flex-col lg:flex-row gap-5 items-start">
+                    {/* ══ ซ้าย: เอกสารแบบตอบรับ (แสดงในแผง) ══ */}
+                    <div className="w-full lg:flex-1 min-w-0 bg-gray-100 dark:bg-gray-800/60 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+                      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                          แบบตอบรับ (เอกสารหมายเลข ๒)
+                        </span>
+                        {evidenceUrl && (
+                          <a
+                            href={evidenceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="open-acceptance-evidence"
+                            className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            {reviewingAcceptance.acceptance_source === 'link'
+                              ? 'เปิดไฟล์แบบตอบรับที่บริษัทแนบมา'
+                              : 'เปิดไฟล์แบบตอบรับที่นักศึกษาอัปโหลด'}
+                          </a>
+                        )}
+                      </div>
+                      <div className="overflow-auto rounded-lg bg-white shadow-xs dark:bg-gray-950 h-[58vh] min-h-[380px] flex items-center justify-center">
+                        {!evidenceUrl ? (
+                          <p className="p-6 text-center text-sm text-gray-600 dark:text-gray-400">
+                            ยังไม่มีไฟล์แบบตอบรับในระบบ
+                          </p>
+                        ) : isPdf ? (
+                          <iframe
+                            key={evidenceUrl}
+                            src={`${evidenceUrl}#toolbar=0&navpanes=0&view=FitH`}
+                            title="แบบตอบรับ"
+                            className="h-full w-full border-0"
+                          />
+                        ) : (
+                          <img
+                            key={evidenceUrl}
+                            src={evidenceUrl}
+                            alt="แบบตอบรับ"
+                            className="mx-auto block h-auto w-full max-h-full object-contain"
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ══ ขวา: ข้อมูลประกอบการตรวจ (คอลัมน์ด้านข้าง) ══ */}
+                    <div className="w-full lg:w-88 min-w-0 flex flex-col gap-3">
+                      {/* แหล่งที่มา */}
+                      {reviewingAcceptance.acceptance_source === 'link' ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            data-testid="acceptance-source-link"
+                            className="inline-flex items-center rounded-full bg-[#EFF6FF] px-2.5 py-0.5 text-[11px] font-bold text-[#1E3A8A] dark:bg-blue-950/60 dark:text-blue-300"
+                          >
+                            บริษัทตอบผ่านลิงก์
+                          </span>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            สถานประกอบการตอบรับและแนบแบบตอบรับเองทางลิงก์ในอีเมล
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            data-testid="acceptance-source-student"
+                            className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-[11px] font-bold text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
+                          >
+                            นักศึกษาอัปโหลดเอง
+                          </span>
+                          <span className="text-xs text-gray-600 dark:text-gray-400">
+                            นักศึกษาเป็นผู้นำส่งแบบตอบรับเข้าระบบ
+                          </span>
+                        </div>
+                      )}
+
+                      {/* สถานประกอบการ */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                        <span className="text-gray-600 dark:text-gray-400 block font-semibold mb-0.5">สถานประกอบการ</span>
+                        <strong className="text-sm font-bold text-gray-900 dark:text-white">{reviewingAcceptance.company_name_th || '—'}</strong>
+                      </div>
+
+                      {/* นักศึกษา */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300">
+                        <span className="text-gray-600 dark:text-gray-400 block font-semibold mb-0.5">นักศึกษา</span>
+                        <strong className="text-sm font-bold text-gray-900 dark:text-white">
+                          {[reviewingAcceptance.first_name, reviewingAcceptance.last_name].filter(Boolean).join(' ') || '—'} ({reviewingAcceptance.student_code || '—'})
+                        </strong>
+                      </div>
+
+                      {/* ผู้ลงนาม */}
+                      <div
+                        className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
+                        data-testid="acceptance-signer"
+                      >
+                        <p className="text-gray-600 dark:text-gray-400">
+                          ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ
+                        </p>
+                        <p>ชื่อผู้อนุมัตินักศึกษา: <strong>{reviewingAcceptance.acceptance_signer_name || '—'}</strong></p>
+                        <p>ตำแหน่ง: <strong>{reviewingAcceptance.acceptance_signer_position || '—'}</strong></p>
+                        <p>วันที่บนแบบตอบรับ: <strong>{reviewingAcceptance.acceptance_signed_date ? formatThaiDate(reviewingAcceptance.acceptance_signed_date.slice(0, 10)) : '—'}</strong></p>
+                      </div>
+
+                      {/* ข้อมูลที่กรอกในเอกสารหมายเลข 2 */}
+                      <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1.5">
+                        <p className="font-semibold text-gray-900 dark:text-white border-b border-gray-200 dark:border-gray-700 pb-1">
+                          ข้อมูลผู้ประสานงาน (เอกสารหมายเลข ๒)
+                        </p>
+                        {reviewingAcceptance.acceptance_form_fill ? (
+                          <div data-testid="acceptance-fill" className="space-y-1 pt-0.5">
+                            <p>ผู้ประสานงาน: <strong>{reviewingAcceptance.acceptance_form_fill.coordinator_name || '—'}</strong></p>
+                            <p>ตำแหน่ง: <strong>{reviewingAcceptance.acceptance_form_fill.coordinator_position || '—'}</strong></p>
+                            <p>โทรศัพท์ที่ทำงาน: <strong>{reviewingAcceptance.acceptance_form_fill.office_phone || '—'}</strong></p>
+                            <p>โทรศัพท์มือถือ: <strong>{reviewingAcceptance.acceptance_form_fill.mobile_phone || '—'}</strong></p>
+                            <p>โทรสาร: <strong>{reviewingAcceptance.acceptance_form_fill.fax || '—'}</strong></p>
+                            <p>E-mail: <strong>{reviewingAcceptance.acceptance_form_fill.email || '—'}</strong></p>
+                            <p>ข้อมูลเพิ่มเติม: <strong>{reviewingAcceptance.acceptance_form_fill.additional_info || '—'}</strong></p>
+                          </div>
+                        ) : (
+                          <p data-testid="acceptance-fill-empty" className="text-gray-600 dark:text-gray-400">
+                            {reviewingAcceptance.acceptance_source === 'link'
+                              ? 'สถานประกอบการไม่ได้กรอกข้อมูลผู้ประสานงานในระบบ — ดูจากไฟล์แบบตอบรับ'
+                              : 'นักศึกษาอัปโหลดแบบตอบรับเอง ไม่มีข้อมูลที่กรอกในระบบ'}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* กล่องระบุเหตุผลตีกลับ */}
+                      {rejectingAcceptance && (
+                        <div className="pt-1">
+                          <label
+                            htmlFor="acceptance-reject-reason"
+                            className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
+                          >
+                            เหตุผลที่ตีกลับ (นักศึกษาจะเห็นข้อความนี้)
+                          </label>
+                          <Textarea
+                            id="acceptance-reject-reason"
+                            rows={3}
+                            data-testid="acceptance-reject-reason"
+                            value={acceptanceRejectReason}
+                            onChange={(e) => setAcceptanceRejectReason(e.target.value)}
+                            placeholder="เช่น ไม่มีตราประทับหรือลายเซ็นของผู้อนุมัติบนแบบตอบรับ"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-
-              {reviewingAcceptance.acceptance_evidence_path ? (
-                <a
-                  href={`${API_BASE_URL}/files/${reviewingAcceptance.acceptance_evidence_path}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="open-acceptance-evidence"
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-blue underline dark:text-blue-400"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {reviewingAcceptance.acceptance_source === 'link'
-                    ? 'เปิดไฟล์แบบตอบรับที่บริษัทแนบมา'
-                    : 'เปิดไฟล์แบบตอบรับที่นักศึกษาอัปโหลด'}
-                </a>
-              ) : (
-                <AlertBanner variant="warning" message="ยังไม่มีไฟล์แบบตอบรับในระบบ" />
-              )}
-
-              {/* ⛔ ไม่มีกล่องพี่เลี้ยงที่นี่ — พี่เลี้ยงถูกระบุหลังใบ accepted และยืนยันที่หน้า "ติดตามพี่เลี้ยง" การรับไม่ต้องรอพี่เลี้ยง */}
-              {rejectingAcceptance ? (
-                <div>
-                  <label
-                    htmlFor="acceptance-reject-reason"
-                    className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400"
-                  >
-                    เหตุผลที่ตีกลับ (นักศึกษาจะเห็นข้อความนี้)
-                  </label>
-                  <Textarea
-                    id="acceptance-reject-reason"
-                    rows={3}
-                    data-testid="acceptance-reject-reason"
-                    value={acceptanceRejectReason}
-                    onChange={(e) => setAcceptanceRejectReason(e.target.value)}
-                    placeholder="เช่น ไม่มีตราประทับหรือลายเซ็นของผู้อนุมัติบนแบบตอบรับ"
-                  />
-                </div>
-              ) : (
-                // ⛔ เจ้าหน้าที่ไม่ต้องคีย์ผู้ลงนามอีก (เจ้าของตัดสิน 2026-09-21) — นักศึกษากรอกตอนอัปโหลด แสดงให้เทียบกับกระดาษ
-                <div
-                  className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 space-y-1"
-                  data-testid="acceptance-signer"
-                >
-                  <p className="text-gray-600 dark:text-gray-400">ผู้ลงนามตามที่{reviewingAcceptance.acceptance_source === 'link' ? 'บริษัท' : 'นักศึกษา'}กรอก — ตรวจให้ตรงกับกระดาษก่อนรับ</p>
-                  <p>ชื่อผู้อนุมัตินักศึกษา: <strong>{reviewingAcceptance.acceptance_signer_name || '—'}</strong></p>
-                  <p>ตำแหน่ง: <strong>{reviewingAcceptance.acceptance_signer_position || '—'}</strong></p>
-                  <p>วันที่บนแบบตอบรับ: <strong>{reviewingAcceptance.acceptance_signed_date ? formatThaiDate(reviewingAcceptance.acceptance_signed_date.slice(0, 10)) : '—'}</strong></p>
-                </div>
-              )}
-            </div>
-          </ModalBody>
+              </ModalBody>
           <ModalFooter>
             {rejectingAcceptance ? (
               <>

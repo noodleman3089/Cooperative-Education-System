@@ -53,7 +53,7 @@ export interface FollowupMentorRow {
   is_active: boolean;
   /** ผู้เรียกกดยืนยันพี่เลี้ยงคนนี้ได้ = บัญชียังปิด และผู้เรียกเป็นอาจารย์นิเทศของนักศึกษาในแถวอย่างน้อยหนึ่งคน (ด่านจริงคือ 403 ที่ `confirm`) */
   can_confirm: boolean;
-  /** บัญชียังปิดและมีนักศึกษาในแถวที่ยังไม่มีอาจารย์นิเทศ — หน้าจอใช้บอกเหตุที่ยังไม่มีใครยืนยันได้ */
+  /** บัญชียังปิดและนักศึกษาในแถวยังไม่มีอาจารย์นิเทศสักคน — หน้าจอใช้บอกเหตุที่ยังไม่มีใครยืนยันได้ */
   awaiting_supervisor: boolean;
   student_count: number;
   students: { student_id: number; student_name: string }[];
@@ -245,7 +245,8 @@ export class MentorFollowupModel {
           is_active: info.is_active === true,
           can_confirm:
             info.is_active !== true && confirmerId !== null && mine.some((p) => p.supervisor_id === confirmerId),
-          awaiting_supervisor: info.is_active !== true && mine.some((p) => p.supervisor_id === null),
+          // ทุกคนในแถวยังไม่มีอาจารย์นิเทศ = ยังไม่มีใครยืนยันได้เลย · มีคนเดียวที่มี = อาจารย์คนนั้นยืนยันได้ (ด่านอยู่ระดับบัญชี)
+          awaiting_supervisor: info.is_active !== true && mine.every((p) => p.supervisor_id === null),
           student_count: mine.length,
           students: mine.map((p) => ({ student_id: p.student_id, student_name: p.student_name })),
           pending_total: items.length,

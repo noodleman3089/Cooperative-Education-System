@@ -351,6 +351,18 @@ export interface IntentForm {
   semester_id: number;
   status: string;
   mentor_id?: number | null;
+  mentor_locked?: boolean;
+  mentor_opens_on?: string | null;
+  supervisor_assigned?: boolean;
+  mentor?: {
+    mentor_id: number;
+    name: string;
+    email: string;
+    phone: string;
+    position?: string | null;
+    department?: string | null;
+    confirmed: boolean;
+  } | null;
   start_date?: string | null;
   acceptance_evidence_path?: string | null;
   // เอกสารหมายเลข 1 — กระดาษที่ลงนามแล้ว และสิ่งที่เจ้าหน้าที่อ่านจากกระดาษนั้น

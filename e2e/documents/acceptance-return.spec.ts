@@ -260,6 +260,10 @@ test.describe('เอกสารหมายเลข 2 — รับกลั�
     await expect(dialog.getByTestId('open-acceptance-evidence')).toBeVisible();
     await expect(dialog.getByTestId('acceptance-signer')).toContainText('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await expect(dialog.getByTestId('acceptance-signer-name')).toHaveCount(0);
+    // นักศึกษาอัปโหลดเอง = ไม่มีข้อมูลผู้ประสานงานในระบบ บอกตรง ๆ ไม่ขึ้นช่องว่างเจ็ดบรรทัด
+    await expect(dialog.getByTestId('acceptance-source-student')).toBeVisible();
+    await expect(dialog.getByTestId('acceptance-fill')).toHaveCount(0);
+    await expect(dialog.getByTestId('acceptance-fill-empty')).toHaveText('นักศึกษาอัปโหลดแบบตอบรับเอง ไม่มีข้อมูลที่กรอกในระบบ');
     await dialog.getByTestId('acceptance-approve-submit').click();
     await page.getByTestId('acceptance-approve-confirm').click();
 

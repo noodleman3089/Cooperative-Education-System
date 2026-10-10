@@ -64,7 +64,13 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
 
   // Order of tiles per spec section 3.2
   const advisorTileOrder = ['report', 'confirmation'];
-  const supervisorTileOrder = ['outline', 'reschedule', 'unrecorded_visit', 'no_appointment'];
+  const supervisorTileOrder = [
+    ...(dashboardPayload?.tiles?.mentor_confirm ? ['mentor_confirm'] : []),
+    'outline',
+    'reschedule',
+    'unrecorded_visit',
+    'no_appointment',
+  ];
   const tileOrder = currentView === 'advisor' ? advisorTileOrder : supervisorTileOrder;
 
   // Determine active tile kind: URL param -> first tile with count > 0 -> fallback first tile
@@ -156,6 +162,11 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     string,
     { title: string; defaultSubtitle: string; viewAllUrl: string }
   > = {
+    mentor_confirm: {
+      title: 'พี่เลี้ยงรอยืนยัน',
+      defaultSubtitle: 'นักศึกษาระบุพี่เลี้ยงแล้ว รอคุณยืนยันและส่งลิงก์เข้าระบบ',
+      viewAllUrl: '/dashboard?role=supervisor&menu=mentor_followup',
+    },
     outline: {
       title: 'โครงร่างรอเห็นชอบ',
       defaultSubtitle: 'สหกิจ 11 ที่พนักงานที่ปรึกษาเห็นชอบแล้ว เรียงตามวันที่ส่งมาถึงคุณ',
@@ -236,9 +247,8 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
         </div>
       )}
 
-      {/* 3 Work Piles (Tiles) */}
       {/* Work Piles (Tiles) */}
-      <div className={`grid gap-3.5 ${currentView === 'advisor' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-4'}`}>
+      <div className={`grid gap-3.5 ${currentView === 'advisor' ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5'}`}>
         {currentView === 'advisor' ? (
           <>
             {/* Tile 1: report */}
@@ -321,6 +331,47 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
           </>
         ) : (
           <>
+            {/* Tile 0: mentor_confirm (when present in payload) */}
+            {dashboardPayload?.tiles?.mentor_confirm && (
+              <button
+                type="button"
+                data-testid="advisor-home-tile-mentor_confirm"
+                data-count={tiles.mentor_confirm?.count ?? 0}
+                onClick={() => handleTileClick('mentor_confirm')}
+                className={`p-4 rounded-2xl text-left transition-all cursor-pointer flex flex-col justify-between gap-1.5 ${
+                  activeTileKind === 'mentor_confirm'
+                    ? 'border-2 border-brand-blue bg-white dark:bg-gray-900 shadow-sm ring-2 ring-blue-100 dark:ring-blue-950/40'
+                    : 'border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 hover:border-gray-300 dark:hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-baseline justify-between w-full">
+                  <span
+                    className={`text-xs font-bold ${
+                      activeTileKind === 'mentor_confirm'
+                        ? 'text-brand-blue dark:text-blue-400'
+                        : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    พี่เลี้ยงรอยืนยัน
+                  </span>
+                  <span
+                    className={`text-3xl font-extrabold leading-none ${
+                      (tiles.mentor_confirm?.count ?? 0) > 0
+                        ? 'text-brand-blue dark:text-blue-400'
+                        : 'text-gray-500 dark:text-gray-400'
+                    }`}
+                  >
+                    {tiles.mentor_confirm?.count ?? 0}
+                  </span>
+                </div>
+                <span className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">
+                  {(tiles.mentor_confirm?.count ?? 0) === 0 && tiles.mentor_confirm?.note
+                    ? tiles.mentor_confirm.note
+                    : 'นักศึกษาระบุพี่เลี้ยงแล้ว รอยืนยันและส่งลิงก์'}
+                </span>
+              </button>
+            )}
+
             {/* Tile 1: outline */}
             <button
               type="button"
@@ -535,19 +586,24 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                   {(currentView === 'advisor' || activeTileKind === 'outline') && (
                     <th className="px-4 py-3 font-bold">หัวข้อรายงาน</th>
                   )}
-                  {(currentView === 'advisor' || activeTileKind === 'outline') && (
+                  {activeTileKind === 'mentor_confirm' && (
+                    <th className="px-4 py-3 font-bold">พี่เลี้ยงที่ระบุ</th>
+                  )}
+                  {(currentView === 'advisor' || activeTileKind === 'outline' || activeTileKind === 'mentor_confirm') && (
                     <th className="px-4 py-3 font-bold">
                       {activeTileKind === 'outline'
                         ? 'พี่เลี้ยงเห็นชอบเมื่อ'
                         : activeTileKind === 'confirmation'
                         ? 'ยื่นขอเมื่อ'
+                        : activeTileKind === 'mentor_confirm'
+                        ? 'ระบุเมื่อ'
                         : 'ส่งมาเมื่อ'}
                     </th>
                   )}
                   {currentView === 'advisor' && (
                     <th className="px-4 py-3 font-bold">บทบาทของคุณ</th>
                   )}
-                  {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && (
+                  {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && activeTileKind !== 'mentor_confirm' && (
                     <th className="px-4 py-3 font-bold">ครั้งที่</th>
                   )}
                   {currentView === 'supervisor' && activeTileKind === 'reschedule' && (
@@ -584,14 +640,22 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                         {it.detail || '–'}
                       </td>
                     )}
-                    {(currentView === 'advisor' || activeTileKind === 'outline') && (
+                    {/* Mentor confirm column: detail (mentor name) */}
+                    {activeTileKind === 'mentor_confirm' && (
+                      <td className="px-4 py-3 align-top text-gray-800 dark:text-gray-200">
+                        {it.detail || '–'}
+                      </td>
+                    )}
+                    {(currentView === 'advisor' || activeTileKind === 'outline' || activeTileKind === 'mentor_confirm') && (
                       <td className="px-4 py-3 align-top">
                         <span className="text-gray-700 dark:text-gray-300 block">
                           {formatDisplayDate(it.since)}
                         </span>
                         {it.days !== null && (
                           <span className="text-amber-700 dark:text-amber-400 font-semibold block mt-0.5">
-                            รอคุณมา {it.days} วัน
+                            {activeTileKind === 'mentor_confirm'
+                              ? `รอคุณยืนยัน ${it.days} วัน`
+                              : `รอคุณมา ${it.days} วัน`}
                           </span>
                         )}
                       </td>
@@ -605,7 +669,7 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
                     )}
 
                     {/* Supervisor columns */}
-                    {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && (
+                    {currentView === 'supervisor' && activeTileKind !== 'no_appointment' && activeTileKind !== 'outline' && activeTileKind !== 'mentor_confirm' && (
                       <td className="px-4 py-3 align-top text-gray-700 dark:text-gray-300">
                         ครั้งที่ {it.visit_number || 1}
                       </td>
@@ -644,6 +708,17 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
 
                     {/* Actions column */}
                     <td className="px-4 py-3 align-top text-right">
+                      {activeTileKind === 'mentor_confirm' && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            navigate('/dashboard?role=supervisor&menu=mentor_followup')
+                          }
+                          className="px-3 py-1.5 rounded-xl bg-brand-blue hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                        >
+                          เปิดตรวจยืนยัน
+                        </button>
+                      )}
                       {activeTileKind === 'outline' && (
                         <button
                           type="button"

@@ -148,7 +148,8 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     // Fill the Placement Reporting form — ไม่มีช่องพี่เลี้ยงแล้ว (พี่เลี้ยงระบุหลังได้ที่ฝึกงาน · ขั้น 5 2026-10-09)
     await expect(page.getByTestId('proof-form').locator('input[type="email"], input[type="tel"]')).toHaveCount(0);
     await expect(page.getByTestId('proof-form')).not.toContainText('ชื่อ-นามสกุล พี่เลี้ยง');
-    await page.getByTestId('proof-start-date').fill('2026-11-01'); // Start Date
+    // ไม่ถามวันเริ่มปฏิบัติงานแล้ว — ใบได้วันจากปฏิทินสหกิจ เจ้าหน้าที่แก้ได้ตอนออกหนังสือส่งตัว
+    await expect(page.getByTestId('proof-start-date')).toHaveCount(0);
     // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
