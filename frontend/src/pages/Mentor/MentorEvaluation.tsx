@@ -730,7 +730,7 @@ const MentorEvaluation: React.FC = () => {
         <ConfirmDialog
           open={confirmingSubmit}
           title="ยืนยันส่งผลการประเมิน"
-          message={`ส่ง${meta.title} ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) คะแนน ${total}/${meta.maxTotal} ใช่หรือไม่? เมื่อส่งแล้วจะไม่สามารถแก้ไขคะแนนเองได้`}
+          message={`ส่ง${meta.title} ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) คะแนน ${total}/${meta.maxTotal} ใช่หรือไม่? ส่งแล้วแก้ได้โดยกรอกใหม่ทั้งใบ`}
           confirmLabel="ยืนยันส่งคะแนน"
           busy={submitting}
           onConfirm={submitEvaluation}

@@ -9,6 +9,7 @@ import { Search, Calendar, Check, AlertCircle } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import IntentReviewModal from '../../components/IntentReviewModal';
+import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLogItem {
   weekly_log_id: number;
@@ -83,6 +84,12 @@ interface DailyLogResponse {
   }>;
 }
 
+interface SupervisorScoreRow {
+  studentId: number;
+  sahatkit15Score: number | null;
+  sahatkit16Score: number | null;
+}
+
 interface AdvisorStudentsProps {
   currentRole?: string;
 }
@@ -102,6 +109,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
   const [intents, setIntents] = useState<IntentForm[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
+  const [supervisorScores, setSupervisorScores] = useState<SupervisorScoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -126,21 +134,24 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     try {
       if (!isBackground) setLoading(true);
       setError(null);
-      const [intentsRes, studentsRes] = await Promise.all([
+      const [intentsRes, studentsRes, scoresRes] = await Promise.all([
         api.get('/intents'),
         api.get('/students'),
+        // คะแนนสหกิจ 15 · 16 — ฝ่ายนิเทศเท่านั้น ฝ่ายที่ปรึกษาไม่ยิง endpoint นี้
+        isSupervisorView ? api.get('/coop-progress/dashboard?view=supervisor') : null,
       ]);
       setIntents(intentsRes || []);
       setStudents(studentsRes || []);
+      setSupervisorScores(scoresRes?.data ?? []);
     } catch (err) {
       console.error('Failed to load students data:', err);
-      if (!isBackground) setError('ไม่สามารถโหลดข้อมูลรายชื่อนักศึกษาได้ กรุณาลองใหม่อีกครั้ง');
+      if (!isBackground) setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลรายชื่อนักศึกษาได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       if (!isBackground) setLoading(false);
     }
-  }, []);
+  }, [isSupervisorView]);
 
-  useDashboardData(loadData, []);
+  useDashboardData(loadData, [isSupervisorView]);
 
   // Fetch panel details when selectedStudentId or activeTab changes
   React.useEffect(() => {
@@ -338,6 +349,16 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                   <th className="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">สถานประกอบการ</th>
                   <th className="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">ขั้นตอนตอนนี้</th>
                   <th className="py-3 px-4 font-bold text-gray-600 dark:text-gray-300">คุณเป็น</th>
+                  {isSupervisorView && (
+                    <>
+                      <th className="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        สหกิจ 15 (เต็ม 100)
+                      </th>
+                      <th className="py-3 px-4 font-bold text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                        สหกิจ 16 (เต็ม 70)
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
@@ -348,6 +369,11 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
                     const isAdvisor = student.advisor_id === currentUserId;
                     const isSupervisor = student.supervisor_id === currentUserId;
+                    const scoreRow = supervisorScores.find((s) => s.studentId === student.student_id);
+                    // ไม่มีแถวคะแนน = ไม่ใช่นักศึกษาที่ฉันนิเทศ (ขอบเขต "ทั้งสาขา") — ห้ามขึ้น "ยังไม่ประเมิน"
+                    // ซึ่งหมายถึงพี่เลี้ยงยังไม่ส่ง
+                    const scoreText = (score: number | null) =>
+                      !scoreRow ? '–' : score === null ? 'ยังไม่ประเมิน' : String(score);
 
                     const companyDisplay = student.company_name || studentIntent?.company_name_th;
                     const provinceDisplay = student.company_province;
@@ -444,12 +470,34 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                             <span className="text-gray-500 dark:text-gray-400 font-bold">–</span>
                           )}
                         </td>
+
+                        {/* Supervisor Evaluation Scores */}
+                        {isSupervisorView && (
+                          <>
+                            <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                              <span
+                                data-testid={`sup-score15-${student.student_id}`}
+                                className="font-medium text-gray-800 dark:text-gray-200"
+                              >
+                                {scoreText(scoreRow?.sahatkit15Score ?? null)}
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                              <span
+                                data-testid={`sup-score16-${student.student_id}`}
+                                className="font-medium text-gray-800 dark:text-gray-200"
+                              >
+                                {scoreText(scoreRow?.sahatkit16Score ?? null)}
+                              </span>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="py-10 text-center text-gray-500 dark:text-gray-400 text-xs">
+                    <td colSpan={isSupervisorView ? 6 : 4} className="py-10 text-center text-gray-500 dark:text-gray-400 text-xs">
                       ไม่พบข้อมูลนักศึกษาที่ตรงตามเงื่อนไข
                     </td>
                   </tr>
@@ -460,7 +508,17 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
           {/* Table Footer */}
           <div className="py-3 px-5 border-t border-gray-100 dark:border-gray-800 text-[13px] text-gray-500 dark:text-gray-400">
-            แสดง {filteredStudents.length} จาก {currentScopeList.length} คน · ไม่มีคอลัมน์เกรด — เกรดดูได้ในรายละเอียดใบความจำนง
+            {isSupervisorView && (
+              <p
+                data-testid="sup-score-note"
+                className="text-xs text-gray-500 dark:text-gray-400 mb-1"
+              >
+                ระบบไม่ตัดเกรด คะแนนนี้ใช้ประกอบการตัดเกรดของท่าน
+              </p>
+            )}
+            <div>
+              แสดง {filteredStudents.length} จาก {currentScopeList.length} คน · ไม่มีคอลัมน์เกรด — เกรดดูได้ในรายละเอียดใบความจำนง
+            </div>
           </div>
         </div>
 

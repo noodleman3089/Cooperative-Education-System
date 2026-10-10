@@ -56,6 +56,12 @@ const ITEM_MARKER = 'E2E-ITEM-DETAIL-MUST-NOT-LEAK';
 const uid = async (email: string): Promise<number> =>
   (await dbValue<number>('SELECT user_id FROM users WHERE email = $1', [email]))!;
 
+/**
+ * ทุกคนในชุดนี้อยู่สาขาเดียวกับ student2 — ระบบจริงไม่ให้จัดสรรที่ปรึกษา/นิเทศข้ามสาขา (`PUT /students/:id/assign` ตอบ 400)
+ * fixture ที่นิเทศข้ามสาขาจึงเป็นสภาพที่เกิดไม่ได้ และ `GET /students` (กรองตามสาขา) จะไม่คืนแถวนั้นให้หน้าจอ
+ */
+const STUDENT2_MAJOR = `(SELECT major_id FROM students WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com'))`;
+
 /** นักศึกษาทดสอบ — enrollment_year ใหม่พอที่ DeactivationScheduler ไม่ปิดบัญชี */
 async function createStudent(
   email: string,
@@ -73,8 +79,7 @@ async function createStudent(
   await dbExec(
     `INSERT INTO students (student_id, student_code, major_id, cumulative_gpa, enrollment_year,
                            first_name, last_name, advisor_id, supervisor_id)
-     VALUES ($1, $2, (SELECT major_id FROM master_major WHERE major_code = 'IT01'), 3.00, 2569,
-             $3, 'ทดสอบนิเทศ', $4, $5)`,
+     VALUES ($1, $2, ${STUDENT2_MAJOR}, 3.00, 2569, $3, 'ทดสอบนิเทศ', $4, $5)`,
     [id, code, first, advisorId, supervisorId]
   );
   return id;
@@ -110,6 +115,9 @@ async function buildFixture(): Promise<Fx> {
   const advisor2 = await uid('advisor2@test.com');
   const s2 = await uid('student2@test.com');
   const mentor1 = await mentor1Id();
+
+  // seeder วาง advisor2 ไว้คนละสาขา — ย้ายมาสาขาเดียวกับ student2 (เหมือน faculty-duty-split)
+  await dbExec(`UPDATE personnel SET major_id = ${STUDENT2_MAJOR} WHERE personnel_id IN ($1, $2)`, [advisor1, advisor2]);
 
   // seed ตั้ง advisor1 เป็นทั้งสองหน้าที่ของ student2 — แยกออก ให้ advisor1 เหลือแค่นิเทศ
   await dbExec('UPDATE students SET advisor_id = $1, supervisor_id = $2 WHERE student_id = $3', [advisor2, advisor1, s2]);
@@ -325,8 +333,7 @@ test.describe('ขั้น 8 · อาจารย์นิเทศเห็�
     await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toBeEnabled();
   });
 
-  // ⏳ รอหน้าจอข้อ ค (คอลัมน์คะแนนในหน้า "นักศึกษาที่ฉันนิเทศ") — หน้าจอเสร็จแล้วเปลี่ยน test.fixme เป็น test
-  test.fixme('S7: หน้า "นักศึกษาที่ฉันนิเทศ" มีคอลัมน์สหกิจ 15 · 16 — มีคะแนนขึ้นตัวเลข ยังไม่มีขึ้น "ยังไม่ประเมิน"', async ({ page }) => {
+  test('S7: หน้า "นักศึกษาที่ฉันนิเทศ" มีคอลัมน์สหกิจ 15 · 16 — มีคะแนนขึ้นตัวเลข ยังไม่มีขึ้น "ยังไม่ประเมิน"', async ({ page }) => {
     test.setTimeout(120_000);
     await loginAs(page, 'advisor1');
     await page.goto('/dashboard?role=supervisor');
@@ -342,9 +349,22 @@ test.describe('ขั้น 8 · อาจารย์นิเทศเห็�
 
     await expect(page.getByTestId('sup-score-note')).toHaveText('ระบบไม่ตัดเกรด คะแนนนี้ใช้ประกอบการตัดเกรดของท่าน');
 
-    // ฝ่ายที่ปรึกษาไม่มีคอลัมน์นี้ — คะแนนของฝ่ายนั้นอยู่ที่หน้าตรวจรับเล่ม
+    // ขอบเขต "ทั้งสาขา": คนที่ไม่ได้นิเทศ (sAdv มีคะแนนสหกิจ 15 = 70) ต้องไม่ขึ้นคะแนน และไม่ขึ้น "ยังไม่ประเมิน"
+    await page.goto('/dashboard?role=supervisor&menu=students&scope=major');
+    await expect(page.getByTestId(`sup-score15-${fx.sAdv}`)).toHaveText('–');
+    await expect(page.getByTestId(`sup-score15-${fx.s2}`)).toHaveText('87.5');
+
+    // ฝ่ายที่ปรึกษาไม่มีคอลัมน์นี้ และไม่ยิง endpoint คะแนนของฝ่ายนิเทศ
+    let supervisorCalls = 0;
+    page.on('request', (r) => {
+      if (r.url().includes('view=supervisor')) supervisorCalls += 1;
+    });
     await page.goto('/dashboard?role=advisor');
+    supervisorCalls = 0; // หน้าฝ่ายนิเทศเดิมอาจ poll ทันก่อนเปลี่ยนหน้า — นับเฉพาะหลังเข้าฝ่ายที่ปรึกษาแล้ว
     await goToMenu(page, 'students');
+    await expect(page.getByTestId(`advisor-student-row-${fx.sAdv}`)).toBeVisible();
     await expect(page.locator('[data-testid^="sup-score15-"]')).toHaveCount(0);
+    await expect(page.getByTestId('sup-score-note')).toHaveCount(0);
+    expect(supervisorCalls).toBe(0);
   });
 });
