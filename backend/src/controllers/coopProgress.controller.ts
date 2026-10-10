@@ -6,7 +6,7 @@ import { sendUnexpectedError } from '../utils/httpError';
 export class CoopProgressController {
   /**
    * Fetch coop progress dashboard list for personnel (Advisor, Dept Head, Staff)
-   * Route: GET /api/coop-progress/dashboard
+   * Route: GET /api/coop-progress/dashboard[?view=supervisor]
    */
   static async getDashboardProgress(req: Request, res: Response): Promise<void> {
     try {
@@ -27,6 +27,16 @@ export class CoopProgressController {
         return;
       }
 
+      // ฝ่ายนิเทศ (`utils/facultyViews.ts`) — อาจารย์นิเทศตัดเกรดเองนอกระบบ จึงต้องเห็นคะแนนสหกิจ 15 · 16
+      // ของนักศึกษาที่ตัวเองนิเทศ ซึ่งมักมีที่ปรึกษาเป็นคนอื่น · ไม่ส่ง `view` = ขอบเขตเดิมทุกอย่าง
+      // ⛔ ค่าอื่นต้อง 400 ไม่ใช่ตกไปขอบเขตเดิม — พิมพ์ผิดแล้วได้รายการที่กว้างกว่าที่ขอ (SEC-06)
+      const view = req.query.view;
+      if (view !== undefined && view !== 'supervisor') {
+        res.status(400).json({ message: 'view ที่รองรับคือ supervisor เท่านั้น' });
+        return;
+      }
+      const supervisorView = view === 'supervisor';
+
       // An advisor is scoped by their own assignment list below, so their major
       // is never needed — and demanding a personnel profile from them here would
       // lock out an advisor who is correctly scoped already.
@@ -40,7 +50,8 @@ export class CoopProgressController {
       // `resolveMajorScope` also returns null for staff, which is the intended
       // institution-wide scope for the co-op office; the old code accidentally
       // pinned staff to whichever major their own profile happened to carry.
-      const scopedMajorId = advisorOnly ? null : (await resolveMajorScope(userId, roles)).majorId;
+      const scopedMajorId =
+        supervisorView || advisorOnly ? null : (await resolveMajorScope(userId, roles)).majorId;
 
       // Build Query
       let queryStr = `
@@ -79,6 +90,8 @@ export class CoopProgressController {
           -- สหกิจ 15 เต็ม 100 ใช้ตัดเกรด · สหกิจ 16 เต็ม 70 เป็นเรตติ้งรายงาน ไม่รวมเกรด
           eval_15.total_score as sahatkit15_score,
           eval_16.total_score as sahatkit16_score,
+          eval_15.submitted_at as sahatkit15_submitted_at,
+          eval_16.submitted_at as sahatkit16_submitted_at,
           -- Notifications Cooldown
           notif.last_notified_at
         FROM students s
@@ -110,7 +123,11 @@ export class CoopProgressController {
 
       // An advisor sees the students assigned to them; a department head sees
       // their own major; staff see the whole institution.
-      if (advisorOnly) {
+      // ฝ่ายนิเทศกรองด้วยตัวผู้เรียกเสมอ ไม่ว่ามีบทบาทอื่นด้วยหรือไม่ — ไม่ได้นิเทศใคร = รายการว่าง
+      if (supervisorView) {
+        queryParams.push(userId);
+        queryStr += ` AND s.supervisor_id = $${queryParams.length}`;
+      } else if (advisorOnly) {
         queryParams.push(userId);
         queryStr += ` AND s.advisor_id = $${queryParams.length}`;
       } else if (scopedMajorId !== null) {
@@ -194,15 +211,21 @@ export class CoopProgressController {
           progressPercent: progress,
           progressDetails: details,
           finalReportStatus: row.final_report_status || 'not_submitted',
-          finalReportPath: row.final_report_path || null,
-          finalReportId: row.final_report_id || null,
+          finalReportPath: supervisorView ? null : row.final_report_path || null,
+          finalReportId: supervisorView ? null : row.final_report_id || null,
           // ไม่มี totalScore อีกแล้ว — สองใบคนละมาตร (100 กับ 70) และเจ้าของเคาะว่า
           // เกรดมาจาก สหกิจ 15 อย่างเดียว การบวกกันจะสร้างตัวเลขที่ไม่มีความหมาย
           sahatkit15Score: row.sahatkit15_score !== null ? parseFloat(row.sahatkit15_score) : null,
           sahatkit16Score: row.sahatkit16_score !== null ? parseFloat(row.sahatkit16_score) : null,
+          // วันที่พี่เลี้ยงส่ง (กรอกทับ = วันที่ล่าสุด) · รายข้อไม่ออกจาก endpoint นี้
+          sahatkit15SubmittedAt: row.sahatkit15_submitted_at || null,
+          sahatkit16SubmittedAt: row.sahatkit16_submitted_at || null,
           lastNotifiedAt: row.last_notified_at || null,
           supervisionRecordCount: parseInt(row.supervision_records_count, 10),
-          reportConfirmation: row.confirmation_id
+          // ตรวจรับเล่มและสหกิจ 14 เป็นงานของอาจารย์ที่ปรึกษา — ฝ่ายนิเทศไม่ได้ไฟล์เล่มและใบยืนยัน
+          reportConfirmation: supervisorView
+            ? null
+            : row.confirmation_id
             ? {
                 confirmationId: row.confirmation_id,
                 status: row.confirmation_status,
