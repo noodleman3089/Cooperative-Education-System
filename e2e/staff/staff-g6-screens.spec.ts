@@ -28,8 +28,17 @@ async function clearCalendar(): Promise<void> {
   await dbExec('DELETE FROM coop_calendar_events WHERE semester_id = $1', [semesterId]);
 }
 
-/** การ์ดงาน 4 ใบของหน้าแรกแบบ B — กอง "ค้างที่คณบดี" ย้ายไปอยู่ช่อง "รอคณบดี" ของท่อย่อ (เจ้าของเคาะ 2026-10-07) */
-const TILE_KINDS = ['request', 'acceptance', 'dispatch', 'appointment'] as const;
+/**
+ * หน้าแรกแบบแถวเดียว 5 ช่อง (เจ้าของเลือก 2026-10-10 — ของเดิม: การ์ดงาน 4 ใบ + ท่อย่อ 13 ช่อง + ตารางหนังสือ)
+ * คีย์ = `cohort_steps` ของ `GET /api/staff/home` · ป้าย = คำที่เจ้าของกำหนด
+ */
+const STEP_LABELS = [
+  ['filed', 'ยื่นคำร้องมาแล้ว'],
+  ['awaiting_dean', 'รอคณบดีลงนาม'],
+  ['letter_signed', 'ส่งหนังสือให้นักศึกษาแล้ว'],
+  ['company_accepted', 'บริษัทตอบรับแล้ว'],
+  ['dispatch_issued', 'ออกหนังสือส่งตัวแล้ว'],
+] as const;
 
 /** นักศึกษาสร้างทิ้งหนึ่งคนในรุ่นของภาคที่เปิดอยู่ พร้อมใบในสถานะที่ระบุ — เติมการ์ดงานและท่อย่อให้มีของจริงนับ */
 async function seedQueued(seq: number, status: string, extra: Record<string, unknown> = {}): Promise<number> {
@@ -68,7 +77,7 @@ async function seedQueued(seq: number, status: string, extra: Record<string, unk
 }
 
 test.describe('E0 · หน้าแรกของเจ้าหน้าที่', () => {
-  test('ช่วงปฏิทิน · งานที่รอ · ท่อย่อ มาจากเซิร์ฟเวอร์ทุกตัว — หน้าจอไม่คิดเองสักตัว', async ({ page }) => {
+  test('แถวห้าช่อง · ป้ายงานรอ · บรรทัดเลยกำหนด มาจากเซิร์ฟเวอร์ทุกตัว — ของที่ย้ายออกไม่ค้างบนหน้าแรก', async ({ page }) => {
     await seedTestData();
     const waiting = await seedQueued(1, 'pending_officer_request', {
       request_form_path: 'request_forms/requestform-user-g6.pdf',
@@ -79,54 +88,62 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
       [waiting]
     );
     await seedQueued(2, 'pending_officer_approval');
+
+    // ร่างนัดนิเทศรอส่ง 1 ใบ — ไม่อยู่บนหน้าแรกแล้ว (เจ้าของสั่ง 2026-10-10) จึงต้องไม่ถูกนับในหัวหน้า
+    await dbExec(
+      `INSERT INTO supervision_appointments (advisor_id, student_id, company_id, appointment_date, student_time, mentor_time, status)
+       SELECT (SELECT user_id FROM users WHERE email = 'advisor1@test.com'), student_id, company_id,
+              CURRENT_DATE + 30, '09:00', '10:00', 'draft'
+         FROM intent_forms WHERE form_id = $1`,
+      [waiting]
+    );
     await loginAs(page, 'staff1');
 
-    const season = page.getByTestId('staff-home-season');
-    await expect(season).toBeVisible();
+    const steps = page.getByTestId('staff-home-steps');
+    await expect(steps).toBeVisible();
 
     // อ่าน payload ด้วย cookie jar เดียวกับเบราว์เซอร์ แล้วเทียบกับที่จอแสดง
     const home = await (await page.request.get('/api/staff/home')).json();
-    const pipeline = await (await page.request.get('/api/staff/pipeline')).json();
 
-    await expect(season).toHaveAttribute('data-season', home.season);
-    await expect(
-      page.getByRole('heading', { name: `งานที่รอคุณ ${home.work_total} เรื่อง`, exact: true })
-    ).toBeVisible();
-    expect(home.work_total).toBe(2);
+    // หัวหน้า = งานของสามคิวที่หน้านี้แสดง (คำร้อง 1 + แบบตอบรับ 1) · ร่างนัดนิเทศอยู่ในเมนูของมันเอง
+    expect(home.work_total).toBe(3);
+    expect(home.tiles.appointment.count).toBe(1);
+    await expect(page.getByRole('heading', { name: 'งานที่รอคุณ 2 เรื่อง', exact: true })).toBeVisible();
 
-    // ⛔ ครบ 4 ใบเสมอ รวมใบที่นับได้ 0 — ไม่มีการซ่อน
-    for (const kind of TILE_KINDS) {
-      await expect(page.getByTestId(`staff-home-tile-${kind}`)).toBeVisible();
-      await expect(page.getByTestId(`staff-home-tile-${kind}-count`)).toHaveText(
-        String(home.tiles[kind].count)
-      );
+    // แถวเดียว 5 ช่อง ครบเสมอ รวมช่องที่นับได้ 0 — ตัวเลขและขนาดรุ่นมาจากเซิร์ฟเวอร์
+    await expect(page.getByRole('heading', { name: `นักศึกษารุ่นนี้ ${home.cohort_total} คน`, exact: true })).toBeVisible();
+    expect(home.cohort_total).toBe(2);
+    for (const [key, label] of STEP_LABELS) {
+      const box = page.getByTestId(`staff-home-step-${key}`);
+      await expect(box.locator('b')).toHaveText(String(home.cohort_steps[key]));
+      await expect(box).toContainText(label);
     }
-    // "รอนานสุด" และ "เลยกำหนด" บนการ์ดคือเลขของเซิร์ฟเวอร์ (นับจากวันอัปโหลดกระดาษ)
-    expect(home.tiles.request.oldest_days).toBe(9);
-    await expect(page.getByTestId('staff-home-tile-request')).toContainText('รอนานสุด 9 วัน · เลยกำหนด 1');
-    await expect(page.getByTestId('staff-home-tile-appointment')).toContainText('ยังไม่มีร่างนัดนิเทศรอส่ง');
+    expect(home.cohort_steps).toEqual({ filed: 2, awaiting_dean: 0, letter_signed: 0, company_accepted: 1, dispatch_issued: 0 });
 
-    // ของที่ถอดจากหน้าแรกแบบเดิมตามที่เจ้าของเคาะ — ต้องไม่ค้างอยู่ครึ่ง ๆ
-    await expect(page.getByTestId('staff-home-tile-dean')).toHaveCount(0);
-    await expect(page.locator('[data-testid^="staff-home-timeline-"]')).toHaveCount(0);
-    await expect(page.getByTestId('staff-home-season-action')).toHaveCount(0);
-
-    // ท่อย่อ 13 ช่อง — จำนวนและชื่อช่องมาจาก /api/staff/pipeline ตรง ๆ
-    // (เดิม 14 · ขั้น "รอนักศึกษาระบุพี่เลี้ยง" ถอดออก 2026-10-09 — พี่เลี้ยงระบุหลังใบ accepted ไม่ขวางขั้นไหน)
-    expect(pipeline.stages).toHaveLength(13);
-    await expect(page.getByTestId('staff-home-pipeline')).toContainText(
-      `นักศึกษาทั้งรุ่น ${pipeline.cohort_total} คน อยู่ขั้นไหน`
+    // ป้ายงานรอขึ้นเฉพาะช่องที่มีงานของเจ้าหน้าที่ — เลขคือตัวนับกองงานของเซิร์ฟเวอร์
+    await expect(page.getByTestId('staff-home-step-badge-filed')).toHaveText(`รอคุณรับ ${home.tiles.request.count}`);
+    await expect(page.getByTestId('staff-home-step-badge-company_accepted')).toHaveText(
+      `รอคุณตรวจ ${home.tiles.acceptance.count}`
     );
-    for (const stage of pipeline.stages as { key: string; short: string; count: number }[]) {
-      const cell = page.getByTestId(`staff-home-pipeline-${stage.key}`);
-      await expect(cell.locator('b')).toHaveText(String(stage.count));
-      await expect(cell).toContainText(stage.short);
+    for (const key of ['awaiting_dean', 'letter_signed', 'dispatch_issued']) {
+      await expect(page.getByTestId(`staff-home-step-badge-${key}`)).toHaveCount(0);
     }
-    expect(
-      (pipeline.stages as { key: string; count: number }[]).find((s) => s.key === 'await_officer_request')?.count
-    ).toBe(1);
 
-    // เมนู "นักศึกษาตอนนี้" ยังอยู่ ไม่ถูกยุบเข้าหน้าแรก
+    // งานเลยกำหนด (คำร้องรอ 9 วัน) = หนึ่งบรรทัดเตือน · หน้าจอไม่ตัดสินเอง: data-season ตรงกับที่เซิร์ฟเวอร์ส่ง
+    expect(home.season).toBe('overdue');
+    expect(home.tiles.request.overdue).toBe(1);
+    const overdue = page.getByTestId('staff-home-season');
+    await expect(overdue).toHaveAttribute('data-season', home.season);
+    await expect(overdue).toHaveText('มีงานเลยกำหนด 1 เรื่อง · คำร้องรอรับ 1');
+
+    // ของที่ย้ายออกจากหน้าแรกตามที่เจ้าของเคาะ — ต้องไม่ค้างอยู่ครึ่ง ๆ
+    await expect(page.locator('[data-testid^="staff-home-tile-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="staff-home-timeline-"]')).toHaveCount(0);
+    await expect(page.getByTestId('staff-home-pipeline')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="edit-document-no-"]')).toHaveCount(0);
+    await expect(page.getByText('ประวัติหนังสือราชการ')).toHaveCount(0);
+
+    // เมนู "นักศึกษาตอนนี้" ยังอยู่ — ลิงก์ "ดูรายคน" พาไป
     await page.getByTestId('staff-home-pipeline-open').click();
     await expect(page).toHaveURL(/[?&]menu=pipeline/);
   });
@@ -149,7 +166,7 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
     expect(text).not.toContain('ระบบไม่พร้อม');
   });
 
-  test('แถบเตือนปฏิทิน — หลายกิจกรรมที่ยังไม่ตั้งรวมเป็นบรรทัดเดียว · กิจกรรมเดียวใช้ข้อความเดิม', async ({
+  test('แถบเตือนปฏิทิน — บรรทัดเดียวบอกจำนวนที่ยังไม่ตั้ง (ไม่ไล่ชื่อกิจกรรม) · ปุ่มพาไปหน้าปฏิทิน · ตั้งครบแล้วแถบหาย', async ({
     page,
   }) => {
     await seedTestData();
@@ -159,22 +176,13 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
     const warning = page.getByTestId('staff-home-calendar-warning');
     await expect(warning).toBeVisible();
 
-    // ปฏิทินว่าง = กิจกรรมที่ล็อกจริงและกรอกเองได้ 5 อัน → บรรทัดรวมเดียว ไม่ใช่ li ซ้ำ 5 บรรทัด
-    await expect(warning.locator('li')).toHaveCount(1);
-    const merged = (await warning.locator('li').innerText()).replace(/\s+/g, ' ');
-    expect(merged).toContain('ยังไม่ได้ตั้งช่วงเวลา:');
-    expect(merged).toContain('ระบบจึงยังไม่ล็อกใครในขั้นเหล่านี้');
-    // ประโยคท้ายต้องขึ้นครั้งเดียว ไม่ใช่ซ้ำตามจำนวนกิจกรรม
-    expect(merged.split('ระบบจึงยังไม่ล็อก').length - 1).toBe(1);
-    for (const label of [
-      'แบบคำร้องขอหนังสือขอความอนุเคราะห์',
-      'แบบตอบรับ',
-      'ข้อมูลที่พัก',
-      'โครงร่างรายงาน',
-      'รายงานการปฏิบัติงานฉบับสมบูรณ์',
-    ]) {
-      expect(merged, `บรรทัดรวมต้องระบุกิจกรรม ${label}`).toContain(label);
-    }
+    // ปฏิทินว่าง = กิจกรรมที่ล็อกจริงและกรอกเองได้ 5 อัน → บรรทัดเดียวบอกจำนวน (จำนวนมาจากเซิร์ฟเวอร์)
+    const before = await (await page.request.get('/api/staff/home')).json();
+    expect(before.calendar_warnings).toHaveLength(5);
+    await expect(warning).toContainText('ยังไม่ได้ตั้งช่วงเวลาในปฏิทินสหกิจ 5 รายการ');
+    // เจ้าของสั่งให้เหลือบรรทัดเดียว — รายชื่อกิจกรรมอยู่ที่หน้าปฏิทิน ไม่ไล่ซ้ำที่นี่
+    await expect(warning.locator('li')).toHaveCount(0);
+    await expect(warning).not.toContainText('โครงร่างรายงาน');
 
     // ตั้งวันปิดให้ 4 จาก 5 → เหลือ ส่งรายงานฉบับสมบูรณ์ อันเดียว → ข้อความเดิม
     const semesterId = await dbValue<number>(
@@ -193,14 +201,25 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
       );
     }
     await page.reload();
-    await expect(warning).toBeVisible();
-    await expect(warning.locator('li')).toHaveCount(1);
-    const single = (await warning.locator('li').innerText()).replace(/\s+/g, ' ');
-    expect(single).toContain('รายงานการปฏิบัติงานฉบับสมบูรณ์ ยังไม่ได้ตั้งช่วงเวลา — ระบบจึงยังไม่ล็อกใครในขั้นนั้น');
-    expect(single).not.toContain('ยังไม่ได้ตั้งช่วงเวลา:');
+    await expect(warning).toContainText('ยังไม่ได้ตั้งช่วงเวลาในปฏิทินสหกิจ 1 รายการ');
+
+    // ปุ่มพาไปตั้งที่หน้าปฏิทิน
+    await warning.getByRole('button', { name: 'ไปตั้งช่วงเวลา' }).click();
+    await expect(page).toHaveURL(/[?&]menu=calendar/);
+
+    // ตั้งอันสุดท้ายครบ = ไม่มีอะไรต้องเตือน แถบหาย (ไม่ค้างเป็น "0 รายการ")
+    await dbExec(
+      `INSERT INTO coop_calendar_events (semester_id, activity_key, date_kind, start_date, end_date)
+       VALUES ($1, 'final_report', 'range', CURRENT_DATE, CURRENT_DATE + 30)`,
+      [semesterId]
+    );
+    await goToMenu(page, 'dashboard');
+    expect((await (await page.request.get('/api/staff/home')).json()).calendar_warnings).toHaveLength(0);
+    await expect(page.getByTestId('staff-home-steps')).toBeVisible();
+    await expect(warning).toHaveCount(0);
   });
 
-  test('การ์ดงานเลือกรายการ — แสดงทีละกอง · ไม่ระบุกอง = กองแรกที่มีงาน · ร่างนัดนิเทศไปเมนูของมันเอง', async ({
+  test('ช่องที่มีป้ายงานรอเลือกรายการ — แสดงทีละกอง · ไม่ระบุกอง = กองแรกที่มีงาน · ช่องไม่มีป้ายกดไม่ได้ · ไม่มีภาคที่เปิดอยู่ งานที่ค้างยังขึ้น', async ({
     page,
   }) => {
     await seedTestData();
@@ -209,21 +228,43 @@ test.describe('E0 · หน้าแรกของเจ้าหน้าท�
 
     // ไม่มีคำร้องรอรับ มีแต่แบบตอบรับ → รายการเริ่มที่กองที่มีงาน ไม่ใช่กองแรกที่ว่างเปล่า
     await expect(page.getByTestId('staff-queue-acceptance')).toBeVisible();
-    await expect(page.getByTestId('staff-home-tile-acceptance')).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('staff-home-step-company_accepted')).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByTestId(`review-acceptance-${acceptanceForm}`)).toBeVisible();
     // ⛔ รายการเดียว — กองอื่นต้องไม่แสดงซ้อนพร้อมกัน
     await expect(page.getByTestId('staff-queue-request')).toHaveCount(0);
     await expect(page.getByTestId('staff-queue-dispatch')).toHaveCount(0);
 
-    await page.getByTestId('staff-home-tile-request').click();
-    await expect(page).toHaveURL(/[?&]queue=request/);
-    await expect(page.getByTestId('staff-queue-request')).toContainText('คำร้องรอรับ · 0 คน');
-    await expect(page.getByTestId('staff-queue-request')).toContainText('ไม่มีคำร้องรอตรวจในขณะนี้');
-    await expect(page.getByTestId('staff-queue-acceptance')).toHaveCount(0);
-    await expect(page.getByTestId('staff-home-tile-request')).toHaveAttribute('aria-pressed', 'true');
+    // ช่องที่ไม่มีงานรอ = ไม่มีป้าย และไม่ใช่ปุ่ม (ไม่มีอะไรให้กดแล้วเจอรายการว่าง)
+    for (const key of ['filed', 'awaiting_dean', 'letter_signed', 'dispatch_issued']) {
+      await expect(page.getByTestId(`staff-home-step-badge-${key}`)).toHaveCount(0);
+      expect(await page.getByTestId(`staff-home-step-${key}`).evaluate((el) => el.tagName)).toBe('DIV');
+    }
+    // การ์ดร่างนัดนิเทศไม่อยู่บนหน้าแรกแล้ว — ไปจากเมนูของมันเอง
+    await expect(page.locator('[data-testid^="staff-home-tile-"]')).toHaveCount(0);
+    await expect(page.getByTestId('nav-appointments')).toBeVisible();
 
-    await page.getByTestId('staff-home-tile-appointment').click();
-    await expect(page).toHaveURL(/[?&]menu=appointments/);
+    // มีคำร้องรอรับเข้ามา → ช่องแรกมีป้ายและกดได้ → สลับรายการ (URL ของตัวเอง)
+    await seedQueued(2, 'pending_officer_request', { request_form_path: 'request_forms/requestform-user-g6.pdf' });
+    await page.reload();
+    await expect(page.getByTestId('staff-home-step-badge-filed')).toHaveText('รอคุณรับ 1');
+    // ไม่ระบุกอง = กองแรกที่มีงาน ตามลำดับ คำร้อง → แบบตอบรับ → หนังสือส่งตัว
+    await expect(page.getByTestId('staff-queue-request')).toBeVisible();
+    await page.getByTestId('staff-home-step-company_accepted').click();
+    await expect(page).toHaveURL(/[?&]queue=acceptance/);
+    await expect(page.getByTestId('staff-queue-acceptance')).toBeVisible();
+    await expect(page.getByTestId('staff-queue-request')).toHaveCount(0);
+    await page.getByTestId('staff-home-step-filed').click();
+    await expect(page).toHaveURL(/[?&]queue=request/);
+    await expect(page.getByTestId('staff-queue-request')).toContainText('คำร้องรอรับ · 1 คน');
+    await expect(page.getByTestId('staff-home-step-filed')).toHaveAttribute('aria-pressed', 'true');
+
+    // ⛔ กองงานไม่ผูกภาคเรียน — ปิดภาคทั้งหมดแล้วไม่มีแถวห้าช่อง แต่งานที่ค้างยังต้องขึ้นให้ทำ
+    await dbExec('UPDATE coop_semesters SET is_active = FALSE');
+    await page.goto('/dashboard');
+    await expect(page.getByRole('heading', { name: 'งานที่รอคุณ 2 เรื่อง', exact: true })).toBeVisible();
+    await expect(page.getByTestId('staff-home-steps')).toHaveCount(0);
+    await expect(page.getByTestId('staff-home-calendar-warning')).toContainText('ยังไม่ได้เปิดภาคเรียน');
+    await expect(page.getByTestId('staff-queue-request')).toBeVisible();
   });
 });
 

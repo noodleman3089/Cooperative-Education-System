@@ -7,6 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbRows, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 import { approveIntentThroughOfficer, coverLetterDocId, deanSign, officerApprove } from '../helpers/intent';
 
 /**
@@ -203,7 +204,9 @@ test.describe('ขั้น 3 — คณบดีลงนามหนังส�
     test.setTimeout(150_000);
     const { formId, docId } = await approvedForm(request);
 
+    // ทะเบียนหนังสือ (และปุ่มดึงกลับ) อยู่ที่หน้า "สรุปภาคเรียน" ไม่ใช่หน้าแรกแล้ว
     await loginAs(page, 'staff1');
+    await goToMenu(page, 'semester_summary');
     await page.getByTestId(`recall-letter-${docId}`).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText(DOC_NO);

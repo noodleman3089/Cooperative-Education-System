@@ -7,6 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 import { approveIntentThroughOfficer, completeDispatchPrep, deanSign, setCoopStart } from '../helpers/intent';
 
 /**
@@ -917,7 +918,9 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
     expect((await issue(request, formId)).status()).toBe(200);
     const letter = (await sendLetter(formId))!;
 
+    // ทะเบียนหนังสือ (และปุ่มดึงกลับ) อยู่ที่หน้า "สรุปภาคเรียน" ไม่ใช่หน้าแรกแล้ว
     await loginAs(page, 'staff1');
+    await goToMenu(page, 'semester_summary');
     const recall = page.getByTestId(`recall-letter-${letter.doc_id}`);
     await expect(recall).toBeVisible();
     // แก้เลขของหนังสือส่งตัว = ดึงกลับแล้วออกใหม่ — ปุ่มแก้เลขเป็นของหนังสือขอความอนุเคราะห์เท่านั้น
@@ -937,8 +940,9 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
     expect(form.dispatch_document_no).toBeNull();
     expect((await recallEvents(formId)).map((e) => e.stage)).toEqual(['dispatch_staff_recalled']);
 
-    // กลับเข้าคิวรอออกพร้อมป้าย "ดึงกลับ"
-    await page.reload();
+    // กลับเข้าคิวรอออกบนหน้าแรก พร้อมป้าย "ดึงกลับ" — กล่อง "ออกหนังสือส่งตัวแล้ว" มีป้ายงานรอ
+    await goToMenu(page, 'dashboard');
+    await expect(page.getByTestId('staff-home-step-badge-dispatch_issued')).toHaveText('รอออก 1');
     await expect(page.getByTestId(`dispatch-recall-badge-${formId}`)).toHaveText('ดึงกลับ');
   });
 });

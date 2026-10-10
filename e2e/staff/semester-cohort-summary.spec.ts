@@ -506,6 +506,37 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     await expect(page.getByTestId('semester-summary')).toBeVisible();
     await expect(page.getByTestId('summary-current-cohort_total')).toHaveText('2');
     await expect(page.getByTestId('summary-current-submitted')).toHaveText('1');
+    await expect(page.getByTestId('summary-current-not_filed')).toHaveText('1');
+
+    // ตารางใหม่: แยกตามสาขา · สถานประกอบการที่รับ · ทะเบียนหนังสือ (ย้ายมาจากหน้าแรก) — ไม่มีข้อมูล = บรรทัดบอกตรง ๆ ไม่ใช่ตารางเปล่า
+    const majorName = (await dbValue<string>('SELECT major_name_th FROM master_major ORDER BY major_id LIMIT 1'))!;
+    const majorRow = page.getByTestId('summary-by-major').getByRole('row', { name: new RegExp(majorName) });
+    await expect(majorRow.getByRole('cell')).toHaveText([majorName, '2', '1', '0']);
+    await expect(page.getByTestId('summary-by-company')).toContainText('ยังไม่มีสถานประกอบการที่รับนักศึกษาในภาคเรียนนี้');
+    await expect(page.getByTestId('summary-by-company').getByRole('table')).toHaveCount(0);
+    await expect(page.getByTestId('summary-letter-register')).toContainText('ยังไม่มีการออกหนังสือราชการบันทึกในระบบ');
+    // "ใครค้างนานที่สุด" ไม่ทำซ้ำ — ลิงก์ไปหน้านักศึกษาตอนนี้
+    await expect(page.getByRole('button', { name: 'เปิดหน้า นักศึกษาตอนนี้' })).toBeVisible();
+
+    // ได้ที่ฝึกแล้ว 1 คน + มีคนในรายชื่อรุ่นที่ยังไม่ลงทะเบียน → ตารางขึ้นตามจริง
+    await dbExec(`UPDATE intent_forms SET status = 'accepted' WHERE semester_id = $1`, [a]);
+    await dbExec(`INSERT INTO semester_cohort (semester_id, student_code) VALUES ($1, 'NOREG-C9')`, [a]);
+    await page.reload();
+    await expect(page.getByTestId('summary-by-major').getByRole('row', { name: /ยังไม่ลงทะเบียน/ }).getByRole('cell')).toHaveText([
+      'ยังไม่ลงทะเบียน', '1', '0', '0',
+    ]);
+    const companyName = (await dbValue<string>(
+      'SELECT c.name_th FROM companies c JOIN intent_forms i ON i.company_id = c.company_id WHERE i.semester_id = $1 LIMIT 1',
+      [a]
+    ))!;
+    await expect(page.getByTestId('summary-by-company').getByRole('row', { name: new RegExp(companyName.slice(0, 12)) }).getByRole('cell')).toHaveText([
+      companyName, '1',
+    ]);
+    await dbExec(`DELETE FROM semester_cohort WHERE student_code = 'NOREG-C9'`);
+    await dbExec(`UPDATE intent_forms SET status = 'pending_advisor' WHERE semester_id = $1`, [a]);
+    await page.reload();
+    await expect(page.getByTestId('summary-current-cohort_total')).toHaveText('2');
+
     await page.getByTestId('summary-semester').selectOption(String(b));
     await expect(page.getByTestId('summary-current-cohort_total')).toHaveText('1');
     // ภาคก่อนของ b (2569/2) คือ a (2569/1)

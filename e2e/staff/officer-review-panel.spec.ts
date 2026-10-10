@@ -6,6 +6,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { dbExec, dbRow, dbValue } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 
 /**
  * ขั้น 2 บนหน้าจอ — แผงรับคำร้องของเจ้าหน้าที่ (แบบ A) · ด่านฝั่ง API อยู่ที่ `officer-review.spec.ts`
@@ -264,7 +265,10 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     ).toBe(200);
     const docId = (await dbValue<number>("SELECT doc_id FROM official_documents WHERE type = 'cover_letter'"))!;
 
+    // ทะเบียนหนังสือย้ายจากหน้าแรกไปหน้า "สรุปภาคเรียน" (2026-10-10) — ปุ่มแก้เลขที่หนังสือไปด้วยกัน
     await loginAs(page, 'staff1');
+    await expect(page.locator('[data-testid^="edit-document-no-"]')).toHaveCount(0);
+    await goToMenu(page, 'semester_summary');
     await page.getByTestId(`edit-document-no-${docId}`).click();
     const dialog = page.getByRole('dialog').filter({ hasText: 'แก้เลขที่หนังสือออก' });
     await expect(dialog.getByTestId('edit-document-no-input')).toHaveValue('อว 0656.10/ผิด');

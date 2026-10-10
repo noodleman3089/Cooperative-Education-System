@@ -42,7 +42,7 @@ interface MenuItem {
  * ⛔ ดึงกลับก่อนส่งโปรเจค: ทำให้รายการนี้ว่าง · `announcements` อยู่ในขอบเขตเล่ม (เจ้าหน้าที่ ข้อ 5) ห้ามลืม
  */
 const PARKED_MENUS: Record<string, string[]> = {
-  staff: ['semester_summary', 'announcements'],
+  staff: ['announcements'],
   advisor: ['mentor_followup'],
   supervisor: [],
   dept_head: ['mentor_followup'],
