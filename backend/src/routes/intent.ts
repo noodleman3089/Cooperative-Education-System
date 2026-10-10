@@ -196,8 +196,8 @@ router.post(
 );
 
 // Route: POST /api/intents/:id/mentor
-// นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — เฉพาะใบ `accepted` และแก้ได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง
-// ⛔ ไม่ผูกปฏิทินกิจกรรม · บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่ยืนยันเท่านั้น (POST /api/mentor-followup/:mentorId/confirm)
+// นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — เฉพาะใบ `accepted` ที่ถึงวันเริ่มฝึกแล้ว และแก้ได้จนกว่าอาจารย์นิเทศยืนยันพี่เลี้ยง
+// ⛔ ไม่ผูกปฏิทินกิจกรรม (ล็อกด้วย `intent_forms.start_date` ในโมเดล) · บัญชีพี่เลี้ยงเปิดตอนอาจารย์นิเทศยืนยันเท่านั้น (POST /api/mentor-followup/:mentorId/confirm)
 router.post('/:id/mentor', authorizeRoles('student'), AcceptanceController.setMentor);
 
 // Route: PATCH /api/intents/:id/daily-log-required (พี่เลี้ยงเปิด/ปิดการบันทึกรายวัน สหกิจ 08)

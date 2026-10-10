@@ -100,7 +100,8 @@ export class FacultyHomeController {
         return;
       }
 
-      const [outline, reschedule, unrecorded, noAppointment] = await Promise.all([
+      const [mentorConfirm, outline, reschedule, unrecorded, noAppointment] = await Promise.all([
+        FacultyHomeController.mentorConfirmRows(me, today),
         FacultyHomeController.outlineRows(me, today),
         FacultyHomeController.rescheduleRows(me, today),
         FacultyHomeController.unrecordedRows(me, today),
@@ -110,6 +111,7 @@ export class FacultyHomeController {
         today,
         view,
         tiles: {
+          mentor_confirm: tile(mentorConfirm.rows, 'ไม่มีพี่เลี้ยงที่รอคุณยืนยัน'),
           outline: tile(outline.rows, 'ไม่มีโครงร่างที่รอคุณเห็นชอบ'),
           reschedule: tile(reschedule.rows, 'ไม่มีนัดที่พี่เลี้ยงขอเลื่อน'),
           unrecorded_visit: tile(unrecorded.rows, 'ไม่มีการนิเทศที่ค้างบันทึก'),
@@ -120,6 +122,30 @@ export class FacultyHomeController {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Advisor home error', 'เกิดข้อผิดพลาดขณะโหลดหน้าแรกของอาจารย์');
     }
+  }
+
+  // พี่เลี้ยงที่นักศึกษาที่ฉันนิเทศระบุไว้และยังไม่ยืนยัน (บัญชียังปิด) — ฉันเป็นคนเดียวที่ยืนยันได้
+  //   ด่านจริงอยู่ที่ `MentorFollowupController.confirm` (ตรวจ supervisor_id) · ref_id = mentor_id · detail = ชื่อพี่เลี้ยง
+  //   since = วันที่นักศึกษาระบุครั้งล่าสุด (เหตุการณ์ mentor_set) · ไม่มีเหตุการณ์ = ไม่ทราบ ไม่เดา
+  private static mentorConfirmRows(me: number, today: string) {
+    return query(
+          `SELECT i.mentor_id AS ref_id, s.student_id, s.student_code, ${FULL_NAME} AS full_name,
+                  c.name_th AS company_name_th, m.name AS detail,
+                  (ev.at AT TIME ZONE 'Asia/Bangkok')::date::text AS since,
+                  ($2::date - (ev.at AT TIME ZONE 'Asia/Bangkok')::date) AS days
+             FROM intent_forms i
+             JOIN students s ON s.student_id = i.student_id
+             JOIN companies c ON c.company_id = i.company_id
+             JOIN mentors m ON m.mentor_id = i.mentor_id
+             JOIN users u ON u.user_id = i.mentor_id
+             LEFT JOIN LATERAL (
+               SELECT MAX(e.entered_at) AS at FROM intent_stage_events e
+                WHERE e.form_id = i.form_id AND e.stage = 'mentor_set'
+             ) ev ON TRUE
+            WHERE i.status = 'accepted' AND u.is_active = FALSE AND s.supervisor_id = $1
+            ORDER BY ev.at ASC NULLS LAST, i.form_id`,
+          [me, today]
+        );
   }
 
   // สหกิจ 11 — ใบที่พี่เลี้ยงเห็นชอบแล้วและรออาจารย์นิเทศ (updateStatus ตรวจ supervisor_id)

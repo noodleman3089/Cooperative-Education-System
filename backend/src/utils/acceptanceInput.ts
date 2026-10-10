@@ -6,28 +6,25 @@ import { query } from '../config/database';
  *   · บริษัทตอบผ่านลิงก์  `PublicAcceptanceController.accept`
  * ⛔ ห้ามคัดลอกไปตรวจซ้ำที่อื่น — สองทางต้องตรวจเท่ากันทุกข้อ แก้ที่นี่แล้วมีผลทั้งคู่
  *
- * ตรวจตามลำดับ: มีไฟล์ → วันเริ่มงาน → ใบมีอยู่ + คณบดีลงนามหนังสือแล้ว (409)
+ * ตรวจตามลำดับ: มีไฟล์ → ใบมีอยู่ + คณบดีลงนามหนังสือแล้ว (409)
  * → ผู้ลงนาม (ชื่อ · ตำแหน่ง · วันที่ รูปแบบ ไม่อนาคต ไม่ก่อนวันคณบดีลงนาม)
  * · คืนธง `submittedLate` (เลยกำหนด ๑๕ วันทำการ) ให้ผู้เรียกเก็บลงใบ — เลยกำหนดยังรับ แต่ติดธง
  * ⛔ ไม่ตรวจและไม่รับช่องพี่เลี้ยงทั้งสองทาง — นักศึกษาระบุหลังใบ `accepted` ที่ `POST /intents/:id/mentor`
+ * ⛔ ไม่ตรวจและไม่รับวันเริ่มปฏิบัติงานทั้งสองทาง (เอกสารหมายเลข 2 ไม่มีช่องนี้ · เจ้าของสั่ง 2026-10-10) —
+ *    `start_date` ที่ส่งมาถูกเมิน ใบได้วันเริ่มจากปฏิทินสหกิจใน `IntentFormModel.acceptWithClient`
  */
 
 export interface AcceptanceInputMessages {
   noFile: string;
-  requiredFields: string;
-  badStartDate: string;
 }
 
 /** ข้อความของทางนักศึกษา */
 const DEFAULT_MESSAGES: AcceptanceInputMessages = {
   noFile: 'Required file upload: evidence.',
-  requiredFields: 'Required field: start_date.',
-  badStartDate: 'Invalid start_date format.',
 };
 
 export interface AcceptanceInputRaw {
   hasFile: boolean;
-  start_date?: string;
   /** ค่าดิบของช่องผู้ลงนามจาก body */
   signer: Record<string, unknown>;
 }
@@ -44,11 +41,6 @@ export async function validateAcceptanceInput(
   const fail = (status: number, message: string): AcceptanceInputResult => ({ ok: false, status, message });
 
   if (!input.hasFile) return fail(400, messages.noFile);
-
-  if (!input.start_date) return fail(400, messages.requiredFields);
-
-  // Date validation
-  if (isNaN(Date.parse(input.start_date))) return fail(400, messages.badStartDate);
 
   // แบบตอบรับ (เอกสารหมายเลข 2) ตอบ **หนังสือขอความอนุเคราะห์** ที่คณบดีลงนาม
   // ยังไม่ลงนาม = ยังไม่มีอะไรให้บริษัทตอบ · `acceptance_due_date` ถูกปั๊มตอนลงนาม

@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
-import { withDb, dbRow, dbValue } from '../helpers/db';
+import { addSecondFaculty, withDb, dbRow, dbValue } from '../helpers/db';
 import { loginAs, apiLoginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 
@@ -63,6 +63,8 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
 
   test('P1: แก้เกรดกับสาขาจากหน้าจอ → ลงฐาน · ล้างที่ปรึกษา · ลง audit · กล่องทะเบียนใหญ่หายไป', async ({ page }) => {
     await resetStudent2();
+    // seed มีคณะเดียว — สร้างคณะที่สองไว้เป็นปลายทางของการย้าย
+    await addSecondFaculty();
     // ย้ายข้ามคณะ — คุมด้วยว่าช่องคณะกรองรายการสาขาจริง (เลือกคณะก่อน สาขาของคณะนั้นถึงโผล่)
     const { major_id: target, faculty_id: targetFaculty } = (await otherFacultyMajor())!;
     await withDb(async (db) => {

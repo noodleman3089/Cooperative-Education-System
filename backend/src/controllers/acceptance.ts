@@ -2,7 +2,6 @@ import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { IntentConflictError, IntentFormModel } from '../models/intent';
-import { StudentAcceptPayload } from '../types';
 import { notifyStudentStatusChange } from '../utils/email';
 import pool from '../config/database';
 import { AuditAction, writeAudit } from '../utils/audit';
@@ -40,14 +39,11 @@ export class AcceptanceController {
         return;
       }
 
-      const { start_date } = req.body as StudentAcceptPayload;
-
       // ด่านตรวจร่วมกับทางลิงก์ของบริษัท (utils/acceptanceInput.ts) — ห้ามคัดลอกไปตรวจซ้ำที่นี่
-      // ไฟล์ · วันเริ่มงาน · หนังสือถูกลงนามแล้ว (409) · ผู้ลงนามบนแบบตอบรับ
+      // ไฟล์ · หนังสือถูกลงนามแล้ว (409) · ผู้ลงนามบนแบบตอบรับ · ⛔ ไม่อ่านวันเริ่มงานจากผู้เรียก (มาจากปฏิทินสหกิจ)
       const input = await validateAcceptanceInput(intentId, {
         hasFile: !!req.file,
-        start_date,
-        signer: req.body as Record<string, unknown>,
+        signer: (req.body ?? {}) as Record<string, unknown>,
       });
       if (!input.ok) {
         discardFile();
@@ -63,7 +59,6 @@ export class AcceptanceController {
       const updatedIntent = await IntentFormModel.acceptByStudentWithTransaction(
         intentId,
         studentUserId,
-        start_date,
         evidencePath,
         submittedLate,
         signer
@@ -88,10 +83,10 @@ export class AcceptanceController {
   }
 
   /**
-   * นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — ระบุซ้ำได้จนกว่าเจ้าหน้าที่จะยืนยันพี่เลี้ยง (ยืนยันแล้ว = 409)
+   * นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — ระบุซ้ำได้จนกว่าอาจารย์นิเทศจะยืนยันพี่เลี้ยง (ยืนยันแล้ว = 409)
    * Route: POST /api/intents/:id/mentor
-   * Access: student เจ้าของใบ · เฉพาะใบ `accepted` (ตรวจในโมเดล)
-   * ⛔ ไม่เปิดบัญชี ไม่ส่งอีเมล — บัญชีพี่เลี้ยงเปิดตอนเจ้าหน้าที่ยืนยันเท่านั้น
+   * Access: student เจ้าของใบ · เฉพาะใบ `accepted` ที่ถึงวันเริ่มฝึกแล้ว (ตรวจในโมเดล · ยังไม่ถึง = 409 `internship_not_started`)
+   * ⛔ ไม่เปิดบัญชี ไม่ส่งอีเมล — บัญชีพี่เลี้ยงเปิดตอนอาจารย์นิเทศของนักศึกษายืนยันเท่านั้น
    *    (`POST /api/mentor-followup/:mentorId/confirm` · SEC-03 · SEC-15)
    */
   static async setMentor(req: Request, res: Response): Promise<void> {
@@ -143,10 +138,11 @@ export class AcceptanceController {
         req
       );
 
-      res.status(200).json({ message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว รอเจ้าหน้าที่ยืนยันก่อนระบบส่งลิงก์เข้าใช้งานให้พี่เลี้ยง' });
+      res.status(200).json({ message: 'บันทึกข้อมูลพี่เลี้ยงเรียบร้อยแล้ว รออาจารย์นิเทศยืนยันก่อนระบบส่งลิงก์เข้าใช้งานให้พี่เลี้ยง' });
     } catch (error) {
       if (error instanceof IntentConflictError) {
-        res.status(409).json({ message: error.message, code: error.code });
+        // `extra` ของ internship_not_started = { opens_on } — หน้าจอใช้บอกวันที่เปิดให้ระบุ
+        res.status(409).json({ message: error.message, code: error.code, ...error.extra });
         return;
       }
       // ข้อความจากโมเดลเป็นภาษาไทยและอธิบายสาเหตุอยู่แล้ว (SEC-03 · สถานะไม่ถูก · ไม่ใช่ของตัวเอง)
@@ -249,7 +245,7 @@ export class AcceptanceController {
 
       if (action === 'accepted') {
         // ⛔ การกดรับไม่เกี่ยวกับพี่เลี้ยงแล้ว — ไม่ต้องมีพี่เลี้ยง ไม่เปิดบัญชี ไม่ส่งลิงก์
-        //    คณะรู้ตัวพี่เลี้ยงหลังนักศึกษาเริ่มฝึก: นักศึกษาระบุบนใบ `accepted` แล้วเจ้าหน้าที่ยืนยันที่
+        //    คณะรู้ตัวพี่เลี้ยงหลังนักศึกษาเริ่มฝึก: นักศึกษาระบุบนใบ `accepted` แล้วอาจารย์นิเทศยืนยันที่
         //    `POST /api/mentor-followup/:mentorId/confirm` (ด่าน SEC-03/15 ย้ายไปอยู่ที่นั่นทั้งก้อน)
 
         // ผู้ลงนามบนแบบตอบรับ นักศึกษากรอกตอนอัปโหลดแล้ว (ตรวจวันที่ไว้ตรงนั้น) — เจ้าหน้าที่แค่ดูเทียบกับกระดาษ
@@ -305,7 +301,7 @@ export class AcceptanceController {
               SET status = 'approved_by_dept_head', reject_reason = $2,
                   acceptance_evidence_path = NULL, acceptance_signer_name = NULL,
                   acceptance_signer_position = NULL, acceptance_signed_date = NULL,
-                  acceptance_source = NULL,
+                  acceptance_source = NULL, acceptance_form_fill = NULL,
                   company_mail_count = 0
             WHERE form_id = $1`,
           [intentId, reason]

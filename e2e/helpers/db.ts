@@ -70,6 +70,29 @@ export async function mentor1Id(): Promise<number> {
   return id;
 }
 
+/**
+ * คณะที่สองพร้อมสาขาสองสาขา สำหรับเทสต์ที่ต้องมีมากกว่าหนึ่งคณะ (ย้ายสาขาข้ามคณะ · ช่องคณะกรองรายการสาขา)
+ *
+ * seed มีคณะเดียวตั้งแต่ 2026-10-10 (คณะศิลปศาสตร์ยุบเข้าคณะบริหารธุรกิจฯ) — ระบบยังรองรับหลายคณะ
+ * เทสต์จึงสร้างคณะที่สองของตัวเอง · เรียกหลัง `seedTestData()` (การรีเซ็ตล้างตาราง master ด้วย) · ชื่อเป็นของสมมติ
+ */
+export async function addSecondFaculty(): Promise<{ faculty_id: number; major_ids: number[] }> {
+  return withDb(async (db) => {
+    const faculty_id = (
+      await db.query(
+        `INSERT INTO master_faculty (faculty_name_th) VALUES ('คณะทดสอบที่สอง') RETURNING faculty_id`
+      )
+    ).rows[0].faculty_id as number;
+    const majors = await db.query(
+      `INSERT INTO master_major (faculty_id, major_code, major_name_th)
+       VALUES ($1, 'E2E01', 'สาขาวิชาทดสอบหนึ่ง'), ($1, 'E2E02', 'สาขาวิชาทดสอบสอง')
+       RETURNING major_id`,
+      [faculty_id]
+    );
+    return { faculty_id, major_ids: majors.rows.map((r) => r.major_id as number) };
+  });
+}
+
 /** Several statements in order, for arranging a scenario. */
 export async function dbExecAll(statements: Array<string | [string, any[]]>): Promise<void> {
   await withDb(async (db) => {

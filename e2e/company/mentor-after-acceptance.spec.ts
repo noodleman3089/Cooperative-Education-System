@@ -14,17 +14,22 @@ import { walkToSigned, confirmMentor, SAMPLE_MENTOR } from '../helpers/intent';
  * เจ้าหน้าที่สหกิจยืนยันว่าคณะรู้ตัวพี่เลี้ยงตอนนักศึกษาเริ่มฝึกแล้วเท่านั้น จึงเปลี่ยนเป็น:
  *   เจ้าหน้าที่กดรับแบบตอบรับ (ไม่ต้องมีพี่เลี้ยง) → ใบ `accepted`
  *   → นักศึกษาระบุพี่เลี้ยง `POST /intents/:id/mentor` (บัญชียังปิด ไม่มีลิงก์)
- *   → เจ้าหน้าที่ยืนยัน `POST /mentor-followup/:mentorId/confirm` (จุดเดียวที่บัญชีเปิดและลิงก์ออก)
+ *   → อาจารย์นิเทศของนักศึกษายืนยัน `POST /mentor-followup/:mentorId/confirm` (จุดเดียวที่บัญชีเปิดและลิงก์ออก)
  *
  * คุม **สิทธิ์และเงื่อนไขก่อนหน้าตา** — ด่านมนุษย์ของ SEC-03 ย้ายที่ ไม่ได้หายไป:
  *   ถ้านักศึกษาระบุแล้วลิงก์ออกเอง นักศึกษาใส่อีเมลเพื่อนแล้วได้คนประเมินสหกิจ 15 ของตัวเอง
  *
- * A1 กดรับได้โดยไม่มีพี่เลี้ยง · ช่องพี่เลี้ยงตอนอัปโหลดถูกเมิน
+ * รอบแก้ 2026-10-10 (เจ้าของสั่ง): คนยืนยัน = อาจารย์นิเทศ (`supervisor_id`) คนเดียว เจ้าหน้าที่ยืนยันไม่ได้ ไม่มีทางสำรอง
+ *   · ระบุพี่เลี้ยงได้เมื่อใบ `accepted` **และถึงวันเริ่มฝึกแล้ว**
+ *
+ * A1 กดรับได้โดยไม่มีพี่เลี้ยง · ช่องพี่เลี้ยงตอนอัปโหลดถูกเมิน · ไม่ต้องส่งวันเริ่มงาน
  * A2 ระบุได้เฉพาะใบ accepted ของตัวเอง · ก่อนยืนยันบัญชีปิดและไม่มีลิงก์
- * A3 ยืนยัน = เจ้าหน้าที่เท่านั้น
+ * A3 ยืนยัน = อาจารย์นิเทศของนักศึกษาเท่านั้น (เจ้าหน้าที่ · ที่ปรึกษาที่ไม่ได้นิเทศ · หัวหน้าสาขา = 403)
  * A4 ยืนยันแล้ว: บัญชีเปิด มีลิงก์ นักศึกษาแก้ไม่ได้ · ข้อจำกัดระดับบัญชี
  * A5 SEC-03 ทั้งตอนระบุและตอนยืนยัน
- * A6 ปลายน้ำ: ไม่ส่งอีเมลถึงพี่เลี้ยงที่ยังไม่ยืนยัน · หน้าติดตาม/ท่อ/หน้าแรกนักศึกษาเห็นสามสภาพ
+ * A6 ปลายน้ำ: ไม่ส่งอีเมลถึงพี่เลี้ยงที่ยังไม่ยืนยัน · หน้าติดตาม/ท่อ/หน้าแรกนักศึกษา/หน้าแรกฝ่ายนิเทศเห็นสามสภาพ
+ * A7 ล็อกวันที่: ยังไม่ถึงวันเริ่มฝึก = 409 `internship_not_started` · ถึงแล้ว/ไม่มีวันเริ่ม = ระบุได้
+ * A8 นักศึกษาที่ยังไม่มีอาจารย์นิเทศ: ระบุได้ ค้างรอยืนยัน ไม่มีใครยืนยันได้จนกว่าจะจัดสรร
  *
  * การส่งเมลไม่ออกเน็ต (`MAIL_DRY_RUN=true` ใน playwright.config.ts) · ข้อมูลทั้งหมดเป็นของปลอม
  */
@@ -40,6 +45,7 @@ const userId = async (email: string): Promise<number> =>
 /**
  * ใบคำร้องของนักศึกษาที่สถานะตามสั่ง (ยัดฐานตรง — เทสต์ชุดนี้ตรวจสิ่งที่เกิด *หลัง* ใบถึงสถานะนั้น)
  * student1 ของ seed ไม่มีแถว `students` เสมอไป จึงเติมให้ก่อน (ปีเข้าใหม่พอที่ตัวปิดบัญชีอัตโนมัติไม่แตะ)
+ * วันเริ่มฝึก = วันนี้ (เวลาไทย จาก Postgres) — ถึงวันเริ่มแล้วจึงระบุพี่เลี้ยงได้ · เคสล็อกวันที่ (A7) ตั้งวันเองด้วย `setStart`
  */
 async function putForm(status: string, studentEmail = 'student2@test.com'): Promise<number> {
   return withDb(async (db) => {
@@ -56,13 +62,27 @@ async function putForm(status: string, studentEmail = 'student2@test.com'): Prom
        VALUES ((SELECT user_id FROM users WHERE email = $1),
                (SELECT company_id FROM companies ORDER BY company_id LIMIT 1),
                (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1),
-               $2, '2026-11-02')
+               $2, (NOW() AT TIME ZONE 'Asia/Bangkok')::date)
        RETURNING form_id`,
       [studentEmail, status]
     );
     return res.rows[0].form_id as number;
   });
 }
+
+/** วันนี้ตามเวลาไทย เลื่อน `offset` วัน — จาก Postgres ตัวเดียวกับที่ด่านใช้ */
+const day = (offset = 0) =>
+  dbValue<string>(`SELECT ((NOW() AT TIME ZONE 'Asia/Bangkok')::date + $1::int)::text`, [offset]) as Promise<string>;
+
+const setStart = (formId: number, date: string | null) =>
+  dbExec('UPDATE intent_forms SET start_date = $2 WHERE form_id = $1', [formId, date]);
+
+/** แยกสองหน้าที่ของ student2: advisor2 = ที่ปรึกษา (ไม่ได้นิเทศ) · advisor1 = อาจารย์นิเทศ (seed ตั้ง advisor1 เป็นทั้งคู่) */
+const splitDuties = () =>
+  dbExec(
+    `UPDATE students SET advisor_id = (SELECT user_id FROM users WHERE email = 'advisor2@test.com')
+      WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')`
+  );
 
 async function postMentor(
   request: APIRequestContext,
@@ -97,7 +117,7 @@ const stagesOf = async (formId: number): Promise<string[]> =>
     (r) => r.stage
   );
 
-test.describe('พี่เลี้ยงหลังเริ่มฝึก — นักศึกษาระบุ เจ้าหน้าที่ยืนยัน', () => {
+test.describe('พี่เลี้ยงหลังเริ่มฝึก — นักศึกษาระบุ อาจารย์นิเทศยืนยัน', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/maps.googleapis.com/**', (route) => route.abort());
     await seedTestData();
@@ -119,12 +139,11 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
           signer_name: 'คุณสมชาย ทรงชัย',
           signer_position: 'ผู้จัดการฝ่ายบุคคล',
           signed_date: today,
-          start_date: '2026-11-02',
           ...extra,
         },
       });
 
-    // ไม่ส่งช่องพี่เลี้ยงเลย = ผ่าน (เดิม 400 "Required fields: name, email, phone")
+    // ไม่ส่งช่องพี่เลี้ยงและไม่ส่งวันเริ่มงานเลย = ผ่าน (เดิม 400 ทั้งสองอย่าง · เอกสารหมายเลข 2 ไม่มีช่องวันเริ่มงาน)
     await apiLoginAs(request, 'student2');
     const bare = await upload();
     expect(bare.status(), await bare.text()).toBe(200);
@@ -230,15 +249,18 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await tokenCount()).toBe(0);
   });
 
-  test('A3: ยืนยันพี่เลี้ยง = เจ้าหน้าที่เท่านั้น — นักศึกษา อาจารย์ หัวหน้าสาขา คณบดี พี่เลี้ยง = 403 · ไม่ล็อกอิน = 401 · บัญชียังปิด', async ({
+  test('A3: ยืนยันพี่เลี้ยง = อาจารย์นิเทศของนักศึกษาเท่านั้น — เจ้าหน้าที่ ที่ปรึกษาที่ไม่ได้นิเทศ หัวหน้าสาขา นักศึกษา คณบดี พี่เลี้ยง = 403 · ไม่ล็อกอิน = 401 · แก้อีเมล/ส่งลิงก์โดยอาจารย์ = 403', async ({
     request,
   }) => {
     test.setTimeout(120_000);
+    // advisor2 = ที่ปรึกษาที่ไม่ได้นิเทศ · advisor1 = อาจารย์นิเทศ
+    await splitDuties();
     const formId = await putForm('accepted');
     expect((await postMentor(request, formId)).status()).toBe(200);
     const mentorId = (await mentorIdOf(formId)) as number;
 
-    for (const who of ['student2', 'student1', 'advisor1', 'head1', 'dean1', 'mentor1'] as const) {
+    // ⛔ เจ้าหน้าที่ยืนยันไม่ได้แล้ว ไม่มีทางสำรอง (เจ้าของสั่ง 2026-10-10)
+    for (const who of ['staff1', 'advisor2', 'head1', 'student2', 'student1', 'dean1', 'mentor1'] as const) {
       await apiLoginAs(request, who);
       const res = await confirmMentor(request, mentorId);
       expect(res.status(), `${who}: ${await res.text()}`).toBe(403);
@@ -253,18 +275,37 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await tokenCount()).toBe(0);
     expect(await stagesOf(formId)).toEqual(['mentor_set']);
 
-    // เจ้าหน้าที่: รหัสผิดรูปแบบ = 400 · บัญชีที่ไม่มีใบ accepted ชี้มา = 409 (ไม่ใช่ทางเปิดบัญชีพี่เลี้ยงลอย ๆ)
-    await apiLoginAs(request, 'staff1');
+    // อาจารย์นิเทศ: รหัสผิดรูปแบบ = 400 · หาใบ accepted ที่ตัวเองนิเทศและชี้มาที่บัญชีนี้ไม่ได้ = 403 ไม่ใช่ผ่าน (SEC-06)
+    // (บัญชีที่ไม่มีอยู่ · ใบที่ไม่ใช่ accepted — ไม่ใช่ทางเปิดบัญชีพี่เลี้ยงลอย ๆ)
+    await apiLoginAs(request, 'advisor1');
     expect((await request.post(`${API_URL}/mentor-followup/12abc/confirm`)).status()).toBe(400);
-    expect((await confirmMentor(request, 999999)).status()).toBe(409);
+    expect((await confirmMentor(request, 999999)).status()).toBe(403);
     await dbExec("UPDATE intent_forms SET status = 'pending_officer_approval' WHERE form_id = $1", [formId]);
     const notAccepted = await confirmMentor(request, mentorId);
-    expect(notAccepted.status(), await notAccepted.text()).toBe(409);
+    expect(notAccepted.status(), await notAccepted.text()).toBe(403);
     expect(await account(MENTOR_EMAIL)).toMatchObject({ is_active: false });
     expect(await tokenCount()).toBe(0);
+
+    // แก้อีเมลพี่เลี้ยง · ส่งลิงก์เปล่า ยังเป็นของเจ้าหน้าที่เท่านั้น — อาจารย์นิเทศก็ทำไม่ได้ (ทั้งก่อนและหลังยืนยัน)
+    await dbExec("UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1", [formId]);
+    const asSupervisor = async () => {
+      await apiLoginAs(request, 'advisor1');
+      const edit = await request.put(`${API_URL}/mentor-followup/${mentorId}/email`, {
+        data: { email: 'changed-by-advisor@example.com' },
+      });
+      expect(edit.status(), await edit.text()).toBe(403);
+      const link = await request.post(`${API_URL}/mentor-followup/${mentorId}/send-link`);
+      expect(link.status(), await link.text()).toBe(403);
+    };
+    await asSupervisor();
+    const ok = await confirmMentor(request, mentorId);
+    expect(ok.status(), await ok.text()).toBe(200);
+    await asSupervisor();
+    expect(await dbValue<string>('SELECT email FROM users WHERE user_id = $1', [mentorId])).toBe(MENTOR_EMAIL);
+    expect(await tokenCount(mentorId)).toBe(1);
   });
 
-  test('A4: เจ้าหน้าที่ยืนยัน — บัญชีเปิด ไม่มีรหัสผ่าน มีลิงก์ 7 วันที่ใช้ได้จริง · นักศึกษาแก้พี่เลี้ยงไม่ได้ (409) · ยืนยันซ้ำ = 409', async ({
+  test('A4: อาจารย์นิเทศยืนยัน — บัญชีเปิด ไม่มีรหัสผ่าน มีลิงก์ 7 วันที่ใช้ได้จริง · นักศึกษาแก้พี่เลี้ยงไม่ได้ (409) · ยืนยันซ้ำ = 409', async ({
     request,
   }) => {
     test.setTimeout(120_000);
@@ -272,7 +313,7 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect((await postMentor(request, formId)).status()).toBe(200);
     const mentorId = (await mentorIdOf(formId)) as number;
 
-    await apiLoginAs(request, 'staff1');
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, mentorId);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     expect((await confirmed.json()).mentor_email_sent).toBe(true);
@@ -288,7 +329,7 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await stagesOf(formId)).toEqual(['mentor_set', 'mentor_confirmed']);
 
     // audit: ใครยืนยัน ยืนยันบัญชีไหน ของใบไหน — เก็บ token_id ไม่เก็บตัว token (SEC-07)
-    const staffId = await userId('staff1@test.com');
+    const confirmerId = await userId('advisor1@test.com');
     await expect
       .poll(
         async () =>
@@ -299,7 +340,7 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
           ),
         { timeout: 10_000 }
       )
-      .toEqual({ actor_id: staffId, entity_id: String(mentorId), form_ids: `[${formId}]`, has_token: false });
+      .toEqual({ actor_id: confirmerId, entity_id: String(mentorId), form_ids: `[${formId}]`, has_token: false });
 
     // ลิงก์ใบนั้นเข้าระบบเป็นพี่เลี้ยงคนนี้ได้จริง
     const ctx = await playwrightRequest.newContext();
@@ -321,14 +362,14 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await dbValue<string>('SELECT name FROM mentors WHERE mentor_id = $1', [mentorId])).toBe(SAMPLE_MENTOR.name);
     expect(await dbValue<string>('SELECT COUNT(*) FROM users WHERE email = $1', ['swap-a4@example.com'])).toBe('0');
 
-    // ยืนยันซ้ำ = 409 ไม่ออกลิงก์เพิ่ม (ต้องการส่งลิงก์อีกครั้งใช้ send-link)
-    await apiLoginAs(request, 'staff1');
+    // ยืนยันซ้ำ = 409 ไม่ออกลิงก์เพิ่ม (ต้องการส่งลิงก์อีกครั้ง เจ้าหน้าที่ใช้ send-link)
+    await apiLoginAs(request, 'advisor1');
     const again = await confirmMentor(request, mentorId);
     expect(again.status(), await again.text()).toBe(409);
     expect(await tokenCount(mentorId)).toBe(1);
 
     // ข้อจำกัดที่ยอมรับ (ด่านอยู่ระดับบัญชี): นักศึกษาอีกคนของบริษัทเดียวกันระบุพี่เลี้ยงที่ยืนยันแล้ว = ผูกทันที
-    // ไม่มีลิงก์ใหม่ออก และไม่มีอะไรให้เจ้าหน้าที่ยืนยันอีก
+    // ไม่มีลิงก์ใหม่ออก และไม่มีอะไรให้อาจารย์นิเทศของคนนั้นยืนยันอีก
     const otherForm = await putForm('accepted', 'student1@test.com');
     const shared = await postMentor(request, otherForm, mentorBody(), 'student1');
     expect(shared.status(), await shared.text()).toBe(200);
@@ -371,9 +412,12 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
       [advisorId, formId]
     );
     await dbExec('UPDATE intent_forms SET mentor_id = $2 WHERE form_id = $1', [formId, advisorId]);
-    await apiLoginAs(request, 'staff1');
+    // ผู้กดคืออาจารย์นิเทศตัวจริงของนักศึกษา (ผ่านด่านสิทธิ์) — 403 ที่ได้ต้องมาจากด่าน SEC-03 ไม่ใช่ด่าน "ไม่ใช่อาจารย์นิเทศ"
+    const SEC03_REFUSAL = 'ไม่ใช่บัญชีพี่เลี้ยงโดยเฉพาะ';
+    await apiLoginAs(request, 'advisor1');
     const notMentor = await confirmMentor(request, advisorId);
     expect(notMentor.status(), await notMentor.text()).toBe(403);
+    expect((await notMentor.json()).message).toContain(SEC03_REFUSAL);
     expect(await dbValue<string>('SELECT password_hash FROM users WHERE user_id = $1', [advisorId])).toBe(hashBefore);
     expect(await tokenCount(advisorId)).toBe(0);
 
@@ -382,18 +426,27 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect((await postMentor(request, formId)).status()).toBe(200);
     const mentorId = (await mentorIdOf(formId)) as number;
     await grantRoleBypassingMentorTrigger(mentorId, 'staff');
-    await apiLoginAs(request, 'staff1');
+    await apiLoginAs(request, 'advisor1');
     const dual = await confirmMentor(request, mentorId);
     expect(dual.status(), await dual.text()).toBe(403);
+    expect((await dual.json()).message).toContain(SEC03_REFUSAL);
     expect(await account(MENTOR_EMAIL)).toMatchObject({ is_active: false, no_password: true });
     expect(await tokenCount(mentorId)).toBe(0);
   });
 
-  test('A6: ปลายน้ำ — ไม่มีอีเมลออกถึงพี่เลี้ยงที่ยังไม่ยืนยัน (นัดนิเทศ · แจ้งประเมิน = 409) · หน้าติดตาม ท่อ และหน้าแรกนักศึกษาเห็นครบสามสภาพ', async ({
+  test('A6: ปลายน้ำ — ไม่มีอีเมลออกถึงพี่เลี้ยงที่ยังไม่ยืนยัน (นัดนิเทศ · แจ้งประเมิน = 409) · หน้าติดตาม ท่อ หน้าแรกนักศึกษา และหน้าแรกฝ่ายนิเทศเห็นครบสามสภาพ', async ({
     request,
   }) => {
     test.setTimeout(180_000);
     const formId = await putForm('accepted');
+    const startDate = await day();
+    // กอง "พี่เลี้ยงรอยืนยัน" ย้ายจากเจ้าหน้าที่มาอยู่หน้าแรกฝ่ายนิเทศของอาจารย์นิเทศคนนั้น
+    const confirmTile = async (who: AccountKey) => {
+      await apiLoginAs(request, who);
+      const res = await request.get(`${API_URL}/faculty/home/advisor?view=supervisor`);
+      expect(res.status(), await res.text()).toBe(200);
+      return (await res.json()).tiles.mentor_confirm as { count: number; items: { ref_id: number; detail: string }[] };
+    };
     const studentId = await userId('student2@test.com');
     const studentCode = await dbValue<string>('SELECT student_code FROM students WHERE student_id = $1', [studentId]);
 
@@ -444,8 +497,9 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     // ── สภาพ 1: ยังไม่ระบุพี่เลี้ยง ──
     let staffView = await followup('staff1');
     expect(staffView.unassigned).toEqual([
-      expect.objectContaining({ form_id: formId, student_id: studentId, student_code: studentCode, start_date: '2026-11-02' }),
+      expect.objectContaining({ form_id: formId, student_id: studentId, student_code: studentCode, start_date: startDate }),
     ]);
+    expect((await confirmTile('advisor1')).count).toBe(0);
     expect(staffView.mentors.some((m: { students: { student_id: number }[] }) => m.students.some((s) => s.student_id === studentId))).toBe(false);
     // ขอบเขต SEC-16 เท่าเดิม: อาจารย์ของนักศึกษาเห็น · อาจารย์คนอื่นไม่เห็น · บทบาทนอกสามบทบาท = 403
     expect((await followup('advisor1')).unassigned.map((u: { form_id: number }) => u.form_id)).toEqual([formId]);
@@ -480,20 +534,32 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     });
     expect([200, 201], await log.text()).toContain(log.status());
 
-    // ── สภาพ 2: ระบุแล้ว รอเจ้าหน้าที่ยืนยัน ──
+    // ── สภาพ 2: ระบุแล้ว รออาจารย์นิเทศยืนยัน ──
     expect((await postMentor(request, formId)).status()).toBe(200);
     const mentorId = (await mentorIdOf(formId)) as number;
 
+    // เจ้าหน้าที่ยังเห็นรายการและสถานะตามเดิม แค่ไม่มีสิทธิ์ยืนยัน (`can_confirm: false`)
     staffView = await followup('staff1');
     expect(staffView.unassigned).toEqual([]);
     expect(staffView.mentors.find((m: { mentor_id: number }) => m.mentor_id === mentorId)).toMatchObject({
       email: MENTOR_EMAIL,
       name: SAMPLE_MENTOR.name,
       is_active: false,
+      can_confirm: false,
+      awaiting_supervisor: false,
       student_count: 1,
       // บันทึกสัปดาห์ที่ส่งไว้ก่อนมีพี่เลี้ยงเข้าคิวของพี่เลี้ยงเองทันทีที่ถูกระบุ ไม่ตกหล่น
       pending_total: 1,
     });
+    // อาจารย์นิเทศของนักศึกษา: แถวเดียวกันกดยืนยันได้ และขึ้นกองบนหน้าแรกฝ่ายนิเทศ · อาจารย์คนอื่นไม่มีกองนี้
+    expect((await followup('advisor1')).mentors.find((m: { mentor_id: number }) => m.mentor_id === mentorId)).toMatchObject({
+      is_active: false,
+      can_confirm: true,
+    });
+    const tile = await confirmTile('advisor1');
+    expect(tile.count).toBe(1);
+    expect(tile.items[0]).toMatchObject({ ref_id: mentorId, detail: SAMPLE_MENTOR.name, student_id: studentId });
+    expect((await confirmTile('advisor2')).count).toBe(0);
     expect(await gaps()).toEqual({ no_mentor: 0, unconfirmed: 1, never: 0 });
     expect(await dashboardMentor()).toMatchObject({ email: MENTOR_EMAIL, confirmed: false });
     // ⛔ อีเมลของพี่เลี้ยงที่ยังไม่ยืนยันไม่ถูกส่งให้หน้านัดนิเทศใช้เป็นปลายทาง
@@ -513,13 +579,20 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await dbValue<string>('SELECT COUNT(*) FROM mentor_reminders')).toBe('0');
     expect(await dbValue<string>('SELECT COUNT(*) FROM mentor_notifications')).toBe('0');
 
-    // ── สภาพ 3: เจ้าหน้าที่ยืนยันแล้ว ──
+    // ── สภาพ 3: อาจารย์นิเทศยืนยันแล้ว ──
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, mentorId);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
 
     expect((await followup('staff1')).mentors.find((m: { mentor_id: number }) => m.mentor_id === mentorId)).toMatchObject({
       is_active: true,
+      can_confirm: false,
     });
+    expect((await followup('advisor1')).mentors.find((m: { mentor_id: number }) => m.mentor_id === mentorId)).toMatchObject({
+      is_active: true,
+      can_confirm: false,
+    });
+    expect((await confirmTile('advisor1')).count).toBe(0);
     expect(await gaps()).toEqual({ no_mentor: 0, unconfirmed: 0, never: 1 });
     expect(await dashboardMentor()).toMatchObject({ email: MENTOR_EMAIL, confirmed: true });
     expect(await appointmentRow()).toMatchObject({ mentor_email: MENTOR_EMAIL, mentor_status: 'confirmed' });
@@ -529,5 +602,111 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(await appointmentStatus()).toBe('pending_company');
     notified = await notify();
     expect(notified.status(), await notified.text()).toBe(200);
+  });
+
+  test('A7: ล็อกวันที่ — ใบ accepted ที่ยังไม่ถึงวันเริ่มฝึก = 409 internship_not_started ไม่มีบัญชีพี่เลี้ยงเกิด · วันนี้ ผ่านมาแล้ว หรือไม่มีวันเริ่ม = ระบุได้ · หน้าแรกนักศึกษาได้สถานะล็อกจากเซิร์ฟเวอร์', async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const formId = await putForm('accepted');
+    const [today, tomorrow, yesterday] = [await day(), await day(1), await day(-1)];
+    const usersBefore = await dbValue<string>('SELECT COUNT(*) FROM users');
+    const lockOf = async () => {
+      await apiLoginAs(request, 'student2');
+      const intent = (await (await request.get(`${API_URL}/students/dashboard`)).json()).activeIntent;
+      return { locked: intent.mentor_locked, opens_on: intent.mentor_opens_on };
+    };
+
+    // พรุ่งนี้เริ่มฝึก = ยังระบุไม่ได้ · ข้อความบอกวันที่เปิด · ไม่มีบัญชีเกิด ใบไม่ถูกแตะ
+    await setStart(formId, tomorrow);
+    const early = await postMentor(request, formId);
+    expect(early.status(), await early.text()).toBe(409);
+    expect(await early.json()).toMatchObject({ code: 'internship_not_started', opens_on: tomorrow });
+    expect((await early.json()).message).toContain('ยังไม่ถึงวันเริ่มปฏิบัติงาน');
+    expect(await mentorIdOf(formId)).toBeNull();
+    expect(await dbValue<string>('SELECT COUNT(*) FROM users')).toBe(usersBefore);
+    expect(await dbValue<string>('SELECT COUNT(*) FROM users WHERE email = $1', [MENTOR_EMAIL])).toBe('0');
+    expect(await stagesOf(formId)).toEqual([]);
+    expect(await lockOf()).toEqual({ locked: true, opens_on: tomorrow });
+
+    // ใบที่ยังไม่ accepted = ล็อก แต่ไม่มีวันเปิดให้บอก (ยังไม่รู้ว่าจะได้ที่ฝึกไหม)
+    await dbExec("UPDATE intent_forms SET status = 'pending_officer_approval' WHERE form_id = $1", [formId]);
+    expect(await lockOf()).toEqual({ locked: true, opens_on: null });
+    await dbExec("UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1", [formId]);
+
+    // ไม่มีวันเริ่ม (ปฏิทินไม่ได้ตั้ง) = ไม่ล็อกด้วยวันที่ — เดาผิดคือปิดใส่นักศึกษาทั้งรุ่น
+    await setStart(formId, null);
+    expect(await lockOf()).toEqual({ locked: false, opens_on: null });
+    const noDate = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-nodate@example.com' }));
+    expect(noDate.status(), await noDate.text()).toBe(200);
+
+    // วันนี้คือวันเริ่มฝึก = ระบุได้ (แก้คนเดิมได้ตราบที่ยังไม่ถูกยืนยัน)
+    await setStart(formId, today);
+    expect(await lockOf()).toEqual({ locked: false, opens_on: null });
+    const onDay = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-today@example.com' }));
+    expect(onDay.status(), await onDay.text()).toBe(200);
+
+    // เริ่มฝึกไปแล้ว = ระบุได้
+    await setStart(formId, yesterday);
+    const after = await postMentor(request, formId);
+    expect(after.status(), await after.text()).toBe(200);
+    expect(await mentorIdOf(formId)).toBe((await account(MENTOR_EMAIL))!.user_id);
+
+    // ระบุไว้แล้วแต่เจ้าหน้าที่เลื่อนวันเริ่มออกไป (แก้ตอนออกหนังสือส่งตัว) = แก้พี่เลี้ยงไม่ได้จนถึงวันใหม่ · คนเดิมยังอยู่
+    await setStart(formId, tomorrow);
+    const relocked = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-late@example.com' }));
+    expect(relocked.status(), await relocked.text()).toBe(409);
+    expect((await relocked.json()).code).toBe('internship_not_started');
+    expect(await mentorIdOf(formId)).toBe((await account(MENTOR_EMAIL))!.user_id);
+  });
+
+  test('A8: นักศึกษาที่ยังไม่มีอาจารย์นิเทศ — ระบุพี่เลี้ยงได้ แต่ค้างรอยืนยัน ไม่มีใครยืนยันได้ (รวมเจ้าหน้าที่) จนหัวหน้าสาขาจัดสรร แล้วอาจารย์นิเทศคนนั้นยืนยันได้', async ({
+    request,
+  }) => {
+    test.setTimeout(120_000);
+    const studentId = await userId('student2@test.com');
+    // advisor1 ยังเป็นที่ปรึกษา แต่ไม่มีใครนิเทศ
+    await dbExec('UPDATE students SET supervisor_id = NULL WHERE student_id = $1', [studentId]);
+    const formId = await putForm('accepted');
+    const supervisorFlag = async () => {
+      await apiLoginAs(request, 'student2');
+      return (await (await request.get(`${API_URL}/students/dashboard`)).json()).activeIntent.supervisor_assigned;
+    };
+
+    expect(await supervisorFlag()).toBe(false);
+    expect((await postMentor(request, formId)).status()).toBe(200);
+    const mentorId = (await mentorIdOf(formId)) as number;
+
+    // ไม่มีอาจารย์นิเทศ = ไม่มีใครยืนยันได้เลย — ที่ปรึกษา อาจารย์อื่น หัวหน้าสาขา และเจ้าหน้าที่ (ไม่มีทางสำรอง)
+    for (const who of ['advisor1', 'advisor2', 'head1', 'staff1'] as const) {
+      await apiLoginAs(request, who);
+      const res = await confirmMentor(request, mentorId);
+      expect(res.status(), `${who}: ${await res.text()}`).toBe(403);
+    }
+    expect(await account(MENTOR_EMAIL)).toMatchObject({ is_active: false, no_password: true });
+    expect(await tokenCount()).toBe(0);
+
+    // หน้าติดตามบอกเหตุที่ค้าง: ยังไม่มีอาจารย์นิเทศ · ไม่มีใครได้ปุ่มยืนยัน
+    for (const who of ['staff1', 'advisor1'] as const) {
+      await apiLoginAs(request, who);
+      const row = (await (await request.get(`${API_URL}/mentor-followup`)).json()).mentors.find(
+        (m: { mentor_id: number }) => m.mentor_id === mentorId
+      );
+      expect(row, who).toMatchObject({ is_active: false, can_confirm: false, awaiting_supervisor: true });
+    }
+
+    // หัวหน้าสาขาจัดสรร advisor2 เป็นอาจารย์นิเทศ → advisor2 ยืนยันได้ · advisor1 (ที่ปรึกษา) ยังไม่ได้
+    await dbExec(
+      `UPDATE students SET supervisor_id = (SELECT user_id FROM users WHERE email = 'advisor2@test.com') WHERE student_id = $1`,
+      [studentId]
+    );
+    expect(await supervisorFlag()).toBe(true);
+    await apiLoginAs(request, 'advisor1');
+    expect((await confirmMentor(request, mentorId)).status()).toBe(403);
+    await apiLoginAs(request, 'advisor2');
+    const confirmed = await confirmMentor(request, mentorId);
+    expect(confirmed.status(), await confirmed.text()).toBe(200);
+    expect(await account(MENTOR_EMAIL)).toMatchObject({ is_active: true, no_password: true, roles: ['mentor'] });
+    expect(await tokenCount(mentorId)).toBe(1);
   });
 });

@@ -429,7 +429,8 @@ test.describe('พี่เลี้ยงเข้าสู่ระบบด�
     expect((await requestLink(mentorEmail)).status()).toBe(200);
     expect(await tokenCountFor(mentorEmail)).toBe(0);
 
-    await apiLoginAs(request, 'staff1');
+    // ผู้ยืนยัน = อาจารย์นิเทศของนักศึกษา (seed: advisor1 ของ student2) — เจ้าหน้าที่ยืนยันไม่ได้แล้ว
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, mentorBefore!.user_id);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     expect((await confirmed.json()).mentor_email_sent).toBe(true);

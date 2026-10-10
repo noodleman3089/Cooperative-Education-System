@@ -431,7 +431,7 @@ export class FinalReportController {
       } else if (sent === 'no_mentor') {
         res.status(409).json({
           code: 'mentor_not_ready',
-          message: 'ยังแจ้งเตือนไม่ได้ เพราะนักศึกษายังไม่ได้ระบุพี่เลี้ยง หรือพี่เลี้ยงยังรอเจ้าหน้าที่ยืนยัน'
+          message: 'ยังแจ้งเตือนไม่ได้ เพราะนักศึกษายังไม่ได้ระบุพี่เลี้ยง หรือพี่เลี้ยงยังรออาจารย์นิเทศยืนยัน'
         });
       } else {
         res.status(429).json({
@@ -447,7 +447,7 @@ export class FinalReportController {
   /**
    * Helper function for sending mentor notification email with rate limiting
    *
-   * ⛔ ส่งถึงพี่เลี้ยงที่เจ้าหน้าที่ยืนยันแล้วเท่านั้น (`is_active`) — ทางนี้นักศึกษากระตุ้นได้เองตอนอัปโหลดเล่ม
+   * ⛔ ส่งถึงพี่เลี้ยงที่อาจารย์นิเทศยืนยันแล้วเท่านั้น (`is_active`) — ทางนี้นักศึกษากระตุ้นได้เองตอนอัปโหลดเล่ม
    *    อีเมลของพี่เลี้ยงที่ยังไม่ยืนยันคือที่อยู่ที่นักศึกษาพิมพ์ ระบบต้องไม่ส่งอะไรไป (SEC-03 · แนวเดียวกับ SEC-13)
    */
   private static async sendMentorNotificationHelper(

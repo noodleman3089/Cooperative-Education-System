@@ -76,7 +76,7 @@ test.describe('SB-F1 · หน้าแรกอาจารย์', () => {
     await dbExec('INSERT INTO supervision_appointments (advisor_id, student_id, company_id, appointment_date, student_time, mentor_time, status) SELECT $1, $2, company_id, CURRENT_DATE + 30, \'09:00\', \'10:00\', \'draft\' FROM intent_forms WHERE student_id = $2', [advisor, s2]);
     const tilesOf = {
       advisor: ['report', 'confirmation'],
-      supervisor: ['outline', 'reschedule', 'unrecorded_visit', 'no_appointment'],
+      supervisor: ['mentor_confirm', 'outline', 'reschedule', 'unrecorded_visit', 'no_appointment'],
     } as const;
     for (const view of ['advisor', 'supervisor'] as const) {
       const home = await advisorHome(request, view);

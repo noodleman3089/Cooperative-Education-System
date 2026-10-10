@@ -32,7 +32,7 @@ export const AuditAction = {
   MENTOR_REMINDER_SENT: 'mentor.reminder_sent',
   MENTOR_LINK_SENT_BY_STAFF: 'mentor.link_sent_by_staff',
   MENTOR_EMAIL_CHANGED: 'mentor.email_changed',
-  // เจ้าหน้าที่ยืนยันพี่เลี้ยงที่นักศึกษาระบุ = จุดเดียวที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์แรกถูกส่ง (SEC-03 · SEC-15)
+  // อาจารย์นิเทศยืนยันพี่เลี้ยงที่นักศึกษาระบุ = จุดเดียวที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์แรกถูกส่ง (SEC-03 · SEC-15)
   MENTOR_CONFIRMED: 'mentor.confirmed',
   // เฟส 3: ระบบเตือนพี่เลี้ยงเอง (ไม่มีผู้กด — actor = 'system') · detail เก็บ auto_count ของรอบนั้นไว้ตามย้อน
   MENTOR_REMINDER_AUTO_SENT: 'mentor.reminder_auto_sent',
@@ -51,7 +51,7 @@ export const AuditAction = {
   // บริษัทตอบผ่านลิงก์ในอีเมล (ไม่มีบัญชี) — บรรทัดนี้คือสิ่งเดียวที่ตามย้อนได้ว่าคำตอบมาจากลิงก์ใบไหน (เก็บ token_id ไม่เก็บ token)
   INTENT_ACCEPTED_VIA_LINK: 'intent.accepted_via_link',
   INTENT_DECLINED_VIA_LINK: 'intent.declined_via_link',
-  // นักศึกษาระบุพี่เลี้ยงบนใบที่ตอบรับแล้ว (ยังไม่เปิดบัญชี — เปิดตอนเจ้าหน้าที่ยืนยัน `mentor.confirmed`)
+  // นักศึกษาระบุพี่เลี้ยงบนใบที่ตอบรับแล้ว (ยังไม่เปิดบัญชี — เปิดตอนอาจารย์นิเทศยืนยัน `mentor.confirmed`)
   INTENT_MENTOR_SET: 'intent.mentor_set',
   // ระบบปิดใบเองเมื่อพ้นปฏิทิน `acceptance_form` โดยยังไม่มีแบบตอบรับ (`utils/acceptanceAutoClose.ts`) — ไม่มีคนกด
   // บรรทัดนี้จึงเป็นหลักฐานเดียวว่าใบถูกปิดด้วยกติกา ไม่ใช่ด้วยมือใคร

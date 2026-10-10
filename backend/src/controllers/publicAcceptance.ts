@@ -349,10 +349,14 @@ export class PublicAcceptanceController {
   }
 
   /**
-   * สถานประกอบการตอบรับ — แนบเอกสารหมายเลข 2 ที่ลงนามแล้ว + สหกิจ 07 → ไปคิวเจ้าหน้าที่
+   * สถานประกอบการตอบรับ — แนบเอกสารหมายเลข 2 ที่ลงนามแล้ว → ไปคิวเจ้าหน้าที่
    * Route: POST /api/public/acceptance/accept?token=...  (multipart)
    * ลำดับที่ router: tokenGate → requireCalendarWindow('acceptance_form') → multer → validateUploadedFile
    * ⛔ ล้มหลัง multer ที่ไหนก็ตามต้องลบไฟล์ที่เพิ่งเขียนทิ้งเสมอ
+   * ⛔ ไม่อ่านวันเริ่มปฏิบัติงาน (`start_date` ที่ส่งมาถูกเมิน) — ใบได้วันเริ่มจากปฏิทินสหกิจ
+   * รับช่องผู้ประสานงานของเอกสารหมายเลข 2 (`STORED_FILL_KEYS` · ว่างได้ทุกช่อง) แล้วเก็บบนใบที่ `acceptance_form_fill`
+   * ⛔ เก็บ**บนใบนี้เท่านั้น** — ยังไม่เขียน `companies` ไม่สร้างบัญชี และฟิลด์สหกิจ 07 เก่ายังถูกเมิน (SEC-14 ข้อ 5)
+   *    ผู้อนุมัติ · ตำแหน่ง · วันที่ อยู่ที่คอลัมน์ `acceptance_signer_*` ตามเดิม ไม่เก็บซ้ำใน JSON
    */
   static async accept(req: Request, res: Response): Promise<void> {
     const gate = gateOf(res);
@@ -370,24 +374,18 @@ export class PublicAcceptanceController {
     let client: PoolClient | null = null;
     try {
       const body = (req.body ?? {}) as Record<string, unknown>;
-      const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
-
-      const startDate = str(body.start_date);
-      if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-        return reject(400, { message: 'รูปแบบวันเริ่มปฏิบัติงานไม่ถูกต้อง' });
-      }
 
       // ด่านตรวจร่วมกับทางนักศึกษาอัปโหลดเอง (utils/acceptanceInput.ts) — ไม่มีสำเนาตรรกะที่นี่
       const input = await validateAcceptanceInput(
         gate.form_id,
-        { hasFile: !!file, start_date: startDate, signer: body },
-        {
-          noFile: 'กรุณาแนบไฟล์แบบตอบรับ (เอกสารหมายเลข ๒) ที่ลงนามและประทับตราแล้ว',
-          requiredFields: 'กรุณาระบุวันเริ่มปฏิบัติงาน',
-          badStartDate: 'รูปแบบวันเริ่มปฏิบัติงานไม่ถูกต้อง',
-        }
+        { hasFile: !!file, signer: body },
+        { noFile: 'กรุณาแนบไฟล์แบบตอบรับ (เอกสารหมายเลข ๒) ที่ลงนามและประทับตราแล้ว' }
       );
       if (!input.ok) return reject(input.status, { message: input.message });
+
+      // ช่องผู้ประสานงานของเอกสารหมายเลข 2 — เพดานความยาวชุดเดียวกับเส้นพิมพ์ฟอร์ม · คีย์อื่นใน body ถูกเมิน
+      const formFill = parseAcceptanceFormFill(body, STORED_FILL_KEYS);
+      if (typeof formFill === 'string') return reject(400, { message: formFill });
 
       client = await pool.connect();
       await client.query('BEGIN');
@@ -405,10 +403,10 @@ export class PublicAcceptanceController {
       await IntentFormModel.acceptWithClient(client, {
         intentId: gate.form_id,
         source: 'link',
-        startDate,
         evidencePath: `acceptance_evidence/${file!.filename}`,
         submittedLate: input.submittedLate,
         signer: input.signer,
+        formFill: formFill as Record<string, string>,
       });
 
       await writeAudit(
@@ -462,11 +460,28 @@ const FILL_MAX_LENGTH: Record<keyof AcceptanceFormFill, number> = {
   approved_date: 10,
 };
 
+/**
+ * ช่องที่ `POST /accept` เก็บลง `intent_forms.acceptance_form_fill` — ผู้ประสานงาน + ข้อมูลเพิ่มเติม
+ * ⛔ ไม่มีช่องผู้อนุมัติ: สามช่องนั้นอยู่ที่คอลัมน์ `acceptance_signer_*` (ผ่านด่านวันที่ใน `validateAcceptanceInput`)
+ */
+const STORED_FILL_KEYS: (keyof AcceptanceFormFill)[] = [
+  'coordinator_name',
+  'coordinator_position',
+  'office_phone',
+  'mobile_phone',
+  'fax',
+  'email',
+  'additional_info',
+];
+
 /** คืนค่าที่กรอก (เฉพาะคีย์ที่รู้จัก · ตัดขึ้นบรรทัดใหม่) หรือข้อความ error สำหรับ 400 */
-function parseAcceptanceFormFill(body: unknown): AcceptanceFormFill | string {
+function parseAcceptanceFormFill(
+  body: unknown,
+  keys: (keyof AcceptanceFormFill)[] = Object.keys(FILL_MAX_LENGTH) as (keyof AcceptanceFormFill)[]
+): AcceptanceFormFill | string {
   const raw = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   const filled: AcceptanceFormFill = {};
-  for (const key of Object.keys(FILL_MAX_LENGTH) as (keyof AcceptanceFormFill)[]) {
+  for (const key of keys) {
     const value = raw[key];
     if (value === undefined || value === null) continue;
     if (typeof value !== 'string') return 'ข้อมูลที่กรอกลงแบบตอบรับต้องเป็นข้อความ';

@@ -7,7 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { walkToSigned, placementCard, confirmMentor } from '../helpers/intent';
+import { walkToSigned, placementCard, confirmMentor, setCoopStart } from '../helpers/intent';
 
 /**
  * ลิงก์ตอบรับของสถานประกอบการ (เอกสารหมายเลข 2) — เจ้าของตัดสิน 2026-09-29:
@@ -51,9 +51,19 @@ const acceptFields = async (over: Record<string, string> = {}): Promise<Record<s
   signer_name: 'คุณสมชาย ผู้จัดการฝ่ายบุคคล',
   signer_position: 'ผู้จัดการฝ่ายบุคคล',
   signed_date: await todayTh(),
-  start_date: '2026-11-02',
   ...over,
 });
+
+/** ช่องผู้ประสานงานของเอกสารหมายเลข 2 ที่บริษัทพิมพ์บนหน้าลิงก์ — เก็บบนใบที่ `acceptance_form_fill` (ข้อมูลปลอมทั้งหมด) */
+const FORM_FILL = {
+  coordinator_name: 'คุณวิภา ประสานงานดี',
+  coordinator_position: 'เจ้าหน้าที่ฝ่ายบุคคล',
+  office_phone: '02-000-1111 ต่อ 22',
+  mobile_phone: '0810000000',
+  fax: '02-000-1112',
+  email: 'coordinator-l6@example.com',
+  additional_info: 'เข้างาน 08.30 น. แต่งกายสุภาพ',
+};
 
 /** พี่เลี้ยงที่นักศึกษาระบุ (ลิงก์ไม่ถามพี่เลี้ยงแล้ว) */
 const mentorBody = (over: Record<string, string> = {}): Record<string, string> => ({
@@ -449,19 +459,26 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(evidenceCount()).toBe(before + 1);
   });
 
-  test('L6: accept สำเร็จ = pending_officer_approval · source=link · ไม่มีพี่เลี้ยง ไม่สร้างบัญชี · companies ไม่เปลี่ยน · ฟิลด์ 07 เก่าถูกเมิน', async ({
+  test('L6: accept สำเร็จ = pending_officer_approval · source=link · ไม่ต้องส่งวันเริ่ม (ใบได้วันจากปฏิทิน) · ช่องเอกสาร 2 ถูกเก็บบนใบ · ไม่มีพี่เลี้ยง ไม่สร้างบัญชี · companies ไม่เปลี่ยน · ฟิลด์ 07 เก่าถูกเมิน', async ({
     request,
   }) => {
     test.setTimeout(180_000);
     const { formId, token, tokenId } = await readyLink(request);
+    // วันเริ่มปฏิบัติงานของภาคตามปฏิทินสหกิจ — ใบต้องได้วันนี้ ไม่ใช่วันที่ผู้ถือลิงก์ส่งมา
+    await setCoopStart('2026-11-16');
     const companyBefore = await companySnapshot(formId);
     const usersBefore = await dbValue<string>('SELECT COUNT(*) FROM users');
     const mentorsBefore = await dbValue<string>('SELECT COUNT(*) FROM mentors');
 
-    // ไคลเอนต์เก่าที่ยังส่งฟิลด์ 07 มาด้วย (พี่เลี้ยง · ตำแหน่งงาน · ข้อมูลบริษัท) ต้องถูกเมินทั้งหมด
+    // ไคลเอนต์เก่าที่ยังส่งฟิลด์ 07 มาด้วย (พี่เลี้ยง · ตำแหน่งงาน · ข้อมูลบริษัท) และวันเริ่มงาน ต้องถูกเมินทั้งหมด
+    // ช่องผู้อนุมัติของเส้นพิมพ์ฟอร์ม (`approver_*`) ก็ไม่ถูกเก็บซ้ำ — ผู้ลงนามอยู่ที่ `acceptance_signer_*`
     const res = await postAccept(
       token,
       await acceptFields({
+        ...FORM_FILL,
+        start_date: '2031-01-01',
+        approver_name: 'ต้องไม่ถูกเก็บซ้ำ',
+        approved_date: 'ไม่ใช่วันที่',
         mentor_name: 'ต้องไม่ถูกสร้าง',
         mentor_email: 'ignored-l6@example.com',
         mentor_phone: '0800000000',
@@ -478,9 +495,12 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       evidence: string;
       signer: string;
       late: boolean;
+      start_date: string | null;
+      fill: Record<string, string> | null;
     }>(
       `SELECT status, acceptance_source, mentor_id, acceptance_evidence_path AS evidence,
-              acceptance_signer_name AS signer, acceptance_submitted_late AS late
+              acceptance_signer_name AS signer, acceptance_submitted_late AS late,
+              start_date::text AS start_date, acceptance_form_fill AS fill
          FROM intent_forms WHERE form_id = $1`,
       [formId]
     );
@@ -489,6 +509,9 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(intent?.signer).toBe('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     expect(intent?.late).toBe(false);
     expect(fs.existsSync(path.join(BACKEND_ROOT, 'uploads', intent!.evidence))).toBe(true);
+    // วันเริ่ม = ปฏิทินสหกิจของภาคของใบ · ค่าชุดเอกสารหมายเลข 2 ถูกเก็บครบ 7 ช่อง และมีแค่ 7 ช่องนั้น
+    expect(intent?.start_date).toBe('2026-11-16');
+    expect(intent?.fill).toEqual(FORM_FILL);
 
     // ⛔ ลิงก์ไม่แตะทะเบียนบริษัทและไม่สร้างบัญชีใดๆ — พี่เลี้ยงมาจากนักศึกษาทีหลัง ไม่ได้มาจากคนถือลิงก์
     expect(await companySnapshot(formId)).toEqual(companyBefore);
@@ -515,7 +538,66 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       .toBe(String(tokenId));
   });
 
-  test('L7a: เจ้าหน้าที่กดรับใบที่ยังไม่มีพี่เลี้ยงได้ = accepted · ไม่มีบัญชีเกิด · ระบุทีหลังบัญชียังปิดจนเจ้าหน้าที่ยืนยัน · companies ไม่เปลี่ยน', async ({
+  test('L6b: ช่องเอกสาร 2 ที่เก็บไว้ — เจ้าหน้าที่เห็นในคิวรอตรวจแบบตอบรับเท่านั้น · อาจารย์ หัวหน้าสาขา คณบดี นักศึกษาไม่ได้ฟิลด์ · ปฏิทินไม่ได้ตั้ง = วันเริ่มว่างและยังตอบรับได้ · ยาวเกิน = 400 ไม่มีไฟล์ค้าง', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const { formId, token } = await readyLink(request);
+    const evidenceDir = path.join(BACKEND_ROOT, 'uploads', 'acceptance_evidence');
+    const filesBefore = fs.existsSync(evidenceDir) ? fs.readdirSync(evidenceDir).length : 0;
+
+    // ยาวเกินเพดานของช่อง (เพดานชุดเดียวกับเส้นพิมพ์ฟอร์ม) = 400 · token ไม่ถูกเผา · ไฟล์ที่ multer เขียนถูกลบ
+    const tooLong = await postAccept(token, await acceptFields({ ...FORM_FILL, coordinator_name: 'ก'.repeat(256) }));
+    expect(tooLong.status(), await tooLong.text()).toBe(400);
+    expect((await tokenRow(token))!.used_at).toBeNull();
+    expect(await formStatus(formId)).toBe('approved_by_dept_head');
+    await expect
+      .poll(() => (fs.existsSync(evidenceDir) ? fs.readdirSync(evidenceDir).length : 0), { timeout: 5_000 })
+      .toBe(filesBefore);
+
+    // ปฏิทินสหกิจไม่ได้ตั้ง (seed ไม่มีแถว coop_start) = ตอบรับได้ตามปกติ วันเริ่มว่าง — ห้ามปฏิเสธเพราะเหตุนี้
+    const ok = await postAccept(token, await acceptFields(FORM_FILL));
+    expect(ok.status(), await ok.text()).toBe(200);
+    expect(await dbValue<string | null>('SELECT start_date::text FROM intent_forms WHERE form_id = $1', [formId])).toBeNull();
+
+    // เจ้าหน้าที่: ได้ฟิลด์นี้ในคิวรอตรวจแบบตอบรับ
+    const listAs = async (who: 'staff1' | 'advisor1' | 'head1' | 'dean1') => {
+      await apiLoginAs(request, who);
+      const res = await request.get(`${API_URL}/intents?status=pending_officer_approval`);
+      expect(res.status(), `${who}: ${await res.text()}`).toBe(200);
+      return ((await res.json()) as Record<string, unknown>[]).find((r) => r.form_id === formId);
+    };
+    expect((await listAs('staff1'))?.acceptance_form_fill).toEqual(FORM_FILL);
+
+    // ⛔ บทบาทอื่นที่ใช้เส้นเดียวกันเห็นแถวได้ตามขอบเขตเดิม แต่ไม่ได้ฟิลด์นี้เลย (ชื่อและเบอร์ของพนักงานบริษัท · SEC-10)
+    for (const who of ['advisor1', 'head1', 'dean1'] as const) {
+      const row = await listAs(who);
+      expect(row, who).toBeDefined();
+      expect(Object.keys(row!), who).not.toContain('acceptance_form_fill');
+      expect(JSON.stringify(row), who).not.toContain(FORM_FILL.mobile_phone);
+    }
+    // นักศึกษาเจ้าของใบ: หน้าแรก · รายการใบของตัวเอง · รายละเอียดใบ — ไม่มีค่าชุดนี้
+    await apiLoginAs(request, 'student2');
+    for (const url of ['/students/dashboard', '/intents/me', `/intents/${formId}`]) {
+      const res = await request.get(`${API_URL}${url}`);
+      expect(res.status(), `${url}: ${await res.text()}`).toBe(200);
+      const text = await res.text();
+      expect(text, url).not.toContain('acceptance_form_fill');
+      expect(text, url).not.toContain(FORM_FILL.coordinator_name);
+      expect(text, url).not.toContain(FORM_FILL.mobile_phone);
+    }
+
+    // เจ้าหน้าที่รับแล้ว = ใบออกจากคิวรอตรวจ ฟิลด์ไม่ตามไปคิวอื่น (ค่ายังอยู่บนใบ)
+    await accept(request, formId);
+    await apiLoginAs(request, 'staff1');
+    const acceptedRow = ((await (await request.get(`${API_URL}/intents?status=accepted`)).json()) as Record<string, unknown>[]).find(
+      (r) => r.form_id === formId
+    );
+    expect(acceptedRow?.acceptance_form_fill ?? null).toBeNull();
+    expect(await dbValue('SELECT acceptance_form_fill FROM intent_forms WHERE form_id = $1', [formId])).toEqual(FORM_FILL);
+  });
+
+  test('L7a: เจ้าหน้าที่กดรับใบที่ยังไม่มีพี่เลี้ยงได้ = accepted · ไม่มีบัญชีเกิด · ระบุทีหลังบัญชียังปิดจนอาจารย์นิเทศยืนยัน · companies ไม่เปลี่ยน', async ({
     request,
   }) => {
     test.setTimeout(180_000);
@@ -548,8 +630,8 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(before).toMatchObject({ is_active: false, no_password: true, roles: ['mentor'], same_company: true, linked: true });
     expect(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens')).toBe('0');
 
-    // เจ้าหน้าที่ยืนยัน = จุดเดียวที่บัญชีเปิดและลิงก์ออก
-    await apiLoginAs(request, 'staff1');
+    // อาจารย์นิเทศของนักศึกษายืนยัน = จุดเดียวที่บัญชีเปิดและลิงก์ออก (เจ้าหน้าที่ยืนยันไม่ได้ — คุมที่ mentor-after-acceptance A3)
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, before!.user_id);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     expect(await mentorRow()).toMatchObject({ is_active: true, no_password: true, roles: ['mentor'] });
@@ -559,10 +641,12 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(await companySnapshot(formId)).toEqual(companyBefore);
   });
 
-  test('L7b: เจ้าหน้าที่ตีกลับ = ที่มาถูกล้าง · ทะเบียนบริษัทไม่ถูกแตะ · ไม่มีบัญชีเกิด', async ({ request }) => {
+  test('L7b: เจ้าหน้าที่ตีกลับ = ที่มาและช่องเอกสาร 2 ที่เก็บไว้ถูกล้าง · ทะเบียนบริษัทไม่ถูกแตะ · ไม่มีบัญชีเกิด · นักศึกษาอัปโหลดเองแทน = ช่องยังว่าง', async ({ request }) => {
     test.setTimeout(180_000);
     const { formId, token } = await readyLink(request);
-    expect((await postAccept(token, await acceptFields())).status()).toBe(200);
+    expect((await postAccept(token, await acceptFields(FORM_FILL))).status()).toBe(200);
+    const fillOf = () => dbValue<Record<string, string> | null>('SELECT acceptance_form_fill FROM intent_forms WHERE form_id = $1', [formId]);
+    expect(await fillOf()).toEqual(FORM_FILL);
     const companyBefore = await companySnapshot(formId);
     const usersBefore = await dbValue<string>('SELECT COUNT(*) FROM users');
 
@@ -577,7 +661,19 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       [formId]
     );
     expect(row).toEqual({ status: 'approved_by_dept_head', source: null, reason: 'ตราประทับบนแบบตอบรับไม่ชัดเจน' });
+    // ค่าที่บริษัทพิมพ์ไว้กับแบบตอบรับฉบับที่ถูกตีกลับต้องไม่ค้างบนใบ
+    expect(await fillOf()).toBeNull();
     expect(await dbValue<string>('SELECT COUNT(*) FROM users')).toBe(usersBefore);
+    expect(await companySnapshot(formId)).toEqual(companyBefore);
+
+    // นักศึกษาอัปโหลดแบบตอบรับเองแทน — ทางนี้ไม่มีชุดช่องนี้ ส่งมาก็ไม่ถูกเก็บ (คอลัมน์เป็น NULL)
+    await apiLoginAs(request, 'student2');
+    const upload = await request.post(`${API_URL}/acceptances/student/${formId}/upload-proof`, {
+      multipart: { evidence: pdfPart(), ...(await acceptFields(FORM_FILL)) },
+    });
+    expect(upload.status(), await upload.text()).toBe(200);
+    expect(await formStatus(formId)).toBe('pending_officer_approval');
+    expect(await fillOf()).toBeNull();
     expect(await companySnapshot(formId)).toEqual(companyBefore);
   });
 
@@ -624,7 +720,7 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     expect(await dbValue<number | null>('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [formId])).not.toBeNull();
   });
 
-  test('L8b: POST /intents/:id/mentor — ช่องบังคับ · สถานะ · เจ้าของใบ · role · ระบุซ้ำได้จนกว่าเจ้าหน้าที่ยืนยันพี่เลี้ยง', async ({
+  test('L8b: POST /intents/:id/mentor — ช่องบังคับ · สถานะ · เจ้าของใบ · role · ระบุซ้ำได้จนกว่าอาจารย์นิเทศยืนยันพี่เลี้ยง', async ({
     request,
   }) => {
     test.setTimeout(180_000);
@@ -691,8 +787,8 @@ test.describe('ลิงก์ตอบรับของสถานประ�
       )
       .toBe('2');
 
-    // เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว = นักศึกษาเปลี่ยนเองไม่ได้ (บัญชีถูกเปิดไปแล้ว) · ใบยังชี้คนเดิม
-    await apiLoginAs(request, 'staff1');
+    // อาจารย์นิเทศยืนยันพี่เลี้ยงแล้ว = นักศึกษาเปลี่ยนเองไม่ได้ (บัญชีถูกเปิดไปแล้ว) · ใบยังชี้คนเดิม
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, second as number);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     const late = await postMentor(request, formId, mentorBody({ email: 'late-l8b@example.com' }));
@@ -1086,7 +1182,8 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     test.setTimeout(180_000);
 
     const formId = await putIntent({ status: 'accepted', due: 15, mailSent: true });
-    await dbExec("UPDATE intent_forms SET start_date = '2026-11-02' WHERE form_id = $1", [formId]);
+    // ถึงวันเริ่มฝึกแล้ว — ก่อนหน้านั้นการระบุพี่เลี้ยงถูกล็อก (409 internship_not_started · คุมที่ mentor-after-acceptance A7)
+    await dbExec("UPDATE intent_forms SET start_date = (NOW() AT TIME ZONE 'Asia/Bangkok')::date WHERE form_id = $1", [formId]);
     await loginAs(page, 'student2');
     const mentorCard = page.getByTestId('mentor-card');
     // ได้ที่ฝึกงานแล้ว = ไม่มีการ์ดสถานะช่วงขอที่ฝึกงาน · บล็อกพี่เลี้ยงอยู่ในการ์ด "ที่ฝึกงานของคุณ" และไม่ใช่การ์ด "ทำอะไรตอนนี้" ใบที่สอง
@@ -1128,8 +1225,9 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     const mentorId = (await dbValue<number>('SELECT mentor_id FROM intent_forms WHERE form_id = $1', [formId])) as number;
     expect(await dbValue<string>('SELECT name FROM mentors WHERE mentor_id = $1', [mentorId])).toBe('สุรเดช แก้ชื่อแล้ว');
 
-    // เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว: การ์ดบอกว่ายืนยันแล้ว ไม่มีปุ่มแก้/ปุ่มระบุ (เซิร์ฟเวอร์ตอบ 409 อยู่แล้ว — หน้าจอไม่ชวนให้กด)
-    await apiLoginAs(request, 'staff1');
+    // อาจารย์นิเทศยืนยันพี่เลี้ยงแล้ว: การ์ดบอกว่ายืนยันแล้ว ไม่มีปุ่มแก้/ปุ่มระบุ (เซิร์ฟเวอร์ตอบ 409 อยู่แล้ว — หน้าจอไม่ชวนให้กด)
+    // ⚠️ ถ้อยคำบนการ์ดยังเป็นของหน้าจอเดิม ("เจ้าหน้าที่ยืนยัน…") — แก้พร้อมหน้าจอของรอบแก้ขั้น 5 (PROMPT-step5-round2-frontend)
+    await apiLoginAs(request, 'advisor1');
     const confirmed = await confirmMentor(request, mentorId);
     expect(confirmed.status(), await confirmed.text()).toBe(200);
     await page.reload();
@@ -1233,6 +1331,8 @@ test.describe('หน้าลิงก์ตอบรับ — ภาษาแ
   }) => {
     test.setTimeout(180_000);
     const { formId, token } = await readyLink(request);
+    // วันเริ่มในกล่องยืนยันมาจากปฏิทินสหกิจ (ผู้ตอบรับไม่ได้ส่งวันเริ่มแล้ว)
+    await setCoopStart('2026-11-16');
     const anon = await playwrightRequest.newContext();
     try {
       const res = await anon.post(`${PUB}/accept?token=${encodeURIComponent(token)}`, {

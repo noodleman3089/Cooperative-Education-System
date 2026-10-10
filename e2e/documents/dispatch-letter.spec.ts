@@ -7,7 +7,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, BACKEND_ROOT } from '../helpers/env';
 import { withDb, dbRow, dbRows, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { approveIntentThroughOfficer, completeDispatchPrep, deanSign } from '../helpers/intent';
+import { approveIntentThroughOfficer, completeDispatchPrep, deanSign, setCoopStart } from '../helpers/intent';
 
 /**
  * หนังสือส่งตัวนักศึกษาเข้าปฏิบัติงานสหกิจศึกษา — ข้อ ๙ ของ ๑๓ ขั้นตอนในคู่มือ
@@ -60,8 +60,17 @@ async function seedIntent(): Promise<number> {
   });
 }
 
-/** เดินเส้นทางจริงจนใบอยู่สถานะ `accepted` — คือจุดที่หนังสือส่งตัวออกได้ */
-async function walkToAccepted(request: APIRequestContext, formId: number): Promise<void> {
+/**
+ * เดินเส้นทางจริงจนใบอยู่สถานะ `accepted` — คือจุดที่หนังสือส่งตัวออกได้
+ * วันเริ่มปฏิบัติงานของใบมาจากปฏิทินสหกิจ (การตอบรับไม่รับวันเริ่มแล้ว — `start_date` ใน `MENTOR` ที่ส่งไปถูกเมิน)
+ * `calendarStart: null` = ปฏิทินไม่ได้ตั้ง → ใบ `accepted` ไม่มีวันเริ่ม
+ */
+async function walkToAccepted(
+  request: APIRequestContext,
+  formId: number,
+  calendarStart: string | null = MENTOR.start_date
+): Promise<void> {
+  if (calendarStart) await setCoopStart(calendarStart);
   await approveIntentThroughOfficer(request, formId);
 
   const coverDocId = await dbValue<number>(
@@ -747,6 +756,28 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
     expect((await sendLetter(formId))!.status).toBe('signed');
     expect((await dispatchForm(formId))!.dispatch_document_no).toBe(DISPATCH_NO);
     expect(await recallEvents(formId)).toHaveLength(1);
+  });
+
+  test('R5b: ปฏิทินสหกิจไม่ได้ตั้งวันเริ่ม → ใบ accepted ไม่มีวันเริ่ม · ออกหนังสือโดยไม่กรอกวันเริ่ม = 400 ไม่มีเอกสารเกิด · กรอกแล้วออกได้และใบได้วันนั้น', async ({
+    request,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedIntent();
+    // การตอบรับไม่ถามวันเริ่มแล้ว และปฏิทินของภาคไม่มี coop_start → วันเริ่มของใบว่าง (ค่าที่ seedIntent ใส่ไว้ถูกเขียนทับตอนตอบรับ)
+    await walkToAccepted(request, formId, null);
+    expect((await dispatchForm(formId))!.start_date).toBeNull();
+
+    await apiLoginAs(request, 'staff1');
+    const noStart = await issue(request, formId);
+    expect(noStart.status(), await noStart.text()).toBe(400);
+    expect((await noStart.json()).message as string).toContain('ยังไม่มีวันเริ่มปฏิบัติงาน');
+    expect(await sendLetter(formId)).toBeUndefined();
+    expect((await dispatchForm(formId))!.dispatch_document_no).toBeNull();
+
+    const ok = await issue(request, formId, { document_no: DISPATCH_NO, end_date: '2027-02-19', start_date: '2026-11-09' });
+    expect(ok.status(), await ok.text()).toBe(200);
+    expect(await dispatchForm(formId)).toMatchObject({ start_date: '2026-11-09', end_date: '2027-02-19' });
+    expect(await sendLetter(formId)).toBeDefined();
   });
 
   test('R5: แก้วันเริ่มงานตอนออกหนังสือ → ใบและข้อความในหนังสือเป็นวันใหม่ · วันเริ่มหลังวันสิ้นสุด = 400', async ({

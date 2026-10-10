@@ -537,6 +537,9 @@ export class IntentFormController {
                u_men.email AS mentor_email,
                -- ที่มาของคำตอบรับ (ลิงก์ของบริษัท / นักศึกษาอัปโหลดเอง)
                i.acceptance_source,
+               -- ช่องผู้ประสานงานของเอกสารหมายเลข 2 ที่บริษัทพิมพ์บนหน้าลิงก์ — เฉพาะใบที่รอตรวจแบบตอบรับ
+               -- เป็นชื่อและเบอร์ของพนักงานบริษัท · เจ้าหน้าที่เท่านั้นที่ได้ค่านี้ — ตัดตามบทบาทที่ปลายทาง
+               CASE WHEN i.status = 'pending_officer_approval' THEN i.acceptance_form_fill END AS acceptance_form_fill,
                doc.status AS cover_letter_status,
                -- ป้ายในคิว "คำร้องรอรับ": หนังสือถูกถอนกลับมาและยังไม่ถูกตีกลับถึงนักศึกษาหลังจากนั้น
                -- (dean_returned / staff_recalled) · เจ้าหน้าที่เท่านั้นที่ได้ค่านี้ — ตัดตามบทบาทที่ปลายทาง
@@ -614,11 +617,13 @@ export class IntentFormController {
 
       const result = await query(queryStr, queryParams);
 
-      // ⛔ ป้ายหนังสือถูกถอนกลับ (ทั้งสองชนิด) ให้เจ้าหน้าที่เท่านั้น (หลักการ SEC-10) — เส้นนี้หลายบทบาทใช้ร่วม
+      // ⛔ ป้ายหนังสือถูกถอนกลับ (ทั้งสองชนิด) และช่องผู้ประสานงานของแบบตอบรับ ให้เจ้าหน้าที่เท่านั้น
+      //    (หลักการ SEC-10) — เส้นนี้หลายบทบาทใช้ร่วม
       if (!roles.includes('staff')) {
         for (const row of result.rows as Record<string, unknown>[]) {
           delete row.letter_recall;
           delete row.dispatch_recall;
+          delete row.acceptance_form_fill;
         }
       } else {
         // คิว "หนังสือส่งตัวรอออก": นักศึกษาส่งเอกสารก่อนออกฝึกครบหรือยัง (ด่านจริงอยู่ที่ `issueDispatchLetter`)

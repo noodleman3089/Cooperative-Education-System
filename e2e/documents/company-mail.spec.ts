@@ -93,8 +93,9 @@ async function walkToIssuedDispatch(request: APIRequestContext, formId: number):
   expect(accepted.status(), await accepted.text()).toBe(200);
 
   await completeDispatchPrep();
+  // ปฏิทินสหกิจของ seed ไม่ได้ตั้งวันเริ่ม → ใบยังไม่มีวันเริ่ม เจ้าหน้าที่กรอกในกล่องออกหนังสือส่งตัว
   const issued = await request.post(`${API_URL}/intents/${formId}/dispatch-letter`, {
-    data: { document_no: 'อว 0656.10/ส่งตัว-m8', end_date: '2027-02-19' },
+    data: { document_no: 'อว 0656.10/ส่งตัว-m8', end_date: '2027-02-19', start_date: '2026-11-02' },
   });
   expect(issued.status(), await issued.text()).toBe(200);
 

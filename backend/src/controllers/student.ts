@@ -100,6 +100,12 @@ export class StudentController {
         const intentQuery = await query(
           `SELECT i.form_id, i.company_id, c.name_th as company_name_th,
                   i.status, i.start_date, i.acceptance_evidence_path,
+                  -- ล็อกการระบุพี่เลี้ยง: ต้อง accepted และถึงวันเริ่มฝึกแล้ว (เงื่อนไขเดียวกับ setMentorWithTransaction)
+                  -- ไม่มีวันเริ่ม = ไม่ล็อกด้วยวันที่ · mentor_opens_on = วันที่จะเปิดให้ระบุ (เฉพาะใบ accepted ที่ยังไม่ถึงวัน)
+                  NOT (i.status = 'accepted'
+                       AND (i.start_date IS NULL OR i.start_date <= (NOW() AT TIME ZONE 'Asia/Bangkok')::date)) AS mentor_locked,
+                  CASE WHEN i.status = 'accepted' AND i.start_date > (NOW() AT TIME ZONE 'Asia/Bangkok')::date
+                       THEN i.start_date::text END AS mentor_opens_on,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
@@ -167,7 +173,13 @@ export class StudentController {
               ...(await IntentFormModel.resolveRequestSigners(userId)),
               candidates: await IntentFormModel.listSignerCandidates(userId),
             },
-            // พี่เลี้ยงระบุได้เมื่อใบ `accepted` — null = ยังไม่ระบุ · `confirmed: false` = รอเจ้าหน้าที่ยืนยัน (ยังแก้เองได้)
+            // ล็อกการระบุพี่เลี้ยง — หน้าจอใช้ล็อกเมนู ⛔ ห้ามคำนวณวันเอง (ด่านจริงคือ 409 `internship_not_started`)
+            // `mentor_locked` = ใบยังไม่ `accepted` หรือยังไม่ถึงวันเริ่มฝึก · `mentor_opens_on` = วันที่จะเปิด (null = ไม่ทราบ/ไม่ได้ล็อกด้วยวันที่)
+            // `supervisor_assigned: false` = ระบุได้แต่จะค้าง "รอยืนยัน" จนกว่าหัวหน้าสาขาจะจัดสรรอาจารย์นิเทศ
+            mentor_locked: row.mentor_locked === true,
+            mentor_opens_on: row.mentor_opens_on ?? null,
+            supervisor_assigned: student.supervisor_id !== null,
+            // พี่เลี้ยงระบุได้เมื่อใบ `accepted` — null = ยังไม่ระบุ · `confirmed: false` = รออาจารย์นิเทศยืนยัน (ยังแก้เองได้)
             // · `confirmed: true` = บัญชีพี่เลี้ยงเปิดแล้ว นักศึกษาแก้ไม่ได้ (POST /intents/:id/mentor ตอบ 409)
             mentor: row.mentor_id ? {
               mentor_id: row.mentor_id,

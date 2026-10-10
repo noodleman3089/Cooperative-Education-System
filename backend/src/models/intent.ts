@@ -2,6 +2,7 @@ import type { PoolClient } from 'pg';
 import pool, { query } from '../config/database';
 import { IntentForm } from '../types';
 import { recordStageEvent } from '../utils/stageEvents';
+import { formatThaiDate } from '../utils/thaiDate';
 
 /**
  * SEC-04: explicit allow-lists for every state transition an external party can
@@ -191,7 +192,8 @@ export class IntentConflictError extends Error {
       | 'not_awaiting_dean'
       | 'letter_missing'
       | 'letter_signed'
-      | 'mentor_confirmed',
+      | 'mentor_confirmed'
+      | 'internship_not_started',
     readonly extra: Record<string, unknown> = {}
   ) {
     super(message);
@@ -1096,7 +1098,6 @@ export class IntentFormModel {
   static async acceptByStudentWithTransaction(
     intentId: number,
     studentUserId: number,
-    startDate: string,
     evidencePath: string,
     /** ส่งกลับหลังพ้น ๑๕ วันทำการ — ผู้เรียกเป็นคนตัดสินโดยเทียบวันที่ฐาน */
     submittedLate = false,
@@ -1111,10 +1112,10 @@ export class IntentFormModel {
         intentId,
         source: 'student',
         studentUserId,
-        startDate,
         evidencePath,
         submittedLate,
         signer,
+        formFill: null,
       });
 
       await client.query('COMMIT');
@@ -1139,6 +1140,11 @@ export class IntentFormModel {
    *
    * ⛔ ไม่แตะพี่เลี้ยงทั้งสองทาง — คณะรู้ตัวพี่เลี้ยงหลังนักศึกษาเริ่มฝึกแล้วเท่านั้น
    *    นักศึกษาระบุบนใบ `accepted` ด้วย `setMentorWithTransaction`
+   * ⛔ ไม่รับวันเริ่มปฏิบัติงานจากผู้ตอบ (เอกสารหมายเลข 2 ไม่มีช่องนี้) — `start_date` = วันเริ่มของกิจกรรม `coop_start`
+   *    ในปฏิทินของภาคที่ใบสังกัด · ปฏิทินไม่ได้ตั้ง = NULL และยังตอบรับได้ (ปฏิทิน fail-open)
+   *    เจ้าหน้าที่แก้วันได้ตอนออกหนังสือส่งตัว (`issueDispatchLetter`)
+   * ⛔ `formFill` = ค่าที่บริษัทพิมพ์ตามเอกสารหมายเลข 2 บนหน้าลิงก์ เก็บ**บนใบนี้เท่านั้น** ไม่เขียน `companies` (SEC-14 ข้อ 5)
+   *    ทางนักศึกษาอัปโหลดเองส่ง null เสมอ
    */
   static async acceptWithClient(
     client: PoolClient,
@@ -1147,15 +1153,16 @@ export class IntentFormModel {
       source: 'student' | 'link';
       /** จำเป็นเมื่อ source = 'student' */
       studentUserId?: number;
-      startDate: string;
       evidencePath: string;
       /** ส่งกลับหลังพ้น ๑๕ วันทำการ — ผู้เรียกเป็นคนตัดสินโดยเทียบวันที่ฐาน */
       submittedLate: boolean;
       /** ผู้ลงนามบนแบบตอบรับ (เอกสารหมายเลข 2) — ผู้เรียกตรวจแล้ว */
       signer: { name: string; position: string; signedDate: string } | null;
+      /** ช่องผู้ประสานงานของเอกสารหมายเลข 2 ที่บริษัทพิมพ์บนหน้าลิงก์ — ผู้เรียกตรวจความยาวแล้ว · ไม่มี = null */
+      formFill: Record<string, string> | null;
     }
   ): Promise<IntentForm> {
-    const { intentId, source, studentUserId, startDate, evidencePath, submittedLate, signer } = p;
+    const { intentId, source, studentUserId, evidencePath, submittedLate, signer, formFill } = p;
     // 1. Lock intent form FOR UPDATE
     const intentRes = await client.query(
       `SELECT form_id, student_id, company_id, semester_id, status
@@ -1185,16 +1192,21 @@ export class IntentFormModel {
     // 3. Update Intent Form status to pending_officer_approval
     const updateRes = await client.query(
       `UPDATE intent_forms
-       SET status = 'pending_officer_approval', start_date = $1,
+       SET status = 'pending_officer_approval',
+           start_date = (SELECT e.start_date FROM coop_calendar_events e
+                          WHERE e.semester_id = intent_forms.semester_id AND e.activity_key = 'coop_start'
+                          LIMIT 1),
            acceptance_evidence_path = $2, acceptance_submitted_late = $4,
            acceptance_signer_name = $5, acceptance_signer_position = $6, acceptance_signed_date = $7,
            reject_reason = NULL, -- ส่งใหม่หลังเจ้าหน้าที่ตีกลับ: เหตุผลเก่าหมดความหมายแล้ว
-           acceptance_source = $8
+           acceptance_source = $8,
+           acceptance_form_fill = $1::jsonb
        WHERE form_id = $3
        RETURNING form_id, student_id, company_id, semester_id, status, mentor_id, start_date,
                  acceptance_evidence_path, acceptance_submitted_late, acceptance_source`,
       [
-        new Date(startDate), evidencePath, intentId, submittedLate,
+        formFill && Object.keys(formFill).length > 0 ? JSON.stringify(formFill) : null,
+        evidencePath, intentId, submittedLate,
         signer?.name ?? null, signer?.position ?? null, signer?.signedDate ?? null,
         source,
       ]
@@ -1242,7 +1254,7 @@ export class IntentFormModel {
     let mentorUserId: number;
 
     if ((userCheck.rowCount ?? 0) === 0) {
-      // No password and inactive until a staff member confirms the mentor
+      // No password and inactive until the student's supervising lecturer confirms the mentor
       // (POST /api/mentor-followup/:mentorId/confirm), which is also when the
       // login link goes out. Nothing is emailed from here.
       const insertUser = await client.query(
@@ -1313,7 +1325,9 @@ export class IntentFormModel {
   /**
    * นักศึกษาระบุพี่เลี้ยงหลังเริ่มฝึก — คณะรู้ตัวพี่เลี้ยงตอนนั้นเท่านั้น (เจ้าหน้าที่สหกิจยืนยัน 2026-10-09)
    *
-   * ⛔ ได้เฉพาะใบ `accepted` · บัญชีที่สร้างที่นี่ยังปิดอยู่ ไม่มีลิงก์ ไม่มีอีเมล — เปิดเมื่อเจ้าหน้าที่ยืนยัน
+   * ⛔ ได้เฉพาะใบ `accepted` **และถึงวันเริ่มฝึกแล้ว** (วันนี้ ≥ `start_date` · "วันนี้" จาก Postgres เวลาไทย) — ยังไม่ถึง = 409
+   *    `internship_not_started` · `start_date` เป็น NULL (ปฏิทินไม่ได้ตั้ง) = ไม่ล็อกด้วยวันที่ (แนวเดียวกับปฏิทิน fail-open)
+   * ⛔ บัญชีที่สร้างที่นี่ยังปิดอยู่ ไม่มีลิงก์ ไม่มีอีเมล — เปิดเมื่ออาจารย์นิเทศของนักศึกษายืนยัน
    *    (`POST /api/mentor-followup/:mentorId/confirm` · SEC-03 · SEC-15)
    * ⛔ ระบุซ้ำ/แก้ได้ตราบที่บัญชีพี่เลี้ยงของใบยังไม่เปิดใช้ (พิมพ์อีเมลผิดแล้วแก้เองได้) · เปิดใช้แล้ว = 409
    *    นักศึกษาเปลี่ยนคนประเมินของตัวเองทีหลังไม่ได้ — เจ้าหน้าที่แก้อีเมลที่หน้าติดตามพี่เลี้ยง
@@ -1328,7 +1342,10 @@ export class IntentFormModel {
       await client.query('BEGIN');
 
       const current = await client.query(
-        `SELECT student_id, company_id, status, mentor_id FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        `SELECT student_id, company_id, status, mentor_id,
+                start_date::text AS start_date,
+                (NOW() AT TIME ZONE 'Asia/Bangkok')::date::text AS today
+           FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
         [intentId]
       );
       if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
@@ -1339,7 +1356,17 @@ export class IntentFormModel {
       }
       assertAllowedTransition('set_mentor', row.status, ['accepted']);
 
-      // อ่านหลังล็อกใบ — การยืนยันของเจ้าหน้าที่ล็อกใบเดียวกันก่อนเปิดบัญชี สองคำขอจึงไม่สวนกัน
+      // ล็อกจนถึงวันเริ่มฝึก — เทียบสตริง YYYY-MM-DD ล้วน (ห้าม new Date()) · ไม่มีวันเริ่ม = ไม่ล็อก
+      const startDate = row.start_date as string | null;
+      if (startDate !== null && (row.today as string) < startDate) {
+        throw new IntentConflictError(
+          `ยังระบุพี่เลี้ยงไม่ได้ เพราะยังไม่ถึงวันเริ่มปฏิบัติงาน — ระบบจะเปิดให้ระบุตั้งแต่วันที่ ${formatThaiDate(startDate)}`,
+          'internship_not_started',
+          { opens_on: startDate }
+        );
+      }
+
+      // อ่านหลังล็อกใบ — การยืนยันของอาจารย์นิเทศล็อกใบเดียวกันก่อนเปิดบัญชี สองคำขอจึงไม่สวนกัน
       if (row.mentor_id !== null) {
         const active = await client.query(`SELECT 1 FROM users WHERE user_id = $1 AND is_active = TRUE`, [row.mentor_id]);
         if ((active.rowCount ?? 0) > 0) {

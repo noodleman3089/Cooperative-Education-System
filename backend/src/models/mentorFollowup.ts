@@ -9,7 +9,7 @@ import { MENTOR_QUEUE_KINDS, MentorQueueKind, MentorQueueModel } from './mentorQ
  * ⛔ ขอบเขต fail closed (SEC-06): หัวหน้าสาขาไม่มีโปรไฟล์ = 403 · บทบาทอื่นนอกสามบทบาท = 403
  *    · ผู้ใช้หลายบทบาทได้ขอบเขตกว้างสุดตามลำดับ staff > dept_head > advisor
  * ⛔ "การจัดวาง (placement)" = `intent_forms` สถานะ 'accepted' ที่มี mentor_id — ที่เดียวกับที่ MentorQueueModel ใช้
- * ⛔ ใบ 'accepted' มีได้สามสภาพ: ยังไม่ระบุพี่เลี้ยง (`unassignedInScope`) · ระบุแล้วรอเจ้าหน้าที่ยืนยัน
+ * ⛔ ใบ 'accepted' มีได้สามสภาพ: ยังไม่ระบุพี่เลี้ยง (`unassignedInScope`) · ระบุแล้วรออาจารย์นิเทศยืนยัน
  *    (แถวใน `list` ที่ `is_active = false`) · ยืนยันแล้ว — หน้าติดตามต้องเห็นครบทั้งสาม
  */
 
@@ -30,6 +30,8 @@ export interface FollowupPlacement {
   mentor_id: number;
   student_id: number;
   student_name: string;
+  /** อาจารย์นิเทศของนักศึกษา — คนเดียวที่ยืนยันพี่เลี้ยงได้ · null = หัวหน้าสาขายังไม่จัดสรร */
+  supervisor_id: number | null;
 }
 
 export interface FollowupUnassigned {
@@ -47,8 +49,12 @@ export interface FollowupMentorRow {
   name: string;
   email: string;
   company_name: string | null;
-  /** false = นักศึกษาระบุแล้วแต่เจ้าหน้าที่ยังไม่ยืนยัน (บัญชียังปิด ยังไม่มีลิงก์) — หรือบัญชีถูกระงับ */
+  /** false = นักศึกษาระบุแล้วแต่อาจารย์นิเทศยังไม่ยืนยัน (บัญชียังปิด ยังไม่มีลิงก์) — หรือบัญชีถูกระงับ */
   is_active: boolean;
+  /** ผู้เรียกกดยืนยันพี่เลี้ยงคนนี้ได้ = บัญชียังปิด และผู้เรียกเป็นอาจารย์นิเทศของนักศึกษาในแถวอย่างน้อยหนึ่งคน (ด่านจริงคือ 403 ที่ `confirm`) */
+  can_confirm: boolean;
+  /** บัญชียังปิดและมีนักศึกษาในแถวที่ยังไม่มีอาจารย์นิเทศ — หน้าจอใช้บอกเหตุที่ยังไม่มีใครยืนยันได้ */
+  awaiting_supervisor: boolean;
   student_count: number;
   students: { student_id: number; student_name: string }[];
   pending_total: number;
@@ -106,7 +112,7 @@ export class MentorFollowupModel {
 
   /**
    * ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง (ในขอบเขตของผู้เรียก) — ยังไม่มีพี่เลี้ยงให้ตาม จึงเป็นรายการแยก
-   * ใบที่ระบุแล้วแต่รอเจ้าหน้าที่ยืนยัน อยู่ใน `list` ตามปกติ (แถวที่ `is_active = false`)
+   * ใบที่ระบุแล้วแต่รออาจารย์นิเทศยืนยัน อยู่ใน `list` ตามปกติ (แถวที่ `is_active = false`)
    */
   static async unassignedInScope(scope: FollowupScope): Promise<FollowupUnassigned[]> {
     const params: unknown[] = [];
@@ -143,7 +149,7 @@ export class MentorFollowupModel {
     }
 
     const res = await query(
-      `SELECT DISTINCT i.mentor_id, s.student_id,
+      `SELECT DISTINCT i.mentor_id, s.student_id, s.supervisor_id,
               btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS student_name
          FROM intent_forms i
          JOIN students s ON s.student_id = i.student_id
@@ -154,6 +160,7 @@ export class MentorFollowupModel {
       mentor_id: Number(r.mentor_id),
       student_id: Number(r.student_id),
       student_name: r.student_name as string,
+      supervisor_id: r.supervisor_id === null ? null : Number(r.supervisor_id),
     }));
   }
 
@@ -177,8 +184,11 @@ export class MentorFollowupModel {
     return new Set(res.rows.map((r) => Number(r.student_id)));
   }
 
-  /** รายการพี่เลี้ยงสำหรับหน้า "คณะตามพี่เลี้ยง" — หนึ่งแถวต่อพี่เลี้ยง นับเฉพาะนักศึกษาในขอบเขต */
-  static async list(scope: FollowupScope): Promise<FollowupMentorRow[]> {
+  /**
+   * รายการพี่เลี้ยงสำหรับหน้า "คณะตามพี่เลี้ยง" — หนึ่งแถวต่อพี่เลี้ยง นับเฉพาะนักศึกษาในขอบเขต
+   * `confirmerId` = user_id ของผู้เรียกเมื่อมีบทบาท advisor (ใช้คิด `can_confirm`) · null = ผู้เรียกยืนยันใครไม่ได้
+   */
+  static async list(scope: FollowupScope, confirmerId: number | null = null): Promise<FollowupMentorRow[]> {
     const placements = await MentorFollowupModel.placementsInScope(scope);
     if (placements.length === 0) return [];
 
@@ -233,6 +243,9 @@ export class MentorFollowupModel {
           email: info.email,
           company_name: info.company_name ?? null,
           is_active: info.is_active === true,
+          can_confirm:
+            info.is_active !== true && confirmerId !== null && mine.some((p) => p.supervisor_id === confirmerId),
+          awaiting_supervisor: info.is_active !== true && mine.some((p) => p.supervisor_id === null),
           student_count: mine.length,
           students: mine.map((p) => ({ student_id: p.student_id, student_name: p.student_name })),
           pending_total: items.length,

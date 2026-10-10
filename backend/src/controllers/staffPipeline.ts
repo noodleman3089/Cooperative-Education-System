@@ -84,7 +84,7 @@ interface Row {
   has_accommodation: boolean;
   final_report_approved: boolean;
   mentor_evaluations: number;
-  /** บัญชีพี่เลี้ยงของใบเปิดใช้แล้ว = เจ้าหน้าที่ยืนยันแล้ว · ไม่มีพี่เลี้ยง = false */
+  /** บัญชีพี่เลี้ยงของใบเปิดใช้แล้ว = อาจารย์นิเทศยืนยันแล้ว · ไม่มีพี่เลี้ยง = false */
   mentor_active: boolean;
   mentor_logged_in: boolean;
   age_created: number | null;
@@ -331,7 +331,7 @@ export class StaffPipelineController {
         { key: 'no_faculty', label: 'ตอบรับแล้วแต่ไม่มีอาจารย์ที่ปรึกษาหรืออาจารย์นิเทศ', count: acceptedRows.filter((x) => x.r.advisor_id === null || x.r.supervisor_id === null).length },
         // พี่เลี้ยงสามสภาพของใบที่ตอบรับแล้ว — แยกกันขาด ไม่นับซ้ำ: ยังไม่ระบุ → รอยืนยัน → ยืนยันแล้วแต่ยังไม่เคยเข้า
         { key: 'no_mentor', label: 'ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง', count: acceptedRows.filter((x) => x.r.mentor_id === null).length },
-        { key: 'mentor_unconfirmed', label: 'ระบุพี่เลี้ยงแล้ว รอเจ้าหน้าที่ยืนยัน', count: acceptedRows.filter((x) => x.r.mentor_id !== null && !x.r.mentor_active).length },
+        { key: 'mentor_unconfirmed', label: 'ระบุพี่เลี้ยงแล้ว รออาจารย์นิเทศยืนยัน', count: acceptedRows.filter((x) => x.r.mentor_id !== null && !x.r.mentor_active).length },
         { key: 'mentor_never_logged_in', label: 'พี่เลี้ยงยังไม่เคยเข้าระบบด้วยลิงก์', count: acceptedRows.filter((x) => x.r.mentor_active && !x.r.mentor_logged_in).length },
       ];
 

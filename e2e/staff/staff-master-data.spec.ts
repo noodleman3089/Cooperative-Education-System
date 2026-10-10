@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { API_URL } from '../helpers/env';
 import { apiLoginAs } from '../helpers/auth';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, dbRow, dbValue } from '../helpers/db';
+import { addSecondFaculty, dbExec, dbRow, dbValue } from '../helpers/db';
 
 /**
  * ทะเบียนคณะและสาขาวิชา (spec-E ข้อ 10.1 · SB7)
@@ -119,9 +119,10 @@ test.describe('ทะเบียนคณะและสาขาวิชา (
 
   test('แก้ชื่อคณะและย้ายสาขาข้ามคณะได้ · ลง audit_log ทุกครั้ง', async ({ request }) => {
     await apiLoginAs(request, 'staff1');
-    // seed มีคณะจริงสองคณะ (2026-10-06) — ชื่อตัวแปรเดิมคงไว้: sci = คณะที่ถูกแก้ชื่อ · eng = คณะปลายทางของการย้ายสาขา
+    // seed มีคณะเดียว (2026-10-10 คณะศิลปศาสตร์ยุบเข้าคณะบริหารธุรกิจฯ) — หน้าจัดการยังรองรับหลายคณะ เทสต์สร้างคณะที่สองเอง
+    // ชื่อตัวแปรเดิมคงไว้: sci = คณะที่ถูกแก้ชื่อ · eng = คณะปลายทางของการย้ายสาขา
     const sci = await facultyIdOf('คณะบริหารธุรกิจและเทคโนโลยีสารสนเทศ');
-    const eng = await facultyIdOf('คณะศิลปศาสตร์');
+    const eng = (await addSecondFaculty()).faculty_id;
     const mm = await majorIdOf('MM01');
 
     const renamed = await request.put(`${API_URL}/master-data/faculties/${sci}`, {

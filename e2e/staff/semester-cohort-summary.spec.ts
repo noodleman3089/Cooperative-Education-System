@@ -212,7 +212,8 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     expect((await request.put(`${API_URL}/acceptances/${formId}/officer-approve`, { data: { action: 'accepted' } })).status()).toBe(200); // accepted
     await completeDispatchPrep();
     const dispatch = await request.post(`${API_URL}/intents/${formId}/dispatch-letter`, {
-      data: { document_no: 'อว 0656.10/ส่งตัว-c4', end_date: '2027-02-19' },
+      // ปฏิทินสหกิจของ seed ไม่ได้ตั้งวันเริ่ม → เจ้าหน้าที่กรอกวันเริ่มในกล่องออกหนังสือส่งตัว
+      data: { document_no: 'อว 0656.10/ส่งตัว-c4', end_date: '2027-02-19', start_date: '2026-11-02' },
     });
     expect(dispatch.status(), await dispatch.text()).toBe(200); // dispatch_issued
 

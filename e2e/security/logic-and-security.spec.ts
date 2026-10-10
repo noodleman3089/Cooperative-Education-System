@@ -98,7 +98,7 @@ test.describe('Cooperative Education System Logic & Security Audits', () => {
     });
     expect(approveRes.status()).toBe(200);
 
-    // การกดรับไม่เปิดบัญชีพี่เลี้ยงอีกแล้ว — ใบเป็น accepted แต่บัญชียังปิด (เปิดตอนเจ้าหน้าที่ยืนยันพี่เลี้ยงเท่านั้น)
+    // การกดรับไม่เปิดบัญชีพี่เลี้ยงอีกแล้ว — ใบเป็น accepted แต่บัญชียังปิด (เปิดตอนอาจารย์นิเทศยืนยันพี่เลี้ยงเท่านั้น)
     const mentorUserId = await withDb(async (db) => {
       const mentorUser = await db.query("SELECT user_id, is_active FROM users WHERE email = 'newmentor@test.com'");
       expect(mentorUser.rows[0].is_active).toBe(false);
@@ -108,11 +108,19 @@ test.describe('Cooperative Education System Logic & Security Audits', () => {
       return mentorUser.rows[0].user_id as number;
     });
 
-    // ยืนยันพี่เลี้ยง: ไม่ล็อกอิน = 401 · เจ้าหน้าที่ = บัญชีเปิด รหัสผ่านเดิมถูกล้าง (SEC-15)
+    // ยืนยันพี่เลี้ยง: ไม่ล็อกอิน = 401 · เจ้าหน้าที่ = 403 (ยืนยันไม่ได้แล้ว บัญชียังปิด)
+    // · อาจารย์นิเทศของนักศึกษา (seed: advisor1 ของ student2) = บัญชีเปิด รหัสผ่านเดิมถูกล้าง (SEC-15)
     const anonymous2 = await playwright.request.newContext();
     expect((await anonymous2.post(`${API_URL}/mentor-followup/${mentorUserId}/confirm`)).status()).toBe(401);
     await anonymous2.dispose();
 
+    expect((await request.post(`${API_URL}/mentor-followup/${mentorUserId}/confirm`)).status()).toBe(403);
+    await withDb(async (db) => {
+      const stillClosed = await db.query("SELECT is_active FROM users WHERE email = 'newmentor@test.com'");
+      expect(stillClosed.rows[0].is_active).toBe(false);
+    });
+
+    await apiLoginAs(request, 'advisor1');
     const confirmRes = await request.post(`${API_URL}/mentor-followup/${mentorUserId}/confirm`);
     expect(confirmRes.status(), await confirmRes.text()).toBe(200);
     await withDb(async (db) => {

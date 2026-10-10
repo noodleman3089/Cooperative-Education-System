@@ -134,9 +134,32 @@ export const SAMPLE_MENTOR = {
   department: 'QA',
 };
 
-/** เจ้าหน้าที่ยืนยันพี่เลี้ยง (ต้องล็อกอินก่อนเรียก) — คืน response ให้เทสต์ตัดสินเอง */
+/**
+ * ยืนยันพี่เลี้ยง (ต้องล็อกอินก่อนเรียก) — คืน response ให้เทสต์ตัดสินเอง
+ * ⛔ ผ่านเฉพาะอาจารย์นิเทศ (`supervisor_id`) ของนักศึกษาที่ระบุพี่เลี้ยงคนนี้ — seed ตั้ง advisor1 เป็นของ student2
+ *    เจ้าหน้าที่ยืนยันไม่ได้แล้ว (403)
+ */
 export function confirmMentor(request: APIRequestContext, mentorId: number) {
   return request.post(`${API_URL}/mentor-followup/${mentorId}/confirm`);
+}
+
+/**
+ * ตั้งวันเริ่มปฏิบัติงานในปฏิทินสหกิจของภาคที่เปิดอยู่ (กิจกรรม `coop_start` · ชนิด single)
+ *
+ * การตอบรับไม่รับวันเริ่มจากผู้ตอบแล้ว — ใบได้ `start_date` จากแถวนี้ตอนแบบตอบรับถูกส่ง (ไม่มีแถว = NULL)
+ * เทสต์ที่ต้องการวันเริ่มเฉพาะต้องเรียกตัวนี้ **ก่อน** ขั้นตอบรับ หรือให้เจ้าหน้าที่กรอกตอนออกหนังสือส่งตัว
+ */
+export async function setCoopStart(date: string): Promise<void> {
+  await dbExec(
+    `DELETE FROM coop_calendar_events
+      WHERE activity_key = 'coop_start'
+        AND semester_id = (SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1)`
+  );
+  await dbExec(
+    `INSERT INTO coop_calendar_events (semester_id, activity_key, date_kind, start_date, end_date)
+     SELECT semester_id, 'coop_start', 'single', $1, $1 FROM coop_semesters WHERE is_active = TRUE LIMIT 1`,
+    [date]
+  );
 }
 
 /**

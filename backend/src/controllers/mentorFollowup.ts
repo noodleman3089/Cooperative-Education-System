@@ -24,7 +24,7 @@ import { recordStageEvent } from '../utils/stageEvents';
  * คณะตามพี่เลี้ยง (Phase 2) — เห็นว่าพี่เลี้ยงคนไหนมีงานค้าง เตือนได้ และเจ้าหน้าที่แก้อีเมลได้
  *
  * ขอบเขตการมองเห็น (SEC-06 fail closed): staff ทั้งหมด · dept_head เฉพาะสาขาตัวเอง · advisor เฉพาะพี่เลี้ยงของนักศึกษาที่ดูแล
- * ⛔ ยืนยันพี่เลี้ยง/แก้อีเมล/ส่งลิงก์เปล่า = เจ้าหน้าที่เท่านั้น (route + ตรวจซ้ำที่นี่)
+ * ⛔ ยืนยันพี่เลี้ยง = อาจารย์นิเทศของนักศึกษาเท่านั้น (เจ้าหน้าที่ยืนยันไม่ได้) · แก้อีเมล/ส่งลิงก์เปล่า = เจ้าหน้าที่เท่านั้น (route + ตรวจซ้ำที่นี่)
  * ⛔ ปลายทางของเมลมาจากทะเบียน (`users.email`) เสมอ ไม่รับจากคำขอ ยกเว้น PUT /email ที่เป็นตัวแก้ทะเบียนเอง
  * ⛔ ทุก endpoint ไม่ส่งข้อมูลส่วนตัวของพี่เลี้ยงเกินที่ระบุ (ไม่มีเบอร์โทร)
  */
@@ -48,8 +48,12 @@ export class MentorFollowupController {
         return;
       }
       const scope = await MentorFollowupModel.resolveScope(req.user.userId, req.user.roles);
-      const mentors = await MentorFollowupModel.list(scope);
+      const mentors = await MentorFollowupModel.list(
+        scope,
+        req.user.roles.includes('advisor') ? req.user.userId : null
+      );
       res.status(200).json({
+        // แก้อีเมล · ส่งลิงก์เปล่า = เจ้าหน้าที่ · ยืนยันพี่เลี้ยงดูที่ `can_confirm` ของแต่ละแถว (อาจารย์นิเทศเท่านั้น)
         can_edit: req.user.roles.includes('staff'),
         mentors,
         // ใบที่ตอบรับแล้วแต่นักศึกษายังไม่ระบุพี่เลี้ยง (ขอบเขตเดียวกับ `mentors`)
@@ -166,9 +170,12 @@ export class MentorFollowupController {
   }
 
   /**
-   * เจ้าหน้าที่ยืนยันพี่เลี้ยงที่นักศึกษาระบุ — จุดเดียวที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบฉบับแรกถูกส่ง
-   * Route: POST /api/mentor-followup/:mentorId/confirm · เจ้าหน้าที่เท่านั้น
+   * อาจารย์นิเทศยืนยันพี่เลี้ยงที่นักศึกษาระบุ — จุดเดียวที่บัญชีพี่เลี้ยงถูกเปิดและลิงก์เข้าระบบฉบับแรกถูกส่ง
+   * Route: POST /api/mentor-followup/:mentorId/confirm · อาจารย์นิเทศของนักศึกษาเท่านั้น
    *
+   * ⛔ ผู้เรียกต้องเป็น `supervisor_id` ของนักศึกษาเจ้าของใบ `accepted` ที่ระบุพี่เลี้ยงคนนี้อย่างน้อยหนึ่งใบ — ตรวจหลังล็อกใบ
+   *    ในทรานแซกชันเดียวกับการยืนยัน · หาใบแบบนั้นไม่ได้ = 403 (SEC-06) · เจ้าหน้าที่ยืนยันไม่ได้ ไม่มีทางสำรอง
+   *    (เจ้าของสั่ง 2026-10-10: เจ้าหน้าที่ไม่รู้เรื่องฝั่งพี่เลี้ยง · อาจารย์นิเทศคือคนที่ติดต่อสถานประกอบการจริง)
    * ⛔ ก้อนนี้ย้ายมาจาก `AcceptanceController.approveByOfficer` (เดิมเปิดบัญชีตอนกดรับแบบตอบรับ) — ด่าน SEC-03/15 ต้องอยู่ครบ:
    *    ล็อกแถวบัญชี · ปฏิเสธเมื่อมีบทบาทอื่นหรือไม่มีแถว `mentors` · ไม่ตั้งรหัสผ่าน · อีเมลออกหลัง COMMIT เท่านั้น
    * ⛔ ด่านอยู่ระดับบัญชี ไม่ใช่ระดับใบ — บัญชีที่เปิดอยู่แล้ว = 409 (ไม่มีอะไรต้องยืนยัน · ต้องการส่งลิงก์ใช้ send-link)
@@ -181,7 +188,7 @@ export class MentorFollowupController {
         res.status(401).json({ message: 'Unauthorized.' });
         return;
       }
-      if (!req.user.roles.includes('staff')) {
+      if (!req.user.roles.includes('advisor')) {
         throw new AccessDeniedError('Forbidden. You do not have access to this resource.');
       }
       const mentorId = parseMentorId(req.params.mentorId);
@@ -195,15 +202,21 @@ export class MentorFollowupController {
       // ล็อกใบก่อนบัญชี — `setMentorWithTransaction` ล็อกใบเดียวกันก่อนอ่าน `is_active`
       // นักศึกษาจึงเปลี่ยนพี่เลี้ยงสวนกับการยืนยันไม่ได้
       const forms = await client.query(
-        `SELECT form_id FROM intent_forms
-          WHERE mentor_id = $1 AND status = 'accepted'
-          ORDER BY form_id FOR UPDATE`,
+        `SELECT i.form_id, s.supervisor_id
+           FROM intent_forms i
+           JOIN students s ON s.student_id = i.student_id
+          WHERE i.mentor_id = $1 AND i.status = 'accepted'
+          ORDER BY i.form_id FOR UPDATE OF i`,
         [mentorId]
       );
-      if ((forms.rowCount ?? 0) === 0) {
+      // SEC-06: ไม่มีใบที่ผู้เรียกเป็นอาจารย์นิเทศ = ปฏิเสธ (รวมกรณีไม่มีใบเลย — ไม่บอกว่าพี่เลี้ยงคนนี้มีอยู่หรือไม่)
+      const me = req.user.userId;
+      const supervised = forms.rows.some((r: { supervisor_id: number | null }) => r.supervisor_id === me);
+      if (!supervised) {
         await client.query('ROLLBACK');
-        res.status(409).json({
-          message: 'ไม่มีคำร้องที่ตอบรับแล้วซึ่งระบุพี่เลี้ยงคนนี้ — นักศึกษาอาจเปลี่ยนพี่เลี้ยงไปแล้ว กรุณาโหลดหน้าใหม่',
+        res.status(403).json({
+          message:
+            'ยืนยันพี่เลี้ยงได้เฉพาะอาจารย์นิเทศของนักศึกษาที่ระบุพี่เลี้ยงคนนี้ — หากนักศึกษาเพิ่งเปลี่ยนพี่เลี้ยง กรุณาโหลดหน้าใหม่',
         });
         return;
       }
@@ -234,7 +247,7 @@ export class MentorFollowupController {
       if (row.is_active === true) {
         await client.query('ROLLBACK');
         res.status(409).json({
-          message: 'บัญชีพี่เลี้ยงคนนี้เปิดใช้งานอยู่แล้ว ไม่มีอะไรต้องยืนยัน — หากต้องการส่งลิงก์อีกครั้ง ใช้ปุ่ม "ส่งลิงก์เข้าระบบใหม่"',
+          message: 'บัญชีพี่เลี้ยงคนนี้เปิดใช้งานอยู่แล้ว ไม่มีอะไรต้องยืนยัน — หากต้องการส่งลิงก์เข้าระบบอีกครั้ง กรุณาแจ้งเจ้าหน้าที่สหกิจศึกษา',
         });
         return;
       }
@@ -286,7 +299,7 @@ export class MentorFollowupController {
         await revokeMentorLoginLink(issued.tokenId);
         res.status(200).json({
           mentor_email_sent: false,
-          message: 'ยืนยันพี่เลี้ยงและเปิดใช้งานบัญชีแล้ว แต่ส่งอีเมลลิงก์เข้าสู่ระบบไม่สำเร็จ — กด "ส่งลิงก์เข้าระบบใหม่" เพื่อส่งอีกครั้ง',
+          message: 'ยืนยันพี่เลี้ยงและเปิดใช้งานบัญชีแล้ว แต่ส่งอีเมลลิงก์เข้าสู่ระบบไม่สำเร็จ — กรุณาแจ้งเจ้าหน้าที่สหกิจศึกษาให้ส่งลิงก์เข้าระบบใหม่',
         });
         return;
       }

@@ -4,7 +4,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import pool from '../../backend/src/config/database';
 import { hashPassword } from '../../backend/src/utils/password';
 import { API_URL } from '../helpers/env';
-import { withDb } from '../helpers/db';
+import { addSecondFaculty, withDb } from '../helpers/db';
 
 /**
  * หน้ากรอกข้อมูลครั้งแรกของนักศึกษา — **ชั้นที่ 1**
@@ -312,6 +312,8 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
 
   test('O4b: เลือกคณะก่อน แล้วเห็นเฉพาะสาขาของคณะนั้น · เปลี่ยนคณะแล้วสาขาที่เลือกไว้ถูกล้าง', async ({ page }) => {
     await seedTestData();
+    // seed มีคณะเดียว — สร้างคณะที่สองไว้ให้ช่องคณะมีอะไรให้สลับ
+    await addSecondFaculty();
     await arriveAsFirstTimeStudent(page);
     await page.goto('/onboarding/student');
 

@@ -223,12 +223,6 @@ export interface Mentor {
   phone: string;
 }
 
-// Sprint 4 Request Bodies
-
-export interface StudentAcceptPayload {
-  start_date: string; // YYYY-MM-DD
-}
-
 // Sprint 5 (System 2) Entities
 
 export interface Accommodation {
