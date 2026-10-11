@@ -3,6 +3,7 @@ import { ExternalLink } from 'lucide-react';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import ConfirmDialog from './ui/ConfirmDialog';
+import ConfirmSummary from './ui/ConfirmSummary';
 import AlertBanner from './ui/AlertBanner';
 import { Textarea } from './ui/Input';
 import { API_BASE_URL } from '../services/api';
@@ -192,16 +193,19 @@ const ReportOutlineReviewModal: React.FC<ReportOutlineReviewModalProps> = ({
         open={confirmingApprove}
         title="ยืนยันเห็นชอบโครงร่างรายงาน"
         message={
-          <div className="flex flex-col gap-1.5">
-            <p>
-              เห็นชอบโครงร่างรายงาน (สหกิจ 11) ของ{' '}
-              <strong>
-                {studentLabel} ({outline.student_code})
-              </strong>{' '}
-              และส่งต่อให้อาจารย์นิเทศ
-            </p>
-            <p>ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้</p>
-          </div>
+          <ConfirmSummary
+            lead="เห็นชอบโครงร่างรายงาน (สหกิจ 11) และส่งต่อให้อาจารย์นิเทศ"
+            rows={[
+              {
+                label: 'นักศึกษา',
+                value: `${studentLabel} (${outline.student_code || '—'})`,
+              },
+              ...(outline.company_name_th
+                ? [{ label: 'สถานประกอบการ', value: outline.company_name_th }]
+                : []),
+            ]}
+            lockNote="ส่งต่อแล้วท่านจะดึงกลับเองไม่ได้"
+          />
         }
         confirmLabel="ยืนยันส่งต่อ"
         cancelLabel="กลับไปอ่าน"

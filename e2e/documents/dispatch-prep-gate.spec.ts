@@ -317,7 +317,7 @@ test.describe('ขั้น 6 — ส่งสหกิจ 03 · 06 ก่อน
     // หน้าจอค้างข้อมูลเก่า (06 หายไประหว่างเปิดกล่อง) — ด่านจริงอยู่ที่เซิร์ฟเวอร์ และคำตอบต้องขึ้น **ใน** กล่อง
     await dbExec('DELETE FROM accommodations WHERE student_id = $1', [studentId]);
     await dialog.getByTestId('dispatch-submit').click();
-    await page.getByRole('button', { name: 'ออกเลขและส่งเข้าคิวคณบดี' }).click();
+    await page.getByTestId('dispatch-confirm').click();
     await expect(dialog.getByRole('alert')).toContainText('สหกิจ 06');
     expect(await sendLetterCount()).toBe(0);
     expect(

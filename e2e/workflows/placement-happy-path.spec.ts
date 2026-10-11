@@ -99,6 +99,9 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     // cannot be taken back, so the button alone no longer signs anything.
     await page.locator('button:has-text("ลงนามแบบกลุ่มที่เลือก")').click();
     await expect(page.locator('[role="dialog"]')).toContainText('ยกเลิกจากหน้านี้ไม่ได้');
+    await expect(page.locator('[role="dialog"] [data-level="3"]').getByTestId('confirm-effects')).toContainText(
+      'เจ้าหน้าที่แก้เลขที่หนังสือหรือดึงหนังสือกลับไม่ได้อีก'
+    );
     await page.locator('[role="dialog"] button:has-text("ลงนาม")').click();
 
     // ⛔ DocuSign ถูกถอดออกทั้งหมด 2026-08-26 — เหลือทางเดียวคือระบบวาดหนังสือ

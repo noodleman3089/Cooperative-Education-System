@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { Search, Check, AlertTriangle, RefreshCw, Download, Mail, Lock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import Button from '../../components/ui/Button';
 import PageSkeleton from '../../components/ui/Skeleton';
@@ -203,6 +204,11 @@ export const FinalProgressDashboard: React.FC = () => {
 
   const pendingCount = useMemo(
     () => students.filter((s) => !isStudentComplete(s)).length,
+    [students]
+  );
+  // ชุดเดียวกับที่ handleBatchNotify วนส่ง — อีเมลออกถึงพี่เลี้ยงเท่านั้น
+  const evalPendingStudents = useMemo(
+    () => students.filter((s) => !s.progressDetails.evaluation15Submitted || !s.progressDetails.evaluation16Submitted),
     [students]
   );
   const completeCount = useMemo(
@@ -706,7 +712,25 @@ export const FinalProgressDashboard: React.FC = () => {
       <ConfirmDialog
         open={notifyTarget !== null}
         title="ยืนยันการส่งอีเมลแจ้งเตือน"
-        message={`ส่งอีเมลแจ้งเตือนไปยังพี่เลี้ยงของ ${notifyTarget?.studentName ?? ''} ใช่หรือไม่? ระบบจะส่งอีเมลออกทันที และจะส่งซ้ำให้นักศึกษาคนนี้ไม่ได้อีกภายใน 24 ชั่วโมง`}
+        message={
+          notifyTarget ? (
+            <ConfirmSummary
+              lead="ส่งอีเมลเตือนถึงพี่เลี้ยงของนักศึกษาคนนี้"
+              rows={[
+                {
+                  label: 'นักศึกษา',
+                  value: `${notifyTarget.studentName} (${notifyTarget.studentCode})`,
+                },
+                ...(notifyTarget.companyName
+                  ? [{ label: 'สถานประกอบการ', value: notifyTarget.companyName }]
+                  : []),
+              ]}
+              lockNote="ระบบจะส่งอีเมลทันที และจะไม่สามารถส่งเตือนซ้ำให้นักศึกษาคนนี้ได้อีกภายใน 24 ชั่วโมง"
+            />
+          ) : (
+            ''
+          )
+        }
         confirmLabel="ยืนยัน ส่งอีเมล"
         busy={!!(notifyTarget && notifyingMap[notifyTarget.studentId])}
         onConfirm={handleNotifyMentor}
@@ -717,7 +741,19 @@ export const FinalProgressDashboard: React.FC = () => {
       <ConfirmDialog
         open={batchNotifyOpen}
         title="ยืนยันการส่งอีเมลเตือนผู้มีเอกสารค้าง"
-        message={`ต้องการส่งอีเมลแจ้งเตือนไปยังพี่เลี้ยงและนักศึกษาที่มีเอกสารค้างทั้งหมด ${pendingCount} รายการ ใช่หรือไม่? ระบบจะข้ามรายการที่เพิ่งส่งไปภายใน 24 ชั่วโมง`}
+        message={
+          <ConfirmSummary
+            lead="ส่งอีเมลเตือนถึงพี่เลี้ยงของนักศึกษาที่ผลประเมินยังไม่ครบ 2 ใบ"
+            rows={[
+              { label: 'นักศึกษาที่ผลประเมินยังไม่ครบ', value: `${evalPendingStudents.length} คน` },
+              {
+                label: 'เพิ่งเตือนไปใน 24 ชั่วโมง (ข้าม)',
+                value: `${evalPendingStudents.filter((s) => isCooldownActive(s.lastNotifiedAt)).length} คน`,
+              },
+            ]}
+            lockNote="อีเมลออกทันที เรียกคืนไม่ได้ · นักศึกษาไม่ได้รับอีเมลจากปุ่มนี้ · คนที่ยังไม่มีพี่เลี้ยงที่ยืนยันแล้วถูกข้าม"
+          />
+        }
         confirmLabel="ส่งอีเมลเตือนทั้งหมด"
         busy={batchNotifying}
         onConfirm={handleBatchNotify}
@@ -820,8 +856,13 @@ export const FinalProgressDashboard: React.FC = () => {
       {/* Confirmation for Reopen */}
       <ConfirmDialog
         open={reopenTarget !== null}
+        level={1}
         title="ยกเลิกการปิดใบที่ฝึกงาน"
-        message="คืนใบนี้เป็น ได้ที่ฝึกแล้ว ใช่หรือไม่"
+        message={
+          reopenTarget
+            ? `คืนใบที่ฝึกงานของ ${reopenTarget.studentName} (${reopenTarget.studentCode}) เป็น ได้ที่ฝึกแล้ว`
+            : ''
+        }
         confirmLabel="คืนใบนี้เป็น ได้ที่ฝึกแล้ว"
         cancelLabel="ยกเลิก"
         confirmTestId="reopen-accepted-confirm"

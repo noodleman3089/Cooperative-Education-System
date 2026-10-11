@@ -649,8 +649,9 @@ const CoopCalendarManager: React.FC = () => {
 
       <ConfirmDialog
         open={!!pendingDelete}
+        level={1}
         title="ยืนยันการลบกำหนดการ"
-        message={`ต้องการลบ "${pendingDelete?.label}" หรือไม่?`}
+        message={`ลบกำหนดการ "${pendingDelete?.label}"`}
         confirmLabel="ลบกำหนดการ"
         destructive
         onConfirm={handleConfirmDelete}

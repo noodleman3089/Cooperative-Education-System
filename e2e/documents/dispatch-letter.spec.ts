@@ -384,7 +384,7 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
 
     await dialog.getByTestId('dispatch-document-no').fill('อว 0656.10/หน้าจอ');
     await dialog.getByTestId('dispatch-submit').click();
-    await page.getByRole('button', { name: 'ออกเลขและส่งเข้าคิวคณบดี' }).click();
+    await page.getByTestId('dispatch-confirm').click();
 
     // ⚠️ **ห้ามยืนยันด้วย `/ออกหนังสือส่งตัวของ/` เฉยๆ** — ข้อความนั้นอยู่ใน
     //    ConfirmDialog เองด้วย ซึ่งขึ้นตั้งแต่ *ก่อน* ยิง API · เทสต์เดิมจึงผ่านบ้าง
@@ -897,7 +897,7 @@ test.describe('หนังสือส่งตัว — ถอนกลับ
     const confirm = page.getByRole('dialog').filter({ hasText: 'ดึงกลับได้จนกว่าคณบดีจะลงนาม' });
     await expect(confirm).toContainText('26');
     await expect(page.locator('body')).not.toContainText('ย้อนกลับไม่ได้');
-    await page.getByRole('button', { name: 'ออกเลขและส่งเข้าคิวคณบดี' }).click();
+    await page.getByTestId('dispatch-confirm').click();
     await expect(page.getByText(/ออกหนังสือส่งตัวของ.*แล้ว เลขที่/)).toBeVisible();
     await expect(page.getByTestId('staff-queue-dispatch')).toContainText('หนังสือส่งตัวรอออก · 0 คน');
 

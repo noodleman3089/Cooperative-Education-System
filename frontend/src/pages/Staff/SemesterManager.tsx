@@ -165,6 +165,15 @@ const SemesterManager: React.FC = () => {
               value: r.calendar_unset.length > 0 ? `${r.calendar_unset.length} กิจกรรม (ยังไม่ล็อกใคร)` : 'ตั้งครบแล้ว',
             },
           ]}
+          effects={
+            active
+              ? [
+                  `เปิดรับคำร้องใหม่สำหรับ ${r.label}`,
+                  `${active.label} จะหยุดรับคำร้องใหม่`,
+                  `ใบที่ค้างอยู่ใน ${active.label} ยังอยู่ในคิวตามเดิม`,
+                ]
+              : [`เปิดรับคำร้องใหม่สำหรับ ${r.label}`]
+          }
         />
       );
     }
@@ -180,6 +189,15 @@ const SemesterManager: React.FC = () => {
           { label: 'ตอบรับแล้วแต่ผลประเมินยังไม่ครบ 2 ใบ', value: `${r.evaluations_missing} คน` },
           { label: 'ตอบรับแล้วแต่เล่มรายงานยังไม่อนุมัติ', value: `${r.reports_pending} คน` },
         ]}
+        effects={
+          r.is_active
+            ? [
+                'ไม่มีภาคที่เปิดรับจนกว่าจะเปิดภาคใหม่',
+                'ใบที่ค้างอยู่ตามเดิม ไม่เปลี่ยนสถานะ ไม่ย้ายภาค',
+                'ใบที่ค้างยังขึ้นในคิวเจ้าหน้าที่',
+              ]
+            : ['ใบที่ค้างอยู่ตามเดิม ไม่เปลี่ยนสถานะ ไม่ย้ายภาค']
+        }
         lockNote="ตัวเลขเหล่านี้เป็นคำเตือน ไม่ได้ขวางการปิดภาค"
       />
     );
@@ -283,6 +301,7 @@ const SemesterManager: React.FC = () => {
       )}
 
       <ConfirmDialog
+        level={3}
         open={pending !== null}
         title={pending?.kind === 'activate' ? `เปิด${pending.row.label}` : `ปิด${pending?.row.label ?? ''}`}
         message={confirmBody()}

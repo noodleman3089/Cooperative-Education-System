@@ -110,8 +110,13 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     await panel.getByTestId('officer-document-no').fill('อว 0656.10/11');
     await panel.getByTestId('officer-approve-open').click();
     const confirm = page.getByRole('dialog').filter({ hasText: 'ยืนยันการรับคำร้องและออกเลขหนังสือ' });
-    await expect(confirm).toContainText('รับรองสถานประกอบการ');
-    await expect(confirm).toContainText('ส่งเข้าคิวคณบดี');
+    // กล่องระดับ 3: ผลของการกดอยู่ในรายการ "สิ่งที่จะเกิดขึ้น" ไม่ใช่ย่อหน้าเดียว
+    await expect(confirm.locator('[data-level="3"]')).toBeVisible();
+    const effects = confirm.getByTestId('confirm-effects');
+    await expect(effects).toContainText('สถานประกอบการนี้ถูกรับรองในทำเนียบ');
+    await expect(effects).toContainText('หนังสือเข้าคิวรอคณบดีลงนาม');
+    await expect(effects).toContainText('นักศึกษายกเลิกคำร้องเองไม่ได้อีก');
+    await expect(confirm.getByTestId('confirm-summary')).toContainText('อว 0656.10/11');
     await expect(confirm).not.toContainText('ทรานแซกชัน');
     await expect(confirm).not.toContainText('SEC-');
   });
@@ -151,7 +156,7 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     await expect(approve).toBeEnabled();
 
     await approve.click();
-    await page.getByRole('button', { name: 'ออกเลขและรับคำร้อง' }).click();
+    await page.getByRole('button', { name: 'รับคำร้องและออกเลข', exact: true }).click();
     await expect(page.getByText(/รับคำร้องของ .* แล้ว เลขที่หนังสือ อว 0656\.10\/22/)).toBeVisible();
     expect(
       await dbRow('SELECT status, officer_document_no FROM intent_forms WHERE form_id = $1', [formId])
@@ -191,7 +196,7 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     fs.renameSync(FONT, FONT_HIDDEN);
     try {
       await panel.getByTestId('officer-approve-open').click();
-      await page.getByRole('button', { name: 'ออกเลขและรับคำร้อง' }).click();
+      await page.getByRole('button', { name: 'รับคำร้องและออกเลข', exact: true }).click();
 
       const failed = panel.getByTestId('cover-letter-failed-banner');
       await expect(failed).toBeVisible();
@@ -321,7 +326,7 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     const panel = await openPanel(page, formId);
     await panel.getByTestId('officer-document-no').fill('อว 0656.10/55');
     await panel.getByTestId('officer-approve-open').click();
-    await page.getByRole('button', { name: 'ออกเลขและรับคำร้อง' }).click();
+    await page.getByRole('button', { name: 'รับคำร้องและออกเลข', exact: true }).click();
 
     const warn = page.getByRole('dialog').filter({ hasText: 'เลขที่หนังสือนี้ถูกใช้แล้ว' });
     await expect(warn).toContainText('อีกคน ทดสอบ');
@@ -334,7 +339,7 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     await expect(panel.getByTestId('officer-document-no')).toHaveValue('อว 0656.10/55');
 
     await panel.getByTestId('officer-approve-open').click();
-    await page.getByRole('button', { name: 'ออกเลขและรับคำร้อง' }).click();
+    await page.getByRole('button', { name: 'รับคำร้องและออกเลข', exact: true }).click();
     await warn.getByTestId('duplicate-no-confirm').click();
     await expect(page.getByText(/รับคำร้องของ .* แล้ว เลขที่หนังสือ อว 0656\.10\/55/)).toBeVisible();
     expect(await dbValue('SELECT status FROM intent_forms WHERE form_id = $1', [formId])).toBe(

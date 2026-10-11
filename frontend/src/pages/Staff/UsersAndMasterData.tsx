@@ -5,6 +5,7 @@ import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Modal, { ModalBody } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import { Input, Select } from '../../components/ui/Input';
@@ -134,6 +135,9 @@ export const UsersAndMasterData: React.FC = () => {
   >([]);
   const [pendingDeptHeadReplace, setPendingDeptHeadReplace] = useState<{
     message: string;
+    majorName?: string;
+    oldHead?: string;
+    newHead?: string;
   } | null>(null);
 
   const loadUsers = useCallback(async () => {
@@ -347,20 +351,31 @@ export const UsersAndMasterData: React.FC = () => {
             (p.roles || []).includes('dept_head')
         );
         const majorName = majors.find((m) => m.major_id === targetMajorId)?.major_name_th || 'นี้';
+        const newHeadName =
+          (targetPersonnel && [targetPersonnel.first_name, targetPersonnel.last_name].filter(Boolean).join(' ').trim()) ||
+          selectedUser.email;
         if (existingHead) {
           const headName =
             [existingHead.first_name, existingHead.last_name].filter(Boolean).join(' ').trim() ||
             existingHead.email;
           setPendingDeptHeadReplace({
             message: `สาขา ${majorName} มีหัวหน้าสาขาอยู่แล้ว คือ ${headName} — บันทึกแล้ว ${headName} จะไม่ใช่หัวหน้าสาขาอีกต่อไป (บัญชีและหน้าที่อาจารย์ยังอยู่)`,
+            majorName,
+            oldHead: headName,
+            newHead: newHeadName,
           });
           return;
         }
         // รายชื่อบุคลากร (GET /personnel ทั้งหมด) บอกชัดว่าสาขานี้ยังไม่มีหัวหน้า — ไม่มีใครถูกถอด บันทึกได้เลย
       } else {
         // ไม่รู้สาขาของบัญชีนี้ — ข้อมูลไม่พอจะบอกว่าใครจะถูกถอด จึงใช้ข้อความทั่วไป (สเปก G ข้อ 7)
+        const newHeadName =
+          (targetPersonnel && [targetPersonnel.first_name, targetPersonnel.last_name].filter(Boolean).join(' ').trim()) ||
+          selectedUser.email;
         setPendingDeptHeadReplace({
           message: 'ถ้าสาขานี้มีหัวหน้าสาขาอยู่ คนเดิมจะถูกถอดตำแหน่ง',
+          oldHead: 'คนเดิม (ถ้ามี)',
+          newHead: newHeadName,
         });
         return;
       }
@@ -1496,20 +1511,22 @@ export const UsersAndMasterData: React.FC = () => {
 
       <ConfirmDialog
         open={pendingDeleteMajor !== null}
+        level={1}
         title="ยืนยันการลบสาขาวิชา"
         message={
           pendingDeleteMajor ? (
-            <span className="block space-y-2">
-              <span className="block">
-                ต้องการลบสาขา “{pendingDeleteMajor.major_name_th}” ({pendingDeleteMajor.major_code})
-                ออกจากทะเบียนใช่หรือไม่? สาขานี้จะหายจากตัวเลือกในหน้าสมัครและหน้าตั้งค่าทั้งหมดทันที
-              </span>
-              {dialogError && (
+            dialogError ? (
+              <span className="block space-y-2">
+                <span className="block">
+                  ลบสาขา “{pendingDeleteMajor.major_name_th}” ({pendingDeleteMajor.major_code}) ออกจากทะเบียน
+                </span>
                 <span className="block rounded-xl border border-red-200 bg-red-50 p-2.5 text-red-800 dark:border-red-800 dark:bg-red-950/30 dark:text-red-200">
                   {dialogError}
                 </span>
-              )}
-            </span>
+              </span>
+            ) : (
+              `ลบสาขา “${pendingDeleteMajor.major_name_th}” (${pendingDeleteMajor.major_code}) ออกจากทะเบียน`
+            )
           ) : (
             ''
           )
@@ -1750,8 +1767,9 @@ export const UsersAndMasterData: React.FC = () => {
       {/* ลบรหัสบุคลากรตั้งต้น — ลบแล้วเจ้าของรหัสยืนยันตัวตนผ่าน Google ไม่ได้อีก */}
       <ConfirmDialog
         open={pendingDeletePreseed !== null}
+        level={1}
         title="ลบรหัสบุคลากรตั้งต้น"
-        message={`ลบรหัส ${pendingDeletePreseed?.employee_code ?? ''} (${pendingDeletePreseed?.first_name ?? ''} ${pendingDeletePreseed?.last_name ?? ''}) ออกจากรายชื่อ? เจ้าของรหัสนี้จะยืนยันสิทธิ์ด้วย Google ไม่ได้อีกจนกว่าจะเพิ่มกลับเข้ามาใหม่`}
+        message={`ลบรหัส ${pendingDeletePreseed?.employee_code ?? ''} (${pendingDeletePreseed?.first_name ?? ''} ${pendingDeletePreseed?.last_name ?? ''}) ออกจากรายชื่อ`}
         confirmLabel="ลบรหัสนี้"
         confirmTestId="preseed-delete-confirm"
         destructive
@@ -1764,7 +1782,21 @@ export const UsersAndMasterData: React.FC = () => {
       <ConfirmDialog
         open={pendingDeptHeadReplace !== null}
         title="ยืนยันการเปลี่ยนหัวหน้าสาขาวิชา"
-        message={pendingDeptHeadReplace?.message || ''}
+        message={
+          pendingDeptHeadReplace ? (
+            <ConfirmSummary
+              lead={pendingDeptHeadReplace.message}
+              rows={[
+                { label: 'สาขาวิชา', value: pendingDeptHeadReplace.majorName || 'สาขาวิชาที่เลือก' },
+                { label: 'หัวหน้าสาขาคนเดิม', value: pendingDeptHeadReplace.oldHead || '—' },
+                { label: 'หัวหน้าสาขาคนใหม่', value: pendingDeptHeadReplace.newHead || '—' },
+              ]}
+              lockNote="คนที่ถูกถอดยังมีบัญชีและหน้าที่อาจารย์ตามเดิม · ตั้งกลับได้ที่หน้านี้"
+            />
+          ) : (
+            ''
+          )
+        }
         confirmLabel="ยืนยันและบันทึก"
         confirmTestId="user-dept-head-replace-confirm"
         busy={isSubmittingUser}

@@ -8,6 +8,7 @@ import { CheckCircle2, AlertCircle, Eye, ExternalLink, X, FileText } from 'lucid
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import ReasonModal from '../../components/ui/ReasonModal';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -253,20 +254,8 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
   }, [pendingDocs]);
 
   // Selected docs for ConfirmDialog details
-  const selectedDocsDetailText = useMemo(() => {
-    const selected = pendingDocs.filter((d) => selectedDocIds.includes(d.doc_id));
-    if (selected.length === 0) return '';
-    const maxShow = 5;
-    const shown = selected.slice(0, maxShow).map((d) => {
-      const num = d.document_number || `#DOC-${d.doc_id}`;
-      const name = docStudentName(d);
-      return `${num} (${name})`;
-    });
-
-    if (selected.length > maxShow) {
-      return `${shown.join(' · ')} และอีก ${selected.length - maxShow} ฉบับ`;
-    }
-    return shown.join(' · ');
+  const selectedDocsForSigning = useMemo(() => {
+    return pendingDocs.filter((d) => selectedDocIds.includes(d.doc_id));
   }, [pendingDocs, selectedDocIds]);
 
   if (loading) {
@@ -713,9 +702,32 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
 
       {/* ══ ConfirmDialog สำหรับการลงนามแบบกลุ่ม ══ */}
       <ConfirmDialog
+        level={3}
         open={confirmSignOpen}
         title="ยืนยันการลงนามเอกสารราชการ"
-        message={`ลงนามเอกสาร ${selectedDocIds.length} ฉบับด้วยลายมือชื่อของท่าน: ${selectedDocsDetailText} — ระบบจะพิมพ์ชื่อ "${signerPrintedName}" ตำแหน่ง "${signerPrintedPosition}" ใต้ลายมือชื่อ ประทับลายเซ็นลงบนไฟล์ PDF และแจ้งนักศึกษาให้มารับหนังสือ การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้`}
+        message={
+          <ConfirmSummary
+            lead={`กำลังจะลงนามเอกสารราชการจำนวน ${selectedDocIds.length} ฉบับด้วยลายมือชื่อดิจิทัลของท่าน`}
+            rows={[
+              ...selectedDocsForSigning.slice(0, 10).map((d) => ({
+                label: d.document_number || `#DOC-${d.doc_id}`,
+                value: `${getDocTypeLabel(d.type)} · ${docStudentName(d)}`,
+              })),
+              ...(selectedDocsForSigning.length > 10
+                ? [{ label: 'เอกสารเพิ่มเติม', value: `และอีก ${selectedDocsForSigning.length - 10} ฉบับ` }]
+                : []),
+              {
+                label: 'ผู้ลงนาม',
+                value: `${signerPrintedName} · ${signerPrintedPosition}`,
+              },
+            ]}
+            effects={[
+              'นักศึกษาดาวน์โหลดหนังสือได้ทันที',
+              'เจ้าหน้าที่แก้เลขที่หนังสือหรือดึงหนังสือกลับไม่ได้อีก',
+            ]}
+            lockNote="การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้ · ชื่อและตำแหน่งผู้ลงนามข้างต้นถูกพิมพ์ใต้ลายมือชื่อ"
+          />
+        }
         confirmLabel={`ลงนาม ${selectedDocIds.length} ฉบับ`}
         busy={signingInProgress}
         onConfirm={handleBatchSign}

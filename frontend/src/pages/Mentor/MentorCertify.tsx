@@ -7,6 +7,7 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import {
@@ -1513,23 +1514,29 @@ const MentorCertify: React.FC = () => {
         open={pendingConfirm !== null}
         title={pendingConfirm === 'plan' ? 'ยืนยันลงนามรับรองแผนปฏิบัติงาน' : 'ยืนยันการรับรองบันทึก'}
         message={
-          <div className="flex flex-col gap-1.5">
-            <p>
-              {pendingConfirm === 'plan' && 'ลงนามรับรองแผนปฏิบัติงาน (สหกิจ 07) ของ '}
-              {pendingConfirm === 'single' && (
-                <>
-                  รับรอง <strong>{currentLog?.week_or_month_label}</strong> ของ{' '}
-                </>
-              )}
-              {pendingConfirm === 'batch' && (
-                <>
-                  รับรองบันทึกที่เลือกไว้ <strong>{selectedBatchIds.length} ใบ</strong> ของ{' '}
-                </>
-              )}
-              <strong>{selectedStudent?.full_name}</strong>
-            </p>
-            <p>ยืนยันแล้วท่านจะยกเลิกเองไม่ได้ กรุณาตรวจว่าอ่านเนื้อหาครบแล้ว</p>
-          </div>
+          <ConfirmSummary
+            lead={
+              pendingConfirm === 'plan'
+                ? 'ลงนามรับรองแผนปฏิบัติงาน (สหกิจ 07) ของนักศึกษา'
+                : 'รับรองบันทึกการปฏิบัติงานของนักศึกษา'
+            }
+            rows={[
+              {
+                label: 'นักศึกษา',
+                value: selectedStudent ? `${selectedStudent.full_name} (${selectedStudent.student_code})` : '—',
+              },
+              {
+                label: 'สิ่งที่รับรอง',
+                value:
+                  pendingConfirm === 'plan'
+                    ? 'แผนปฏิบัติงาน (สหกิจ 07)'
+                    : pendingConfirm === 'single'
+                    ? currentLog?.week_or_month_label || 'บันทึกการปฏิบัติงาน'
+                    : `บันทึกที่เลือก ${selectedBatchIds.length} รายการ`,
+              },
+            ]}
+            lockNote="ยืนยันแล้วท่านจะยกเลิกเองไม่ได้ กรุณาตรวจว่าอ่านเนื้อหาครบแล้ว"
+          />
         }
         confirmLabel={pendingConfirm === 'plan' ? 'ยืนยันลงนาม' : 'ยืนยันรับรอง'}
         cancelLabel="กลับไปอ่าน"

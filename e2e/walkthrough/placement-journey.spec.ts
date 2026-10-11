@@ -134,7 +134,7 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       await expect(approveDialog).toBeVisible();
       await walk.step(page, 'เจ้าหน้าที่', 'กด "รับคำร้อง" — กล่องยืนยัน (รับรองสถานประกอบการ + ออกหนังสือเข้าคิวคณบดี)');
 
-      await approveDialog.getByRole('button', { name: 'ออกเลขและรับคำร้อง' }).click();
+      await approveDialog.getByRole('button', { name: 'รับคำร้องและออกเลข', exact: true }).click();
       await expect(page.getByText(/รับคำร้องของ .* แล้ว เลขที่หนังสือ/)).toBeVisible();
       await walk.step(page, 'เจ้าหน้าที่', 'ยืนยันแล้ว — ระบบแจ้งว่ารับคำร้องและออกเลขที่หนังสือแล้ว');
       await logout(page);

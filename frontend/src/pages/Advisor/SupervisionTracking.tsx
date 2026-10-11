@@ -1138,36 +1138,58 @@ const SupervisionTracking: React.FC = () => {
       )}
 
       {/* Confirm Dialogs for accepting reschedule and bypass */}
-      <ConfirmDialog
-        open={acceptingRescheduleId !== null}
-        title="ยืนยันการยอมรับวันนัดหมายใหม่"
-        message="ยอมรับวันและเวลาที่พี่เลี้ยงเสนอมาใช่หรือไม่? วันและเวลานัดหมายเดิมจะถูกแทนที่ และเวลานัดของนักศึกษาจะถูกปรับตามไปด้วย"
-        confirmLabel="ยืนยัน ใช้วันใหม่"
-        busy={confirmBusy}
-        onConfirm={handleAcceptReschedule}
-        onCancel={() => setAcceptingRescheduleId(null)}
-      />
+      {(() => {
+        const acceptingAppt = appointments.find((a) => a.appointment_id === acceptingRescheduleId);
+        const acceptingStudent = acceptingAppt?.first_name ? `${acceptingAppt.first_name} ${acceptingAppt.last_name || ''}`.trim() : '';
+        const bypassingAppt = appointments.find((a) => a.appointment_id === bypassingId);
+        const bypassingStudent = bypassingAppt?.first_name ? `${bypassingAppt.first_name} ${bypassingAppt.last_name || ''}`.trim() : '';
 
-      <ConfirmDialog
-        open={bypassingId !== null}
-        title="ยืนยันการตกลงนัดหมายนอกรอบ"
-        message="ยืนยันว่าได้ตกลงวันและเวลานิเทศกับสถานประกอบการนอกระบบเรียบร้อยแล้ว? ระบบจะข้ามขั้นตอนการส่งอีเมลนัดหมายให้พี่เลี้ยง"
-        confirmLabel="ยืนยัน ตกลงนอกรอบแล้ว"
-        busy={confirmBusy}
-        onConfirm={handleBypass}
-        onCancel={() => setBypassingId(null)}
-      />
+        return (
+          <>
+            <ConfirmDialog
+              open={acceptingRescheduleId !== null}
+              level={1}
+              title="ยืนยันการยอมรับวันนัดหมายใหม่"
+              message={
+                acceptingStudent
+                  ? `ยอมรับวันและเวลาใหม่ที่พี่เลี้ยงของ ${acceptingStudent} เสนอมา`
+                  : 'ยอมรับวันและเวลาใหม่ที่พี่เลี้ยงเสนอมา'
+              }
+              confirmLabel="ยืนยัน ใช้วันใหม่"
+              busy={confirmBusy}
+              onConfirm={handleAcceptReschedule}
+              onCancel={() => setAcceptingRescheduleId(null)}
+            />
 
-      <ConfirmDialog
-        open={deletingAppointment !== null}
-        title="ยืนยันการลบร่างนัดหมายนิเทศ"
-        message={`ต้องการลบร่างนัดหมายนิเทศครั้งที่ ${deletingAppointment?.visitNumber} ของ ${deletingAppointment?.studentName} ใช่หรือไม่?`}
-        confirmLabel="ลบร่างนัด"
-        destructive
-        busy={confirmBusy}
-        onConfirm={handleDeleteDraft}
-        onCancel={() => setDeletingAppointment(null)}
-      />
+            <ConfirmDialog
+              open={bypassingId !== null}
+              level={1}
+              title="ยืนยันการตกลงนัดหมายนอกรอบ"
+              message={
+                bypassingStudent
+                  ? `บันทึกว่าได้ตกลงวันและเวลานิเทศของ ${bypassingStudent} นอกระบบเรียบร้อยแล้ว`
+                  : 'บันทึกว่าได้ตกลงวันและเวลานิเทศนอกระบบเรียบร้อยแล้ว'
+              }
+              confirmLabel="ยืนยัน ตกลงนอกรอบแล้ว"
+              busy={confirmBusy}
+              onConfirm={handleBypass}
+              onCancel={() => setBypassingId(null)}
+            />
+
+            <ConfirmDialog
+              open={deletingAppointment !== null}
+              level={1}
+              title="ยืนยันการลบร่างนัดหมายนิเทศ"
+              message={`ลบร่างนัดหมายนิเทศครั้งที่ ${deletingAppointment?.visitNumber} ของ ${deletingAppointment?.studentName}`}
+              confirmLabel="ลบร่างนัด"
+              destructive
+              busy={confirmBusy}
+              onConfirm={handleDeleteDraft}
+              onCancel={() => setDeletingAppointment(null)}
+            />
+          </>
+        );
+      })()}
     </div>
   );
 };

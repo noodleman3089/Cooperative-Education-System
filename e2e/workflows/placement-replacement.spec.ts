@@ -788,7 +788,9 @@ test.describe('ขั้น 9 — เจ้าหน้าที่ปิดใ�
     await goToMenu(page, 'final_progress');
     await expect(page.getByText('เจ้าหน้าที่ปิดใบแล้ว (เปลี่ยนสถานประกอบการ)')).toBeVisible();
     await page.getByTestId(`reopen-accepted-${code}`).click();
-    await expect(page.getByRole('dialog')).toContainText('คืนใบนี้เป็น ได้ที่ฝึกแล้ว ใช่หรือไม่');
+    // กล่องระดับ 1 (ถามสั้น) — ต้องบอกว่ากำลังคืนใบของใคร
+    const reopenBody = page.getByRole('dialog').locator('[data-level="1"]');
+    await expect(reopenBody).toContainText(`(${code}) เป็น ได้ที่ฝึกแล้ว`);
     await page.getByTestId('reopen-accepted-confirm').click();
 
     await expect(page.getByText('ยกเลิกการปิดแล้ว ใบกลับเป็น "ได้ที่ฝึกแล้ว" ตามเดิม')).toBeVisible();

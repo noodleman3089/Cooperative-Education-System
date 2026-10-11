@@ -19,6 +19,7 @@ import EmptyState from '../../components/ui/EmptyState';
 import CalendarGate from '../../components/ui/CalendarGate';
 import { useCalendarGate } from '../../components/ui/useCalendarGate';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLogItem {
@@ -1372,7 +1373,23 @@ const WeeklyLog: React.FC = () => {
       <ConfirmDialog
         open={pendingDailyAction !== null}
         title="สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว"
-        message="การบันทึกครั้งนี้จะล้างการรับรองของพี่เลี้ยงทิ้งทั้งสัปดาห์ และต้องรอให้พี่เลี้ยงรับรองใหม่ ยืนยันที่จะบันทึกหรือไม่?"
+        message={
+          <ConfirmSummary
+            lead="การบันทึกครั้งนี้จะล้างการรับรองของพี่เลี้ยงทิ้งทั้งสัปดาห์ และต้องรอให้พี่เลี้ยงรับรองใหม่"
+            rows={[
+              { label: 'สัปดาห์ที่', value: `สัปดาห์ที่ ${selectedWeek}` },
+              {
+                label: 'พี่เลี้ยงที่รับรอง',
+                value:
+                  currentDailyWeek?.certified_by_name ||
+                  dailyIntent?.mentor_name ||
+                  intent?.mentor_name ||
+                  'พี่เลี้ยง',
+              },
+            ]}
+            lockNote="เมื่อบันทึกแล้ว สถานะการรับรองจะถูกยกเลิก และต้องส่งให้พี่เลี้ยงตรวจรับรองใหม่อีกครั้ง"
+          />
+        }
         confirmLabel="ยืนยันบันทึก"
         confirmTestId="daily-confirm-overwrite"
         busy={submitting}

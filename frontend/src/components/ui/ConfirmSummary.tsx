@@ -13,6 +13,8 @@ interface ConfirmSummaryProps {
   groups?: { title?: string; rows: ConfirmSummaryRow[] }[];
   /** ทางลัดเมื่อมีกลุ่มเดียว */
   rows?: ConfirmSummaryRow[];
+  /** รายการสิ่งที่จะเกิดขึ้น (เฉพาะระดับ 3) */
+  effects?: string[];
   /** แถบเหลือง: อะไรแก้ไม่ได้ และถ้าผิดต้องทำอย่างไร */
   lockNote?: React.ReactNode;
 }
@@ -23,7 +25,7 @@ interface ConfirmSummaryProps {
  * ⛔ แสดง **ค่าที่กำลังจะส่งจริง** ไม่ใช่ "แน่ใจไหม" ลอย ๆ — กล่องที่ไม่มีข้อมูลคนกดผ่านโดยไม่อ่าน
  * กล่องที่มีรหัสนักศึกษาของตัวเองอยู่ตรงหน้า คนเห็นตัวเลขผิดก่อนกด
  */
-const ConfirmSummary: React.FC<ConfirmSummaryProps> = ({ lead, groups, rows, lockNote }) => {
+const ConfirmSummary: React.FC<ConfirmSummaryProps> = ({ lead, groups, rows, effects, lockNote }) => {
   const allGroups = groups ?? (rows ? [{ rows }] : []);
   return (
     <div className="space-y-3" data-testid="confirm-summary">
@@ -43,6 +45,18 @@ const ConfirmSummary: React.FC<ConfirmSummaryProps> = ({ lead, groups, rows, loc
               ))}
             </div>
           ))}
+        </div>
+      )}
+      {effects && effects.length > 0 && (
+        <div data-testid="confirm-effects" className="space-y-1 text-xs">
+          <p className="font-bold text-gray-700 dark:text-gray-300">สิ่งที่จะเกิดขึ้น</p>
+          <ul className="list-disc list-inside space-y-1 text-gray-600 dark:text-gray-400">
+            {effects.map((effect, idx) => (
+              <li key={idx} className="leading-relaxed">
+                {effect}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {lockNote && (

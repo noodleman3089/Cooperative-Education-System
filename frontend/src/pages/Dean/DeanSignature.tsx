@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -494,9 +495,20 @@ const DeanSignature: React.FC<DeanSignatureProps> = ({ onNavigate }) => {
       </div>
 
       <ConfirmDialog
+        level={3}
         open={confirmReplaceSigOpen}
         title="แทนที่ลายมือชื่อเดิม"
-        message="ลายมือชื่อที่บันทึกไว้เดิมจะถูกลบออกจากระบบ และใช้ลายมือชื่อใหม่แทนในการประทับเอกสารราชการทุกฉบับนับจากนี้ ภาพเดิมถูกลบจากเซิร์ฟเวอร์ · หนังสือที่ลงนามไปแล้วไม่เปลี่ยน ยืนยันหรือไม่?"
+        message={
+          <ConfirmSummary
+            lead="คุณกำลังจะบันทึกลายมือชื่อใหม่เพื่อแทนที่ลายมือชื่อเดิม"
+            effects={[
+              'ลายมือชื่อเดิมถูกลบออกจากระบบ',
+              'หนังสือที่ลงนามไปแล้วไม่เปลี่ยน',
+              'หนังสือฉบับต่อไปใช้ลายมือชื่อใหม่',
+            ]}
+            lockNote="ภาพลายมือชื่อเดิมจะถูกลบออกจากเซิร์ฟเวอร์ทันทีและไม่สามารถกู้คืนได้"
+          />
+        }
         confirmLabel="แทนที่ลายมือชื่อ"
         destructive
         busy={isSavingSig}

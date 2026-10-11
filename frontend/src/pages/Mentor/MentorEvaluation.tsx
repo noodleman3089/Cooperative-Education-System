@@ -7,6 +7,7 @@ import { User, ClipboardList, FileText, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
 import type { RubricItem } from '../../config/evaluationRubric';
@@ -730,7 +731,20 @@ const MentorEvaluation: React.FC = () => {
         <ConfirmDialog
           open={confirmingSubmit}
           title="ยืนยันส่งผลการประเมิน"
-          message={`ส่ง${meta.title} ของ ${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code}) คะแนน ${total}/${meta.maxTotal} ใช่หรือไม่? ส่งแล้วแก้ได้โดยกรอกใหม่ทั้งใบ`}
+          message={
+            <ConfirmSummary
+              lead="ส่งผลการประเมินไปยังระบบ"
+              rows={[
+                {
+                  label: 'นักศึกษา',
+                  value: `${selectedStudent.first_name} ${selectedStudent.last_name} (${selectedStudent.student_code})`,
+                },
+                { label: 'แบบประเมิน', value: meta.title },
+                { label: 'คะแนนรวม / เต็ม', value: `${total} / ${meta.maxTotal} คะแนน` },
+              ]}
+              lockNote="ส่งแล้วสามารถแก้ไขได้โดยการกรอกแบบประเมินใหม่ทั้งใบ"
+            />
+          }
           confirmLabel="ยืนยันส่งคะแนน"
           busy={submitting}
           onConfirm={submitEvaluation}

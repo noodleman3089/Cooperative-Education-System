@@ -672,10 +672,11 @@ const MentorFollowup: React.FC = () => {
 
       <ConfirmDialog
         open={remindTarget !== null}
+        level={1}
         title="ยืนยันการเตือนพี่เลี้ยง"
         message={
           remindTarget
-            ? `ระบบจะส่งอีเมลสรุปงานค้างพร้อมลิงก์เข้าระบบถึง ${remindTarget.name} (${remindTarget.email}) ทันที และจะเตือนคนเดิมซ้ำไม่ได้อีกภายใน 24 ชั่วโมง`
+            ? `ส่งอีเมลเตือนงานค้างถึงพี่เลี้ยง ${remindTarget.name} (${remindTarget.email}) เตือนคนเดิมซ้ำได้อีกครั้งหลัง 24 ชั่วโมง`
             : ''
         }
         confirmLabel="ยืนยัน ส่งอีเมลเตือน"
@@ -687,10 +688,11 @@ const MentorFollowup: React.FC = () => {
 
       <ConfirmDialog
         open={linkTarget !== null}
+        level={1}
         title="ยืนยันการส่งลิงก์เข้าระบบใหม่"
         message={
           linkTarget
-            ? `ระบบจะส่งอีเมลลิงก์เข้าระบบใหม่ถึง ${linkTarget.name} (${linkTarget.email}) ทันที ลิงก์ที่เคยส่งไปก่อนหน้านี้จะใช้ไม่ได้อีก`
+            ? `ส่งลิงก์เข้าระบบใหม่ถึง ${linkTarget.name} (${linkTarget.email})`
             : ''
         }
         confirmLabel="ยืนยัน ส่งลิงก์"

@@ -16,6 +16,12 @@ interface ConfirmDialogProps {
   /** Red confirm button, for deletions and anything that cannot be undone. */
   destructive?: boolean;
   busy?: boolean;
+  /**
+   * 1 = ถามสั้น (sm, ไม่มีไอคอน)
+   * 2 = สรุปก่อนส่ง (md, มีไอคอน AlertTriangle) — ค่าตั้งต้น
+   * 3 = เฉพาะงาน (lg, ไม่มีไอคอน, เต็มความกว้าง)
+   */
+  level?: 1 | 2 | 3;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -40,26 +46,39 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelTestId,
   destructive = false,
   busy = false,
+  level = 2,
   onConfirm,
   onCancel,
 }) => {
   if (!open) return null;
 
+  const modalSize = level === 1 ? 'sm' : level === 3 ? 'lg' : 'md';
+
   return (
-    <Modal onClose={onCancel} size="md" title={title}>
+    <Modal onClose={onCancel} size={modalSize} title={title}>
       <ModalBody>
-        <div className="flex items-start gap-3">
-          <div
-            className={`shrink-0 rounded-full p-2 ${
-              destructive
-                ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400'
-                : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-            }`}
-          >
-            <AlertTriangle className="h-5 w-5" />
+        {level === 1 ? (
+          <div data-level={1} className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
+            {message}
           </div>
-          <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{message}</div>
-        </div>
+        ) : level === 3 ? (
+          <div data-level={3} className="w-full text-sm text-gray-600 dark:text-gray-300 leading-relaxed">
+            {message}
+          </div>
+        ) : (
+          <div data-level={2} className="flex items-start gap-3">
+            <div
+              className={`shrink-0 rounded-full p-2 ${
+                destructive
+                  ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                  : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+              }`}
+            >
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="text-sm text-gray-600 dark:text-gray-300 leading-relaxed">{message}</div>
+          </div>
+        )}
       </ModalBody>
 
       <ModalFooter>

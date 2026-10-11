@@ -15,6 +15,7 @@ import {
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import { Input } from '../../components/ui/Input';
 import PageSkeleton from '../../components/ui/Skeleton';
@@ -775,13 +776,30 @@ const CompanyDirectory: React.FC = () => {
         open={verifyTarget !== null}
         title={verifyTarget?.is_verified ? 'ยกเลิกการรับรองสถานประกอบการ' : 'รับรองสถานประกอบการ'}
         message={
-          verifyTarget?.is_verified
-            ? `นักศึกษาจะไม่เห็น ${verifyTarget?.name_th} ในทำเนียบอีก และจะออกหนังสือราชการถึงที่นี่ไม่ได้จนกว่าจะรับรองใหม่ · เอกสารที่ออกไปแล้วไม่ได้รับผลกระทบ`
-            : `นักศึกษาจะเห็น ${verifyTarget?.name_th ?? ''} ในทำเนียบและเลือกเป็นที่ฝึกงานได้ และเจ้าหน้าที่จะออกหนังสือราชการถึงที่นี่ได้${
-                verifyTarget && contactIsIncomplete(verifyTarget)
-                  ? ' · หมายเหตุ: ข้อมูลผู้ติดต่อยังไม่ครบ หนังสือที่ออกจะไม่มีชื่อผู้รับที่ถูกต้อง'
-                  : ''
-              }`
+          verifyTarget ? (
+            <ConfirmSummary
+              lead={
+                verifyTarget.is_verified
+                  ? 'ยกเลิกการรับรองสถานประกอบการนี้ในทำเนียบ'
+                  : 'รับรองสถานประกอบการนี้เข้าสู่ทำเนียบ'
+              }
+              rows={[
+                { label: 'ชื่อสถานประกอบการ', value: verifyTarget.name_th },
+                { label: 'จังหวัด', value: verifyTarget.province || '—' },
+              ]}
+              lockNote={
+                verifyTarget.is_verified
+                  ? 'นักศึกษาจะไม่เห็นในทำเนียบอีก และจะออกหนังสือราชการถึงที่นี่ไม่ได้จนกว่าจะรับรองใหม่ · เอกสารที่ออกไปแล้วไม่ได้รับผลกระทบ'
+                  : `นักศึกษาจะเห็นในทำเนียบและเลือกเป็นที่ฝึกงานได้ และเจ้าหน้าที่จะออกหนังสือราชการถึงที่นี่ได้${
+                      contactIsIncomplete(verifyTarget)
+                        ? ' · หมายเหตุ: ข้อมูลผู้ติดต่อยังไม่ครบ หนังสือที่ออกจะไม่มีชื่อผู้รับที่ถูกต้อง'
+                        : ''
+                    }`
+              }
+            />
+          ) : (
+            ''
+          )
         }
         confirmLabel={verifyTarget?.is_verified ? 'ยืนยัน ยกเลิกการรับรอง' : 'ยืนยัน รับรอง'}
         destructive={!!verifyTarget?.is_verified}
@@ -793,34 +811,33 @@ const CompanyDirectory: React.FC = () => {
       {/* Level 3 ConfirmDialog for Delete */}
       <ConfirmDialog
         open={deleteTarget !== null}
+        level={3}
         title={`ลบ “${deleteTarget?.name_th ?? ''}” ออกจากทำเนียบ`}
         confirmTestId="company-delete-confirm"
         message={
           isDeleteBlocked ? (
-            <div className="space-y-2">
-              <p className="text-red-700 dark:text-red-400 font-bold">
-                ลบไม่ได้ เพราะมีข้อมูลผูกอยู่:
-              </p>
-              <p className="text-xs text-gray-700 dark:text-gray-300">
-                สถานประกอบการนี้มีใบแจ้งความจำนง/นักศึกษาผูกอยู่ {deleteTargetUsage?.count} รายการ
-              </p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                ระบบไม่อนุญาตให้ลบแถวที่มีประวัติหรือรายการใช้งานค้างอยู่ เพื่อป้องกันข้อผิดพลาดในฐานข้อมูล
-              </p>
-            </div>
+            <ConfirmSummary
+              lead="ลบไม่ได้ เพราะมีข้อมูลผูกอยู่กับสถานประกอบการนี้"
+              rows={[
+                { label: 'ชื่อสถานประกอบการ', value: deleteTarget?.name_th ?? '' },
+                { label: 'จังหวัด', value: deleteTarget?.province || '—' },
+                { label: 'รายการที่ผูกอยู่', value: `${deleteTargetUsage?.count ?? 0} รายการ (ใบแจ้งความจำนง/นักศึกษา)` },
+              ]}
+              lockNote="ระบบไม่อนุญาตให้ลบแถวที่มีประวัติหรือรายการใช้งานค้างอยู่ เพื่อป้องกันข้อผิดพลาดในฐานข้อมูล"
+            />
           ) : (
-            <div className="space-y-2">
-              <p className="text-sm text-gray-800 dark:text-gray-200">
-                ลบ <strong>{deleteTarget?.name_th ?? ''}</strong> ออกจากทำเนียบ
-              </p>
-              <p className="text-xs text-gray-600 dark:text-gray-400">
-                แถวนี้ยังไม่มีคำร้อง และไม่มีนักศึกษาผูกอยู่ จึงลบได้<br />
-                <strong>ถ้ามีอะไรผูกอยู่ ปุ่มลบจะปิดพร้อมบอกว่าติดอะไรอยู่กี่รายการ</strong> ไม่ปล่อยให้ error ฐานข้อมูลเด้งขึ้นจอ
-              </p>
-            </div>
+            <ConfirmSummary
+              lead="แถวนี้ยังไม่มีคำร้องและไม่มีนักศึกษาผูกอยู่ จึงลบได้"
+              rows={[
+                { label: 'ชื่อสถานประกอบการ', value: deleteTarget?.name_th ?? '' },
+                { label: 'จังหวัด', value: deleteTarget?.province || '—' },
+              ]}
+              effects={['สถานประกอบการนี้ถูกลบออกจากทำเนียบอย่างถาวร']}
+              lockNote="หากต้องการใช้ในอนาคต จะต้องเพิ่มข้อมูลสถานประกอบการใหม่"
+            />
           )
         }
-        confirmLabel={isDeleteBlocked ? 'เข้าใจแล้ว' : 'ยืนยัน ลบ'}
+        confirmLabel={isDeleteBlocked ? 'เข้าใจแล้ว' : 'ลบออกจากทำเนียบ'}
         destructive={!isDeleteBlocked}
         busy={busy}
         onConfirm={isDeleteBlocked ? () => setDeleteTarget(null) : handleDelete}

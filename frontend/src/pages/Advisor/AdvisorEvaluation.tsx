@@ -5,6 +5,7 @@ import api, { API_BASE_URL } from '../../services/api';
 import { FileText, CheckCircle, XCircle } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
 
@@ -625,16 +626,15 @@ const AdvisorEvaluation: React.FC = () => {
         open={certifyDialogOpen}
         title="ยืนยันการลงนามรับรอง สหกิจ 14"
         message={
-          <div className="text-sm space-y-2 text-gray-600 dark:text-gray-300">
-            <p>
-              ลงนามในนาม <strong className="text-gray-900 dark:text-white">{advisorName}</strong> ว่า{' '}
-              <strong className="text-gray-900 dark:text-white">{selectedStudent?.studentName}</strong>{' '}
-              ส่งรายงานการปฏิบัติงานฉบับสมบูรณ์แล้ว
-            </p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800">
-              การลงนามนี้ยืนยันว่านักศึกษาส่งเล่มครบแล้วจริง ไม่ใช่การให้คะแนน · ชื่อของคุณจะถูกพิมพ์ลงแบบฟอร์มที่นักศึกษาพิมพ์ออก และไม่สามารถถอนการลงนามได้
-            </p>
-          </div>
+          <ConfirmSummary
+            lead={`ลงนามในนาม ${advisorName} ว่านักศึกษาส่งรายงานการปฏิบัติงานฉบับสมบูรณ์แล้ว`}
+            rows={[
+              { label: 'นักศึกษา', value: selectedStudent?.studentName || '—' },
+              { label: 'รหัสนักศึกษา', value: selectedStudent?.studentCode || '—' },
+              { label: 'ชื่อผู้ลงนาม', value: advisorName },
+            ]}
+            lockNote="การลงนามนี้ยืนยันว่านักศึกษาส่งเล่มครบแล้วจริง ไม่ใช่การให้คะแนน · ชื่อของคุณจะถูกพิมพ์ลงแบบฟอร์มที่นักศึกษาพิมพ์ออก และไม่สามารถถอนการลงนามได้"
+          />
         }
         confirmLabel="ลงนาม"
         cancelLabel="ยกเลิก"

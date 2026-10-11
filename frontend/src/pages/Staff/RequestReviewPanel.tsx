@@ -4,6 +4,7 @@ import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal from '../../components/ui/Modal';
 import { Input, Textarea } from '../../components/ui/Input';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../../utils/errors';
@@ -621,29 +622,26 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
 
       {/* ผลของการกดรับบอกที่นี่ที่เดียว */}
       <ConfirmDialog
+        level={3}
         open={confirming}
         title="ยืนยันการรับคำร้องและออกเลขหนังสือ"
         message={
-          <div className="space-y-3 text-left">
-            <p>
-              คุณกำลังจะรับคำร้องของ <strong>{studentName}</strong> ({row.student_code || '-'})
-            </p>
-            <div className="space-y-1 rounded-xl border border-blue-200 bg-blue-50 p-3 text-[13px] text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/40 dark:text-blue-200">
-              <p className="mb-1 font-bold">กดยืนยันแล้ว:</p>
-              <p>
-                ① รับคำร้อง และบันทึกเลขที่หนังสือ <strong>{documentNo.trim()}</strong>
-              </p>
-              <p>
-                ② <strong>รับรองสถานประกอบการ {row.company_name_th}</strong> เข้าทำเนียบ (นักศึกษาคนอื่นจะเห็นและเลือกได้)
-              </p>
-              <p>③ สร้างหนังสือขอความอนุเคราะห์ (ยังไม่ลงนาม) ส่งเข้าคิวคณบดี</p>
-            </div>
-            <p className="text-[13px] font-medium text-amber-800 dark:text-amber-400">
-              ข้อ ① และ ② ย้อนกลับเองไม่ได้ · เลขที่หนังสือแก้ได้จนกว่าคณบดีจะลงนาม · ถ้าสร้างหนังสือไม่สำเร็จ ระบบจะแจ้งและให้กดสร้างอีกครั้ง
-            </p>
-          </div>
+          <ConfirmSummary
+            lead={`กำลังจะรับคำร้องและออกหนังสือขอความอนุเคราะห์ให้ ${studentName}`}
+            rows={[
+              { label: 'นักศึกษา', value: `${studentName} (${row.student_code || '-'})` },
+              { label: 'สถานประกอบการ', value: row.company_name_th },
+              { label: 'เลขที่หนังสือ', value: documentNo.trim() },
+            ]}
+            effects={[
+              'สถานประกอบการนี้ถูกรับรองในทำเนียบ',
+              'หนังสือเข้าคิวรอคณบดีลงนาม',
+              'นักศึกษายกเลิกคำร้องเองไม่ได้อีก',
+            ]}
+            lockNote="เลขที่หนังสือแก้ได้จนกว่าคณบดีจะลงนาม · ถ้าสร้างหนังสือไม่สำเร็จ ระบบจะแจ้งและให้กดสร้างอีกครั้ง"
+          />
         }
-        confirmLabel="ออกเลขและรับคำร้อง"
+        confirmLabel="รับคำร้องและออกเลข"
         busy={busy}
         onConfirm={() => approve(false)}
         onCancel={() => setConfirming(false)}
@@ -651,13 +649,18 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
 
       {/* เลขซ้ำ = เตือน ไม่บล็อก — ยังไม่รู้ว่าหนังสือฉบับเดียวครอบนักศึกษาหลายคนได้หรือไม่ */}
       <ConfirmDialog
+        level={3}
         open={duplicateWarning !== null}
         title="เลขที่หนังสือนี้ถูกใช้แล้ว"
         message={
-          <div className="space-y-2 text-left">
-            <p>{duplicateWarning}</p>
-            <p>ต้องการใช้เลขนี้กับคำร้องของ {studentName} ด้วยหรือไม่</p>
-          </div>
+          <ConfirmSummary
+            lead={`ต้องการใช้เลขนี้กับคำร้องของ ${studentName} ด้วยหรือไม่`}
+            rows={[
+              { label: 'เลขที่หนังสือ', value: documentNo.trim() },
+              { label: 'รายละเอียด', value: duplicateWarning || '—' },
+            ]}
+            lockNote="หากใช้เลขนี้ซ้ำ หนังสือฉบับนี้จะใช้เลขที่หนังสือเดียวกันกับรายการที่มีอยู่แล้ว"
+          />
         }
         confirmLabel="ใช้เลขนี้ซ้ำ"
         cancelLabel="กลับไปแก้เลข"

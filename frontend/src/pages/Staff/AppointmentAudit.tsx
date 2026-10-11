@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { ChevronRight, Phone, FileText } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody } from '../../components/ui/Modal';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate } from '../../utils/thaiDate';
@@ -472,9 +473,31 @@ export const AppointmentAudit: React.FC = () => {
         open={confirmingDraft !== null}
         title="ยืนยันการส่งอีเมลนัดหมายนิเทศ"
         message={
-          confirmingDraft
-            ? `ส่งอีเมลนัดหมายนิเทศของ ${confirmingDraft.first_name} ${confirmingDraft.last_name} วันที่ ${formatThaiDate(confirmingDraft.appointment_date)} ไปยังพี่เลี้ยงที่ ${confirmingDraft.company_name}? อีเมลจะมีลิงก์ให้ตอบรับหรือขอเลื่อนนัด`
-            : ''
+          confirmingDraft ? (
+            <ConfirmSummary
+              lead="พี่เลี้ยงจะได้รับลิงก์สำหรับตอบรับหรือเสนอวันใหม่"
+              rows={[
+                {
+                  label: 'นักศึกษา',
+                  value: `${confirmingDraft.first_name} ${confirmingDraft.last_name} (${confirmingDraft.student_code})`,
+                },
+                { label: 'สถานประกอบการ', value: confirmingDraft.company_name },
+                {
+                  label: 'วันและเวลานิเทศ',
+                  value: `${formatThaiDate(confirmingDraft.appointment_date)} · ${
+                    confirmingDraft.mentor_time || confirmingDraft.student_time || '10:00'
+                  } น.`,
+                },
+                {
+                  label: 'ส่งไปที่',
+                  value: confirmingDraft.mentor_email || '—',
+                },
+              ]}
+              lockNote="อีเมลที่ส่งแล้วเรียกคืนไม่ได้ · ถ้าวันผิด อาจารย์นิเทศแก้นัดได้ แล้วนัดจะกลับมาให้ส่งใหม่"
+            />
+          ) : (
+            ''
+          )
         }
         confirmLabel="ตรวจแล้ว ส่งเลย"
         busy={sendingId !== null}
@@ -485,10 +508,11 @@ export const AppointmentAudit: React.FC = () => {
       {/* Confirm Phone Bypass Dialog */}
       <ConfirmDialog
         open={bypassingDraft !== null}
+        level={1}
         title="ยืนยันการบันทึกว่านัดทางโทรศัพท์แล้ว"
         message={
           bypassingDraft
-            ? `บันทึกว่าได้รับการยืนยันวันนัดหมายนิเทศของ ${bypassingDraft.first_name} (${bypassingDraft.company_name}) ทางโทรศัพท์เรียบร้อยแล้วใช่หรือไม่? ระบบจะแสดงสถานะเป็น "ยืนยันนอกระบบ (โทรศัพท์)" เพื่อให้อาจารย์รับทราบ`
+            ? `บันทึกว่าได้รับการยืนยันวันนัดหมายนิเทศของ ${bypassingDraft.first_name} ${bypassingDraft.last_name} (${bypassingDraft.company_name}) ทางโทรศัพท์เรียบร้อยแล้ว`
             : ''
         }
         confirmLabel="บันทึกว่านัดแล้ว (ยืนยันนอกระบบ)"
@@ -500,10 +524,11 @@ export const AppointmentAudit: React.FC = () => {
       {/* Confirm Accept Reschedule Dialog */}
       <ConfirmDialog
         open={acceptingRescheduleDraft !== null}
+        level={1}
         title="ยืนยันการรับวันนัดหมายใหม่"
         message={
           acceptingRescheduleDraft
-            ? `ยอมรับวันนัดหมายใหม่ที่บริษัทขอเลื่อน (${acceptingRescheduleDraft.proposed_reschedule_date ? formatThaiDate(acceptingRescheduleDraft.proposed_reschedule_date) : 'วันใหม่'}) สำหรับนักศึกษา ${acceptingRescheduleDraft.first_name} ใช่หรือไม่?`
+            ? `รับวันนัดหมายใหม่ (${acceptingRescheduleDraft.proposed_reschedule_date ? formatThaiDate(acceptingRescheduleDraft.proposed_reschedule_date) : 'วันใหม่'}) สำหรับนักศึกษา ${acceptingRescheduleDraft.first_name} ${acceptingRescheduleDraft.last_name}`
             : ''
         }
         confirmLabel="ยอมรับวันใหม่"

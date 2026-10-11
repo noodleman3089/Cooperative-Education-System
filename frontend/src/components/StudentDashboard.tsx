@@ -1718,6 +1718,7 @@ const StudentDashboard: React.FC = () => {
       {calendarModal}
 
       <ConfirmDialog
+        level={3}
         open={confirmingWithdraw && !!activeIntent}
         title="ยกเลิกคำร้องนี้"
         confirmLabel="ยืนยันยกเลิกคำร้อง"
@@ -1740,16 +1741,34 @@ const StudentDashboard: React.FC = () => {
                   value: activeIntent?.request_form_path ? 'ถูกลบออกจากระบบ' : 'ยังไม่ได้ส่ง',
                 },
               ]}
+              effects={[
+                'คำร้องนี้ถูกลบออกจากระบบ ไม่เหลือในรายการของเจ้าหน้าที่',
+                'ยื่นคำร้องใหม่ได้ในช่วงเปิดรับ',
+              ]}
               lockNote="ยกเลิกแล้วคำร้องนี้ถูกลบออกจากระบบ เรียกคืนไม่ได้ · กระดาษที่ลงนามไว้ของใบนี้ใช้ต่อไม่ได้ ต้องพิมพ์และลงนามใบใหม่"
             />
           </>
         }
       />
       <ConfirmDialog
+        level={3}
         open={confirmingFailure}
         title="รายงานผลการสัมภาษณ์ไม่ผ่าน"
-        message="ยืนยันที่จะรายงานว่าถูกปฏิเสธหรือสัมภาษณ์ไม่ผ่าน? ระบบจะปลดล็อกให้กลับไปยื่นความจำนงที่สถานประกอบการอื่นใหม่ได้ และใบความจำนงฉบับนี้จะถูกปิด"
-        confirmLabel="ยืนยัน รายงานผล"
+        message={
+          <ConfirmSummary
+            lead="รายงานว่าสถานประกอบการปฏิเสธหรือสัมภาษณ์ไม่ผ่าน"
+            rows={[
+              { label: 'สถานประกอบการ', value: activeIntent?.company_name_th ?? '—' },
+            ]}
+            effects={[
+              'คำร้องนี้ถูกปิด',
+              'หนังสือที่ออกไปแล้วใช้กับที่อื่นไม่ได้',
+              'ยื่นคำร้องขอหนังสือสำหรับที่ใหม่ได้',
+            ]}
+            lockNote="รายงานแล้วย้อนกลับไม่ได้"
+          />
+        }
+        confirmLabel="แจ้งว่าไม่ได้ที่ฝึก"
         destructive
         busy={reportingFail}
         onConfirm={handleReportFailure}

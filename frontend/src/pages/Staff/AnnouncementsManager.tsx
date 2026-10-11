@@ -331,8 +331,9 @@ export const AnnouncementsManager: React.FC = () => {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={pendingDeleteId !== null}
+        level={1}
         title="ยืนยันการลบข่าวประชาสัมพันธ์"
-        message={`ต้องการลบข่าว "${targetToDelete?.title ?? ''}" ออกจากระบบใช่หรือไม่? เมื่อลบแล้วข่าวจะหายไปจากหน้าแรกของนักศึกษาทันที`}
+        message={`ลบข่าวประชาสัมพันธ์ "${targetToDelete?.title ?? ''}" ออกจากระบบ`}
         confirmLabel="ลบข่าวประชาสัมพันธ์"
         destructive
         busy={deleteBusy}

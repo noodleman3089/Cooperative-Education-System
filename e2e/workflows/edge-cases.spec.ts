@@ -195,7 +195,7 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await page.getByTestId('officer-document-no').fill('อว 0656.10/777');
     await page.getByTestId('officer-approve-open').click();
 
-    const confirmBtn = page.locator('[role="dialog"] button:has-text("ออกเลขและรับคำร้อง")');
+    const confirmBtn = page.locator('[role="dialog"] button:has-text("รับคำร้องและออกเลข")');
     await expect(confirmBtn).toBeVisible();
     await confirmBtn.click({ clickCount: 2 });
 

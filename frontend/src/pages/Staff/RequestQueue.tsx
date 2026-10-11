@@ -953,28 +953,39 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
       {/* ══ ConfirmDialog Level 3 สำหรับหนังสือส่งตัว ══ */}
       <ConfirmDialog
+        level={3}
         open={confirmingDispatch}
         title="ยืนยันการออกหนังสือส่งตัว"
         message={
-          <>
-            ออกหนังสือส่งตัวของ{' '}
-            <strong>
-              {[reviewingDispatch?.first_name, reviewingDispatch?.last_name].filter(Boolean).join(' ')}
-            </strong>{' '}
-            ({reviewingDispatch?.student_code}) เลขที่{' '}
-            <strong>{dispatchForm.document_no}</strong>
-            <br />
-            ช่วงปฏิบัติงาน{' '}
-            <strong>
-              {dispatchForm.start_date ? formatThaiDate(dispatchForm.start_date) : '-'}
-              {' – '}
-              {dispatchForm.end_date ? formatThaiDate(dispatchForm.end_date) : '-'}
-            </strong>
-            <br />
-            หนังสือจะเข้าคิวให้คณบดีลงนาม · ดึงกลับได้จนกว่าคณบดีจะลงนาม
-          </>
+          <ConfirmSummary
+            lead="กำลังจะออกหนังสือส่งตัวให้นักศึกษาเข้าปฏิบัติงานสหกิจศึกษา"
+            rows={[
+              {
+                label: 'นักศึกษา',
+                value: `${[reviewingDispatch?.first_name, reviewingDispatch?.last_name].filter(Boolean).join(' ')} (${reviewingDispatch?.student_code || '-'})`,
+              },
+              {
+                label: 'สถานประกอบการ',
+                value: reviewingDispatch?.company_name_th || '—',
+              },
+              {
+                label: 'เลขที่หนังสือ',
+                value: dispatchForm.document_no.trim(),
+              },
+              {
+                label: 'วันเริ่ม ถึง วันสิ้นสุด',
+                value: `${dispatchForm.start_date ? formatThaiDate(dispatchForm.start_date) : '-'} – ${dispatchForm.end_date ? formatThaiDate(dispatchForm.end_date) : '-'}`,
+              },
+            ]}
+            effects={[
+              'หนังสือเข้าคิวรอคณบดีลงนาม',
+              'วันเริ่มและวันสิ้นสุดนี้ถูกพิมพ์ลงหนังสือ',
+            ]}
+            lockNote="ดึงกลับได้จนกว่าคณบดีจะลงนาม"
+          />
         }
-        confirmLabel="ออกเลขและส่งเข้าคิวคณบดี"
+        confirmLabel="ออกหนังสือส่งตัว"
+        confirmTestId="dispatch-confirm"
         busy={dispatchBusy}
         onConfirm={submitIssueDispatch}
         onCancel={() => setConfirmingDispatch(false)}
