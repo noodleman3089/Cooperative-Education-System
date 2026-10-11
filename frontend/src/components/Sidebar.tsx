@@ -32,23 +32,6 @@ interface MenuItem {
   group?: string;
 }
 
-/**
- * เมนูที่ **พักไว้ชั่วคราว** ระหว่างไล่เส้นทางสหกิจหลักให้ครบ (เจ้าของสั่ง 2026-10-09 · กำหนดส่ง 2026-10-19)
- *
- * ซ่อนจากแถบเมนูอย่างเดียว — หน้าจอ route สิทธิ์ และ `?menu=<id>` ยังใช้ได้ครบ ไม่มีโค้ดถูกลบ
- * ชุด E2E เห็นเมนูครบเสมอ เพราะ `playwright.config.ts` ตั้ง `VITE_SHOW_ALL_MENUS=true` ให้ frontend ที่มันเปิดเอง
- * (dev server ที่เปิดค้างไว้ที่พอร์ต 5173 ไม่ได้ค่านี้ — ปิดก่อนรัน E2E ไม่งั้น spec ที่เดินเข้าเมนูพวกนี้จะแดง)
- *
- * ⛔ ดึงกลับก่อนส่งโปรเจค: ทำให้รายการนี้ว่าง · `announcements` อยู่ในขอบเขตเล่ม (เจ้าหน้าที่ ข้อ 5) ห้ามลืม
- */
-const PARKED_MENUS: Record<string, string[]> = {
-  staff: ['announcements'],
-  advisor: ['mentor_followup'],
-  supervisor: [],
-  dept_head: ['mentor_followup'],
-};
-const SHOW_ALL_MENUS = import.meta.env.VITE_SHOW_ALL_MENUS === 'true';
-
 const Sidebar: React.FC<SidebarProps> = ({
   currentRole,
   activeMenu,
@@ -243,7 +226,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
       { id: 'students', label: 'นักศึกษาในสาขา', icon: icons.students, group: 'ระหว่างปฏิบัติงาน' },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'ระหว่างปฏิบัติงาน' },
-      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'ระหว่างปฏิบัติงาน' },
+      // ⛔ ไม่มี "ติดตามพี่เลี้ยง" ที่ฝ่ายที่ปรึกษาและหัวหน้าสาขา (เจ้าของสั่ง 2026-10-11) — เรื่องพี่เลี้ยงเป็นของนักศึกษากับอาจารย์นิเทศ
       { id: 'final_evaluation', label: 'ตรวจรับเล่มรายงาน (สหกิจ 14)', icon: icons.evaluation, group: 'ปลายภาค' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
@@ -263,7 +246,6 @@ const Sidebar: React.FC<SidebarProps> = ({
       // หน้านี้เหลือหน้าที่ติดตามอย่างเดียว ป้ายเมนูจึงต้องไม่สัญญาว่ามีปุ่มให้กด
       { id: 'approval', label: 'ติดตามคำร้อง (เอกสารหมายเลข 1)', icon: icons.approval, group: 'งานของสาขาวิชา' },
       { id: 'final_progress', label: 'ติดตามเอกสาร & ผลประเมิน', icon: icons.summary, group: 'งานของสาขาวิชา' },
-      { id: 'mentor_followup', label: 'ติดตามพี่เลี้ยง', icon: icons.mentor_followup, group: 'งานของสาขาวิชา' },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline, group: 'งานของสาขาวิชา' },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
@@ -297,11 +279,10 @@ const Sidebar: React.FC<SidebarProps> = ({
     ]
   };
 
-  const parked = SHOW_ALL_MENUS ? [] : PARKED_MENUS[currentRole] ?? [];
-  const activeMenuItems = (menuConfig[currentRole] || [
+  const activeMenuItems = menuConfig[currentRole] || [
     { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
     { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile }
-  ]).filter((item) => !parked.includes(item.id));
+  ];
 
 
   return (

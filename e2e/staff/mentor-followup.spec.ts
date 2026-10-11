@@ -990,14 +990,29 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     expect(await tokenCount(fx.mentor1)).toBe(1);
   });
 
-  test('F12: หน้าจออาจารย์/หัวหน้าสาขา — เห็นเฉพาะพี่เลี้ยงในขอบเขตและมีปุ่มเตือน แต่ไม่มีปุ่มแก้อีเมล/ส่งลิงก์', async ({
+  test('F12: หน้าจอฝ่ายนิเทศ — เห็นเฉพาะพี่เลี้ยงในขอบเขตและมีปุ่มเตือน แต่ไม่มีปุ่มแก้อีเมล/ส่งลิงก์ · ฝ่ายที่ปรึกษาและหัวหน้าสาขาไม่มีเมนูนี้', async ({
     page,
   }) => {
     test.setTimeout(120_000);
     await addMentor1Work(fx);
 
-    for (const who of ['advisor1', 'head1'] as const) {
+    // เรื่องพี่เลี้ยงเป็นของนักศึกษากับอาจารย์นิเทศ (เจ้าของสั่ง 2026-10-11) — ฝ่ายที่ปรึกษาและหัวหน้าสาขา
+    // ไม่มีเมนู และเปิดด้วยลิงก์ตรงก็ไม่ได้หน้านี้ (ตกไปหน้าแรกของฝ่ายตัวเอง)
+    for (const [who, url] of [
+      ['head1', '/dashboard?menu=mentor_followup'],
+      ['advisor1', '/dashboard?role=advisor&menu=mentor_followup'],
+    ] as const) {
       await loginAs(page, who);
+      await page.goto(url);
+      await expect(page.getByTestId('nav-dashboard'), who).toBeVisible();
+      await expect(page.getByTestId('screen-loading')).toHaveCount(0);
+      await expect(page.getByTestId('nav-mentor_followup'), `${who} ไม่มีเมนู`).toHaveCount(0);
+      await expect(page.getByRole('heading', { name: 'ติดตามพี่เลี้ยง' }), `${who} ไม่ได้หน้านี้`).toHaveCount(0);
+    }
+
+    for (const who of ['advisor1'] as const) {
+      await loginAs(page, who);
+      await page.goto('/dashboard?role=supervisor');
       await goToMenu(page, 'mentor_followup');
 
       await expect(page.getByTestId(`mf-row-${fx.mentor1}`), who).toBeVisible();
@@ -1061,8 +1076,9 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     const tokens = async () =>
       Number(await dbValue<string>('SELECT COUNT(*) FROM mentor_login_tokens WHERE user_id = $1', [fx.mentor1]));
 
-    // เจ้าหน้าที่และหัวหน้าสาขาเห็นป้ายรอยืนยัน แต่ไม่มีปุ่มยืนยัน — เห็นข้อความว่ารอใคร (เซิร์ฟเวอร์ 403 อยู่แล้ว)
-    for (const who of ['head1', 'staff1'] as const) {
+    // เจ้าหน้าที่เห็นป้ายรอยืนยัน แต่ไม่มีปุ่มยืนยัน — เห็นข้อความว่ารอใคร (เซิร์ฟเวอร์ 403 อยู่แล้ว)
+    // (หัวหน้าสาขาไม่มีเมนูนี้แล้ว — F12 คุม)
+    for (const who of ['staff1'] as const) {
       await loginAs(page, who);
       await goToMenu(page, 'mentor_followup');
       await expect(page.getByTestId(`mf-inactive-${fx.mentor1}`)).toHaveText('รอยืนยัน');

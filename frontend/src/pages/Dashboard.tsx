@@ -441,7 +441,6 @@ const Dashboard: React.FC = () => {
         if (activeMenu === 'students') return <AdvisorStudents />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         if (activeMenu === 'final_evaluation') return <AdvisorEvaluation />;
-        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         return <AdvisorHome view="advisor" />;
 
       case 'supervisor':
@@ -466,7 +465,6 @@ const Dashboard: React.FC = () => {
       case 'dept_head':
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         if (activeMenu === 'final_progress') return <FinalProgressDashboard />;
-        if (activeMenu === 'mentor_followup') return <MentorFollowup />;
         if (activeMenu === 'memos') return <FacultyMemos />;
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
         //   แทนที่จะเปิดหน้าว่าง · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
