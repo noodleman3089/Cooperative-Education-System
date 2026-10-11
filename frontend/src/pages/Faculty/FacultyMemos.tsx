@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';

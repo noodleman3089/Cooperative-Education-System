@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import PageSkeleton from '../../components/ui/Skeleton';
 import api from '../../services/api';
 import { useDashboardData } from '../../hooks/useDashboardData';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import { MapPin, Calendar, Send, ChevronDown, ChevronUp, Printer } from 'lucide-react';
 import SupervisionLogForm from './SupervisionLogForm';
 import AlertBanner from '../../components/ui/AlertBanner';

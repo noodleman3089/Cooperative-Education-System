@@ -1,17 +1,10 @@
-import React, { createContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/api';
 import api from '../services/api';
+import { AuthContext, type AuthContextType } from './authContextValue';
 
-export interface AuthContextType {
-  user: User | null;
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  login: (userData: User) => void;
-  logout: () => Promise<void>;
-}
-
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+export type { AuthContextType };
 
 /**
  * The session JWT lives in an httpOnly cookie, so JS cannot read it or check its

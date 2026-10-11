@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import api, { API_BASE_URL } from '../../services/api';
 import type { Company, CoopCalendarResponse, StudentProfile } from '../../types/api';
 import PageSkeleton from '../../components/ui/Skeleton';

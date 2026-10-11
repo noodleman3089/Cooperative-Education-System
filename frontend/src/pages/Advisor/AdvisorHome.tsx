@@ -1,6 +1,7 @@
 import React, { useState, useContext, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api from '../../services/api';
 import type { IntentForm } from '../../types/api';
@@ -9,7 +10,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import { formatThaiDate } from '../../utils/thaiDate';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import { getErrorMessage } from '../../utils/errors';
 
 export interface TileItem {

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import Button from '../../components/ui/Button';
 import { CheckCircle2, AlertCircle, Eye, ExternalLink, X, FileText } from 'lucide-react';

@@ -5,7 +5,7 @@ import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
 import { Input } from './ui/Input';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 
 interface PersonnelProfileData {

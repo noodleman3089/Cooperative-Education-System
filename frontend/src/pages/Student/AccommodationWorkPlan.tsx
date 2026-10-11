@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import api, { API_BASE_URL } from '../../services/api';
 import {
   ExternalLink,

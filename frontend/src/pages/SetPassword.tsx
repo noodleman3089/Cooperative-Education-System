@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 import api from '../services/api';
 import { Lock, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import AlertBanner from '../components/ui/AlertBanner';

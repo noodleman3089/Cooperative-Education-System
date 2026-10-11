@@ -1,11 +1,12 @@
 import React, { useCallback, useContext, useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 import Navbar from '../components/Navbar';
 import Sidebar from '../components/Sidebar';
-import PageSkeleton, { skeletonFor } from '../components/ui/Skeleton';
+import PageSkeleton from '../components/ui/Skeleton';
+import { skeletonFor } from '../components/ui/skeletonFor';
 import Button from '../components/ui/Button';
-import { statusText } from '../components/ui/StatusBadge';
+import { statusText } from '../components/ui/statusLabels';
 import api from '../services/api';
 import EmptyState from '../components/ui/EmptyState';
 import { Lock } from 'lucide-react';

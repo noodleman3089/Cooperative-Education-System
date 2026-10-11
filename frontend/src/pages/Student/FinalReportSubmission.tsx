@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import api from '../../services/api';
 import {
   FileText,
@@ -11,7 +11,8 @@ import {
   Send,
 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
-import { CalendarGate, useCalendarGate } from '../../components/ui/CalendarGate';
+import { CalendarGate } from '../../components/ui/CalendarGate';
+import { useCalendarGate } from '../../components/ui/useCalendarGate';
 import { getErrorMessage } from '../../utils/errors';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';

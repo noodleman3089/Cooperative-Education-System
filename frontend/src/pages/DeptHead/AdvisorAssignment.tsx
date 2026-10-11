@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search } from 'lucide-react';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api from '../../services/api';
 import type { StudentProfile } from '../../types/api';

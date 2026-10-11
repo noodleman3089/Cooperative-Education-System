@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api, { API_BASE_URL } from '../services/api';
 import { Download, CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
-import { statusText } from './ui/StatusBadge';
+import { statusText } from './ui/statusLabels';
 
 /**
  * ⛔ `currentRole` กับ `onSuccess` ถูกถอดออก 2026-08-27 — มันมีไว้ให้ปุ่มอนุมัติ/ตีกลับ

@@ -1,6 +1,6 @@
 import React, { useContext, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 import api, { API_BASE_URL } from '../services/api';
 import { Bell, FileText, LogOut } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';

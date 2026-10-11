@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { AuthContext } from '../../context/AuthContext';
+import { AuthContext } from '../../context/authContextValue';
 import api, { API_BASE_URL } from '../../services/api';
 import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';

@@ -3,7 +3,8 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
 import AlertBanner from '../../components/ui/AlertBanner';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import EmptyState from '../../components/ui/EmptyState';
 import { getErrorMessage } from '../../utils/errors';
 import {

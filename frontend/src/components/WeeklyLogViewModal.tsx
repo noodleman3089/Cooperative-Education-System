@@ -33,15 +33,6 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTabWeek, setActiveTabWeek] = useState<number | null>(null);
 
-  useEffect(() => {
-    if (isOpen && studentId) {
-      fetchStudentLogs(studentId);
-    } else {
-      setLogs([]);
-      setActiveTabWeek(null);
-    }
-  }, [isOpen, studentId]);
-
   const fetchStudentLogs = async (id: number) => {
     try {
       setLoading(true);
@@ -63,6 +54,15 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (isOpen && studentId) {
+      fetchStudentLogs(studentId);
+    } else {
+      setLogs([]);
+      setActiveTabWeek(null);
+    }
+  }, [isOpen, studentId]);
 
   if (!isOpen) return null;
 

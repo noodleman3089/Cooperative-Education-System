@@ -1,6 +1,6 @@
 import React, { useContext, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 
 /* The login pages stay eager: they are the first thing an unauthenticated
    visitor sees, and splitting them would only add a round trip before the

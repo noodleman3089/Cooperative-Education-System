@@ -7,7 +7,8 @@ import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Input from '../../components/ui/Input';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate, formatThaiDateTime } from '../../utils/thaiDate';
 

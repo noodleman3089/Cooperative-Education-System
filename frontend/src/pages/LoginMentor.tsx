@@ -5,7 +5,7 @@ import LoginCard from '../components/auth/LoginCard';
 import AlertBanner from '../components/ui/AlertBanner';
 import Button from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { AuthContext } from '../context/AuthContext';
+import { AuthContext } from '../context/authContextValue';
 import api from '../services/api';
 import { getErrorMessage } from '../utils/errors';
 

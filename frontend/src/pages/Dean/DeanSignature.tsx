@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback } from 'react';
-import PageSkeleton, { skeletonFor } from '../../components/ui/Skeleton';
+import PageSkeleton from '../../components/ui/Skeleton';
+import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import Button from '../../components/ui/Button';
 import api, { API_BASE_URL } from '../../services/api';
