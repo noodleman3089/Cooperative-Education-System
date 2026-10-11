@@ -12,6 +12,8 @@ import { recordStageEvent } from './stageEvents';
  *   · ปฏิทิน `acceptance_form` ของ **ภาคของใบ** เป็น `closed` (พ้นช่วงผ่อนผันด้วย)
  * ⛔ ไม่ปิด: ใบที่ยังรอคณบดี · `pending_officer_approval` (คำตอบมาถึงแล้ว) · ภาคที่ปฏิทินไม่ได้ตั้ง · ช่วงผ่อนผัน
  *    — ปฏิทินเป็นเรื่องกำหนดการ ไม่รู้ = ไม่ทำ (fail-open แบบเดียวกับ `calendarGate`)
+ * ⛔ ไม่ปิด: ใบของนักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก (ขั้น 9) — ใบนั้นยื่นหลังพ้นปฏิทินโดยชอบ
+ *    ผลข้างเคียงที่รู้: ใบแบบนี้ไม่มีวันถูกปิดเอง บริษัทเงียบ = นักศึกษาต้องกด "ไม่ได้ที่ฝึกงานที่นี่" เอง
  * ⛔ ไม่ปิดที่ ๑๕ วันทำการ — ระบบนับวันทำการข้ามแค่เสาร์-อาทิตย์ ไม่รู้จักวันหยุดนักขัตฤกษ์ (`workingDays.ts`)
  *    กำหนดนั้นทำให้ลิงก์ตายอย่างเดียว ใบยังรับกระดาษจากนักศึกษาได้จนพ้นปฏิทิน
  *
@@ -67,18 +69,25 @@ async function closeOne(formId: number): Promise<boolean> {
 /** คืนจำนวนใบที่ปิดในรอบนี้ */
 export async function runAcceptanceAutoClose(): Promise<number> {
   const candidates = await query(
-    `SELECT form_id, semester_id FROM intent_forms
+    `SELECT form_id, semester_id, student_id FROM intent_forms
       WHERE status = 'approved_by_dept_head' AND acceptance_due_date IS NOT NULL
       ORDER BY form_id`
   );
 
   const closedBySemester = new Map<number, boolean>();
   let closed = 0;
-  for (const { form_id, semester_id } of candidates.rows as { form_id: number; semester_id: number }[]) {
+  for (const { form_id, semester_id, student_id } of candidates.rows as {
+    form_id: number;
+    semester_id: number;
+    student_id: number;
+  }[]) {
     if (!closedBySemester.has(semester_id)) {
       closedBySemester.set(semester_id, await isCalendarClosed('acceptance_form', semester_id));
     }
     if (!closedBySemester.get(semester_id)) continue;
+    // ใบใหม่ของนักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก (ยื่นหลังพ้นปฏิทินด้วยสิทธิ์ผ่าน) ต้องไม่ถูกปิดทิ้ง
+    // ถามซ้ำพร้อมเจ้าของใบ — คำตอบ "ปิด" ของทั้งภาคข้างบนไม่รู้จักสิทธิ์รายคน
+    if (!(await isCalendarClosed('acceptance_form', semester_id, student_id))) continue;
 
     try {
       if (!(await closeOne(form_id))) continue;

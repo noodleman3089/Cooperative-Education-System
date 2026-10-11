@@ -167,6 +167,15 @@ router.post(
   IntentFormController.recallDispatchLetter
 );
 
+// Route: POST /api/intents/:id/close-accepted
+// เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว (นักศึกษาถูกส่งตัวกลับ / เปลี่ยนที่ฝึก) — ใบเป็น `superseded` นักศึกษายื่นที่ใหม่ได้
+// ⛔ staff เท่านั้น (SEC-04) — นักศึกษา · อาจารย์ · หัวหน้าสาขา ปิดเองไม่ได้
+router.post('/:id/close-accepted', authorizeRoles('staff'), IntentFormController.closeAccepted);
+
+// Route: POST /api/intents/:id/reopen-accepted
+// เจ้าหน้าที่ยกเลิกการปิดข้างบน (กดผิดใบ) — ได้ตราบที่นักศึกษายังไม่มีใบใหม่ที่เดินอยู่
+router.post('/:id/reopen-accepted', authorizeRoles('staff'), IntentFormController.reopenAccepted);
+
 // Route: GET /api/intents/:id/cover-letter/preview (เจ้าหน้าที่ดูตัวอย่างก่อนส่งคิวคณบดี)
 router.get(
   '/:id/cover-letter/preview',

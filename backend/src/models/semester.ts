@@ -59,4 +59,24 @@ export class CoopSemesterModel {
     );
     return (res.rowCount ?? 0) > 0 ? (res.rows[0].semester_id as number) : null;
   }
+
+  /**
+   * นักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก (ถูกส่งตัวกลับ / เปลี่ยนที่ฝึก) = มีใบ `superseded` ในภาคนั้น
+   * → ผ่านด่านปฏิทินของการหาที่ใหม่ได้แม้พ้นช่วง (`middlewares/calendarGate.ts` เป็นคนใช้)
+   *
+   * ⛔ นิยามเดียวของสิทธิ์นี้ ห้ามเขียนเงื่อนไขซ้ำที่อื่น · `superseded` ตั้งได้ทางเดียวคือเจ้าหน้าที่ปิดใบ
+   *    (`IntentFormModel.closeAcceptedByOfficer`) และยกเลิกการปิดแล้วใบกลับเป็น `accepted` สิทธิ์จึงหายเอง
+   * `semesterId` ว่าง = ภาคที่ active (กติกาเดียวกับ `CoopCalendarModel.findWindow`)
+   */
+  static async hasReplacementPass(studentId: number, semesterId: number | null): Promise<boolean> {
+    const res = await query(
+      `SELECT 1 FROM intent_forms i
+         JOIN coop_semesters s ON s.semester_id = i.semester_id
+        WHERE i.student_id = $1 AND i.status = 'superseded'
+          AND CASE WHEN $2::int IS NULL THEN s.is_active ELSE s.semester_id = $2 END
+        LIMIT 1`,
+      [studentId, semesterId]
+    );
+    return (res.rowCount ?? 0) > 0;
+  }
 }

@@ -72,6 +72,27 @@ export const LETTER_RETURN_FROM = ['approved_by_dept_head'];
  */
 export const DISPATCH_RETURN_FROM = ['accepted'];
 /**
+ * เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว (นักศึกษาถูกส่งตัวกลับ / เปลี่ยนที่ฝึก · ขั้น 9 · 2026-10-11) — ใบเป็น `superseded`
+ * ทางเดียวที่ใบ `accepted` ออกจากสถานะนั้นได้ และทางเดียวที่ตั้ง `superseded` · เจ้าหน้าที่เท่านั้น (SEC-04)
+ * ⛔ ห้ามขยายไปสถานะอื่น — ใบที่ยังไม่ `accepted` มีทางปิดของมันเองอยู่แล้ว (นักศึกษาแจ้งเอง · บริษัทไม่รับ · ระบบปิด)
+ */
+export const OFFICER_CLOSE_ACCEPTED_FROM = ['accepted'];
+/** ยกเลิกการปิดข้างบน (กดปิดผิดใบ) — กลับเป็น `accepted` ได้ตราบที่นักศึกษายังไม่มีใบใหม่ที่เดินอยู่ (`canReopenClosedSql`) */
+export const OFFICER_REOPEN_ACCEPTED_FROM = ['superseded'];
+export const CLOSED_KINDS = ['sent_back', 'change_company'] as const;
+export type ClosedKind = (typeof CLOSED_KINDS)[number];
+
+/**
+ * ใบ `superseded` ใบนี้ยกเลิกการปิดได้หรือไม่ = นักศึกษายังไม่มีใบอื่นที่เดินอยู่ในภาคเดียวกัน
+ * ⛔ ที่มาเดียวของธง `can_reopen` ที่หน้าจอเจ้าหน้าที่ใช้ และของด่าน 409 ใน `reopenAcceptedByOfficer` — ต้องตอบตรงกัน
+ */
+export const canReopenClosedSql = (alias: string): string =>
+  `(${alias}.status = 'superseded' AND NOT EXISTS (
+      SELECT 1 FROM intent_forms o
+       WHERE o.student_id = ${alias}.student_id AND o.semester_id = ${alias}.semester_id
+         AND o.form_id <> ${alias}.form_id
+         AND o.status NOT IN ('rejected', 'company_rejected', 'superseded')))`;
+/**
  * นักศึกษายกเลิกคำร้องเองได้ **ก่อนเจ้าหน้าที่รับเท่านั้น** (เจ้าของสั่ง 2026-10-06)
  * หลังเจ้าหน้าที่รับ = บริษัทถูกรับรองและเลขที่หนังสือออกไปแล้ว ย้อนด้วยปุ่มของนักศึกษาไม่ได้
  */
@@ -132,7 +153,7 @@ const STATUS_TH: Record<string, string> = {
   accepted: 'สถานประกอบการตอบรับแล้ว',
   rejected: 'คำร้องปิดแล้ว',
   company_rejected: 'สถานประกอบการไม่รับ',
-  superseded: 'คำร้องถูกแทนที่แล้ว',
+  superseded: 'เจ้าหน้าที่ปิดใบแล้ว',
 };
 
 export function assertAllowedTransition(action: string, currentStatus: string, allowedFrom: string[]): void {
@@ -193,10 +214,21 @@ export class IntentConflictError extends Error {
       | 'letter_missing'
       | 'letter_signed'
       | 'mentor_confirmed'
-      | 'internship_not_started',
+      | 'internship_not_started'
+      | 'wrong_status'
+      | 'replacement_exists',
     readonly extra: Record<string, unknown> = {}
   ) {
     super(message);
+  }
+}
+
+/** `assertAllowedTransition` ที่ผิดสถานะแล้วตอบ 409 `wrong_status` (แทน 400 ของ Error ธรรมดา) — ใช้กับปิดใบ/ยกเลิกการปิด */
+function assertTransitionOrConflict(action: string, currentStatus: string, allowedFrom: string[]): void {
+  try {
+    assertAllowedTransition(action, currentStatus, allowedFrom);
+  } catch (error) {
+    throw new IntentConflictError((error as Error).message, 'wrong_status');
   }
 }
 
@@ -786,6 +818,120 @@ export class IntentFormModel {
         draftPath: letter?.generated_file_path ?? null,
         officerId: (row.officer_approved_by as number | null) ?? null,
       };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว — นักศึกษาถูกส่งตัวกลับ หรือต้องเปลี่ยนที่ฝึก (ขั้น 9 · 2026-10-11)
+   *
+   * ทรานแซกชันเดียว: ใบเป็น `superseded` + เหตุ + เหตุผล · แถวสหกิจ 06 (`accommodations`) ย้ายไปเก็บบนใบแล้วลบแถวจริง
+   * (ทุกจุดที่ถาม "ส่ง 06 แล้วหรือยัง" ใช้ `EXISTS … accommodations` จึงกลับเป็น "ยังไม่ส่ง" เอง — ที่ใหม่ต้องส่งใหม่)
+   *
+   * ⛔ ไม่แตะ: `mentor_id` (พี่เลี้ยงเก่าหลุดเองเพราะทุกคิวรีพี่เลี้ยงกรอง `status = 'accepted'`) · บัญชีพี่เลี้ยง
+   *    · หนังสือส่งตัวฉบับเก่า (เก็บเป็นประวัติ) · `advisor_id` / `supervisor_id`
+   * ⛔ ข้อมูลระหว่างฝึก (บันทึกสัปดาห์/เดือน/วัน · โครงร่าง · การนิเทศ · ผลประเมิน) ผูกกับนักศึกษา ทำต่อที่ใหม่
+   *    **ห้ามลบ ห้ามย้าย** (เจ้าของตัดสิน 2026-10-11)
+   * สถานะไม่ใช่ `accepted` = 409 `wrong_status`
+   */
+  static async closeAcceptedByOfficer(
+    formId: number,
+    input: { kind: ClosedKind; reason: string; actorUserId: number }
+  ): Promise<{ studentId: number }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, status FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+      const row = current.rows[0] as { student_id: number; status: string };
+      assertTransitionOrConflict('officer_close_accepted', row.status, OFFICER_CLOSE_ACCEPTED_FROM);
+
+      // ลบพร้อมหยิบแถวออกมาในคำสั่งเดียว — ไม่มีช่วงที่แถวถูกแก้ระหว่างอ่านกับลบ
+      const removed = await client.query(
+        `DELETE FROM accommodations WHERE student_id = $1 RETURNING to_jsonb(accommodations.*) AS snapshot`,
+        [row.student_id]
+      );
+      const snapshot = (removed.rows[0]?.snapshot as Record<string, unknown> | undefined) ?? null;
+
+      await client.query(
+        `UPDATE intent_forms
+            SET status = 'superseded', reject_reason = $2, closed_kind = $3, closed_accommodation = $4::jsonb
+          WHERE form_id = $1`,
+        [formId, input.reason, input.kind, snapshot ? JSON.stringify(snapshot) : null]
+      );
+      await recordStageEvent(client, formId, 'closed_by_staff', { note: input.kind, actorId: input.actorUserId });
+
+      await client.query('COMMIT');
+      return { studentId: row.student_id };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  /**
+   * ยกเลิกการปิดใบ (เจ้าหน้าที่กดปิดผิดใบ) — `superseded` กลับเป็น `accepted`
+   *
+   * ⛔ ได้ตราบที่นักศึกษายังไม่มีใบอื่นที่เดินอยู่ในภาคเดียวกัน (`canReopenClosedSql`) — มีแล้ว = 409 `replacement_exists`
+   *    (ถ้าปล่อยผ่านจะมีใบเดินสองใบในภาคเดียว · index `uq_student_semester_active` กันซ้ำอีกชั้น)
+   * สหกิจ 06 คืนจาก `closed_accommodation` **เฉพาะเมื่อนักศึกษายังไม่ได้ส่งฉบับใหม่** (ฉบับใหม่ชนะ) แล้วล้างคอลัมน์
+   * สิทธิ์ผ่านปฏิทินของนักศึกษาหายเอง เพราะนิยามของมันคือ "มีใบ `superseded`"
+   */
+  static async reopenAcceptedByOfficer(
+    formId: number,
+    actorUserId: number
+  ): Promise<{ studentId: number; closedKind: string | null }> {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      const current = await client.query(
+        `SELECT student_id, status, closed_kind FROM intent_forms WHERE form_id = $1 FOR UPDATE`,
+        [formId]
+      );
+      if ((current.rowCount ?? 0) === 0) throw new Error('ไม่พบคำร้องที่ต้องการ');
+      const row = current.rows[0] as { student_id: number; status: string; closed_kind: string | null };
+      assertTransitionOrConflict('officer_reopen_accepted', row.status, OFFICER_REOPEN_ACCEPTED_FROM);
+
+      const reopenable = await client.query(
+        `SELECT ${canReopenClosedSql('i')} AS can_reopen FROM intent_forms i WHERE i.form_id = $1`,
+        [formId]
+      );
+      if (reopenable.rows[0]?.can_reopen !== true) {
+        throw new IntentConflictError(
+          'ยกเลิกการปิดไม่ได้ เพราะนักศึกษายื่นคำร้องใบใหม่ไปแล้ว — ถ้าต้องการให้กลับไปที่เดิม ให้นักศึกษายกเลิกหรือปิดใบใหม่ก่อน',
+          'replacement_exists'
+        );
+      }
+
+      await client.query(
+        `INSERT INTO accommodations
+         SELECT (jsonb_populate_record(NULL::accommodations, i.closed_accommodation)).*
+           FROM intent_forms i
+          WHERE i.form_id = $1 AND i.closed_accommodation IS NOT NULL
+         ON CONFLICT (student_id) DO NOTHING`,
+        [formId]
+      );
+      await client.query(
+        `UPDATE intent_forms
+            SET status = 'accepted', reject_reason = NULL, closed_kind = NULL, closed_accommodation = NULL
+          WHERE form_id = $1`,
+        [formId]
+      );
+      await recordStageEvent(client, formId, 'close_undone', { note: row.closed_kind, actorId: actorUserId });
+
+      await client.query('COMMIT');
+      return { studentId: row.student_id, closedKind: row.closed_kind };
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;

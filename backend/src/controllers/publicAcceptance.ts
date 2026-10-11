@@ -113,8 +113,8 @@ export async function acceptanceTokenGate(req: Request, res: Response, next: Nex
     }
     // ด่านสุดท้าย: พ้นกำหนดรับแบบตอบรับตามปฏิทินคณะของภาคของใบ (พ้นช่วงผ่อนผันด้วย) — บอกบริษัทตั้งแต่เปิดหน้า
     // ไม่ใช่ให้กรอกครบ แนบไฟล์ แล้วเจอ 403 ที่เขียนถึงนักศึกษา · ⚠️ ยังไม่ตั้งปฏิทิน/ช่วงผ่อนผัน = ผ่าน (fail-open
-    // ตามกฎปฏิทิน ห้ามทำให้เหมือน SEC-06)
-    if (await isCalendarClosed('acceptance_form', row.semester_id)) {
+    // ตามกฎปฏิทิน ห้ามทำให้เหมือน SEC-06) · นักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก (เจ้าของใบที่ token ชี้) ผ่านได้
+    if (await isCalendarClosed('acceptance_form', row.semester_id, row.student_id)) {
       res.status(410).json({
         code: 'calendar_closed',
         message:

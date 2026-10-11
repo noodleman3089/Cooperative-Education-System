@@ -4,6 +4,8 @@ import path from 'path';
 import {
   IntentFormModel,
   IntentConflictError,
+  CLOSED_KINDS,
+  ClosedKind,
   COMPANY_MAIL_LIMIT,
   LATE_REASON_MIN_LENGTH,
   LateStamp,
@@ -1187,6 +1189,107 @@ export class IntentFormController {
   }
 
   /**
+   * เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว — นักศึกษาถูกส่งตัวกลับ หรือต้องเปลี่ยนที่ฝึก (สาขาแจ้งมาด้วยบันทึกข้อความบนกระดาษ)
+   * Route: POST /api/intents/:id/close-accepted
+   * Access: staff เท่านั้น
+   *
+   * หลังปิด นักศึกษายื่นที่ใหม่ได้แม้พ้นช่วงปฏิทิน (`calendarGate` · สิทธิ์ผ่านของนักศึกษาที่ถูกปิดใบ)
+   * ตัวงานอยู่ที่ `IntentFormModel.closeAcceptedByOfficer` (ทรานแซกชันเดียว)
+   */
+  static async closeAccepted(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const kind = req.body?.kind as ClosedKind;
+      if (!CLOSED_KINDS.includes(kind)) {
+        res.status(400).json({ message: 'กรุณาเลือกเหตุที่ปิดใบ: สถานประกอบการส่งตัวกลับ หรือ เปลี่ยนสถานประกอบการ' });
+        return;
+      }
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        res.status(400).json({ message: 'กรุณาระบุเหตุผลที่ปิดใบ นักศึกษาจะเห็นข้อความนี้' });
+        return;
+      }
+
+      const { studentId } = await IntentFormModel.closeAcceptedByOfficer(formId, {
+        kind,
+        reason,
+        actorUserId: req.user.userId,
+      });
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_CLOSED_BY_STAFF,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: studentId,
+          detail: { kind, reason },
+        },
+        req
+      ).catch(() => undefined);
+
+      notifyStudentStatusChange(formId, `closed_${kind}`, reason).catch(console.error);
+
+      res.status(200).json({
+        message: 'ปิดใบที่ฝึกงานแล้ว นักศึกษายื่นคำร้องขอหนังสือสำหรับที่ใหม่ได้ทันที',
+        form_id: formId,
+      });
+    } catch (error) {
+      if (sendIntentConflict(res, error)) return;
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถปิดใบที่ฝึกงานได้') });
+    }
+  }
+
+  /**
+   * เจ้าหน้าที่ยกเลิกการปิดใบ (กดปิดผิดใบ) — ได้ตราบที่นักศึกษายังไม่มีใบใหม่ที่เดินอยู่
+   * Route: POST /api/intents/:id/reopen-accepted
+   * Access: staff เท่านั้น
+   */
+  static async reopenAccepted(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized. Please log in.' });
+        return;
+      }
+
+      const formId = parseInt(req.params.id, 10);
+      if (isNaN(formId)) {
+        res.status(400).json({ message: 'Invalid intent form ID format.' });
+        return;
+      }
+
+      const { studentId, closedKind } = await IntentFormModel.reopenAcceptedByOfficer(formId, req.user.userId);
+
+      writeAudit(
+        {
+          action: AuditAction.INTENT_CLOSE_UNDONE,
+          entityType: 'intent_form',
+          entityId: formId,
+          subjectId: studentId,
+          detail: { kind: closedKind },
+        },
+        req
+      ).catch(() => undefined);
+
+      notifyStudentStatusChange(formId, 'close_undone').catch(console.error);
+
+      res.status(200).json({ message: 'ยกเลิกการปิดแล้ว ใบกลับเป็น "ได้ที่ฝึกแล้ว" ตามเดิม', form_id: formId });
+    } catch (error) {
+      if (sendIntentConflict(res, error)) return;
+      res.status(400).json({ message: getErrorMessage(error, 'ไม่สามารถยกเลิกการปิดใบได้') });
+    }
+  }
+
+  /**
    * นักศึกษายกเลิกคำร้องของตัวเองก่อนเจ้าหน้าที่รับ — ใบถูกลบทิ้งทั้งใบ ยื่นที่ใหม่ได้ทันที
    * Route: POST /api/intents/:id/withdraw
    * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
@@ -1704,7 +1807,8 @@ export class IntentFormController {
       }
 
       // พ้นกำหนดรับแบบตอบรับตามปฏิทินคณะแล้ว = บริษัทเปิดลิงก์ก็ตอบไม่ได้ (ด่านลิงก์ตอบ 410) จึงไม่ส่ง
-      if (await isCalendarClosed('acceptance_form', row.semester_id)) {
+      // (นักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึกผ่านได้ — ด่านลิงก์ยกเว้นให้คนเดียวกัน)
+      if (await isCalendarClosed('acceptance_form', row.semester_id, row.student_id)) {
         res.status(409).json({
           message:
             'พ้นกำหนดส่งแบบตอบรับตามปฏิทินสหกิจศึกษาแล้ว จึงส่งลิงก์ให้สถานประกอบการไม่ได้ — หากสถานประกอบการยังไม่ตอบรับ ให้แจ้งว่าไม่ได้ที่ฝึกงานที่นี่ แล้วยื่นคำร้องที่ใหม่',

@@ -56,6 +56,9 @@ export const AuditAction = {
   // ระบบปิดใบเองเมื่อพ้นปฏิทิน `acceptance_form` โดยยังไม่มีแบบตอบรับ (`utils/acceptanceAutoClose.ts`) — ไม่มีคนกด
   // บรรทัดนี้จึงเป็นหลักฐานเดียวว่าใบถูกปิดด้วยกติกา ไม่ใช่ด้วยมือใคร
   INTENT_AUTO_CLOSED: 'intent.auto_closed',
+  // เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว (ถูกส่งตัวกลับ/เปลี่ยนที่ฝึก) และยกเลิกการปิด — detail: kind (+ reason ตอนปิด)
+  INTENT_CLOSED_BY_STAFF: 'intent.closed_by_staff',
+  INTENT_CLOSE_UNDONE: 'intent.close_undone',
   ACCEPTANCE_OFFICER_DECISION: 'acceptance.officer_decision',
   DOCUMENT_GENERATED: 'document.generated',
   DOCUMENT_SIGNED: 'document.signed',

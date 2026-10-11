@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { StudentModel } from '../models/student';
 import { MasterModel } from '../models/master';
+import { CoopSemesterModel } from '../models/semester';
 import pool, { query } from '../config/database';
 import {
   assertCanAccessStudent,
@@ -84,17 +85,22 @@ export class StudentController {
       );
       
       let activeIntent = null;
-      // ใบที่ถูกปิด (ตีกลับ/บริษัทไม่รับ) ล่าสุดของภาคนี้ — ให้การ์ดสถานะบอกเหตุผลได้
+      // ใบที่ถูกปิด (ตีกลับ/บริษัทไม่รับ/เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว) ล่าสุดของภาคนี้ — ให้การ์ดสถานะบอกเหตุผลได้
       // ⛔ แยกจาก activeIntent โดยตั้งใจ: โค้ดอื่นอ่าน activeIntent === null ว่า "ยื่นใหม่ได้" ห้ามยัดใบที่ปิดแล้วลงไป
-      // · ส่งเฉพาะตอนไม่มี activeIntent · ส่งแค่ 4 ฟิลด์ (ไม่มีข้อมูลบริษัทอื่น — SEC-10)
+      // · ส่งเฉพาะตอนไม่มี activeIntent · ส่งแค่ 5 ฟิลด์ (ไม่มีข้อมูลบริษัทอื่น — SEC-10)
       let closedIntent: {
         form_id: number;
         status: string;
         company_name_th: string;
         reject_reason: string | null;
+        closed_kind: string | null;
       } | null = null;
+      // สิทธิ์ยื่นที่ใหม่นอกช่วงปฏิทิน (เจ้าหน้าที่ปิดใบที่ฝึกเดิม) — หน้าจอใช้ปลดล็อกปุ่มของสามกิจกรรมที่ด่านปฏิทินยกเว้นให้
+      // ⛔ ถามจากนิยามเดียวกับด่านจริง (`calendarGate`) ห้ามให้หน้าจอเดาจากสถานะใบเอง
+      let replacementPass = false;
       if ((semesterQuery.rowCount ?? 0) > 0) {
         const semesterId = semesterQuery.rows[0].semester_id;
+        replacementPass = await CoopSemesterModel.hasReplacementPass(userId, semesterId);
         
         // Fetch student's intent form for this semester (not rejected/failed)
         const intentQuery = await query(
@@ -193,11 +199,11 @@ export class StudentController {
           };
         } else {
           const closedQuery = await query(
-            `SELECT i.form_id, i.status, c.name_th AS company_name_th, i.reject_reason
+            `SELECT i.form_id, i.status, c.name_th AS company_name_th, i.reject_reason, i.closed_kind
              FROM intent_forms i
              JOIN companies c ON i.company_id = c.company_id
              WHERE i.student_id = $1 AND i.semester_id = $2
-               AND i.status IN ('rejected', 'company_rejected')
+               AND i.status IN ('rejected', 'company_rejected', 'superseded')
              ORDER BY i.form_id DESC
              LIMIT 1`,
             [userId, semesterId]
@@ -209,6 +215,8 @@ export class StudentController {
               status: row.status,
               company_name_th: row.company_name_th,
               reject_reason: row.reject_reason,
+              // เหตุที่เจ้าหน้าที่ปิดใบ ('sent_back' · 'change_company') — มีเฉพาะใบ `superseded`
+              closed_kind: row.closed_kind,
             };
           }
         }
@@ -315,6 +323,7 @@ export class StudentController {
         },
         activeIntent,
         closedIntent,
+        replacement_pass: replacementPass,
         documents: docQuery.rows
       });
 

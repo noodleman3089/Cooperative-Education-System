@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { query } from '../config/database';
+import { canReopenClosedSql } from '../models/intent';
 import { resolveMajorScope, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
 
@@ -93,7 +94,10 @@ export class CoopProgressController {
           eval_15.submitted_at as sahatkit15_submitted_at,
           eval_16.submitted_at as sahatkit16_submitted_at,
           -- Notifications Cooldown
-          notif.last_notified_at
+          notif.last_notified_at,
+          -- ใบที่เจ้าหน้าที่ปิดได้ (accepted) หรือยกเลิกการปิดได้ (superseded) — ส่งออกให้ staff เท่านั้น (ตัดข้างล่าง)
+          pf.form_id AS placement_form_id, pf.status AS placement_status,
+          pf.closed_kind AS placement_closed_kind, pf.can_reopen AS placement_can_reopen
         FROM students s
         JOIN master_major m ON s.major_id = m.major_id
         LEFT JOIN personnel p_adv ON s.advisor_id = p_adv.personnel_id
@@ -116,6 +120,14 @@ export class CoopProgressController {
         LEFT JOIN final_evaluations eval_16 ON s.student_id = eval_16.student_id
              AND eval_16.evaluator_role = 'mentor' AND eval_16.form_code = 'sahatkit_16'
         LEFT JOIN mentor_notifications notif ON s.student_id = notif.student_id
+        -- ใบ accepted มาก่อน · ไม่มีจึงเป็นใบที่ถูกปิดล่าสุด · can_reopen มาจากนิยามเดียวกับด่านของ reopen-accepted
+        LEFT JOIN LATERAL (
+          SELECT i.form_id, i.status, i.closed_kind, ${canReopenClosedSql('i')} AS can_reopen
+            FROM intent_forms i
+           WHERE i.student_id = s.student_id AND i.status IN ('accepted', 'superseded')
+           ORDER BY (i.status = 'accepted') DESC, i.form_id DESC
+           LIMIT 1
+        ) pf ON TRUE
         WHERE 1=1
       `;
 
@@ -221,6 +233,20 @@ export class CoopProgressController {
           sahatkit15SubmittedAt: row.sahatkit15_submitted_at || null,
           sahatkit16SubmittedAt: row.sahatkit16_submitted_at || null,
           lastNotifiedAt: row.last_notified_at || null,
+          // ปิดใบที่ฝึก / ยกเลิกการปิด เป็นงานของเจ้าหน้าที่คนเดียว — บทบาทอื่นไม่ได้ฟิลด์นี้เลย (SEC-10)
+          // ⛔ หน้าจอห้ามเดา `can_reopen` เอง · null = นักศึกษายังไม่มีใบที่ตอบรับหรือถูกปิด
+          ...(isStaff
+            ? {
+                placement: row.placement_form_id
+                  ? {
+                      form_id: row.placement_form_id,
+                      status: row.placement_status,
+                      closed_kind: row.placement_closed_kind,
+                      can_reopen: row.placement_can_reopen === true,
+                    }
+                  : null,
+              }
+            : {}),
           supervisionRecordCount: parseInt(row.supervision_records_count, 10),
           // ตรวจรับเล่มและสหกิจ 14 เป็นงานของอาจารย์ที่ปรึกษา — ฝ่ายนิเทศไม่ได้ไฟล์เล่มและใบยืนยัน
           reportConfirmation: supervisorView

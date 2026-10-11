@@ -26,6 +26,8 @@
  *   dispatch_staff_recalled  เจ้าหน้าที่ดึงหนังสือส่งตัวที่ยังไม่ลงนามกลับ → เหมือนบรรทัดบน
  *     ⛔ คนละค่ากับ `dean_returned` / `staff_recalled` โดยตั้งใจ — สองค่านั้นคือ "เข้าคิวคำร้องรอรับ" (ดูค่าคงที่ด้านล่าง)
  *   exited               ออกจากท่อ (บริษัทไม่รับ / นักศึกษายกเลิก / ระบบปิดเมื่อพ้นปฏิทินรับแบบตอบรับ)
+ *   closed_by_staff      เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว (ถูกส่งตัวกลับ/เปลี่ยนที่ฝึก) → ใบเป็น `superseded` · `note` = เหตุ (`closed_kind`)
+ *   close_undone         เจ้าหน้าที่ยกเลิกการปิดข้างบน → ใบกลับเป็น `accepted` · `note` = เหตุของการปิดที่ถูกยกเลิก
  */
 export type StageEvent =
   | 'form_created'
@@ -44,7 +46,9 @@ export type StageEvent =
   | 'dispatch_issued'
   | 'dispatch_dean_returned'
   | 'dispatch_staff_recalled'
-  | 'exited';
+  | 'exited'
+  | 'closed_by_staff'
+  | 'close_undone';
 
 interface Db {
   query: (text: string, params?: unknown[]) => Promise<unknown>;

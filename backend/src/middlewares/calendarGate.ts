@@ -28,6 +28,7 @@ import { sendUnexpectedError } from '../utils/httpError';
  *   open  → ผ่านเงียบๆ
  *   late  → **ผ่าน** แต่ปั๊มธงไว้ให้ controller รู้ว่านี่คือการส่งช้า
  *   ที่เหลือ → 403
+ * (ข้อยกเว้นเดียว: นักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก — ดู `REPLACEMENT_PASS_ACTIVITIES` ข้างล่าง)
  * ตัวด่านไม่บังคับให้ชี้แจงเหตุผลเอง เพราะมันถูกใช้ร่วมกันหลาย endpoint และ
  * แต่ละอันเก็บเหตุผลคนละที่ — คนที่บังคับคือ controller ที่รู้ว่าตัวเองเก็บที่ไหน
  *
@@ -70,20 +71,45 @@ async function resolveSemesterId(
 }
 
 /**
+ * สิทธิ์ผ่านของนักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก (ขั้น 9 · 2026-10-11) — ถูกส่งตัวกลับ/เปลี่ยนที่ฝึกหลังพ้นช่วงปฏิทินไปแล้ว
+ * จึงต้องเดินเรื่องที่ใหม่นอกช่วงได้ · ใครมีสิทธิ์ = `CoopSemesterModel.hasReplacementPass` (นิยามเดียว)
+ *
+ * ⛔ ใช้กับสามกิจกรรมของการหาที่ใหม่เท่านั้น — บันทึกการปฏิบัติงาน · โครงร่าง · เล่มรายงาน ไม่ยกเว้น
+ * ⛔ ยกเว้นเฉพาะ "พ้นช่วง" (`late` · `closed`) — ยังไม่ถึงช่วง (`upcoming`) ไม่ยกเว้น
+ * ⛔ นักศึกษาที่ไม่มีสิทธิ์ต้องโดนด่านเหมือนเดิมทุกจุด (`workflows/placement-replacement` คุม)
+ */
+const REPLACEMENT_PASS_ACTIVITIES: readonly CoopActivityKey[] = [
+  'intent_submission',
+  'acceptance_form',
+  'accommodation_plan',
+];
+
+async function passesAsReplacement(
+  activityKey: CoopActivityKey,
+  semesterId: number | null,
+  studentId: number | null | undefined
+): Promise<boolean> {
+  if (!studentId || !REPLACEMENT_PASS_ACTIVITIES.includes(activityKey)) return false;
+  return CoopSemesterModel.hasReplacementPass(studentId, semesterId);
+}
+
+/**
  * พ้นช่วงของกิจกรรมในภาคนั้นแล้วหรือยัง (พ้นช่วงผ่อนผันด้วย) — สำหรับจุดที่ไม่ได้เป็น middleware
  * (ด่านลิงก์ตอบรับของบริษัท · นักศึกษากดส่งหนังสือ · งานปิดใบอัตโนมัติ)
  *
  * ⚠️ fail-open เหมือนด่านข้างล่าง: ไม่มีภาค · ยังไม่ตั้งวัน · ช่วงผ่อนผัน = `false` ทั้งหมด
+ * `studentId` = เจ้าของใบ — ส่งมาเมื่อจุดนั้นต้องเคารพสิทธิ์ผ่านของนักศึกษาที่ถูกปิดใบ (ข้างบน)
  */
 export async function isCalendarClosed(
   activityKey: CoopActivityKey,
-  semesterId: number | null
+  semesterId: number | null,
+  studentId?: number | null
 ): Promise<boolean> {
   const window = await CoopCalendarModel.findWindow(activityKey, semesterId);
   if (!window) return false;
-  return (
-    calendarStatus(window.today, window.start_date, window.end_date, window.late_end_date) === 'closed'
-  );
+  const closed =
+    calendarStatus(window.today, window.start_date, window.end_date, window.late_end_date) === 'closed';
+  return closed && !(await passesAsReplacement(activityKey, semesterId, studentId));
 }
 
 export const requireCalendarWindow =
@@ -108,6 +134,19 @@ export const requireCalendarWindow =
       if (status === 'not_configured' || status === 'open') {
         next();
         return;
+      }
+
+      // นักศึกษาที่เจ้าหน้าที่ปิดใบที่ฝึก: พ้นช่วงแล้วก็ผ่าน และ **ไม่นับเป็นส่งช้า** (ไม่ปั๊ม calendarLate)
+      // เจ้าของใบ = ผู้เรียก · ทางลิงก์บริษัทไม่มีผู้เรียก จึงอ่านจากใบที่ token ชี้
+      if (status === 'late' || status === 'closed') {
+        const studentId =
+          scope === 'link'
+            ? (res.locals.acceptanceLink?.student_id as number | undefined)
+            : req.user?.userId;
+        if (await passesAsReplacement(activityKey, semesterId, studentId)) {
+          next();
+          return;
+        }
       }
 
       if (status === 'late') {

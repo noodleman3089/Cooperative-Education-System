@@ -470,6 +470,13 @@ CREATE TABLE IF NOT EXISTS intent_forms (
     -- student, and audit_log has no read API by design (SEC-07) — the same
     -- reasoning as every other reject reason in this schema.
     reject_reason TEXT,
+    -- เจ้าหน้าที่ปิดใบที่ตอบรับแล้ว (สถานะ `superseded` · ขั้น 9 · migration 056)
+    -- `closed_kind` = เหตุ: 'sent_back' (สถานประกอบการส่งตัวกลับ) · 'change_company' (เปลี่ยนที่ฝึก) · เหตุผลที่พิมพ์อยู่ที่ reject_reason
+    -- `closed_accommodation` = แถว `accommodations` (สหกิจ 06) ของนักศึกษา ณ ตอนปิด — แถวจริงถูกลบเพื่อให้ส่งใหม่
+    --    เก็บไว้คืนเมื่อเจ้าหน้าที่ยกเลิกการปิด · ⛔ มีที่อยู่ของนักศึกษา ห้ามส่งออกทาง API ไหนเลย
+    -- NULL ทั้งคู่ = ใบไม่ได้ถูกปิดด้วยทางนี้ (หรือยกเลิกการปิดแล้ว)
+    closed_kind VARCHAR(30) CHECK (closed_kind IN ('sent_back', 'change_company')),
+    closed_accommodation JSONB,
     -- ยื่นในช่วงผ่อนผัน (เลย end_date แต่ยังไม่เลย late_end_date)
     -- ⛔ ปั๊ม ณ ตอนเกิดเหตุเท่านั้น (ตอนยื่น · หรือตอนอัปโหลดกระดาษที่ลงนามครั้งแรก — กำหนดส่งนับที่วันอัปโหลด 2026-10-06)
     --    ตั้งได้อย่างเดียวไม่มีทางถอด · ห้ามคำนวณย้อนหลัง — เจ้าหน้าที่แก้ปฏิทินทีหลังได้
