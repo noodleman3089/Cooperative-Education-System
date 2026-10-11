@@ -25,7 +25,8 @@ export type StatusCardState =
   | 'wait-company'
   | 'wait-confirm'
   | 'company-rejected'
-  | 'rejected';
+  | 'rejected'
+  | 'superseded';
 
 /** ฟิลด์ที่ `GET /students/dashboard` ส่งมาแต่ `IntentForm` ยังไม่ได้ประกาศ — optional ทั้งหมด */
 export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm, 'status'>> & {
@@ -40,6 +41,8 @@ export type StatusIntent = Pick<IntentForm, 'status'> & Partial<Omit<IntentForm,
     /** เจ้าหน้าที่ยืนยันพี่เลี้ยงแล้ว (บัญชีเปิด) — false = รอยืนยัน นักศึกษายังแก้ได้ */
     confirmed?: boolean;
   } | null;
+  /** เหตุที่เจ้าหน้าที่ปิดใบ ('sent_back' · 'change_company') — มีเฉพาะใบ `superseded` */
+  closed_kind?: string | null;
 };
 
 type Tone = 'act' | 'wait';
@@ -50,6 +53,7 @@ const TONE: Record<StatusCardState, Tone> = {
   send: 'act',
   'company-rejected': 'act',
   rejected: 'act',
+  superseded: 'act',
   'wait-staff': 'wait',
   'wait-dean': 'wait',
   'wait-company': 'wait',
@@ -81,6 +85,7 @@ const ACTIVE_STEP: Record<StatusCardState, number> = {
   // เริ่มขั้น 1 ใหม่ — ใบเดิมปิดแล้ว
   'company-rejected': 0,
   rejected: 0,
+  superseded: 0,
 };
 
 // ⛔ ไม่มีขั้น "ระบุพี่เลี้ยง" — พี่เลี้ยงระบุหลังได้ที่ฝึกงานแล้ว (การ์ด "ที่ฝึกงานของคุณ") ไม่ขวางการขอที่ฝึกงาน
@@ -100,6 +105,7 @@ function headerLabel(state: StatusCardState, tone: Tone): string {
       return 'สิ่งที่ต้องทำตอนนี้ · กลับไปขั้น 5';
     case 'company-rejected':
     case 'rejected':
+    case 'superseded':
       return 'สิ่งที่ต้องทำตอนนี้ · เริ่มขั้น 1 ใหม่';
     default:
       return tone === 'act'
@@ -201,6 +207,8 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         return <Pill tone="bad">บริษัทไม่รับ</Pill>;
       case 'rejected':
         return <Pill tone="bad">ปิดคำร้องแล้ว</Pill>;
+      case 'superseded':
+        return <Pill tone="neutral">เจ้าหน้าที่ปิดใบแล้ว</Pill>;
       default:
         return null;
     }
@@ -361,6 +369,42 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
             </div>
           </>
         );
+      case 'superseded': {
+        const headline =
+          intent.closed_kind === 'sent_back'
+            ? 'สถานประกอบการส่งตัวกลับ เจ้าหน้าที่ปิดใบที่ฝึกงานเดิมแล้ว'
+            : intent.closed_kind === 'change_company'
+              ? 'เจ้าหน้าที่ปิดใบที่ฝึกงานเดิมเพื่อเปลี่ยนสถานประกอบการ'
+              : 'เจ้าหน้าที่ปิดใบที่ฝึกงานเดิมแล้ว';
+
+        return (
+          <>
+            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              {headline}
+            </h2>
+            {intent.reject_reason && <ReasonBox tone="plain">เหตุผล: {intent.reject_reason}</ReasonBox>}
+            <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+              ยื่นคำร้องขอหนังสือสำหรับที่ใหม่ได้ที่เมนู{' '}
+              <a
+                href="?menu=jobs"
+                onClick={(e) => {
+                  e.preventDefault();
+                  onFindPlacement();
+                }}
+                className="font-bold text-brand-blue underline dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
+              >
+                ยื่นคำร้องขอหนังสือ
+              </a>{' '}
+              แม้พ้นช่วงยื่นตามปฏิทินแล้ว
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button data-testid="status-primary" onClick={onFindPlacement}>
+                หาที่ฝึกงานใหม่
+              </Button>
+            </div>
+          </>
+        );
+      }
     }
   })();
 

@@ -30,6 +30,7 @@ interface ModalProps {
   className?: string;
   /** Off for dialogs where a stray click would lose typed input. */
   closeOnBackdrop?: boolean;
+  'data-testid'?: string;
 }
 
 /**
@@ -50,6 +51,7 @@ export const Modal: React.FC<ModalProps> = ({
   children,
   className = '',
   closeOnBackdrop = true,
+  'data-testid': testId,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   // ponytail: hold onClose in a ref so inline arrow functions passed from callers
@@ -100,6 +102,7 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
+        data-testid={testId}
         className={`w-full ${SIZES[size]} max-h-[calc(100vh-3.5rem)] my-auto flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-hidden animate-scale-in ${className}`.trim()}
       >
         {title && (

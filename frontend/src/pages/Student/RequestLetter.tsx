@@ -79,6 +79,7 @@ const RequestLetter: React.FC = () => {
   const [profile, setProfile] = useState<StudentProfile | null>(null);
   const [hasProfile, setHasProfile] = useState(true);
   const [currentIntent, setCurrentIntent] = useState<ActiveIntent | null>(null);
+  const [replacementPass, setReplacementPass] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [provinceList, setProvinceList] = useState<Province[]>([]);
   const [calendar, setCalendar] = useState<CoopCalendarResponse | null>(null);
@@ -118,7 +119,7 @@ const RequestLetter: React.FC = () => {
 
   const activity = (key: string) => calendar?.activities.find((a) => a.activity_key === key);
   const submission = activity('intent_submission');
-  const isLate = submission?.status === 'late';
+  const isLate = !replacementPass && submission?.status === 'late';
   const coopStart = activity('coop_start')?.start_date ?? null;
   const coopEnd = activity('coop_end')?.end_date ?? null;
 
@@ -157,9 +158,11 @@ const RequestLetter: React.FC = () => {
       if (me.ok) {
         setHasProfile(true);
         setCurrentIntent(me.d?.activeIntent ?? null);
+        setReplacementPass(me.d?.replacement_pass === true);
       } else if (getErrorStatus(me.e) === 404) {
         setHasProfile(false);
         setCurrentIntent(null);
+        setReplacementPass(false);
       } else {
         throw me.e;
       }
@@ -505,12 +508,18 @@ const RequestLetter: React.FC = () => {
         {semesterLabel && (
           <span className="rounded-full border border-blue-200 bg-blue-100 px-3.5 py-1.5 text-xs font-bold text-brand-navy dark:border-blue-900 dark:bg-blue-950/50 dark:text-blue-300">
             {semesterLabel}
-            {submission?.end_date ? ` · เปิดรับถึง ${formatThaiDate(submission.end_date)}` : ''}
+            {!replacementPass && submission?.end_date ? ` · เปิดรับถึง ${formatThaiDate(submission.end_date)}` : ''}
           </span>
         )}
       </div>
 
       <div ref={alertRef} className="empty:hidden space-y-4">
+        {replacementPass && (
+          <AlertBanner
+            variant="info"
+            message="คุณได้รับสิทธิ์ยื่นนอกช่วงปฏิทิน เพราะเจ้าหน้าที่ปิดใบที่ฝึกงานเดิม"
+          />
+        )}
         <AlertBanner variant="error" message={error} />
         <AlertBanner variant="success" message={success} />
         {duplicate && (
@@ -880,7 +889,7 @@ const RequestLetter: React.FC = () => {
                 'พิมพ์แบบคำร้องที่กรอกแล้วจากหน้าแรก และลงชื่อ',
                 'ให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาลงนาม',
                 // กำหนดส่งนับที่วันอัปโหลดกระดาษ ไม่ใช่วันกดยื่น (เจ้าของตัดสิน 2026-10-06)
-                submission?.end_date
+                !replacementPass && submission?.end_date
                   ? `สแกนหรือถ่ายรูปหน้า 1 อัปโหลดกลับที่หน้าแรก ภายในวันที่ ${formatThaiDate(submission.end_date)} — กำหนดส่งนับที่วันอัปโหลด`
                   : 'สแกนหรือถ่ายรูปหน้า 1 อัปโหลดกลับที่หน้าแรก',
               ].map((step, i) => (

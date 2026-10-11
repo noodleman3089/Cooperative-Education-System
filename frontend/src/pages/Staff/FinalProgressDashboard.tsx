@@ -3,6 +3,8 @@ import api from '../../services/api';
 import { Search, Check, AlertTriangle, RefreshCw, Download, Mail, Lock } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
+import Button from '../../components/ui/Button';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
 
@@ -38,6 +40,12 @@ interface StudentProgress {
   sahatkit15Score: number | null;
   sahatkit16Score: number | null;
   lastNotifiedAt: string | null;
+  placement?: {
+    form_id: number;
+    status: 'accepted' | 'superseded';
+    closed_kind: 'sent_back' | 'change_company' | null;
+    can_reopen: boolean;
+  } | null;
 }
 
 export const FinalProgressDashboard: React.FC = () => {
@@ -52,6 +60,17 @@ export const FinalProgressDashboard: React.FC = () => {
   const [notifyTarget, setNotifyTarget] = useState<StudentProgress | null>(null);
   const [batchNotifyOpen, setBatchNotifyOpen] = useState(false);
   const [batchNotifying, setBatchNotifying] = useState(false);
+
+  // ปิดใบที่ฝึกงาน (accepted → superseded)
+  const [closeTarget, setCloseTarget] = useState<StudentProgress | null>(null);
+  const [closeKind, setCloseKind] = useState<'sent_back' | 'change_company' | ''>('');
+  const [closeReason, setCloseReason] = useState('');
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+
+  // ยกเลิกการปิดใบ (superseded → accepted)
+  const [reopenTarget, setReopenTarget] = useState<StudentProgress | null>(null);
+  const [reopening, setReopening] = useState(false);
 
   // Store mount timestamp to avoid impure Date.now() during render
   const [now] = useState(() => Date.now());
@@ -123,6 +142,43 @@ export const FinalProgressDashboard: React.FC = () => {
       setError(getErrorMessage(err, 'ส่งอีเมลเตือนเป็นกลุ่มไม่สำเร็จ'));
     } finally {
       setBatchNotifying(false);
+    }
+  };
+
+  const handleCloseSubmit = async () => {
+    if (!closeTarget?.placement || !closeKind || !closeReason.trim()) return;
+    try {
+      setClosing(true);
+      setCloseError(null);
+      const res = await api.post(`/intents/${closeTarget.placement.form_id}/close-accepted`, {
+        kind: closeKind,
+        reason: closeReason.trim(),
+      });
+      setCloseTarget(null);
+      // `api` คืน body ของคำตอบตรง ๆ (ไม่ใช่ axios) — ข้อความอยู่ที่ res.message
+      setSuccess(res?.message || 'ปิดใบที่ฝึกงานแล้ว');
+      await loadData();
+    } catch (err) {
+      setCloseError(getErrorMessage(err, 'ไม่สามารถปิดใบที่ฝึกงานได้'));
+    } finally {
+      setClosing(false);
+    }
+  };
+
+  const handleReopenConfirm = async () => {
+    if (!reopenTarget?.placement) return;
+    try {
+      setReopening(true);
+      setError(null);
+      const res = await api.post(`/intents/${reopenTarget.placement.form_id}/reopen-accepted`);
+      setReopenTarget(null);
+      setSuccess(res?.message || 'ยกเลิกการปิดใบสำเร็จ');
+      await loadData();
+    } catch (err) {
+      setReopenTarget(null);
+      setError(getErrorMessage(err, 'ไม่สามารถยกเลิกการปิดใบได้'));
+    } finally {
+      setReopening(false);
     }
   };
 
@@ -397,7 +453,7 @@ export const FinalProgressDashboard: React.FC = () => {
                     <br />
                     <span className="font-normal text-[11px] text-gray-600 dark:text-gray-400">15 / 16</span>
                   </th>
-                  <th className="p-3 font-bold text-right w-[110px]"></th>
+                  <th className="p-3 font-bold text-right min-w-[140px]"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-700/60 text-gray-700 dark:text-gray-300">
@@ -543,31 +599,71 @@ export const FinalProgressDashboard: React.FC = () => {
 
                         {/* 11. Actions */}
                         <td className="p-3 text-right">
-                          {needsMentorReminder ? (
-                            <button
-                              type="button"
-                              onClick={() => setNotifyTarget(std)}
-                              disabled={isCooldownActive(std.lastNotifiedAt) || notifyingMap[std.studentId]}
-                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
-                            >
-                              เตือนพี่เลี้ยง
-                            </button>
-                          ) : !complete ? (
-                            <button
-                              type="button"
-                              onClick={() => setNotifyTarget(std)}
-                              className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                            >
-                              ส่งอีเมลเตือน
-                            </button>
+                          {std.placement?.status === 'superseded' ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                                เจ้าหน้าที่ปิดใบแล้ว
+                                {std.placement.closed_kind === 'sent_back'
+                                  ? ' (สถานประกอบการส่งตัวกลับ)'
+                                  : std.placement.closed_kind === 'change_company'
+                                  ? ' (เปลี่ยนสถานประกอบการ)'
+                                  : ''}
+                              </span>
+                              {std.placement.can_reopen && (
+                                <button
+                                  type="button"
+                                  data-testid={`reopen-accepted-${std.studentCode}`}
+                                  onClick={() => setReopenTarget(std)}
+                                  className="text-[11px] font-semibold text-brand-blue dark:text-blue-400 hover:underline"
+                                >
+                                  ยกเลิกการปิด
+                                </button>
+                              )}
+                            </div>
                           ) : (
-                            <button
-                              type="button"
-                              onClick={() => alert(`ข้อมูลนักศึกษา: ${std.studentName}\nรหัส: ${std.studentCode}\nอาจารย์: ${std.advisorName}\nความคืบหน้า: 100% ครบสมบูรณ์`)}
-                              className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50"
-                            >
-                              ดูรายคน
-                            </button>
+                            <div className="flex flex-col items-end gap-1.5">
+                              {needsMentorReminder ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setNotifyTarget(std)}
+                                  disabled={isCooldownActive(std.lastNotifiedAt) || notifyingMap[std.studentId]}
+                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+                                >
+                                  เตือนพี่เลี้ยง
+                                </button>
+                              ) : !complete ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setNotifyTarget(std)}
+                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                                >
+                                  ส่งอีเมลเตือน
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => alert(`ข้อมูลนักศึกษา: ${std.studentName}\nรหัส: ${std.studentCode}\nอาจารย์: ${std.advisorName}\nความคืบหน้า: 100% ครบสมบูรณ์`)}
+                                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50"
+                                >
+                                  ดูรายคน
+                                </button>
+                              )}
+                              {std.placement?.status === 'accepted' && (
+                                <button
+                                  type="button"
+                                  data-testid={`close-accepted-${std.studentCode}`}
+                                  onClick={() => {
+                                    setCloseTarget(std);
+                                    setCloseKind('');
+                                    setCloseReason('');
+                                    setCloseError(null);
+                                  }}
+                                  className="text-[11px] text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 underline transition-colors"
+                                >
+                                  ปิดใบที่ฝึก
+                                </button>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
@@ -626,6 +722,112 @@ export const FinalProgressDashboard: React.FC = () => {
         busy={batchNotifying}
         onConfirm={handleBatchNotify}
         onCancel={() => setBatchNotifyOpen(false)}
+      />
+
+      {/* Dialog สำหรับปิดใบที่ฝึกงาน */}
+      {closeTarget && (
+        <Modal
+          onClose={() => !closing && setCloseTarget(null)}
+          size="lg"
+          closeOnBackdrop={!closing}
+          data-testid="close-accepted-dialog"
+          title={
+            <div>
+              <div className="text-base font-bold text-gray-900 dark:text-white">
+                ปิดใบที่ฝึกงาน
+              </div>
+              <div className="text-xs font-normal text-gray-500 dark:text-gray-400 mt-0.5">
+                {closeTarget.studentName} ({closeTarget.studentCode}) · {closeTarget.companyName || '—'}
+              </div>
+            </div>
+          }
+        >
+          {/* ⛔ ห้ามห่อ ModalBody/ModalFooter ด้วย div — แผง Modal เป็น flex column ตัวห่อทำให้เนื้อหาเลื่อนไม่ได้และปุ่มถูกตัดบนจอเตี้ย */}
+          <>
+            <ModalBody className="space-y-4">
+              <AlertBanner variant="error" message={closeError} />
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  เหตุที่ปิดใบ <span className="text-red-500">*</span>
+                </label>
+                <select
+                  data-testid="close-accepted-kind"
+                  value={closeKind}
+                  disabled={closing}
+                  onChange={(e) => setCloseKind(e.target.value as 'sent_back' | 'change_company' | '')}
+                  className="w-full text-xs p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-blue-500"
+                >
+                  <option value="">-- เลือกเหตุที่ปิดใบ --</option>
+                  <option value="sent_back">สถานประกอบการส่งตัวกลับ</option>
+                  <option value="change_company">เปลี่ยนสถานประกอบการ</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                  เหตุผล <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  data-testid="close-accepted-reason"
+                  rows={3}
+                  value={closeReason}
+                  disabled={closing}
+                  onChange={(e) => setCloseReason(e.target.value)}
+                  placeholder="ระบุเหตุผล..."
+                  className="w-full text-xs p-2.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-blue-500"
+                />
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  พิมพ์ตามบันทึกข้อความที่สาขาส่งมา นักศึกษาจะเห็นข้อความนี้
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3.5 dark:border-gray-700 dark:bg-gray-800/60 space-y-1.5">
+                <p className="text-xs font-bold text-gray-700 dark:text-gray-300">สิ่งที่จะเกิดขึ้น:</p>
+                <ul className="list-disc list-inside text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                  <li>นักศึกษายื่นคำร้องขอหนังสือสำหรับที่ใหม่ได้ทันที แม้พ้นช่วงยื่นตามปฏิทิน</li>
+                  <li>พี่เลี้ยงของที่เดิมจะไม่เห็นนักศึกษาคนนี้อีก</li>
+                  <li>นักศึกษาต้องส่งแบบแจ้งที่พัก (สหกิจ 06) ใหม่</li>
+                  <li>บันทึกการปฏิบัติงาน โครงร่าง และผลประเมินที่มีอยู่ยังอยู่ครบ</li>
+                </ul>
+              </div>
+            </ModalBody>
+
+            <ModalFooter className="flex justify-end gap-2.5">
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={closing}
+                onClick={() => setCloseTarget(null)}
+              >
+                ยกเลิก
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                data-testid="close-accepted-submit"
+                loading={closing}
+                disabled={!closeKind || !closeReason.trim() || closing}
+                onClick={handleCloseSubmit}
+              >
+                ปิดใบที่ฝึก
+              </Button>
+            </ModalFooter>
+          </>
+        </Modal>
+      )}
+
+      {/* Confirmation for Reopen */}
+      <ConfirmDialog
+        open={reopenTarget !== null}
+        title="ยกเลิกการปิดใบที่ฝึกงาน"
+        message="คืนใบนี้เป็น ได้ที่ฝึกแล้ว ใช่หรือไม่"
+        confirmLabel="คืนใบนี้เป็น ได้ที่ฝึกแล้ว"
+        cancelLabel="ยกเลิก"
+        confirmTestId="reopen-accepted-confirm"
+        busy={reopening}
+        onConfirm={handleReopenConfirm}
+        onCancel={() => setReopenTarget(null)}
       />
     </div>
   );

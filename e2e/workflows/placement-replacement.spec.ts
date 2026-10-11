@@ -5,9 +5,11 @@ import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { dbExec, dbRow, dbValue, mentor1Id, withDb } from '../helpers/db';
-import { apiLoginAs, DEFAULT_PASSWORD, type AccountKey } from '../helpers/auth';
+import { apiLoginAs, loginAs, DEFAULT_PASSWORD, type AccountKey } from '../helpers/auth';
+import { goToMenu } from '../helpers/nav';
 import {
   SAMPLE_MENTOR,
+  submitRequestToDirectoryCompany,
   approveIntentThroughOfficer,
   completeDispatchPrep,
   coverLetterDocId,
@@ -29,7 +31,8 @@ import { putForm, shift } from '../helpers/semesters';
  *   R4  ตัวปิดใบอัตโนมัติ — ไม่ปิดใบใหม่ของนักศึกษาที่มีสิทธิ์ · ยังปิดใบค้างของคนอื่น
  *   R6  ยกเลิกการปิด — ใบและ 06 กลับมา สิทธิ์ผ่านหาย · 06 ฉบับใหม่ชนะฉบับเก่า · ยื่นใบใหม่แล้ว = 409
  *   R7  ไม่มีที่ใหม่ — ปิดแล้วจบ หน้าแรกนักศึกษายังเปิดได้และบอกเหตุผล
- * (R5 ของใบสั่งรวมอยู่ในท้าย R3 · R8 หน้าจอ รอฝั่งหน้าจอส่งงาน)
+ *   R8  หน้าจอ — เจ้าหน้าที่ปิดใบจากหน้าติดตามเอกสารนักศึกษา · นักศึกษาเห็นการ์ดแล้วยื่นที่ใหม่ · R8b ยกเลิกการปิด
+ * (R5 ของใบสั่งรวมอยู่ในท้าย R3)
  *
  * อีเมลไม่ออกเน็ต (`MAIL_DRY_RUN=true` ใน playwright.config.ts) · ข้อมูลทั้งหมดเป็นของปลอม
  */
@@ -708,5 +711,89 @@ test.describe('ขั้น 9 — เจ้าหน้าที่ปิดใ�
       reject_reason: CLOSE_REASON,
     });
     expect(dash.replacement_pass).toBe(true);
+  });
+
+  test('R8: หน้าจอ — เจ้าหน้าที่ปิดใบจากหน้าติดตามเอกสารนักศึกษา · นักศึกษาเห็นการ์ดบอกเหตุผลแล้วยื่นที่ใหม่ได้ทั้งที่ปฏิทินปิด · หัวหน้าสาขาไม่มีปุ่ม', async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const formId = await seedAccepted();
+    await closePlacementWindows();
+    const code = (await dbValue<string>(`SELECT student_code FROM students WHERE student_id = ${STUDENT2}`))!;
+
+    // ── หัวหน้าสาขาเปิดหน้าเดียวกันได้ แต่ไม่มีปุ่มปิดใบ (ฟิลด์ไม่ถูกส่งให้) ──
+    await loginAs(page, 'head1');
+    await goToMenu(page, 'final_progress');
+    await expect(page.getByText(code)).toBeVisible();
+    await expect(page.getByTestId(`close-accepted-${code}`)).toHaveCount(0);
+
+    // ── เจ้าหน้าที่ปิดใบ ──
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'final_progress');
+    await page.getByTestId(`close-accepted-${code}`).click();
+
+    const dialog = page.getByTestId('close-accepted-dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(code);
+    await expect(dialog).toContainText('นักศึกษาต้องส่งแบบแจ้งที่พัก (สหกิจ 06) ใหม่');
+    await expect(dialog).toContainText('บันทึกการปฏิบัติงาน โครงร่าง และผลประเมินที่มีอยู่ยังอยู่ครบ');
+    const submit = page.getByTestId('close-accepted-submit');
+    await expect(submit, 'ยังไม่เลือกเหตุและไม่มีเหตุผล = กดไม่ได้').toBeDisabled();
+    await page.getByTestId('close-accepted-kind').selectOption('sent_back');
+    await expect(submit, 'มีเหตุแต่ยังไม่มีเหตุผล = กดไม่ได้').toBeDisabled();
+    await page.getByTestId('close-accepted-reason').fill(CLOSE_REASON);
+    await submit.click();
+
+    await expect(page.getByText('ปิดใบที่ฝึกงานแล้ว นักศึกษายื่นคำร้องขอหนังสือสำหรับที่ใหม่ได้ทันที')).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByText('เจ้าหน้าที่ปิดใบแล้ว (สถานประกอบการส่งตัวกลับ)')).toBeVisible();
+    await expect(page.getByTestId(`reopen-accepted-${code}`)).toBeVisible();
+    await expect(page.getByTestId(`close-accepted-${code}`)).toHaveCount(0);
+    expect(await formRow(formId)).toMatchObject({ status: 'superseded', closed_kind: 'sent_back', reject_reason: CLOSE_REASON });
+
+    // ── นักศึกษา: การ์ดบอกเหตุกับเหตุผล แล้วพาไปยื่นที่ใหม่ ──
+    await loginAs(page, 'student2');
+    await expect(page.getByText('สถานประกอบการส่งตัวกลับ เจ้าหน้าที่ปิดใบที่ฝึกงานเดิมแล้ว')).toBeVisible();
+    await expect(page.getByText(`เหตุผล: ${CLOSE_REASON}`)).toBeVisible();
+    await page.getByRole('link', { name: 'ยื่นคำร้องขอหนังสือ' }).click();
+    await expect(
+      page.getByText('คุณได้รับสิทธิ์ยื่นนอกช่วงปฏิทิน เพราะเจ้าหน้าที่ปิดใบที่ฝึกงานเดิม')
+    ).toBeVisible();
+
+    // ปฏิทินยื่นคำร้องปิดไปแล้ว 10 วัน — ยื่นผ่านหน้าจอได้จริง
+    await submitRequestToDirectoryCompany(page);
+    await expect(
+      page.locator('text=ยื่นคำร้องถึง บริษัท ซีเกท เทคโนโลยี (ประเทศไทย) จำกัด เรียบร้อยแล้ว')
+    ).toBeVisible();
+    expect(
+      await dbValue<number>(
+        `SELECT COUNT(*)::int FROM intent_forms WHERE student_id = ${STUDENT2} AND status = 'pending_advisor'`
+      )
+    ).toBe(1);
+
+    // ── นักศึกษายื่นใบใหม่แล้ว เจ้าหน้าที่ไม่มีปุ่มยกเลิกการปิด ──
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'final_progress');
+    await expect(page.getByText('เจ้าหน้าที่ปิดใบแล้ว (สถานประกอบการส่งตัวกลับ)')).toBeVisible();
+    await expect(page.getByTestId(`reopen-accepted-${code}`)).toHaveCount(0);
+  });
+
+  test('R8b: หน้าจอ — เจ้าหน้าที่ยกเลิกการปิดใบ ใบกลับเป็นได้ที่ฝึกแล้ว ปุ่มปิดใบกลับมา', async ({ page, request }) => {
+    test.setTimeout(120_000);
+    const formId = await seedAccepted();
+    const code = (await dbValue<string>(`SELECT student_code FROM students WHERE student_id = ${STUDENT2}`))!;
+    await staffCloses(request, formId, 'change_company');
+
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'final_progress');
+    await expect(page.getByText('เจ้าหน้าที่ปิดใบแล้ว (เปลี่ยนสถานประกอบการ)')).toBeVisible();
+    await page.getByTestId(`reopen-accepted-${code}`).click();
+    await expect(page.getByRole('dialog')).toContainText('คืนใบนี้เป็น ได้ที่ฝึกแล้ว ใช่หรือไม่');
+    await page.getByTestId('reopen-accepted-confirm').click();
+
+    await expect(page.getByText('ยกเลิกการปิดแล้ว ใบกลับเป็น "ได้ที่ฝึกแล้ว" ตามเดิม')).toBeVisible();
+    await expect(page.getByTestId(`close-accepted-${code}`)).toBeVisible();
+    await expect(page.getByTestId(`reopen-accepted-${code}`)).toHaveCount(0);
+    expect(await formRow(formId)).toMatchObject({ status: 'accepted', closed_kind: null, reject_reason: null });
   });
 });

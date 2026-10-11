@@ -55,6 +55,8 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
       return 'company-rejected';
     case 'rejected':
       return 'rejected';
+    case 'superseded':
+      return 'superseded';
     case 'accepted':
       // ได้ที่ฝึกงานแล้ว = จบช่วงขอที่ฝึกงาน · การ์ด "สิ่งที่ต้องทำตอนนี้" ช่วงนี้หายไป
       // เหลือ `CoopNowCard` ใบเดียวที่พาเดินต่อ (เจ้าของตัดสิน 2026-09-30: มีการ์ด "ทำอะไรตอนนี้" ได้ใบเดียวเสมอ)
@@ -70,7 +72,14 @@ const StudentDashboard: React.FC = () => {
     student: StudentProfile & { advisor?: { email: string; name?: string }; supervisor?: { email: string; name?: string } };
     activeIntent: IntentForm | null;
     /** ใบที่ถูกปิดล่าสุดของภาคนี้ — มีเฉพาะตอน activeIntent เป็น null */
-    closedIntent?: { form_id: number; status: string; company_name_th: string; reject_reason: string | null } | null;
+    closedIntent?: {
+      form_id: number;
+      status: string;
+      company_name_th: string;
+      reject_reason: string | null;
+      closed_kind?: string | null;
+    } | null;
+    replacement_pass?: boolean;
     documents: OfficialDocument[];
     /** คณะเตือนพี่เลี้ยงของนักศึกษาคนนี้ไปกี่ครั้ง — แสดงให้รู้ว่าไม่ต้องตามเอง (ไม่มี = ไม่แสดงอะไร) */
     mentor_reminders?: { count: number; last_at: string | null };
@@ -201,6 +210,7 @@ const StudentDashboard: React.FC = () => {
   // (ใบที่เคยอัปโหลดแล้วหรือถูกตีกลับ เซิร์ฟเวอร์ไม่ผูกปฏิทิน · เซิร์ฟเวอร์เป็นด่านจริง ตรงนี้แค่ถามล่วงหน้า)
   const submissionWindow = calendar?.activities.find((a) => a.activity_key === 'intent_submission');
   const uploadNeedsLateReason =
+    !data?.replacement_pass &&
     submissionWindow?.status === 'late' &&
     !!data?.activeIntent &&
     !data.activeIntent.submitted_late &&

@@ -88,6 +88,7 @@ interface StudentStage {
   intentStatus: string | null;
   mentorLocked?: boolean;
   mentorOpensOn?: string | null;
+  replacementPass?: boolean;
 }
 
 /** Full-screen version of the padlock in the sidebar, with the way forward. */
@@ -224,12 +225,13 @@ const Dashboard: React.FC = () => {
           intentStatus: stageRes.value?.activeIntent?.status ?? null,
           mentorLocked: stageRes.value?.activeIntent?.mentor_locked ?? true,
           mentorOpensOn: stageRes.value?.activeIntent?.mentor_opens_on ?? null,
+          replacementPass: stageRes.value?.replacement_pass === true,
         });
       } else if (getErrorStatus(stageRes.reason) === 404) {
         // 404 is the student who has not filled the profile in yet. Anything
         // else is the server having a bad day, and a bad day must not invent a
         // padlock — leave the menus as they were.
-        setStage({ hasProfile: false, intentStatus: null, mentorLocked: true, mentorOpensOn: null });
+        setStage({ hasProfile: false, intentStatus: null, mentorLocked: true, mentorOpensOn: null, replacementPass: false });
       }
 
       if (calRes.status === 'fulfilled') {
@@ -272,6 +274,11 @@ const Dashboard: React.FC = () => {
       //    โดยตั้งใจ การเช็ค start ด้วยจะทำให้เส้นตายไม่ล็อกอะไรเลยเงียบๆ
       if (!activity.end_date) continue;
 
+      // นักศึกษาที่มีสิทธิ์ผ่าน (เจ้าหน้าที่ปิดใบที่ฝึกเดิม) ได้รับยกเว้นการล็อกปฏิทินสำหรับ accommodation_plan
+      if (activity.activity_key === 'accommodation_plan' && stage?.replacementPass) {
+        continue;
+      }
+
       // ชนิด "ภายในวันที่" ไม่มีวันเริ่ม จึงพูดว่า "เปิดถึงวันที่" ไม่ได้ —
       // คนอ่านจะนึกว่ามีวันเริ่มที่ตัวเองพลาดไป (กติกาเดียวกับ calendarGate.ts)
       const closedOn =
@@ -304,7 +311,7 @@ const Dashboard: React.FC = () => {
       }
     }
     return locks;
-  }, [currentRole, calendar]);
+  }, [currentRole, calendar, stage]);
 
   /** ล็อกตามขั้นตอนของนักศึกษาคนนั้น — ของเดิม ไม่เกี่ยวกับเวลา */
   const stageLocks = useMemo<Record<string, string>>(() => {
