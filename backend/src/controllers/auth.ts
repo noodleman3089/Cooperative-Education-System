@@ -67,7 +67,7 @@ export class AuthController {
         email = payload?.email;
       }
       if (!email) {
-        res.status(400).json({ message: 'Failed to extract email from Google ID Token.' });
+        res.status(400).json({ message: 'อ่านอีเมลจากบัญชี Google ไม่ได้ กรุณาลองเข้าสู่ระบบใหม่อีกครั้ง' });
         return;
       }
 
@@ -77,7 +77,7 @@ export class AuthController {
       const allowedDomain = process.env.ALLOWED_SSO_DOMAIN || 'rmutto.ac.th';
       const isSimulated = process.env.ALLOW_SIMULATED_SSO === 'true' && token.startsWith('simulated_token_for_');
       if (!isSimulated && !cleanEmail.endsWith(`@${allowedDomain}`)) {
-        res.status(403).json({ message: `Access denied. You must log in using an @${allowedDomain} account.` });
+        res.status(403).json({ message: `บัญชีนี้ใช้เข้าสู่ระบบไม่ได้ กรุณาใช้อีเมลมหาวิทยาลัย (@${allowedDomain})` });
         return;
       }
 
@@ -127,7 +127,7 @@ export class AuthController {
       }
 
       if (!user.is_active) {
-        res.status(403).json({ message: 'Your account is currently deactivated.' });
+        res.status(403).json({ message: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อเจ้าหน้าที่งานสหกิจศึกษา' });
         return;
       }
 
@@ -156,7 +156,7 @@ export class AuthController {
         },
       });
     } catch (error) {
-      sendUnexpectedError(res, error, 'Google SSO Error', 'An internal server error occurred during Google SSO authentication.');
+      sendUnexpectedError(res, error, 'Google SSO Error', 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
     }
   }
 
