@@ -219,7 +219,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'submit-paper':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">ส่งแบบคำร้องที่ลงนามแล้ว</h2>
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">ส่งแบบคำร้องที่ลงนามแล้ว</h2>
             <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
               พิมพ์แบบคำร้อง (เอกสาร 1) ให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนามด้วยปากกา แล้วอัปโหลดไฟล์ที่สแกนกลับมาที่นี่
             </p>
@@ -229,7 +229,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'wait-staff':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">รอเจ้าหน้าที่รับคำร้อง</h2>
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">รอเจ้าหน้าที่รับคำร้อง</h2>
             <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
               เจ้าหน้าที่ตรวจลายเซ็นบนคำร้อง (เอกสาร 1) แล้วออกเลขหนังสือ · ไม่ต้องทำอะไรตอนนี้
               ระบบจะแจ้งทางอีเมลเมื่อผ่านขั้นนี้
@@ -240,7 +240,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'wait-dean':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               เจ้าหน้าที่รับคำร้องแล้ว รอคณบดีลงนาม
             </h2>
             <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
@@ -252,7 +252,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'send':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               คณบดีลงนามหนังสือแล้ว ส่งให้บริษัทได้เลย
             </h2>
             <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
@@ -275,7 +275,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         if (linkExpired) {
           return (
             <>
-              <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+              <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
                 {company} ยังไม่ตอบ และลิงก์ตอบรับหมดอายุแล้ว
               </h2>
               <p data-testid="link-expired-note" className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
@@ -289,7 +289,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         }
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">รอบริษัทตอบรับ</h2>
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">รอบริษัทตอบรับ</h2>
             <p className="text-sm leading-relaxed text-gray-600 dark:text-gray-400">
               บริษัทตอบผ่านลิงก์แล้วระบบจะแจ้งคุณทันที · ไม่ต้องทำอะไรตอนนี้
             </p>
@@ -300,7 +300,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'returned':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               เอกสารตอบรับยังใช้ไม่ได้ ต้องให้บริษัทส่งใหม่
             </h2>
             <ReasonBox tone="warn">
@@ -313,7 +313,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'wait-confirm':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               บริษัทตอบรับแล้ว รอเจ้าหน้าที่ยืนยัน
             </h2>
             {intent.acceptance_signer_name && (
@@ -341,7 +341,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
       case 'company-rejected':
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               {company} ไม่รับครั้งนี้ เลือกที่ฝึกงานใหม่ได้เลย
             </h2>
             {intent.reject_reason && <ReasonBox tone="plain">เหตุผลจากบริษัท: {intent.reject_reason}</ReasonBox>}
@@ -357,7 +357,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
         return (
           <>
             {/* หัวข้อเป็นกลาง — ใบปิดได้สองทาง: นักศึกษาแจ้งเอง (ไม่มีเหตุผล) · ระบบปิดเมื่อพ้นปฏิทิน (มีเหตุผล) */}
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               คำร้องที่ {company} ปิดแล้ว เลือกที่ฝึกงานใหม่ได้เลย
             </h2>
             {intent.reject_reason && <ReasonBox tone="plain">เหตุผล: {intent.reject_reason}</ReasonBox>}
@@ -379,7 +379,7 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
 
         return (
           <>
-            <h2 className="text-2xl font-semibold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-extrabold text-gray-900 dark:text-white">
               {headline}
             </h2>
             {intent.reject_reason && <ReasonBox tone="plain">เหตุผล: {intent.reject_reason}</ReasonBox>}
@@ -473,9 +473,8 @@ export const RequestProgress: React.FC<{ state: StatusCardState }> = ({ state })
               className={`flex items-center gap-2.5 ${
                 current
                   ? 'font-semibold text-brand-navy dark:text-blue-300'
-                  : done
-                    ? 'text-gray-600 dark:text-gray-400'
-                    : 'text-gray-600 dark:text-gray-500'
+                  : // ขั้นที่ผ่านแล้วกับขั้นที่ยังไม่ถึงใช้สีเดียวกัน (ต่างกันที่ไอคอน) — gray-500 ในโหมดมืดได้แค่ 3.67:1
+                    'text-gray-600 dark:text-gray-400'
               }`}
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">

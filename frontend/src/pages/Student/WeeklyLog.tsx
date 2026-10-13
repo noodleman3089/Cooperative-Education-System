@@ -11,13 +11,13 @@ import {
   Printer,
   Trash2,
   ExternalLink,
-  Loader2,
   Send,
   Save,
 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
 import PageSkeleton from '../../components/ui/Skeleton';
+import Button from '../../components/ui/Button';
 import CalendarGate from '../../components/ui/CalendarGate';
 import { useCalendarGate } from '../../components/ui/useCalendarGate';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -610,7 +610,7 @@ const WeeklyLog: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       {/* 1. Header Card */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div className="space-y-1.5">
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
             บันทึกการปฏิบัติงาน
@@ -639,7 +639,7 @@ const WeeklyLog: React.FC = () => {
       {/* 2. Progress Card (ความคืบหน้ารายสัปดาห์) */}
       <div
         data-testid="worklog-progress"
-        className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 md:p-7 shadow-sm space-y-4"
+        className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-5 md:p-7 shadow-sm space-y-4"
       >
         <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-3">
           <span className="text-base font-bold text-gray-900 dark:text-white">
@@ -715,7 +715,7 @@ const WeeklyLog: React.FC = () => {
       </div>
 
       {/* 3. Main Form Container with 3 Tabs */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden flex flex-col">
         {/* Tab Headers */}
         <div className="flex border-b border-gray-200 dark:border-gray-700 px-3 bg-gray-50/80 dark:bg-gray-900/40 items-center overflow-x-auto">
           <div className="flex shrink-0">
@@ -726,38 +726,38 @@ const WeeklyLog: React.FC = () => {
                 type="button"
                 data-testid="worklog-tab-daily"
                 onClick={() => setActiveTab('daily')}
-                className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition ${
+                className={`flex items-center gap-2 px-3.5 sm:px-5 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition ${
                   activeTab === 'daily'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
                     : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent'
                 }`}
               >
-                รายวัน · สหกิจ 08
+                รายวัน<span className="hidden sm:inline"> · สหกิจ 08</span>
               </button>
             )}
             <button
               type="button"
               data-testid="worklog-tab-weekly"
               onClick={() => setActiveTab('weekly')}
-              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition ${
+              className={`flex items-center gap-2 px-3.5 sm:px-5 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition ${
                 activeTab === 'weekly'
                   ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent'
               }`}
             >
-              รายสัปดาห์ · สหกิจ 09
+              รายสัปดาห์<span className="hidden sm:inline"> · สหกิจ 09</span>
             </button>
             <button
               type="button"
               data-testid="worklog-tab-monthly"
               onClick={() => setActiveTab('monthly')}
-              className={`flex items-center gap-2 px-5 py-3.5 text-sm font-semibold border-b-2 transition ${
+              className={`flex items-center gap-2 px-3.5 sm:px-5 py-3.5 text-sm font-semibold border-b-2 whitespace-nowrap transition ${
                 activeTab === 'monthly'
                   ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400'
                   : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 border-transparent'
               }`}
             >
-              รายเดือน · สหกิจ 10
+              รายเดือน<span className="hidden sm:inline"> · สหกิจ 10</span>
             </button>
           </div>
         </div>
@@ -894,30 +894,25 @@ const WeeklyLog: React.FC = () => {
                   บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
                 </span>
                 <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
-                  <button
-                    type="button"
+                  {/* ปุ่มของกลาง (`ui/Button`) — ตอนกำลังส่งจางลงและมีตัวหมุน เดิมปุ่มที่เขียนเองไม่เปลี่ยนอะไรให้เห็นเลย */}
+                  <Button
+                    variant="secondary"
                     data-testid="daily-save-draft"
                     disabled={submitting}
                     onClick={() => requestSaveDaily('draft')}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
+                    icon={<Save className="w-4 h-4" />}
                   >
-                    <Save className="w-4 h-4" />
                     บันทึกร่าง
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
                     data-testid="daily-submit"
-                    disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+                    loading={submitting}
+                    disabled={calendarStatus === 'upcoming' || calendarStatus === 'closed'}
                     onClick={() => requestSaveDaily('submitted')}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                      submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
-                        ? 'bg-blue-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
-                    }`}
+                    icon={<Send className="w-4 h-4" />}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     ส่งบันทึกสัปดาห์นี้ให้พี่เลี้ยงรับรอง
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1007,8 +1002,12 @@ const WeeklyLog: React.FC = () => {
                 <button
                   type="button"
                   data-testid="worklog-company-form-toggle"
+                  // สวิตช์ต้องมีชื่อและบอกสถานะให้โปรแกรมอ่านหน้าจอ · `before:` ขยายพื้นที่กดเป็น 44px โดยหน้าตาเท่าเดิม
+                  role="switch"
+                  aria-checked={Boolean(intent?.uses_company_log_form)}
+                  aria-label="บริษัทให้ใช้แบบฟอร์มบันทึกของเขาเอง"
                   onClick={handleToggleCompanyForm}
-                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 mt-0.5 ${
+                  className={`w-11 h-6 rounded-full transition-colors relative shrink-0 mt-0.5 before:absolute before:-inset-2.5 before:content-[''] ${
                     intent?.uses_company_log_form ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
                   }`}
                 >
@@ -1202,30 +1201,24 @@ const WeeklyLog: React.FC = () => {
                   </span>
                 )}
                 <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     data-testid="worklog-save-draft"
                     disabled={submitting}
                     onClick={() => requestSaveWeekly('draft')}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
+                    icon={<Save className="w-4 h-4" />}
                   >
-                    <Save className="w-4 h-4" />
                     บันทึกร่าง
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
                     data-testid="worklog-submit"
-                    disabled={submitting || weekNotStarted || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+                    loading={submitting}
+                    disabled={weekNotStarted || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
                     onClick={() => requestSaveWeekly('submitted')}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                      submitting || weekNotStarted || calendarStatus === 'upcoming' || calendarStatus === 'closed'
-                        ? 'bg-blue-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
-                    }`}
+                    icon={<Send className="w-4 h-4" />}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     ส่งให้พี่เลี้ยงรับรอง
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1434,30 +1427,24 @@ const WeeklyLog: React.FC = () => {
                   บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
                 </span>
                 <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     data-testid="worklog-save-draft"
                     disabled={submitting}
                     onClick={() => requestSaveMonthly('draft')}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
+                    icon={<Save className="w-4 h-4" />}
                   >
-                    <Save className="w-4 h-4" />
                     บันทึกร่าง
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
                     data-testid="worklog-submit"
-                    disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+                    loading={submitting}
+                    disabled={calendarStatus === 'upcoming' || calendarStatus === 'closed'}
                     onClick={() => requestSaveMonthly('submitted')}
-                    className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                      submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
-                        ? 'bg-blue-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
-                    }`}
+                    icon={<Send className="w-4 h-4" />}
                   >
-                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     ส่งให้พี่เลี้ยงรับรอง
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>

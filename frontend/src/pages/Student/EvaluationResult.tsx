@@ -115,7 +115,7 @@ const EvaluationResult: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       {/* Header Banner */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-2">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-2">
         <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2.5">
           <ClipboardCheck className="w-6 h-6 text-blue-600 dark:text-blue-400" />
           ผลประเมิน
@@ -125,7 +125,7 @@ const EvaluationResult: React.FC = () => {
           <strong className="text-gray-900 dark:text-white font-bold">
             นี่ไม่ใช่เกรด
           </strong>{' '}
-          อาจารย์ที่ปรึกษาเป็นผู้ตัดเกรดโดยใช้คะแนนชุดนี้ประกอบ
+          อาจารย์นิเทศเป็นผู้ตัดเกรดโดยใช้คะแนนชุดนี้ประกอบ
         </p>
       </div>
 
@@ -138,7 +138,7 @@ const EvaluationResult: React.FC = () => {
       {lockedReason && (
         <div
           data-testid="eval-locked"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
         >
           <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 flex items-center justify-center shrink-0">
             <Calendar className="w-6 h-6" />
@@ -162,7 +162,7 @@ const EvaluationResult: React.FC = () => {
       {hasNone && !lockedReason && isBeforeFinalWeek && (
         <div
           data-testid="eval-empty-not-yet"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-8 shadow-sm flex items-start gap-4"
         >
           <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
             <Calendar className="w-6 h-6" />
@@ -251,7 +251,7 @@ const EvaluationResult: React.FC = () => {
         <p className="text-xs md:text-sm text-blue-900 dark:text-blue-300 leading-relaxed">
           บนกระดาษ สหกิจ 15/16 ใส่ซองปิดผนึกประทับตรา “ลับ” — เจตนาคือ
           <strong>กันนักศึกษาแก้คะแนนระหว่างทาง ไม่ใช่กันนักศึกษาเห็นผล</strong>{' '}
-          ในระบบนักศึกษาจึงเห็นคะแนนรายข้อได้ แต่แก้ไม่ได้และไม่มีเส้น API ให้เขียน
+          ในระบบนักศึกษาจึงเห็นคะแนนรายข้อได้ แต่แก้ไม่ได้
         </p>
       </div>
 
@@ -260,7 +260,7 @@ const EvaluationResult: React.FC = () => {
         {/* สหกิจ 15 Summary */}
         <div
           data-testid="eval-summary-15"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
         >
           <div className="space-y-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">
@@ -294,7 +294,7 @@ const EvaluationResult: React.FC = () => {
         {/* สหกิจ 16 Summary */}
         <div
           data-testid="eval-summary-16"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
         >
           <div className="space-y-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">
@@ -328,7 +328,7 @@ const EvaluationResult: React.FC = () => {
 
       {/* สหกิจ 15 รายข้อ */}
       {s15 && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-6">
           <div className="flex items-baseline justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               สหกิจ 15 — คะแนนรายหัวข้อ
@@ -447,7 +447,7 @@ const EvaluationResult: React.FC = () => {
 
       {/* สหกิจ 16 รายข้อ */}
       {s16 && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
           <div className="flex items-baseline justify-between border-b border-gray-100 dark:border-gray-700 pb-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
               สหกิจ 16 — คะแนนรายงาน 14 หัวข้อ

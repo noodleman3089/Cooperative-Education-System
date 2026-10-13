@@ -210,7 +210,8 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
       { id: 'accommodation_plan', label: 'แจ้งที่พัก (สหกิจ 06)', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
-      { id: 'my_mentor', label: 'พี่เลี้ยงของฉัน', icon: icons.mentor_followup, group: 'ระหว่างฝึก' },
+      // ไอคอนกลุ่มคน ไม่ใช่กระดิ่ง (`mentor_followup`) — กระดิ่งซ้ำกับปุ่มแจ้งเตือนบนแถบบนในจอเดียวกัน
+      { id: 'my_mentor', label: 'พี่เลี้ยงของฉัน', icon: icons.users, group: 'ระหว่างฝึก' },
       { id: 'weekly_log', label: 'บันทึกการปฏิบัติงาน', icon: icons.weekly_log, group: 'ระหว่างฝึก' },
       { id: 'report_outline', label: 'โครงร่างรายงาน', icon: icons.report_outline, group: 'ระหว่างฝึก' },
       // บันทึกข้อความกรณียกเว้น — ไม่ล็อกตามขั้นตอนหรือปฏิทิน เพราะเหตุจำเป็น
@@ -385,7 +386,8 @@ const Sidebar: React.FC<SidebarProps> = ({
               // Without this the tooltip becomes the accessible name and the
               // menu reads out as the reason with no clue which menu it is.
               aria-label={lockReason ? `${item.label} (ยังไม่เปิดให้ใช้) ${lockReason}` : undefined}
-              className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${isCollapsed ? 'justify-center' : ''
+              aria-current={isActive ? 'page' : undefined}
+              className={`w-full flex items-center gap-2.5 px-3.5 py-3 rounded-xl text-xs font-semibold transition-all cursor-pointer ${isCollapsed ? 'justify-center' : ''
                 } ${isActive
                   ? 'bg-blue-50 text-brand-navy font-bold dark:bg-brand-blue dark:text-white dark:shadow-sm dark:shadow-blue-500/20'
                   // Locked items keep the same text colour as the rest.

@@ -388,12 +388,22 @@ const RequestLetter: React.FC = () => {
     setError(null);
     setSuccess(null);
 
+    // บอกชื่อช่องที่ยังขาด (ชื่อเดียวกับป้ายบนฟอร์ม) — เดิมบอกแค่ "ให้ครบ" ต้องไล่หาเองจาก 6 ช่อง
     const missingCompany = (
-      ['company_name_th', 'company_address', 'company_province', 'company_district', 'company_postal_code', 'company_phone'] as const
-    ).some((key) => !form[key].trim());
+      [
+        ['company_name_th', 'ชื่อสถานประกอบการ'],
+        ['company_address', 'ที่อยู่'],
+        ['company_district', 'อำเภอ/เขต'],
+        ['company_province', 'จังหวัด'],
+        ['company_postal_code', 'รหัสไปรษณีย์'],
+        ['company_phone', 'โทรศัพท์ที่ทำงาน'],
+      ] as const
+    )
+      .filter(([key]) => !form[key].trim())
+      .map(([, label]) => label);
     let problem: string | null = null;
-    if (missingCompany) {
-      problem = 'กรุณากรอกข้อมูลสถานประกอบการที่มีเครื่องหมาย * ให้ครบ';
+    if (missingCompany.length > 0) {
+      problem = `กรุณากรอกข้อมูลสถานประกอบการให้ครบ ยังขาด: ${missingCompany.join(' · ')}`;
     } else if (!locked && !/^\d{5}$/.test(form.company_postal_code.trim())) {
       problem = 'รหัสไปรษณีย์ต้องเป็นตัวเลข 5 หลัก';
     } else if (!locked && (!form.contact_person.trim() || !form.contact_position.trim())) {

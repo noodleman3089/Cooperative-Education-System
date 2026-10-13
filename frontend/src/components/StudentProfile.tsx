@@ -376,7 +376,7 @@ const StudentProfile: React.FC = () => {
     <div className="max-w-5xl mx-auto space-y-6 page-enter pb-16">
       {/* Top Banner */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs">
-        <h1 className="text-2xl font-black text-gray-900 dark:text-white">ข้อมูลส่วนตัวและเรซูเม่</h1>
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">ข้อมูลส่วนตัวและเรซูเม่</h1>
         <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
           หน้านี้ไม่ใช่แบบฟอร์มสหกิจใบไหน — เป็นแหล่งข้อมูลกลางที่ใบอื่นดึงไปใช้ · แก้ที่นี่ที่เดียว ใบที่เกี่ยวข้องเปลี่ยนตาม
         </p>
@@ -423,7 +423,7 @@ const StudentProfile: React.FC = () => {
                   const first = majors.find((m) => m.faculty_id === Number(e.target.value));
                   if (first) setSelectedMajorId(first.major_id);
                 }}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
               >
                 {faculties.map((f) => (
                   <option key={f.faculty_id} value={f.faculty_id}>
@@ -441,7 +441,7 @@ const StudentProfile: React.FC = () => {
                 data-testid="profile-major"
                 value={selectedMajorId}
                 onChange={(e) => setSelectedMajorId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
               >
                 {majors.filter((m) => m.faculty_id === selectedFacultyId).map((m) => (
                   <option key={m.major_id} value={m.major_id}>
@@ -467,7 +467,7 @@ const StudentProfile: React.FC = () => {
                 data-testid="profile-gpa"
                 value={cumulativeGpa}
                 onChange={(e) => setCumulativeGpa(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                 placeholder="เช่น 3.25"
               />
             </div>
@@ -480,7 +480,7 @@ const StudentProfile: React.FC = () => {
                 type="text"
                 readOnly
                 value={enrollmentYear !== '' ? String(enrollmentYear) : '—'}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
               />
             </div>
 
@@ -492,7 +492,7 @@ const StudentProfile: React.FC = () => {
                 type="text"
                 readOnly
                 value={displayAdvisor}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
               />
             </div>
           </div>
@@ -556,7 +556,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-name-prefix"
                   value={namePrefix}
                   onChange={(e) => setNamePrefix(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                 >
                   {/* ยังไม่เคยเลือก = มีตัวเลือกว่างให้เห็นว่ายังขาด · เลือกแล้วล้างกลับเป็นว่างไม่ได้ */}
                   {!profile?.name_prefix && <option value="">-- ยังไม่ได้เลือก --</option>}
@@ -578,7 +578,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-first-name"
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="กรอกชื่อ"
                 />
               </div>
@@ -592,7 +592,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-last-name"
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="กรอกนามสกุล"
                 />
               </div>
@@ -606,7 +606,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-nickname"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="เช่น กฤต"
                 />
               </div>
@@ -619,7 +619,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-year-level"
                   value={yearLevel}
                   onChange={(e) => setYearLevel(e.target.value !== '' ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                 >
                   <option value={3}>ชั้นปีที่ 3</option>
                   <option value={4}>ชั้นปีที่ 4</option>
@@ -635,7 +635,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-section"
                   value={section}
                   onChange={(e) => setSection(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue font-semibold"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue font-semibold"
                   placeholder="เช่น IT4/1"
                 />
               </div>
@@ -649,7 +649,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-birth-date"
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue cursor-pointer"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue cursor-pointer"
                 />
               </div>
 
@@ -662,7 +662,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-phone"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="08X-XXX-XXXX"
                 />
               </div>
@@ -676,7 +676,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-alt-email"
                   value={altEmail}
                   onChange={(e) => setAltEmail(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="example@gmail.com"
                 />
               </div>
@@ -690,7 +690,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-current-address"
                   value={currentAddress}
                   onChange={(e) => setCurrentAddress(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="บ้านเลขที่ ซอย ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์"
                 />
               </div>
@@ -704,7 +704,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-parent-name"
                   value={parentName}
                   onChange={(e) => setParentName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="ชื่อ-นามสกุล ผู้ปกครอง"
                 />
               </div>
@@ -718,7 +718,7 @@ const StudentProfile: React.FC = () => {
                   data-testid="profile-parent-phone"
                   value={parentPhone}
                   onChange={(e) => setParentPhone(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                  className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
                   placeholder="08X-XXX-XXXX"
                 />
               </div>
@@ -813,7 +813,7 @@ const StudentProfile: React.FC = () => {
               data-testid="profile-skills"
               value={skillsAndActivities}
               onChange={(e) => setSkillsAndActivities(e.target.value)}
-              className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue resize-vertical"
+              className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue resize-vertical"
               placeholder="พัฒนาเว็บด้วย React และ Node.js · เขียน SQL ระดับใช้งานจริง · เคยเป็นกรรมการชมรมคอมพิวเตอร์ดูแลงานอบรมให้รุ่นน้อง"
             />
           </div>
@@ -874,7 +874,7 @@ const StudentProfile: React.FC = () => {
                 data-testid="profile-region"
                 value={preferredRegion}
                 onChange={(e) => setPreferredRegion(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
               >
                 <option value="">-- เลือกภูมิภาคที่สะดวก --</option>
                 {regionOptions.map((reg) => (

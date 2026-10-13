@@ -19,7 +19,8 @@ const VARIANTS: Record<ButtonVariant, string> = {
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-xs gap-1.5',
+  // จอสัมผัส: สูงอย่างน้อย 44px (เดิม 33–35px กดพลาดง่าย โดยเฉพาะคู่ยกเลิก/ยืนยันในกล่อง) · เมาส์ใช้ขนาดเดิม
+  sm: 'px-3 py-1.5 text-xs gap-1.5 pointer-coarse:min-h-11',
   md: 'px-4 py-2.5 text-sm gap-2',
   lg: 'w-full px-4 py-3 text-sm gap-2',
 };

@@ -138,7 +138,8 @@ export const Modal: React.FC<ModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="ปิดหน้าต่าง"
-              className="p-1 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors shrink-0"
+              // p-3 -m-2 = พื้นที่กด 44px โดยหัวกล่องสูงเท่าเดิม (เดิม 28px)
+              className="p-3 -m-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors shrink-0"
             >
               <X className="h-5 w-5" />
             </button>

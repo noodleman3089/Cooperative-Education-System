@@ -81,7 +81,9 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
           <button
             type="button"
             onClick={() => setShowPassword(!showPassword)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            aria-label={showPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+            // p-2 -m-2 = พื้นที่กด 32px โดยไอคอนอยู่ที่เดิม (เดิม 16px และไม่มีชื่อให้โปรแกรมอ่านหน้าจอ)
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 -m-2 rounded-lg text-gray-600 dark:text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>

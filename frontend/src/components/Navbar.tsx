@@ -280,7 +280,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
 
           // 4. Documents
           if (documents && documents.length > 0) {
-            documents.forEach((doc: { doc_id: number; type: string; status: string }) => {
+            // หนังสือของคำร้องที่ปิดไปแล้วไม่ใช่ "ความคืบหน้า" ของใบปัจจุบัน — "เอกสารของฉัน" ยังแสดงพร้อมป้ายกำกับ
+            const currentDocs = documents.filter((doc: { of_closed_request?: boolean }) => !doc.of_closed_request);
+            currentDocs.forEach((doc: { doc_id: number; type: string; status: string }) => {
               const docTypeLabel = doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
               const docStatusLabel = doc.status === 'signed' ? 'ลงนามเสร็จสิ้นแล้ว' : 'รอลงนาม';
               studentNotifs.push({
@@ -326,6 +328,18 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     };
   }, [currentRole, auth?.user]);
 
+  // เมนูบนแถบบน (แจ้งเตือน · บัญชี) ปิดด้วย Esc ได้ — เดิมปิดได้ด้วยการกดนอกเมนูอย่างเดียว
+  useEffect(() => {
+    if (!showNotifDropdown && !showUserMenu) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setShowNotifDropdown(false);
+      setShowUserMenu(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [showNotifDropdown, showUserMenu]);
+
   /**
    * ชื่อ-นามสกุลของผู้ใช้ สำหรับแสดงบนแถบบน
    *
@@ -369,7 +383,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             <button
               type="button"
               onClick={onToggleSidebar}
-              className="p-2 -ml-2 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors md:hidden"
+              className="p-2.5 -ml-2 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors md:hidden"
               aria-label="เปิดเมนูนำทาง"
               aria-expanded={isSidebarOpen}
             >
@@ -470,7 +484,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                 <button
                   type="button"
                   onClick={() => setShowNotifDropdown(!showNotifDropdown)}
-                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
+                  className="p-3 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
                   title={
                     currentRole === 'student'
                       ? 'ความคืบหน้าคำร้อง'
@@ -493,7 +507,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                 >
                   <Bell className="h-5 w-5" />
                   {notifCount > 0 && (
-                    <span className="absolute top-1 right-1 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
+                    <span className="absolute top-2 right-2 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
                       {notifCount}
                     </span>
                   )}
@@ -714,7 +728,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                     <button
                       type="button"
                       onClick={toggleDarkMode}
-                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold text-gray-700 transition-colors hover:bg-gray-50 sm:hidden dark:text-gray-200 dark:hover:bg-gray-700"
+                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-3.5 text-left text-xs font-bold text-gray-700 transition-colors hover:bg-gray-50 sm:hidden dark:text-gray-200 dark:hover:bg-gray-700"
                     >
                       {darkMode ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
                     </button>
@@ -722,7 +736,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                       type="button"
                       data-testid="logout"
                       onClick={handleLogout}
-                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-3.5 text-left text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
                     >
                       <LogOut className="h-4 w-4 shrink-0" />
                       ออกจากระบบ

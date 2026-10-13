@@ -114,10 +114,10 @@ const StudentMemoScreen: React.FC = () => {
   return (
     <div className="page-enter space-y-6">
       <div>
-        <h2 className="flex items-center gap-2 text-xl font-bold text-gray-800 dark:text-white">
-          <FileText className="h-5 w-5 text-brand-blue dark:text-blue-400" />
+        <h1 className="flex items-center gap-2 text-2xl font-extrabold text-gray-900 dark:text-white">
+          <FileText className="h-6 w-6 text-brand-blue dark:text-blue-400" />
           บันทึกข้อความถึงคณบดี
-        </h2>
+        </h1>
         <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
           ใช้เมื่อมีเหตุจำเป็นนอกเหนือจากขั้นตอนปกติ เลือกหัวข้อและเขียนเหตุผล
           ระบบจะพิมพ์เป็นบันทึกข้อความตามรูปแบบราชการให้

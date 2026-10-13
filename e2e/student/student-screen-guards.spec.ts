@@ -106,4 +106,52 @@ test.describe('หน้าจอนักศึกษา — ด่านตา
     await expect(page.getByTestId('acc-house-no')).toHaveValue('99/1');
     await expect(page.getByText('ที่พัก · ยังไม่ได้บันทึก')).toBeVisible();
   });
+
+  test('S5: `?menu=` ที่ฝ่ายนักศึกษาไม่มี — ได้หน้าแรกและ URL ถูกแก้ให้ตรง ไม่ค้างค่าผิด', async ({ page }) => {
+    await loginAs(page, 'student2');
+
+    for (const menu of ['does_not_exist', 'users']) {
+      await page.goto(`/dashboard?menu=${menu}`);
+      await expect(page).toHaveURL(/\/dashboard$/);
+      // เมนู "หน้าแรก" ถูกเลือกจริง ไม่ใช่หน้าแรกที่ไม่มีเมนูไหนสว่าง
+      await expect(page.getByTestId('nav-dashboard')).toHaveAttribute('aria-current', 'page');
+    }
+  });
+
+  test('S6: ยื่นคำร้องโดยยังกรอกไม่ครบ — ข้อความต้องบอกชื่อช่องที่ขาด', async ({ page }) => {
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'jobs');
+
+    await page.getByTestId('request-company-name').fill('บริษัท ทดสอบ จำกัด');
+    await page.getByTestId('request-submit').click();
+
+    const alert = page.locator('main').getByRole('alert').first();
+    await expect(alert).toContainText('ยังขาด:');
+    await expect(alert).toContainText('ที่อยู่');
+    await expect(alert).toContainText('รหัสไปรษณีย์');
+    // ช่องที่กรอกแล้วต้องไม่อยู่ในรายการที่ขาด
+    await expect(alert).not.toContainText('ชื่อสถานประกอบการ');
+  });
+
+  test('S7: โครงร่างรายงาน — เลือกไฟล์ผิดประเภทถูกทักทันที ไม่ปล่อยไปถึงกล่องยืนยัน', async ({ page }) => {
+    await acceptedIntent('student2@test.com');
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'report_outline');
+
+    await page.getByTestId('outline-file-input').setInputFiles({
+      name: 'not-a-pdf.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('ไม่ใช่ไฟล์ที่รับ'),
+    });
+    await expect(page.locator('main').getByRole('alert')).toContainText('PDF หรือ Word');
+    await expect(page.getByText('not-a-pdf.txt')).toHaveCount(0);
+
+    await page.getByTestId('outline-file-input').setInputFiles({
+      name: 'outline.pdf',
+      mimeType: 'application/pdf',
+      buffer: Buffer.from('%PDF-1.4\n%%EOF'),
+    });
+    await expect(page.locator('main').getByRole('alert')).toHaveCount(0);
+    await expect(page.getByText('outline.pdf')).toBeVisible();
+  });
 });

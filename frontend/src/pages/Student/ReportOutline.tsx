@@ -267,7 +267,7 @@ const ReportOutline: React.FC = () => {
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       {/* 1. Header Card */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm flex flex-col md:flex-row md:items-start justify-between gap-6">
         <div className="space-y-1.5">
           <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
             โครงร่างรายงาน (สหกิจ 11)
@@ -291,7 +291,7 @@ const ReportOutline: React.FC = () => {
       </div>
 
       {/* 2. Three Steps Indicator */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm space-y-4">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-sm space-y-4">
         <span className="text-base font-bold text-gray-900 dark:text-white block">
           โครงร่างต้องผ่าน 2 คน
         </span>
@@ -421,7 +421,7 @@ const ReportOutline: React.FC = () => {
       </div>
 
       {/* 3. Main Form Card */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
         <AlertBanner variant="error" message={error} scrollOnShow />
         <AlertBanner variant="success" message={success} scrollOnShow />
 
@@ -497,7 +497,7 @@ const ReportOutline: React.FC = () => {
 บทที่ 3 เครื่องมือและวิธีดำเนินงาน — การออกแบบระบบและการพัฒนา
 บทที่ 4 ผลการดำเนินงานและการทดสอบระบบ
 บทที่ 5 สรุปผล ปัญหา อุปสรรค และข้อเสนอแนะ`}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition font-mono leading-relaxed"
+              className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm outline-none placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:border-blue-500 transition leading-relaxed"
             />
           </div>
 
@@ -515,7 +515,18 @@ const ReportOutline: React.FC = () => {
                 type="file"
                 data-testid="outline-file-input"
                 accept=".pdf,.doc,.docx"
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                onChange={(e) => {
+                  // ทักทันทีที่เลือกไฟล์ผิดประเภท (ลากวางข้าม `accept` ได้) — เดิมปล่อยไปถึงกล่องยืนยัน
+                  const picked = e.target.files?.[0] || null;
+                  if (picked && !/\.(pdf|docx?)$/i.test(picked.name)) {
+                    setError('กรุณาแนบไฟล์ PDF หรือ Word (.pdf .doc .docx) เท่านั้น');
+                    e.target.value = '';
+                    setFile(null);
+                    return;
+                  }
+                  setError(null);
+                  setFile(picked);
+                }}
                 className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
               />
               <UploadCloud className="w-7 h-7 text-gray-400 mx-auto" />
@@ -603,7 +614,7 @@ const ReportOutline: React.FC = () => {
 
       {/* 4. Versions History Card */}
       {data?.versions && data.versions.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-8 shadow-sm space-y-6">
           <h2 className="text-base font-bold text-gray-900 dark:text-white">
             ประวัติการส่งและผลตรวจ ({data.versions.length} เวอร์ชัน)
           </h2>

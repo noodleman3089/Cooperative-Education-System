@@ -76,6 +76,21 @@ const ReportOutlineQueue = lazy(() => import('./Mentor/ReportOutlineQueue'));
  * `jobs` is deliberately not here: browsing postings before applying is the
  * point of that screen, and the board already explains its own disabled button.
  */
+/** เมนูที่ฝ่ายนักศึกษามีจริง — ต้องตรงกับ `case 'student'` ใน `renderDashboardContent` */
+const STUDENT_MENU_IDS: readonly string[] = [
+  'dashboard',
+  'jobs',
+  'profile',
+  'job_application',
+  'accommodation_plan',
+  'my_mentor',
+  'report_outline',
+  'weekly_log',
+  'final_report',
+  'evaluation_result',
+  'memos',
+];
+
 const STAGE_GATED_STUDENT_MENUS = [
   'accommodation_plan',
   'report_outline',
@@ -199,6 +214,20 @@ const Dashboard: React.FC = () => {
     },
     [setSearchParams, roleParam, currentRole, userViews]
   );
+
+  // นักศึกษาเปิด `?menu=` ที่ฝ่ายตัวเองไม่มี (พิมพ์ผิด หรือของฝ่ายอื่น) ได้หน้าแรกอยู่แล้ว
+  // — แก้ URL ให้ตรงกับสิ่งที่เห็น ไม่ทิ้งค่าผิดค้างไว้โดยไม่มีเมนูใดถูกเลือก · replace เพื่อไม่ให้ปุ่ม Back วนกลับมา
+  useEffect(() => {
+    if (currentRole !== 'student' || STUDENT_MENU_IDS.includes(activeMenu)) return;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('menu');
+        return next;
+      },
+      { replace: true }
+    );
+  }, [currentRole, activeMenu, setSearchParams]);
 
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
 
@@ -532,6 +561,15 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F3F4F6] dark:bg-[#111827] transition-colors relative">
+      {/* ทางข้ามเมนูสำหรับผู้ใช้คีย์บอร์ด — มองเห็นเมื่อ Tab มาถึงเท่านั้น (เดิมต้อง Tab ผ่านเมนูทั้งแถบก่อนถึงเนื้อหา) */}
+      <button
+        type="button"
+        onClick={() => document.getElementById('main-content')?.focus()}
+        className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-50 focus:rounded-xl focus:bg-white focus:px-4 focus:py-2.5 focus:text-sm focus:font-bold focus:text-brand-navy focus:shadow-lg dark:focus:bg-gray-800 dark:focus:text-white"
+      >
+        ข้ามไปเนื้อหา
+      </button>
+
       {/* Backdrop overlay for mobile drawer */}
       {sidebarOpen && (
         <div 
@@ -561,7 +599,11 @@ const Dashboard: React.FC = () => {
           isSidebarOpen={sidebarOpen}
         />
         
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F3F4F6] dark:bg-[#111827] transition-colors w-full">
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F3F4F6] dark:bg-[#111827] transition-colors w-full outline-none"
+        >
           <Suspense fallback={<PageSkeleton variant={skeletonFor(currentRole, activeMenu)} />}>
             {renderDashboardContent()}
           </Suspense>

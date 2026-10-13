@@ -322,9 +322,9 @@ const CoopJobApplication: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto space-y-6 page-enter">
       <div>
-        <h2 className="text-xl font-bold text-gray-800 dark:text-white">
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
           ใบสมัครงานสหกิจศึกษา (สหกิจ 03)
-        </h2>
+        </h1>
         <p className="mt-1 text-xs text-gray-600 dark:text-gray-400">
           ข้อมูลชุดนี้จะถูกใช้จัดทำใบสมัครงานที่<strong>ส่งคณะ</strong>เพื่อประกอบการออกหนังสือส่งตัว
           ส่วนที่ระบบรู้อยู่แล้ว (ชื่อไทย · รหัสนักศึกษา · สาขา · เกรด) ดึงจากโปรไฟล์ให้อัตโนมัติ ·
@@ -555,7 +555,8 @@ const CoopJobApplication: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label htmlFor="ca-national-id" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              เลขประจำตัวประชาชน (13 หลัก) <span className="text-red-600 dark:text-red-400">*</span>
+              {/* red-700 ในการ์ดนี้ — พื้นเหลืองอ่อนทำให้ red-600 ได้ 4.44:1 ต่ำกว่าเกณฑ์ 4.5 */}
+              เลขประจำตัวประชาชน (13 หลัก) <span className="text-red-700 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-national-id"
@@ -576,7 +577,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-id-district" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              บัตรออกให้ ณ เขต/อำเภอ <span className="text-red-600 dark:text-red-400">*</span>
+              บัตรออกให้ ณ เขต/อำเภอ <span className="text-red-700 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-id-district"
@@ -587,7 +588,7 @@ const CoopJobApplication: React.FC = () => {
           </div>
           <div>
             <label htmlFor="ca-id-expiry" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              วันหมดอายุบัตร <span className="text-red-600 dark:text-red-400">*</span>
+              วันหมดอายุบัตร <span className="text-red-700 dark:text-red-400">*</span>
             </label>
             <Input
               id="ca-id-expiry"

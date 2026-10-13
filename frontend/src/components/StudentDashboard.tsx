@@ -1142,6 +1142,11 @@ const StudentDashboard: React.FC = () => {
                 data-testid="company-mail-send"
                 disabled={companyMailLeft === 0 || !companyMailAddress}
                 onClick={() => {
+                  // ตรวจรูปแบบก่อนเปิดกล่องยืนยัน (กติกาเดียวกับหน้ายื่นคำร้อง) — เดิมกล่องขึ้น "ส่งถึง bad-address" ไปก่อน
+                  if (!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(companyMailAddress)) {
+                    setCompanyMailError('อีเมลของสถานประกอบการไม่ถูกต้อง กรุณากรอกอีเมลเดียวในรูปแบบ name@example.com');
+                    return;
+                  }
                   setCompanyMailError(null);
                   setConfirmingCompanyMail(true);
                 }}
@@ -1255,7 +1260,18 @@ const StudentDashboard: React.FC = () => {
                         accept=".pdf,.png,.jpg,.jpeg"
                         required
                         disabled={submittingProof || reportingFail}
-                        onChange={(e) => setEvidenceFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          // ทักทันทีที่เลือกไฟล์ผิดประเภท — เดิมรู้ตอนเซิร์ฟเวอร์ปฏิเสธหลังกดส่ง
+                          const picked = e.target.files?.[0] || null;
+                          if (picked && !/\.(pdf|png|jpe?g)$/i.test(picked.name)) {
+                            setProofError('กรุณาแนบไฟล์ PDF หรือรูปภาพ (.pdf .png .jpg) เท่านั้น');
+                            e.target.value = '';
+                            setEvidenceFile(null);
+                            return;
+                          }
+                          setProofError(null);
+                          setEvidenceFile(picked);
+                        }}
                         className="block w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200 dark:file:bg-gray-800 dark:file:text-gray-300 cursor-pointer"
                       />
                     </div>
@@ -1682,7 +1698,12 @@ const StudentDashboard: React.FC = () => {
                   { label: 'ไฟล์', value: pendingRequestForm?.file.name ?? '' },
                   {
                     label: 'ขนาด',
-                    value: pendingRequestForm ? `${(pendingRequestForm.file.size / 1024 / 1024).toFixed(2)} MB` : '',
+                    // ไฟล์เล็กแสดงเป็น KB — เดิมไฟล์ไม่ถึง 5 KB ขึ้น "0.00 MB"
+                    value: pendingRequestForm
+                      ? pendingRequestForm.file.size < 100 * 1024
+                        ? `${Math.max(1, Math.round(pendingRequestForm.file.size / 1024))} KB`
+                        : `${(pendingRequestForm.file.size / 1024 / 1024).toFixed(2)} MB`
+                      : '',
                   },
                   // เปลี่ยนไฟล์ของใบที่ส่งไปแล้ว: ชื่อผู้ลงนามอยู่บนใบแล้ว ไม่แสดงซ้ำ
                   ...(activeIntent?.request_form_path

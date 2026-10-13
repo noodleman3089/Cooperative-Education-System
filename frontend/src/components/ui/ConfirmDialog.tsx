@@ -55,7 +55,8 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const modalSize = level === 1 ? 'sm' : level === 3 ? 'lg' : 'md';
 
   return (
-    <Modal onClose={onCancel} size={modalSize} title={title}>
+    // ระหว่างกำลังส่ง ปิดกล่องไม่ได้ทุกทาง (ปุ่ม X · Esc · แตะนอกกล่อง) — ปิดไปแล้วจะไม่เห็นผลของคำขอที่ยังวิ่งอยู่
+    <Modal onClose={busy ? () => undefined : onCancel} size={modalSize} title={title}>
       <ModalBody>
         {level === 1 ? (
           <div data-level={1} className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">

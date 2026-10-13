@@ -47,10 +47,13 @@ export const useGoogleSignIn = (
         client_id: clientId,
         callback: (response: { credential: string }) => callbackRef.current(response.credential),
       });
+      // กว้างตามที่ว่างจริงของการ์ด (Google รับ 200–400) — เดิมตายตัว 320 จึงล้นการ์ดบนจอ 320px
+      // วัดจากกล่องแม่ เพราะตัว container ยังซ่อนอยู่ตอนนี้ (กว้าง 0) · วัดไม่ได้ = ใช้ 320 ตามเดิม
+      const available = container.parentElement?.clientWidth || 320;
       google.accounts.id.renderButton(container, {
         theme: 'outline',
         size: 'large',
-        width: 320,
+        width: Math.max(200, Math.min(320, Math.floor(available))),
         text: 'signin_with',
         shape: 'rectangular',
       });

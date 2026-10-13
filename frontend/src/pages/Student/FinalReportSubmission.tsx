@@ -272,9 +272,9 @@ const FinalReportSubmission: React.FC = () => {
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto py-10 space-y-6">
-        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-28" />
-        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-48" />
-        <div className="animate-pulse bg-white dark:bg-gray-800 rounded-2xl p-6 h-64" />
+        <div className="animate-pulse bg-white dark:bg-gray-900 rounded-2xl p-6 h-28" />
+        <div className="animate-pulse bg-white dark:bg-gray-900 rounded-2xl p-6 h-48" />
+        <div className="animate-pulse bg-white dark:bg-gray-900 rounded-2xl p-6 h-64" />
       </div>
     );
   }
@@ -290,7 +290,7 @@ const FinalReportSubmission: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       {/* 1. Header Card */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm">
         <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
           รายงานฉบับสมบูรณ์
         </h1>
@@ -303,7 +303,7 @@ const FinalReportSubmission: React.FC = () => {
       {success && <AlertBanner variant="success" message={success} />}
 
       {/* 2. Step 1: Draft to Mentor */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
         <div className="flex items-start gap-4">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
@@ -421,7 +421,7 @@ const FinalReportSubmission: React.FC = () => {
       </div>
 
       {/* 3. Step 2: Final Report to Advisor */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
         <div className="flex items-start gap-4">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
@@ -604,7 +604,7 @@ const FinalReportSubmission: React.FC = () => {
       </div>
 
       {/* 4. Step 3: Report Confirmation (สหกิจ 14) */}
-      <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
+      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 md:p-7 shadow-sm space-y-5">
         <div className="flex items-start gap-4">
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
@@ -717,7 +717,14 @@ const FinalReportSubmission: React.FC = () => {
               }
               rows={[
                 { label: 'ไฟล์', value: pendingUpload.file.name },
-                { label: 'ขนาด', value: `${(pendingUpload.file.size / (1024 * 1024)).toFixed(1)} MB` },
+                {
+                  label: 'ขนาด',
+                  // ไฟล์เล็กแสดงเป็น KB — เดิมไฟล์ไม่ถึง 50 KB ขึ้น "0.0 MB"
+                  value:
+                    pendingUpload.file.size < 100 * 1024
+                      ? `${Math.max(1, Math.round(pendingUpload.file.size / 1024))} KB`
+                      : `${(pendingUpload.file.size / (1024 * 1024)).toFixed(1)} MB`,
+                },
                 {
                   label: 'ส่งเป็นฉบับที่',
                   value: String(

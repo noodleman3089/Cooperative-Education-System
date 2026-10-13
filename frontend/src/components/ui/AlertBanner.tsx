@@ -62,6 +62,9 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
   useEffect(() => {
     if (scrollOnShow && message) {
       ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // ปุ่มที่เพิ่งกดถูก disabled ระหว่างส่ง focus จึงหลุดไปที่ <body> — ผู้ใช้คีย์บอร์ดต้อง Tab ใหม่จากบนสุด
+      // ย้าย focus มาที่แถบผลเฉพาะกรณีนั้น ถ้าผู้ใช้กำลังพิมพ์ช่องอื่นอยู่จะไม่แย่ง
+      if (document.activeElement === document.body) ref.current?.focus({ preventScroll: true });
     }
   }, [scrollOnShow, message]);
 
@@ -74,6 +77,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({
       ref={ref}
       role={variant === 'error' ? 'alert' : 'status'}
       data-testid={dataTestId}
+      tabIndex={scrollOnShow ? -1 : undefined}
       className={`flex items-start gap-3 rounded-xl border p-4 text-sm ${box} ${className}`.trim()}
     >
       <Icon className={`h-5 w-5 shrink-0 ${icon}`} aria-hidden="true" />

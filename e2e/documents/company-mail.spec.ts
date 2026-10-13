@@ -542,7 +542,15 @@ test.describe('นักศึกษาส่งหนังสือให้�
     await expect(page.getByTestId('company-mail-box')).toBeVisible();
 
     // ที่อยู่ที่ไม่ผ่านด่านของเซิร์ฟเวอร์ (browser type=email ไม่ขวางตอนกดปุ่มเอง) → error ในกล่อง
+    // 2026-10-14: รูปแบบผิดชัด ๆ (หลายที่อยู่คั่นจุลภาค) หน้าจอทักเองก่อนเปิดกล่องยืนยัน — ไม่มีกล่อง ไม่มีคำขอออก
     await page.getByTestId('company-mail-input').fill('a@example.com,b@example.com');
+    await page.getByTestId('company-mail-send').click();
+    await expect(page.getByTestId('company-mail-error')).toContainText('อีเมลของสถานประกอบการไม่ถูกต้อง');
+    await expect(page.getByTestId('company-mail-confirm')).toHaveCount(0);
+    expect(await mailState(formId)).toEqual(NOTHING_SENT);
+
+    // ที่อยู่ที่ผ่านด่านของหน้าจอแต่ไม่ผ่านด่านของเซิร์ฟเวอร์ (ยาวเกิน 254 ตัว) — error ของเซิร์ฟเวอร์ต้องขึ้นในกล่อง
+    await page.getByTestId('company-mail-input').fill(`${'a'.repeat(250)}@example.com`);
     await page.getByTestId('company-mail-send').click();
     await page.getByTestId('company-mail-confirm').click();
     await expect(page.getByTestId('company-mail-error')).toContainText('อีเมลสถานประกอบการไม่ถูกต้อง');

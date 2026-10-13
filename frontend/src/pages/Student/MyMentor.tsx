@@ -140,7 +140,7 @@ const MyMentor: React.FC = () => {
   return (
     <div className="space-y-6 page-enter max-w-4xl mx-auto">
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+        <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
           <UserCheck className="h-6 w-6 text-brand-blue dark:text-blue-400" />
           พี่เลี้ยงของฉัน
         </h1>
