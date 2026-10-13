@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KeyRound, AlertTriangle } from 'lucide-react';
+import { KeyRound, AlertTriangle, Loader2 } from 'lucide-react';
 import LoginCard from './LoginCard';
 import PasswordLoginForm from './PasswordLoginForm';
+import AlertBanner from '../ui/AlertBanner';
+import Button from '../ui/Button';
 import { useAuthLogin } from '../../hooks/useAuthLogin';
 import type { OnboardingType } from '../../hooks/useAuthLogin';
 import { useGoogleSignIn } from '../../hooks/useGoogleSignIn';
@@ -53,7 +55,7 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
   const { error, isSubmitting, loginWithPassword, loginWithGoogle, isAuthenticated } =
     useAuthLogin(onboardingType);
 
-  useGoogleSignIn(GOOGLE_BUTTON_ID, loginWithGoogle);
+  const googleSignInStatus = useGoogleSignIn(GOOGLE_BUTTON_ID, loginWithGoogle);
 
   useEffect(() => {
     if (isAuthenticated) navigate('/dashboard');
@@ -92,12 +94,66 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
 
         {/* TAB 1: Google SSO (Default & ONLY path for first-time users) */}
         <div className={activeTab === 'sso' ? 'space-y-4 py-2' : 'hidden'}>
-          <div className="flex justify-center items-center my-2 min-h-[44px]">
-            <div id={GOOGLE_BUTTON_ID} className="w-full max-w-[320px] flex justify-center"></div>
+          {googleSignInStatus === 'failed' && (
+            <AlertBanner
+              variant="warning"
+              data-testid="google-signin-failed"
+              className="w-full"
+              message={
+                <div className="space-y-3">
+                  <p>โหลดปุ่มเข้าสู่ระบบด้วย Google ไม่ได้ ตรวจสอบการเชื่อมต่ออินเทอร์เน็ตแล้วโหลดหน้าใหม่</p>
+                  <div>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => window.location.reload()}
+                    >
+                      โหลดหน้าใหม่
+                    </Button>
+                  </div>
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    ถ้าเคยตั้งรหัสผ่านในระบบไว้แล้ว ใช้แท็บ{' '}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('pwd')}
+                      className="font-bold underline text-brand-navy dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200 cursor-pointer"
+                    >
+                      รหัสผ่านเฉพาะระบบ
+                    </button>{' '}
+                    ได้
+                  </p>
+                </div>
+              }
+            />
+          )}
+
+          <div className={googleSignInStatus === 'failed' ? 'hidden' : 'space-y-4'}>
+            <div className="flex justify-center items-center my-2 min-h-[44px]">
+              {googleSignInStatus === 'loading' && (
+                <p className="text-xs text-gray-500 dark:text-gray-400">กำลังโหลดปุ่ม Google…</p>
+              )}
+              <div
+                id={GOOGLE_BUTTON_ID}
+                className={`w-full max-w-[320px] flex justify-center ${
+                  googleSignInStatus !== 'ready' ? 'hidden' : ''
+                } ${isSubmitting ? 'pointer-events-none opacity-60' : ''}`}
+              />
+            </div>
+
+            {isSubmitting && (
+              <div
+                data-testid="google-signin-busy"
+                className="flex items-center justify-center gap-2 text-xs text-gray-600 dark:text-gray-300"
+              >
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-blue dark:text-blue-400" />
+                <span>กำลังเข้าสู่ระบบ…</span>
+              </div>
+            )}
+
+            <p className="text-center text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+              ใช้อีเมลมหาวิทยาลัย (@rmutto.ac.th) ในการเข้าสู่ระบบ
+            </p>
           </div>
-          <p className="text-center text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-            ใช้อีเมลมหาวิทยาลัย (@rmutto.ac.th) ในการเข้าสู่ระบบ
-          </p>
         </div>
 
         {/* TAB 2: Password Login (Only for users who previously set a local password) */}

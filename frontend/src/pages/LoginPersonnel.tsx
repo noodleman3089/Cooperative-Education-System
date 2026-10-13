@@ -7,7 +7,7 @@ const LoginPersonnel: React.FC = () => (
     onboardingType="personnel"
     icon={<Users className="h-6 w-6" />}
     title="เข้าสู่ระบบสำหรับบุคลากร"
-    subtitle="อาจารย์ที่ปรึกษา, เจ้าหน้าที่ดูแลงานสหกิจศึกษา และคณบดี"
+    subtitle="อาจารย์ที่ปรึกษา อาจารย์นิเทศ หัวหน้าสาขาวิชา เจ้าหน้าที่งานสหกิจศึกษา และคณบดี"
     identifierLabel="อีเมลของบุคลากร (Email)"
     identifierPlaceholder="กรอกอีเมลบุคลากร"
     submitLabel="เข้าสู่ระบบบุคลากร"

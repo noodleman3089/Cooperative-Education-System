@@ -90,7 +90,9 @@ export async function attemptLogin(
 
   await page.request.post(`${API_URL}/auth/logout`);
   await page.goto(path);
-  const pwdTab = page.locator('button:has-text("รหัสผ่านเฉพาะระบบ")');
+  // `.first()` = ตัวแท็บ — เมื่อสคริปต์ Google โหลดไม่ได้ แถบเตือนใต้แท็บมีปุ่มชื่อเดียวกันอีกปุ่ม
+  // ถ้าไม่เจาะจง locator จะชนสองปุ่ม แล้ว `.catch` ข้างล่างกลืน error ทำให้ไม่กดแท็บเลย
+  const pwdTab = page.locator('button:has-text("รหัสผ่านเฉพาะระบบ")').first();
   if (await pwdTab.isVisible({ timeout: 1500 }).catch(() => false)) {
     await pwdTab.click();
   }
