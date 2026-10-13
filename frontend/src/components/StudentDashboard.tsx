@@ -1411,7 +1411,17 @@ const StudentDashboard: React.FC = () => {
                 data-testid="registry-reminder"
                 className="rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
               >
-                กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้
+                กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้{' '}
+                {/* ระบบทะเบียนของมหาวิทยาลัยเปิดด้วย http เท่านั้น (https ไม่ตอบ · ตรวจ 2026-10-13) */}
+                <a
+                  data-testid="registry-link"
+                  href="http://regis.rmutto.ac.th/registrar/login.asp"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="whitespace-nowrap font-bold underline underline-offset-2"
+                >
+                  เปิดระบบทะเบียน
+                </a>
               </p>
             )}
             </>

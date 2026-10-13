@@ -1151,10 +1151,13 @@ test.describe('การ์ดสถานะบนแดชบอร์ดน�
     // วันเริ่มงานย้ายมาอยู่การ์ด "ที่ฝึกงานของคุณ" · ยังไม่มีพี่เลี้ยงบนใบ = ไม่มีบรรทัดพี่เลี้ยง
     await expect(page.getByTestId('intent-start-date')).toContainText('2569');
     await expect(page.getByTestId('intent-mentor')).toHaveCount(0);
-    // ได้ที่ฝึกงานแล้ว: เตือนเรื่องระบบทะเบียน (ข้อความอย่างเดียว)
-    await expect(page.getByTestId('registry-reminder')).toHaveText(
+    // ได้ที่ฝึกงานแล้ว: เตือนเรื่องระบบทะเบียน พร้อมลิงก์ไประบบทะเบียนของมหาวิทยาลัย (เปิดแท็บใหม่)
+    await expect(page.getByTestId('registry-reminder')).toContainText(
       'กรอกข้อมูลสถานประกอบการในระบบทะเบียนก่อน ไม่งั้นลงทะเบียนวิชาสหกิจไม่ได้'
     );
+    const registryLink = page.getByTestId('registry-link');
+    await expect(registryLink).toHaveAttribute('href', 'http://regis.rmutto.ac.th/registrar/login.asp');
+    await expect(registryLink).toHaveAttribute('target', '_blank');
     // ฟอร์มพี่เลี้ยงไม่อยู่บนหน้าแรกแล้ว — เหลือบรรทัดเดียวบอกว่าระบุได้เมื่อไหร่ (ยังไม่ถึงวันเริ่มฝึก = ไม่มีลิงก์)
     await expect(page.getByTestId('mentor-card')).toHaveCount(0);
     await expect(page.getByTestId('mentor-form')).toHaveCount(0);
