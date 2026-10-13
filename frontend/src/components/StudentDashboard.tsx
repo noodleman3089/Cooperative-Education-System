@@ -119,6 +119,7 @@ const StudentDashboard: React.FC = () => {
   const [submittingProof, setSubmittingProof] = useState(false);
   const [reportingFail, setReportingFail] = useState(false);
   const [confirmingFailure, setConfirmingFailure] = useState(false);
+  const [failError, setFailError] = useState<string | null>(null);
   // ยกเลิกคำร้องเองก่อนเจ้าหน้าที่รับ (`POST /intents/:id/withdraw`) — คนละเส้นกับ "สัมภาษณ์ไม่ผ่าน" ข้างบน
   const [confirmingWithdraw, setConfirmingWithdraw] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -179,10 +180,10 @@ const StudentDashboard: React.FC = () => {
 
       if (dashResult.status === 'fulfilled') {
         setData(dashResult.value);
-        if (!isBackground) {
-          setError(null);
-          setNeedsProfile(false);
-        }
+        // `error` ของหน้านี้มีแต่ "โหลดไม่ขึ้น" (ความผิดพลาดของปุ่มอยู่ใน state ของแต่ละกล่อง)
+        // โหลดได้เมื่อไหร่ต้องหายเอง แม้เป็นรอบ background — เดิมค้างจนกว่าจะรีเฟรชทั้งหน้า
+        setError(null);
+        if (!isBackground) setNeedsProfile(false);
       } else {
         console.error('Failed to load student dashboard:', dashResult.reason);
         if (!isBackground) {
@@ -362,14 +363,15 @@ const StudentDashboard: React.FC = () => {
   const handleReportFailure = async () => {
     if (!activeIntent) return;
     setReportingFail(true);
-    setError(null);
+    setFailError(null);
 
     try {
       await api.post(`/acceptances/student/${activeIntent.form_id}/fail`);
       setConfirmingFailure(false);
       await loadDashboardData();
     } catch (err) {
-      setError(getErrorMessage(err, 'การรายงานผลสัมภาษณ์ล้มเหลวล้มเหลว กรุณาลองใหม่อีกครั้ง'));
+      // error อยู่ในกล่องยืนยัน — เดิมใช้ `setError` ซึ่งแทนทั้งหน้าแรกด้วยข้อความบรรทัดเดียว
+      setFailError(getErrorMessage(err, 'รายงานผลไม่สำเร็จ ยังไม่มีอะไรถูกบันทึก กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setReportingFail(false);
     }
@@ -562,6 +564,12 @@ const StudentDashboard: React.FC = () => {
         {announcementBanner}
         {calendarBanner}
         <AlertBanner variant="error" message={error} />
+        {/* ข้อความบอกให้ลองใหม่ ต้องมีอะไรให้กด — รอบ background ที่โหลดสำเร็จก็พาหน้ากลับมาเองเช่นกัน */}
+        {error && (
+          <Button variant="secondary" size="sm" data-testid="dashboard-retry" onClick={() => loadDashboardData()}>
+            ลองใหม่
+          </Button>
+        )}
 
         {/* guide ครอบคลุมกว่าการ์ดนี้ (บอกครบ 3 ขั้น + มีปุ่มไปหน้าประวัติอยู่แล้ว) จึงแสดง
             อย่างใดอย่างหนึ่ง ไม่ใช่ทั้งคู่ — เดิมขึ้น "ยินดีต้อนรับสู่ระบบสหกิจศึกษา" ซ้อนกันสองบล็อก
@@ -626,7 +634,8 @@ const StudentDashboard: React.FC = () => {
   const step1_2Done = !!activeIntent?.request_form_path || OFFICER_RECEIVED.includes(intentStatus);
   const step1_3Done = OFFICER_RECEIVED.includes(intentStatus);
   // หนังสือของ **ใบที่ยังเดินอยู่** ลงนามแล้ว — `step1_3Done` นำไว้กันสถานะที่ยังไม่ถึงมือเจ้าหน้าที่
-  const step1_4Done = step1_3Done && coverLetterStatus === 'signed';
+  // ใบที่บริษัทตอบรับแล้ว (accepted) ผ่านขั้นลงนามมาแล้วเสมอ — ไม่ให้ขั้น 1.4 ค้าง "ตอนนี้" หลัง 1.5 เสร็จ
+  const step1_4Done = step1_3Done && (coverLetterStatus === 'signed' || intentStatus === 'accepted');
 
   /**
    * กำหนดตอบกลับของแบบตอบรับ (เอกสารหมายเลข 2)
@@ -670,6 +679,8 @@ const StudentDashboard: React.FC = () => {
   );
   const step2_3Done = step1_5Done && Boolean(hasSignedDispatchLetter);
   const phase2Done = step2_1Done && step2_2Done && step2_3Done;
+  // เอกสารก่อนออกฝึกยังไม่ครบ = ยังเป็นงานค้าง ไม่ว่าเส้นทางจะเดินไปถึงเฟสไหนแล้ว
+  const phase2Open = step1_5Done && !phase2Done;
 
   const step3_1Done = step1_5Done && !!progress?.outline_submitted;
   const step3_2Done = step1_5Done && !!progress?.outline_approved;
@@ -686,7 +697,12 @@ const StudentDashboard: React.FC = () => {
   // ⛔ นักศึกษากรอกจริงแค่ สหกิจ 06 (สหกิจ 03 พิมพ์จากเมนูใบสมัครงานสหกิจ) — แผนปฏิบัติงาน สหกิจ 07 หน้า 3
   //    ไม่ใช่ภาระนักศึกษาและห้ามเป็นเงื่อนไขบล็อกความคืบหน้า (เจ้าของสั่ง 2026-10-05)
   if (step1_5Done) activePhaseId = 2;
-  if (phase2Done) activePhaseId = 3;
+  // ถึงวันเริ่มฝึกแล้ว เฟส "ระหว่างทำงาน" เปิดเลย แม้เอกสารก่อนออกฝึกยังไม่ครบ (เจ้าของตัดสิน 2026-10-13)
+  // — เดิมนักศึกษาที่ฝึกมา 10 สัปดาห์ยังเห็น "ปฏิบัติงานและส่งบันทึก: ยังไม่ถึง" เพราะสหกิจ 06 ค้าง
+  // ขั้นของเฟส 2 ที่ยังไม่เสร็จยังขึ้นเป็นงานค้างตามเดิม (`phase2Open`) ไม่ได้ถูกข้าม
+  const internshipStarted =
+    step1_5Done && !!activeIntent?.start_date && new Date(activeIntent.start_date).setHours(0, 0, 0, 0) <= new Date().getTime();
+  if (phase2Done || internshipStarted) activePhaseId = 3;
   if (step3_3Done || step4_1Done) activePhaseId = 4;
 
   const phases: PhaseGroup[] = [
@@ -739,15 +755,15 @@ const StudentDashboard: React.FC = () => {
       phaseId: 2,
       title: '2. เตรียมเอกสารก่อนเริ่มฝึก',
       subtitle: 'ใบสมัครงานสหกิจ (สหกิจ 03) & แจ้งที่พัก (สหกิจ 06)',
-      status: phase2Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
+      status: phase2Done ? 'completed' : phase2Open ? 'active' : 'pending',
       subSteps: [
         {
           id: '2.1',
           title: '2.1 แบบแจ้งรายละเอียดที่พัก (สหกิจ 06)',
           description:
             'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · ส่งคู่กับสหกิจ 03 เพื่อให้คณะออกหนังสือส่งตัวและจัดอาจารย์นิเทศ',
-          status: step2_1Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
-          actionLabel: activePhaseId === 2 && !step2_1Done ? 'กรอกรายละเอียดที่พัก' : undefined,
+          status: step2_1Done ? 'completed' : phase2Open ? 'active' : 'pending',
+          actionLabel: phase2Open && !step2_1Done ? 'กรอกรายละเอียดที่พัก' : undefined,
           onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
         },
         {
@@ -755,8 +771,8 @@ const StudentDashboard: React.FC = () => {
           title: '2.2 ใบสมัครงานสหกิจ (สหกิจ 03)',
           description:
             'กรอกข้อมูลในใบสมัครให้ครบทุกช่องบังคับเพื่อส่งคณะ · พิมพ์เป็นหลักฐานได้จากเมนู "ใบสมัครงานสหกิจ"',
-          status: step2_2Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending',
-          actionLabel: activePhaseId === 2 && !step2_2Done ? 'กรอกใบสมัครงาน' : undefined,
+          status: step2_2Done ? 'completed' : phase2Open ? 'active' : 'pending',
+          actionLabel: phase2Open && !step2_2Done ? 'กรอกใบสมัครงาน' : undefined,
           onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'job_application' }))
         },
         {
@@ -764,7 +780,7 @@ const StudentDashboard: React.FC = () => {
           title: '2.3 รับหนังสือส่งตัว นำส่งสถานประกอบการ',
           description:
             'คณะจะออกหนังสือส่งตัวให้หลังส่งสหกิจ 06 และกรอกสหกิจ 03 ครบถ้วนแล้ว · เมื่อคณบดีลงนาม ให้ดาวน์โหลดจากส่วน "เอกสารของฉัน" ด้านล่างแล้วนำส่งสถานประกอบการ',
-          status: step2_3Done ? 'completed' : activePhaseId === 2 ? 'active' : 'pending'
+          status: step2_3Done ? 'completed' : phase2Open ? 'active' : 'pending'
         }
       ]
     },
@@ -910,9 +926,10 @@ const StudentDashboard: React.FC = () => {
                             disabled={uploadingRequestForm}
                             data-testid="replace-request-form"
                             onChange={(e) => handleRequestFormUpload(e, intent.form_id)}
-                            className="sr-only"
+                            className="peer sr-only"
                           />
-                          <span className="font-bold text-brand-blue underline dark:text-blue-400">เปลี่ยนไฟล์</span>
+                          {/* input ซ่อนอยู่ — focus ต้องไปแสดงที่ข้อความที่มองเห็น ไม่งั้นผู้ใช้คีย์บอร์ดไม่รู้ว่าอยู่ตรงไหน */}
+                          <span className="rounded font-bold text-brand-blue underline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-blue dark:text-blue-400">เปลี่ยนไฟล์</span>
                         </label>
                         <AlertBanner variant="error" message={requestFormError} className="w-full font-normal" />
                       </div>
@@ -1012,10 +1029,10 @@ const StudentDashboard: React.FC = () => {
                           disabled={uploadingRequestForm}
                           data-testid="upload-request-form"
                           onChange={(e) => handleRequestFormUpload(e, intent.form_id)}
-                          className="sr-only"
+                          className="peer sr-only"
                         />
                         <span
-                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-bold transition-colors peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-blue ${
                             uploadingRequestForm
                               ? 'border-gray-200 bg-gray-100 text-gray-400 dark:border-gray-800 dark:bg-gray-900 dark:text-gray-400'
                               : 'border-brand-blue bg-brand-blue text-white hover:bg-brand-navy'
@@ -1401,7 +1418,8 @@ const StudentDashboard: React.FC = () => {
                 <StatusBadge
                   domain="intent"
                   status={intentDisplayStatus(activeIntent.status, coverLetterStatus)}
-                  className="mt-1 self-start"
+                  // ป้ายยาว ("คณบดีลงนามแล้ว · รอสถานประกอบการตอบรับ") ต้องตัดบรรทัดได้ — เดิมล้นการ์ดที่จอ 360
+                  className="mt-1 max-w-full self-start whitespace-normal! text-left"
                 />
               </div>
             </div>
@@ -1591,7 +1609,9 @@ const StudentDashboard: React.FC = () => {
               · เงื่อนไขอ่านจาก `acceptance_due_date` ซึ่งถูกปั๊มตอนคณบดีลงนาม —
                 แหล่งเดียวกับที่เซิร์ฟเวอร์ใช้ตัดสิน จึงไม่มีทางที่หน้าจอกับ API
                 จะไม่ตรงกัน (ถ้าอ่านจาก `documents` จะเป็นแหล่งความจริงที่สอง) */}
-          {activeIntent?.acceptance_due_date && (
+          {/* เพิ่ม `coverLetterStatus === 'signed'` ให้ตรงกับด่านของเซิร์ฟเวอร์ตรง ๆ — ใบที่มีวันครบกำหนดแต่ไม่มี
+              หนังสือที่ลงนาม (ข้อมูลเก่า/ข้อมูลเดโม) เคยเห็นลิงก์แล้วกดได้ JSON 409 */}
+          {activeIntent?.acceptance_due_date && coverLetterStatus === 'signed' && (
             <div className="mt-3 rounded-lg border border-blue-100 bg-blue-50/60 p-3 text-xs dark:border-blue-900/40 dark:bg-blue-950/20">
               <span className="block font-bold text-gray-700 dark:text-gray-300">
                 แบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2)
@@ -1765,6 +1785,8 @@ const StudentDashboard: React.FC = () => {
         open={confirmingFailure}
         title="รายงานผลการสัมภาษณ์ไม่ผ่าน"
         message={
+          <>
+          <AlertBanner variant="error" message={failError} className="mb-3" />
           <ConfirmSummary
             lead="รายงานว่าสถานประกอบการปฏิเสธหรือสัมภาษณ์ไม่ผ่าน"
             rows={[
@@ -1777,12 +1799,16 @@ const StudentDashboard: React.FC = () => {
             ]}
             lockNote="รายงานแล้วย้อนกลับไม่ได้"
           />
+          </>
         }
         confirmLabel="แจ้งว่าไม่ได้ที่ฝึก"
         destructive
         busy={reportingFail}
         onConfirm={handleReportFailure}
-        onCancel={() => setConfirmingFailure(false)}
+        onCancel={() => {
+          setConfirmingFailure(false);
+          setFailError(null);
+        }}
       />
     </div>
   );

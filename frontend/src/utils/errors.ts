@@ -36,11 +36,23 @@ export function getErrorMessage(err: unknown, fallback = 'เกิดข้อ�
   const data = shape.response?.data;
   const fromResponse =
     typeof data === 'object' && data !== null ? (data as { message?: unknown }).message : undefined;
-  if (typeof fromResponse === 'string' && fromResponse.trim()) return fromResponse;
+  const fromServer =
+    typeof fromResponse === 'string' && fromResponse.trim()
+      ? fromResponse
+      : typeof shape.message === 'string' && shape.message.trim()
+        ? shape.message
+        : '';
+  if (!fromServer) return fallback;
 
-  if (typeof shape.message === 'string' && shape.message.trim()) return shape.message;
+  // ข้อความ 5xx และ 429 ที่ไม่ใช่ภาษาไทยคือข้อความกลางของเซิร์ฟเวอร์/ตัวจำกัดอัตรา
+  // ("An unexpected error occurred on the server." · "Too many requests…") ผู้ใช้อ่านแล้วไม่รู้ว่าต้องทำอะไร
+  // — ใช้ข้อความไทยของผู้เรียกแทน · ข้อความไทยที่เซิร์ฟเวอร์ตั้งใจส่งมา (ทุกสถานะ) ยังแสดงตามเดิม
+  const status = getErrorStatus(err);
+  const hasThai = /[฀-๿]/.test(fromServer);
+  if (!hasThai && status === 429) return 'มีการส่งคำขอถี่เกินไป กรุณารอประมาณ 15 นาทีแล้วลองใหม่อีกครั้ง';
+  if (!hasThai && status !== undefined && status >= 500) return fallback;
 
-  return fallback;
+  return fromServer;
 }
 
 /** รหัสสถานะ HTTP ถ้ามี — ใช้แยก 404 (ยังไม่มีข้อมูล) ออกจากความผิดพลาดจริง */

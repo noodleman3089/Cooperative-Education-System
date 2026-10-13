@@ -246,10 +246,12 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await page.locator('button:has-text("ลงนามแบบกลุ่มที่เลือก")').click();
     await page.locator('[role="dialog"] button:has-text("ลงนาม")').click();
 
-    // Expect the custom offline message to be gracefully presented as an error in the UI
+    // ล้มแล้วหน้าจอต้องบอกเป็นภาษาไทยว่าอะไรไม่สำเร็จ — ข้อความ 5xx ภาษาอังกฤษของเซิร์ฟเวอร์ไม่แสดงให้ผู้ใช้แล้ว
+    // (2026-10-13 · `getErrorMessage` ใช้ข้อความสำรองของหน้าจอแทนเมื่อ status ≥ 500 และข้อความไม่ใช่ภาษาไทย)
+    await expect(page.getByRole('alert')).toHaveText('การลงนามแบบกลุ่มล้มเหลว กรุณาลองใหม่อีกครั้ง');
     await expect(
       page.locator('text=DocuSign service is currently offline. Please try again later.')
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test('Test 6: File Type Spoofing & Header Validation', async ({ page }) => {

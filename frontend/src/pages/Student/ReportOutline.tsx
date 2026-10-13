@@ -73,6 +73,8 @@ const ReportOutline: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  // โหลดไม่ขึ้นตั้งแต่ครั้งแรก — ห้ามแสดง "ยังไม่ได้ส่ง" และฟอร์มเปล่าเป็นข้อเท็จจริงทั้งที่แค่อ่านข้อมูลไม่ได้
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Form Fields
@@ -101,6 +103,7 @@ const ReportOutline: React.FC = () => {
         if (!active) return;
         const outlineData: OutlineResponse | null = (res as { data?: OutlineResponse })?.data || null;
         setData(outlineData);
+        setLoadFailed(false);
 
         if (outlineData?.versions && outlineData.versions.length > 0) {
           const latest = outlineData.versions[0];
@@ -122,6 +125,7 @@ const ReportOutline: React.FC = () => {
       } catch (err) {
         if (!active) return;
         setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดโครงร่างรายงาน'));
+        setLoadFailed(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -248,6 +252,14 @@ const ReportOutline: React.FC = () => {
     return (
       <div className="max-w-6xl mx-auto py-16 flex justify-center">
         <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
+  if (loadFailed && !data) {
+    return (
+      <div className="max-w-6xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
       </div>
     );
   }
@@ -553,7 +565,7 @@ const ReportOutline: React.FC = () => {
               ? 'การกดส่งใหม่จะนับเป็นเวอร์ชันถัดไป และเริ่มรอบการตรวจใหม่จากพี่เลี้ยง'
               : 'บันทึกร่างเก็บไว้ในเครื่องนี้ พี่เลี้ยงยังไม่เห็นจนกว่าจะกดส่งตรวจ'}
           </span>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
             <button
               type="button"
               data-testid="outline-save-draft"

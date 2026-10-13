@@ -7,6 +7,7 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { intentDisplayStatus } from '../../utils/intentStatus';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Input, Select, Textarea } from '../../components/ui/Input';
@@ -44,6 +45,7 @@ interface ActiveIntent {
   submitted_late?: boolean;
   company_name_th?: string;
   status: string;
+  cover_letter_status?: string | null;
 }
 
 const EMPTY_FORM = {
@@ -73,6 +75,8 @@ const RequestLetter: React.FC = () => {
   const auth = useContext(AuthContext);
 
   const [loading, setLoading] = useState(true);
+  // โหลดไม่ขึ้นตั้งแต่ครั้งแรก = ไม่รู้ว่ามีคำร้องเดินอยู่หรือไม่ — ห้ามเปิดฟอร์มยื่นใหม่เหมือนยังไม่เคยยื่น
+  const [loadState, setLoadState] = useState<'pending' | 'ok' | 'failed'>('pending');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -167,8 +171,11 @@ const RequestLetter: React.FC = () => {
         throw me.e;
       }
       setProfile(profileRes.ok ? ((profileRes.d?.profile as StudentProfile) ?? null) : null);
+      setLoadState('ok');
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลสำหรับยื่นคำร้องได้ กรุณาลองใหม่อีกครั้ง'));
+      // เคยโหลดสำเร็จแล้ว = ข้อมูลบนจอยังเป็นของจริง ไม่ต้องซ่อน
+      setLoadState((prev) => (prev === 'ok' ? 'ok' : 'failed'));
     } finally {
       setLoading(false);
     }
@@ -471,6 +478,14 @@ const RequestLetter: React.FC = () => {
 
   if (loading) return <PageSkeleton variant="form" />;
 
+  if (loadState === 'failed') {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
   const studentName = [profile?.first_name, profile?.last_name].filter(Boolean).join(' ');
   const majorName = (profile?.major_name_th ?? '').replace(/^สาขาวิชา\s*/, '');
   const email = auth?.user?.email || profile?.alt_email || '';
@@ -590,7 +605,10 @@ const RequestLetter: React.FC = () => {
               <p className="font-bold">คุณมีคำร้องที่ดำเนินการอยู่แล้ว</p>
               <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                 <span>{blockingIntent.company_name_th || 'สถานประกอบการที่ยื่นไว้'}</span>
-                <StatusBadge status={blockingIntent.status} domain="intent" />
+                <StatusBadge
+                  status={intentDisplayStatus(blockingIntent.status, blockingIntent.cover_letter_status)}
+                  domain="intent"
+                />
               </p>
               <p>
                 ยื่นได้ครั้งละ 1 แห่งต่อภาคการศึกษา · ก่อนอัปโหลดแบบคำร้องที่ลงนาม แก้ข้อมูลสถานประกอบการได้ที่นี่ ·

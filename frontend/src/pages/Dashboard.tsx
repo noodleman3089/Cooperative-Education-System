@@ -7,6 +7,7 @@ import PageSkeleton from '../components/ui/Skeleton';
 import { skeletonFor } from '../components/ui/skeletonFor';
 import Button from '../components/ui/Button';
 import { statusText } from '../components/ui/statusLabels';
+import { intentDisplayStatus } from '../utils/intentStatus';
 import api from '../services/api';
 import EmptyState from '../components/ui/EmptyState';
 import { Lock } from 'lucide-react';
@@ -87,6 +88,8 @@ const STAGE_GATED_STUDENT_MENUS = [
 interface StudentStage {
   hasProfile: boolean;
   intentStatus: string | null;
+  /** สถานะหนังสือขาออกของใบเดียวกัน — ใช้คู่กับ `intentDisplayStatus` ให้ข้อความตรงกับหน้าแรก */
+  coverLetterStatus?: string | null;
   mentorLocked?: boolean;
   mentorOpensOn?: string | null;
   replacementPass?: boolean;
@@ -224,6 +227,7 @@ const Dashboard: React.FC = () => {
         setStage({
           hasProfile: true,
           intentStatus: stageRes.value?.activeIntent?.status ?? null,
+          coverLetterStatus: stageRes.value?.activeIntent?.cover_letter_status ?? null,
           mentorLocked: stageRes.value?.activeIntent?.mentor_locked ?? true,
           mentorOpensOn: stageRes.value?.activeIntent?.mentor_opens_on ?? null,
           replacementPass: stageRes.value?.replacement_pass === true,
@@ -325,7 +329,7 @@ const Dashboard: React.FC = () => {
         ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่มีข้อมูลประวัตินักศึกษาในระบบ กรุณากรอกประวัติให้ครบก่อน'
         : stage.intentStatus === null
           ? 'เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว ตอนนี้ยังไม่ได้ยื่นแบบแจ้งความจำนงไปที่สถานประกอบการใด'
-          : `เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว สถานะใบความจำนงตอนนี้: ${statusText(stage.intentStatus, 'intent')}`;
+          : `เมนูนี้จะเปิดให้ใช้เมื่อสถานประกอบการตอบรับคุณเข้าปฏิบัติงานแล้ว สถานะใบความจำนงตอนนี้: ${statusText(intentDisplayStatus(stage.intentStatus, stage.coverLetterStatus), 'intent')}`;
 
       for (const id of STAGE_GATED_STUDENT_MENUS) {
         locks[id] = reason;
@@ -367,6 +371,16 @@ const Dashboard: React.FC = () => {
     // `setActiveMenu` ผูกกับ `setSearchParams` ซึ่งเปลี่ยนตัวได้เมื่อ location เปลี่ยน
     // — ต้องอยู่ใน deps ไม่งั้น listener ค้างอยู่กับ setter ของหน้าเก่า
   }, [setActiveMenu]);
+
+  // ลิ้นชักเมนูบนจอเล็กปิดด้วย Esc ได้ (เดิมปิดได้ด้วยการแตะนอกเมนูอย่างเดียว)
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [sidebarOpen]);
 
   if (!auth || !auth.user) {
     return (
@@ -544,6 +558,7 @@ const Dashboard: React.FC = () => {
           currentRole={currentRole} 
           onRoleChange={handleRoleChange} 
           onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          isSidebarOpen={sidebarOpen}
         />
         
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[#F3F4F6] dark:bg-[#111827] transition-colors w-full">

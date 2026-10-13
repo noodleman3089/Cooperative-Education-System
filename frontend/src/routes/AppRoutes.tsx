@@ -22,7 +22,6 @@ const SetPassword = lazy(() => import('../pages/SetPassword'));
 const AppointmentResponse = lazy(() => import('../pages/Mentor/AppointmentResponse'));
 const AcceptanceLink = lazy(() => import('../pages/CompanyLink/AcceptanceLink'));
 const MentorLinkLanding = lazy(() => import('../pages/Mentor/MentorLinkLanding'));
-const FinalReportSubmission = lazy(() => import('../pages/Student/FinalReportSubmission'));
 const AdvisorEvaluation = lazy(() => import('../pages/Advisor/AdvisorEvaluation'));
 const FinalProgressDashboard = lazy(() => import('../pages/Staff/FinalProgressDashboard'));
 
@@ -141,12 +140,14 @@ const AppRoutes: React.FC = () => {
 
       {/* Phase 4 Routes */}
       <Route 
-        path="/student/final-report" 
+        path="/student/final-report"
         element={
+          // ทางเดียวของหน้านี้คือเมนูใน /dashboard — ได้แถบเมนูและด่านล็อกตามขั้นมาด้วย
+          // (เดิมเปิดฟอร์มเปล่า ๆ ไม่มีเมนู และข้ามด่าน "ยังไม่ถึงขั้นตอนนี้")
           <ProtectedRoute requiredRoles={['student']}>
-            <FinalReportSubmission />
+            <Navigate to="/dashboard?menu=final_report" replace />
           </ProtectedRoute>
-        } 
+        }
       />
       <Route 
         path="/advisor/evaluation" 

@@ -81,6 +81,10 @@ const AccommodationWorkPlan: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  // โหลดไม่ขึ้นตั้งแต่ครั้งแรก = ไม่แสดงฟอร์มเปล่ากับป้าย "ยังไม่ได้บันทึก" เป็นข้อเท็จจริง
+  const [loadState, setLoadState] = useState<'pending' | 'ok' | 'failed'>('pending');
+  // ป้าย "บันทึกแล้ว" อ่านจากสิ่งที่เซิร์ฟเวอร์มีจริง ไม่ใช่จากช่องที่กำลังพิมพ์หรือร่างในเครื่อง
+  const [savedOnServer, setSavedOnServer] = useState(false);
 
   const [accommodation, setAccommodation] = useState<Accommodation>(BLANK_ACCOMMODATION);
   const [legacyAddress, setLegacyAddress] = useState('');
@@ -107,6 +111,8 @@ const AccommodationWorkPlan: React.FC = () => {
     try {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
       const loadedSection: string = res.section || '';
+      setLoadState('ok');
+      setSavedOnServer(Boolean(res.accommodation?.house_no && res.accommodation?.province));
 
       if (res.accommodation) {
         const a = res.accommodation;
@@ -147,6 +153,8 @@ const AccommodationWorkPlan: React.FC = () => {
     } catch (err) {
       console.error('Failed to load accommodation:', err);
       setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลที่พักได้'));
+      // เคยโหลดสำเร็จแล้ว (โหลดซ้ำหลังบันทึกพัง) = ค่าในฟอร์มยังเป็นของจริง ไม่ต้องซ่อนฟอร์ม
+      setLoadState((prev) => (prev === 'ok' ? 'ok' : 'failed'));
     } finally {
       setAccommodation(loadedAcc);
       setLegacyAddress(loadedLegacy);
@@ -318,7 +326,15 @@ const AccommodationWorkPlan: React.FC = () => {
     return <PageSkeleton variant="form" />;
   }
 
-  const isAccSubmitted = Boolean(accommodation.house_no && accommodation.province);
+  if (loadState === 'failed') {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
+  const isAccSubmitted = savedOnServer;
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 page-enter pb-16">
@@ -666,10 +682,12 @@ const AccommodationWorkPlan: React.FC = () => {
         </div>
 
         {/* Retain testids in the DOM for E2E assertions without selector breakage */}
-        <div className="sr-only">
+        {/* มีไว้ให้ E2E อ่านค่าเท่านั้น — ต้องไม่เป็นจุดหยุดของ Tab (เดิม focus หายไป 3 จังหวะตรงนี้) */}
+        <div className="sr-only" aria-hidden="true">
           <input
             type="text"
             data-testid="acc-emg-name"
+            tabIndex={-1}
             readOnly
             value={emergencyContact.name || accommodation.emergency_contact || ''}
             onChange={(e) => setAccommodation({ ...accommodation, emergency_contact: e.target.value })}
@@ -677,6 +695,7 @@ const AccommodationWorkPlan: React.FC = () => {
           <input
             type="text"
             data-testid="acc-emg-relation"
+            tabIndex={-1}
             readOnly
             value={emergencyContact.relationship || accommodation.emergency_relationship || ''}
             onChange={(e) => setAccommodation({ ...accommodation, emergency_relationship: e.target.value })}
@@ -684,6 +703,7 @@ const AccommodationWorkPlan: React.FC = () => {
           <input
             type="text"
             data-testid="acc-emg-phone"
+            tabIndex={-1}
             readOnly
             value={emergencyContact.phone || accommodation.emergency_phone || ''}
             onChange={(e) => setAccommodation({ ...accommodation, emergency_phone: e.target.value })}

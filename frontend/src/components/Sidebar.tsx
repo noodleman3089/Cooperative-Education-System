@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { usePageTitle } from '../hooks/usePageTitle';
 
 interface SidebarProps {
   currentRole: string;
@@ -37,6 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   activeMenu,
   onMenuChange,
   isOpen = false,
+  onClose,
   lockedMenus = {}
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
@@ -284,11 +286,16 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'profile', label: 'ข้อมูลส่วนตัว', icon: icons.profile }
   ];
 
+  // ชื่อแท็บเบราว์เซอร์ตามเมนูที่เปิดอยู่ — ป้ายเมนูอยู่ที่นี่ที่เดียว จึงตั้งที่นี่
+  usePageTitle(activeMenuItems.find((item) => item.id === activeMenu)?.label);
 
   return (
     <aside
-      className={`bg-white text-gray-700 flex flex-col border-r border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 shrink-0 fixed md:static inset-y-0 left-0 z-40 transform transition-all duration-300 md:translate-x-0 ${isCollapsed ? 'w-16' : 'w-56'
-        } ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      className={`bg-white text-gray-700 flex flex-col border-r border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-800 shrink-0 fixed md:static inset-y-0 left-0 z-40 max-w-[85vw] transform transition-all duration-300 md:translate-x-0 ${isCollapsed ? 'w-16' : 'w-56'
+        } ${
+          // ลิ้นชักที่ปิดอยู่บนจอเล็กต้องไม่รับ focus (เดิม Tab วิ่งเข้าปุ่มนอกจอ 12 ปุ่ม) — `invisible` ตัดออกจากลำดับ Tab
+          isOpen ? 'translate-x-0' : '-translate-x-full invisible md:visible'
+        }`}
     >
       {/* Header Bar with Logo and Toggle Button « / » */}
       <div className="h-16 flex items-center justify-between px-4 border-b border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-950/80">
@@ -303,10 +310,22 @@ const Sidebar: React.FC<SidebarProps> = ({
               </svg>
               ระบบสหกิจศึกษา
             </span>
+            {/* จอเล็ก: เมนูเป็นลิ้นชัก ปุ่มนี้ต้อง "ปิด" — การพับเหลือแต่ไอคอนไม่มีชื่อใช้กับจอใหญ่เท่านั้น */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="md:hidden p-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+              title="ปิดเมนู"
+              aria-label="ปิดเมนู"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={() => setIsCollapsed(true)}
-              className="p-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+              className="hidden md:block p-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
               title="พับเก็บเมนู (Collapse Sidebar)"
               aria-label="พับเก็บเมนู"
             >

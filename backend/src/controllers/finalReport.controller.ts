@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { sendFinalReportNotificationEmail } from '../utils/email';
@@ -26,6 +27,22 @@ export class FinalReportController {
 
       const studentId = req.user.userId;
       const reviewerKind = req.body.reviewer_kind === 'mentor' ? 'mentor' : 'advisor';
+
+      // 0. ต้องมีที่ฝึก (ใบ accepted) ก่อน — ไม่งั้นร่างไม่มีพี่เลี้ยงหรืออาจารย์คนไหนเห็น (แถวกำพร้า)
+      //    หน้าจอล็อกเมนูนี้ไว้อยู่แล้ว ด่านนี้กันการยิงตรง · ไฟล์ถูก multer เขียนลงดิสก์ไปแล้วจึงต้องลบทิ้ง
+      const placementRes = await query(
+        `SELECT 1 FROM intent_forms WHERE student_id = $1 AND status = 'accepted' LIMIT 1`,
+        [studentId]
+      );
+      if ((placementRes.rowCount ?? 0) === 0) {
+        fs.promises
+          .unlink(req.file.path)
+          .catch((e) => console.error('[FinalReport] cannot remove rejected upload:', e));
+        res.status(409).json({
+          message: 'ยังส่งรายงานไม่ได้ เพราะยังไม่มีสถานประกอบการที่ตอบรับคุณ',
+        });
+        return;
+      }
 
       // 1. Check if Report Outline (สหกิจ 11) is Approved (required for advisor submission)
       if (reviewerKind === 'advisor') {

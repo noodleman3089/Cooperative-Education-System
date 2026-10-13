@@ -1,3 +1,4 @@
+import fs from 'fs';
 import { Request, Response } from 'express';
 import { query } from '../config/database';
 import { assertCanReviewStudentWork, sendAccessError } from '../utils/access';
@@ -76,6 +77,31 @@ export class WeeklyLogController {
             });
             return;
           }
+        }
+      }
+
+      // ส่งล่วงหน้าไม่ได้ (เจ้าของตัดสิน 2026-10-13) — สัปดาห์ที่ยังไม่เริ่มยังไม่มีงานให้พี่เลี้ยงรับรอง
+      // บันทึกร่างไว้ก่อนได้ · "วันนี้" มาจาก Postgres เวลาไทย · ใบที่ไม่มีวันเริ่มฝึกไม่ถูกกัน (เทียบกับ NULL ไม่เป็นจริง)
+      if (status === 'submitted') {
+        const notStarted = await query(
+          `SELECT to_char(start_date + ($2::int - 1) * 7, 'YYYY-MM-DD') AS week_start
+             FROM intent_forms
+            WHERE form_id = $1
+              AND start_date + ($2::int - 1) * 7 > (NOW() AT TIME ZONE 'Asia/Bangkok')::date`,
+          [intent.form_id, weekNum]
+        );
+        if ((notStarted.rowCount ?? 0) > 0) {
+          // multer เขียนไฟล์ลงดิสก์ไปแล้ว — ปฏิเสธแล้วต้องลบทิ้ง
+          if (req.file) {
+            fs.promises
+              .unlink(req.file.path)
+              .catch((e) => console.error('[WeeklyLog] cannot remove rejected upload:', e));
+          }
+          res.status(409).json({
+            code: 'week_not_started',
+            message: `ยังส่งบันทึกสัปดาห์ที่ ${weekNum} ไม่ได้ เพราะสัปดาห์นั้นเริ่มวันที่ ${notStarted.rows[0].week_start} (บันทึกร่างไว้ก่อนได้)`,
+          });
+          return;
         }
       }
 

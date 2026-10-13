@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 import { loginAs } from '../helpers/auth';
 import { goToMenu } from '../helpers/nav';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, dbValue, mentor1Id, withDb } from '../helpers/db';
+import { dbExec, dbRows, dbValue, mentor1Id, withDb } from '../helpers/db';
+import { API_URL } from '../helpers/env';
 
 /**
  * ข้อ 4 ของ PROMPT-sonnet-R1-close-company.md — แท็บบันทึกรายวัน (สหกิจ 08)
@@ -64,8 +65,15 @@ test.describe('บันทึกรายวัน (สหกิจ 08) — ฝ
     await goToMenu(page, 'weekly_log');
     await page.getByTestId('worklog-tab-daily').click();
 
+    // หน้าจอมีครบ 7 วันของสัปดาห์ (สัปดาห์นับจากวันเริ่มฝึก ไม่จำเป็นต้องเริ่มวันจันทร์) — กรอกเฉพาะวันที่ทำงาน
+    // เดิมมี 5 วันแรก: เริ่มฝึกกลางสัปดาห์แล้ววันทำงานบางวันไม่มีแถวให้กรอกเลย
     const inputs = page.locator('[data-testid^="daily-input-"]');
-    await expect(inputs).toHaveCount(5);
+    await expect(inputs).toHaveCount(7);
+    const firstDay = await dbValue<string>(`SELECT to_char(CURRENT_DATE - 6, 'YYYY-MM-DD')`);
+    const lastDay = await dbValue<string>(`SELECT to_char(CURRENT_DATE, 'YYYY-MM-DD')`);
+    await expect(page.getByTestId(`daily-row-${firstDay}`)).toBeVisible();
+    await expect(page.getByTestId(`daily-row-${lastDay}`)).toBeVisible();
+    // ⛔ วันที่ไม่ได้กรอกต้องไม่กลายเป็นแถวว่างในฐาน — กรอก 5 จาก 7 วัน ฐานต้องมี 5 แถว
     for (let i = 0; i < 5; i++) {
       await inputs.nth(i).fill(`วันที่ ${i + 1} ทำงานทดสอบระบบบันทึกรายวัน`);
     }
@@ -173,5 +181,74 @@ test.describe('บันทึกรายวัน (สหกิจ 08) — ฝ
     await page.getByTestId('worklog-save-draft').click();
     await page.getByTestId('worklog-confirm-overwrite').click();
     await expect.poll(monthlyCert).toBeNull();
+  });
+
+  test('สัปดาห์ที่ยังไม่เริ่มส่งให้พี่เลี้ยงรับรองไม่ได้ ทั้งหน้าจอและ API — บันทึกร่างยังได้', async ({ page }) => {
+    // เริ่มฝึกเมื่อ 3 วันก่อน: สัปดาห์ที่ 1 กำลังเดิน · สัปดาห์ที่ 2 เริ่มอีก 4 วัน
+    const { studentId } = await attachMentorTo('student2@test.com', false, 3);
+    const fields = { assigned_work: 'งาน', methods: 'วิธี', tools_used: 'เครื่องมือ', achievements: 'ผล', problems: '', summary: '' };
+    const post = (week: number, status: 'draft' | 'submitted') =>
+      page.request.post(`${API_URL}/weekly-logs`, {
+        multipart: { ...fields, week_number: String(week), status },
+      });
+
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'weekly_log');
+
+    // หน้าเปิดมาที่สัปดาห์ปัจจุบัน ไม่ใช่สัปดาห์อนาคต
+    await expect(page.getByTestId('worklog-week-select')).toHaveValue('1');
+    await expect(page.getByTestId('worklog-submit')).toBeEnabled();
+
+    await page.getByTestId('worklog-week-select').selectOption('2');
+    await expect(page.getByTestId('worklog-submit')).toBeDisabled();
+    await expect(page.getByTestId('worklog-save-draft')).toBeEnabled();
+    await expect(page.getByTestId('worklog-week-not-started')).toContainText('สัปดาห์ที่ 2 ยังไม่เริ่ม');
+
+    // ⛔ ด่านจริงอยู่ที่เซิร์ฟเวอร์ — ยิงตรงก็ต้องไม่ผ่าน และต้องไม่มีแถวสถานะ submitted เกิดขึ้น
+    const blocked = await post(2, 'submitted');
+    expect(blocked.status()).toBe(409);
+    expect((await blocked.json()).code).toBe('week_not_started');
+    expect((await post(2, 'draft')).ok()).toBe(true);
+    expect((await post(1, 'submitted')).ok()).toBe(true);
+
+    const rows = await dbRows<{ week_number: number; status: string }>(
+      'SELECT week_number, status FROM weekly_logs WHERE student_id = $1 ORDER BY week_number',
+      [studentId]
+    );
+    expect(rows).toEqual([
+      { week_number: 1, status: 'submitted' },
+      { week_number: 2, status: 'draft' },
+    ]);
+  });
+
+  test('แถบสัปดาห์บอกใบที่ถูกส่งกลับ · แท็บอยู่ใน URL และรอดจากการรีเฟรช · กดเลขสัปดาห์จากแท็บรายวันไม่ถูกพาไปรายสัปดาห์', async ({
+    page,
+  }) => {
+    const { studentId } = await attachMentorTo('student2@test.com', true, 20);
+    await dbExec(
+      `INSERT INTO weekly_logs (student_id, week_number, assigned_work, methods, tools_used, achievements,
+                                 status, returned_comment)
+       VALUES ($1, 2, 'งาน', 'วิธี', 'เครื่องมือ', 'ผล', 'returned', 'ขอรายละเอียดเพิ่ม')`,
+      [studentId]
+    );
+
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'weekly_log');
+
+    // ใบที่พี่เลี้ยงส่งกลับต้องเห็นจากแถบ — เดิมหน้าตาเหมือนสัปดาห์ที่ยังไม่ถึง
+    await expect(page.getByTestId('worklog-week-2')).toContainText('แก้');
+    await expect(page.getByTestId('worklog-week-2')).toHaveAttribute('title', /ส่งกลับมาแก้ไข/);
+
+    await page.getByTestId('worklog-tab-monthly').click();
+    await expect(page).toHaveURL(/tab=monthly/);
+    await page.reload();
+    await expect(page.locator('[data-testid^="monthly-month-"]').first()).toBeVisible();
+    await expect(page.getByTestId('worklog-week-select')).toHaveCount(0);
+
+    await page.getByTestId('worklog-tab-daily').click();
+    await expect(page).toHaveURL(/tab=daily/);
+    await page.getByTestId('worklog-week-2').click();
+    await expect(page.getByTestId('daily-week-select')).toHaveValue('2');
+    await expect(page.locator('[data-testid^="daily-row-"]')).toHaveCount(7);
   });
 });

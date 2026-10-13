@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AuthContext } from '../../context/authContextValue';
 import api from '../../services/api';
 import {
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
+import PageSkeleton from '../../components/ui/Skeleton';
 import CalendarGate from '../../components/ui/CalendarGate';
 import { useCalendarGate } from '../../components/ui/useCalendarGate';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
@@ -105,15 +107,40 @@ const THAI_MONTHS_SHORT = [
 
 const THAI_WEEKDAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
+/** วันที่ตามเวลาเครื่อง รูปแบบ YYYY-MM-DD — `toISOString()` ให้วันที่ UTC ซึ่งช้ากว่าไทย 7 ชั่วโมง (ตีห้ายังนับเป็น "เมื่อวาน") */
+const toLocalIso = (d: Date): string =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+type WorkLogTab = 'weekly' | 'monthly' | 'daily';
+
 const WeeklyLog: React.FC = () => {
   const auth = useContext(AuthContext);
-  const [activeTab, setActiveTab] = useState<'weekly' | 'monthly' | 'daily'>('weekly');
+  // แท็บอยู่ใน URL (`?tab=`) — รีเฟรชหรือกดย้อนแล้วอยู่แท็บเดิม ไม่หลุดกลับไปรายสัปดาห์
+  const [searchParams, setSearchParams] = useSearchParams();
+  const setActiveTab = (tab: WorkLogTab) =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (tab === 'weekly') next.delete('tab');
+        else next.set('tab', tab);
+        return next;
+      },
+      { replace: true }
+    );
 
   const [intent, setIntent] = useState<IntentData | null>(null);
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyLogItem[]>([]);
   const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogItem[]>([]);
   const [dailyIntent, setDailyIntent] = useState<DailyIntent | null>(null);
   const [dailyWeeks, setDailyWeeks] = useState<DailyLogWeek[]>([]);
+  // แท็บรายวันมีเฉพาะเมื่อพี่เลี้ยงเปิดสวิตช์ — `?tab=daily` ของคนที่ไม่มีแท็บนี้ตกไปรายสัปดาห์
+  const requestedTab = searchParams.get('tab');
+  const activeTab: WorkLogTab =
+    requestedTab === 'monthly'
+      ? 'monthly'
+      : requestedTab === 'daily' && dailyIntent?.daily_log_required
+        ? 'daily'
+        : 'weekly';
   const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -231,7 +258,12 @@ const WeeklyLog: React.FC = () => {
           (max: number, l: WeeklyLogItem) => (l.status === 'submitted' ? Math.max(max, l.week_number) : max),
           0
         );
-        setSelectedWeek(Math.min(maxSubmittedWeek + 1, 16));
+        // เปิดมาที่สัปดาห์ถัดจากที่ส่งล่าสุด แต่ไม่เกินสัปดาห์ปัจจุบัน — สัปดาห์ที่ยังไม่เริ่มส่งไม่ได้
+        const startDate = weeklyData.intent?.start_date ? new Date(weeklyData.intent.start_date) : null;
+        const currentWeek = startDate
+          ? Math.floor((Date.now() - startDate.getTime()) / (7 * 86400000)) + 1
+          : 16;
+        setSelectedWeek(Math.max(1, Math.min(maxSubmittedWeek + 1, currentWeek, 16)));
       } catch (err) {
         if (!active) return;
         setError(getErrorMessage(err, 'ไม่สามารถดึงข้อมูลบันทึกการปฏิบัติงานได้'));
@@ -274,8 +306,11 @@ const WeeklyLog: React.FC = () => {
   const currentWeekDays = (() => {
     const range = weekRanges[selectedWeek - 1];
     if (!range) return [];
-    const todayIso = new Date().toISOString().slice(0, 10);
-    return Array.from({ length: 5 }, (_, i) => {
+    const todayIso = toLocalIso(new Date());
+    // ครบ 7 วันของสัปดาห์ (เจ้าของตัดสิน 2026-10-13) — สัปดาห์นับจากวันเริ่มฝึก ซึ่งไม่จำเป็นต้องเป็นวันจันทร์
+    // เดิมหยิบ 5 วันแรก: เริ่มวันพฤหัส = มีแถวเสาร์อาทิตย์ แต่อังคารพุธไม่มีแถวในสัปดาห์ไหนเลย
+    // หลังบ้านรับวันที่ได้ทั้งช่วง 7 วันอยู่แล้ว (`weekRange` ใน dailyLog.ts) · กรอกเฉพาะวันที่ทำงาน
+    return Array.from({ length: 7 }, (_, i) => {
       const d = new Date(range.start);
       d.setDate(range.start.getDate() + i);
       const logDate = d.toISOString().slice(0, 10);
@@ -286,10 +321,15 @@ const WeeklyLog: React.FC = () => {
         weekday: THAI_WEEKDAYS[d.getDay()],
         label: `${d.getDate()} ${THAI_MONTHS_SHORT[d.getMonth()]} ${d.getFullYear() + 543}`,
         isFuture: logDate > todayIso,
+        savedOnServer: Boolean(existing),
         workDetail: dailyDrafts[draftKey] ?? existing?.work_detail ?? '',
       };
     });
   })();
+
+  // สัปดาห์ที่เลือกยังไม่เริ่ม = ยังส่งให้พี่เลี้ยงรับรองไม่ได้ (บันทึกร่างได้) · หลังบ้านกันซ้ำด้วย 409
+  const selectedWeekStart = weekRanges[selectedWeek - 1]?.start;
+  const weekNotStarted = Boolean(selectedWeekStart && toLocalIso(selectedWeekStart) > toLocalIso(new Date()));
 
   const updateDailyField = (logDate: string, value: string) => {
     setDailyDrafts((prev) => ({ ...prev, [`${selectedWeek}:${logDate}`]: value }));
@@ -313,7 +353,11 @@ const WeeklyLog: React.FC = () => {
       const res = await api.post('/daily-logs', {
         week_number: selectedWeek,
         status,
-        days: currentWeekDays.map((d) => ({ log_date: d.logDate, work_detail: d.workDetail })),
+        // ส่งเฉพาะวันที่มีข้อความ หรือวันที่เคยบันทึกไว้แล้ว (ลบข้อความทิ้งต้องไปถึงเซิร์ฟเวอร์)
+        // — หน้าจอมี 7 วัน ถ้าส่งทุกวัน วันหยุดที่ไม่ได้กรอกจะกลายเป็นแถวว่างบนใบที่พี่เลี้ยงต้องรับรอง
+        days: currentWeekDays
+          .filter((d) => d.workDetail.trim() || d.savedOnServer)
+          .map((d) => ({ log_date: d.logDate, work_detail: d.workDetail })),
       });
       setSuccess((res as { message?: string })?.message || (status === 'submitted' ? 'ส่งบันทึกรายวันเรียบร้อยแล้ว' : 'บันทึกร่างสำเร็จ'));
       setDailyDrafts((prev) => {
@@ -383,6 +427,11 @@ const WeeklyLog: React.FC = () => {
 
     if (status === 'submitted' && (calendarStatus === 'upcoming' || calendarStatus === 'closed')) {
       setError('ไม่อยู่ในช่วงเวลาที่เปิดให้ส่งตามปฏิทินสหกิจศึกษา (สามารถบันทึกร่างไว้ก่อนได้)');
+      return;
+    }
+
+    if (status === 'submitted' && weekNotStarted) {
+      setError(`สัปดาห์ที่ ${selectedWeek} ยังไม่เริ่ม จึงยังส่งให้พี่เลี้ยงรับรองไม่ได้ (บันทึกร่างไว้ก่อนได้)`);
       return;
     }
 
@@ -531,6 +580,12 @@ const WeeklyLog: React.FC = () => {
 
   // โหลดพัง ≠ ยังไม่ถึงขั้นตอน — ต้องเช็คก่อน EmptyState ข้างล่าง ไม่งั้นนักศึกษาที่ตอบรับแล้ว
   // จะเห็นข้อความว่า "ยังไม่สามารถบันทึกได้" ทั้งที่เป็นแค่เซิร์ฟเวอร์ล่มชั่วคราว
+  // โหลดครั้งแรก: โครงร่างแทนฟอร์ม — เดิมแสดง "ส่งแล้ว 0 จาก 16" กับฟอร์มสัปดาห์ที่ 1 ที่พิมพ์ได้ระหว่างรอ
+  // (โหลดซ้ำหลังบันทึกมี `intent` แล้ว จึงไม่กลับมาเป็นโครงร่าง และแถบผลไม่หาย)
+  if (loading && !intent) {
+    return <PageSkeleton variant="form" />;
+  }
+
   if (!loading && error && !intent) {
     return (
       <div className="max-w-5xl mx-auto py-8">
@@ -601,7 +656,7 @@ const WeeklyLog: React.FC = () => {
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded bg-rose-400" />
-              เลยกำหนด
+              ส่งกลับมาแก้ไข
             </span>
             <span className="inline-flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded bg-gray-200 dark:bg-gray-700" />
@@ -617,6 +672,8 @@ const WeeklyLog: React.FC = () => {
             const log = weeklyLogs.find((l) => l.week_number === wNum);
             const isCertified = log?.status === 'submitted' && Boolean(log.mentor_certified_at);
             const isWaiting = log?.status === 'submitted' && !log.mentor_certified_at;
+            // พี่เลี้ยงส่งกลับ = งานค้างของนักศึกษา ต้องเห็นจากแถบนี้ ไม่ใช่หน้าตาเหมือนสัปดาห์ที่ยังไม่ถึง
+            const isReturned = log?.status === 'returned';
             const isSelected = selectedWeek === wNum;
 
             let badgeClass = 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400';
@@ -624,6 +681,8 @@ const WeeklyLog: React.FC = () => {
               badgeClass = 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300';
             } else if (isWaiting) {
               badgeClass = 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300';
+            } else if (isReturned) {
+              badgeClass = 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200';
             }
 
             return (
@@ -633,8 +692,10 @@ const WeeklyLog: React.FC = () => {
                 data-testid={`worklog-week-${wNum}`}
                 onClick={() => {
                   setSelectedWeek(wNum);
-                  setActiveTab('weekly');
+                  // อยู่แท็บรายวันให้อยู่ต่อ (เลขสัปดาห์ใช้ร่วมกัน) — เดิมถูกพาไปรายสัปดาห์ เสี่ยงกรอกผิดใบ
+                  if (activeTab !== 'daily') setActiveTab('weekly');
                 }}
+                title={isReturned ? `สัปดาห์ที่ ${wNum} — พี่เลี้ยงส่งกลับมาแก้ไข` : undefined}
                 className={`w-11 h-11 rounded-xl flex flex-col items-center justify-center gap-0.5 text-xs font-bold border transition ${badgeClass} ${
                   isSelected ? 'ring-2 ring-blue-500 dark:ring-blue-400 shadow-sm' : 'hover:border-blue-300 dark:hover:border-blue-700'
                 }`}
@@ -644,6 +705,8 @@ const WeeklyLog: React.FC = () => {
                   <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                 ) : isWaiting ? (
                   <span className="text-[9px] font-semibold">รอ</span>
+                ) : isReturned ? (
+                  <span className="text-[9px] font-semibold">แก้</span>
                 ) : null}
               </button>
             );
@@ -726,14 +789,17 @@ const WeeklyLog: React.FC = () => {
                       สัปดาห์ที่ {selectedWeek}
                     </span>
                     <span className="text-xs text-blue-700 dark:text-blue-300">
-                      {weekRanges[selectedWeek - 1]?.label || `ช่วงสัปดาห์ที่ ${selectedWeek}`}
+                      {/* ช่วงของแท็บรายวันคือ 7 วันตามแถวข้างล่าง ไม่ใช่ป้าย 5 วันของใบรายสัปดาห์ */}
+                      {currentWeekDays.length > 0
+                        ? `${currentWeekDays[0].label} – ${currentWeekDays[currentWeekDays.length - 1].label}`
+                        : `ช่วงสัปดาห์ที่ ${selectedWeek}`}
                     </span>
                   </div>
                   <select
                     data-testid="daily-week-select"
                     value={selectedWeek}
                     onChange={(e) => setSelectedWeek(Number(e.target.value))}
-                    className="w-56 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-blue-500 shadow-sm"
+                    className="w-full sm:w-56 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-blue-500 shadow-sm"
                   >
                     {Array.from({ length: totalWeeks }, (_, idx) => idx + 1).map((w) => (
                       <option key={w} value={w}>สัปดาห์ที่ {w}</option>
@@ -779,7 +845,7 @@ const WeeklyLog: React.FC = () => {
                 </div>
               )}
 
-              {/* 5 วันทำงาน */}
+              {/* ทุกวันของสัปดาห์ (7 วัน) — กรอกเฉพาะวันที่ทำงาน */}
               <div className="space-y-2.5">
                 {currentWeekDays.map((day) => (
                   <div
@@ -827,7 +893,7 @@ const WeeklyLog: React.FC = () => {
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
                 </span>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
                   <button
                     type="button"
                     data-testid="daily-save-draft"
@@ -875,7 +941,7 @@ const WeeklyLog: React.FC = () => {
                     data-testid="worklog-week-select"
                     value={selectedWeek}
                     onChange={(e) => setSelectedWeek(Number(e.target.value))}
-                    className="w-56 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-blue-500 shadow-sm"
+                    className="w-full sm:w-56 px-3 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white outline-none focus:border-blue-500 shadow-sm"
                   >
                     {Array.from({ length: totalWeeks }, (_, idx) => {
                       const w = idx + 1;
@@ -1126,10 +1192,16 @@ const WeeklyLog: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="pt-4 border-t border-gray-100 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <span className="text-xs text-gray-500 dark:text-gray-400">
-                  บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
-                </span>
-                <div className="flex items-center gap-3 shrink-0">
+                {weekNotStarted ? (
+                  <span data-testid="worklog-week-not-started" className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                    สัปดาห์ที่ {selectedWeek} ยังไม่เริ่ม จึงยังส่งให้พี่เลี้ยงรับรองไม่ได้ · บันทึกร่างไว้ก่อนได้
+                  </span>
+                ) : (
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
+                  </span>
+                )}
+                <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
                   <button
                     type="button"
                     data-testid="worklog-save-draft"
@@ -1143,10 +1215,10 @@ const WeeklyLog: React.FC = () => {
                   <button
                     type="button"
                     data-testid="worklog-submit"
-                    disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
+                    disabled={submitting || weekNotStarted || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
                     onClick={() => requestSaveWeekly('submitted')}
                     className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
-                      submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
+                      submitting || weekNotStarted || calendarStatus === 'upcoming' || calendarStatus === 'closed'
                         ? 'bg-blue-400 cursor-not-allowed'
                         : 'bg-blue-600 hover:bg-blue-700 active:scale-[0.98]'
                     }`}
@@ -1361,7 +1433,7 @@ const WeeklyLog: React.FC = () => {
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   บันทึกร่างไว้ก่อนได้ ระบบไม่ได้ส่งแจ้งเตือนใครจนกว่าจะกดส่งให้พี่เลี้ยงรับรอง
                 </span>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex flex-wrap items-center gap-3 sm:shrink-0">
                   <button
                     type="button"
                     data-testid="worklog-save-draft"

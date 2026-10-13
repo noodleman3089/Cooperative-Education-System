@@ -46,9 +46,11 @@ interface NavbarProps {
   currentRole: string;
   onRoleChange: (role: string) => void;
   onToggleSidebar?: () => void;
+  /** สถานะลิ้นชักเมนูบนจอเล็ก — ใช้บอกโปรแกรมอ่านหน้าจอผ่าน `aria-expanded` */
+  isSidebarOpen?: boolean;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSidebar }) => {
+const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSidebar, isSidebarOpen }) => {
   // index.html has already put the class on <html>; read it rather than
   // re-deriving it from localStorage and reapplying it after mount.
   const [darkMode, setDarkMode] = useState(() =>
@@ -367,8 +369,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             <button
               type="button"
               onClick={onToggleSidebar}
-              className="p-2 -ml-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors md:hidden focus:outline-none"
+              className="p-2 -ml-2 shrink-0 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors md:hidden"
               aria-label="เปิดเมนูนำทาง"
+              aria-expanded={isSidebarOpen}
             >
               <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
@@ -634,7 +637,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           <button
             type="button"
             onClick={toggleDarkMode}
-            className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors"
+            // จอเล็กปุ่มนี้ย้ายเข้าเมนูบัญชี — แถบบนไม่พอที่เมื่อขยายตัวอักษร (กระดิ่งเคยทับปุ่มเปิดเมนู)
+            className={`${auth?.user ? 'hidden sm:block ' : ''}p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors`}
             title="สลับโหมดการแสดงผล"
             aria-label={darkMode ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
           >
@@ -707,6 +711,13 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                     </div>
                     {/* ⛔ ปุ่มนี้ย้ายมาจากท้ายแถบเมนู (ร่างไม่มีอะไรตรงนั้น) — ย้าย ไม่ใช่ลบ
                         `data-testid="logout"` ต้องคงไว้ เพราะ helper `logout(page)` ใช้เดินทั้งชุด */}
+                    <button
+                      type="button"
+                      onClick={toggleDarkMode}
+                      className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-2.5 text-left text-xs font-bold text-gray-700 transition-colors hover:bg-gray-50 sm:hidden dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      {darkMode ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'}
+                    </button>
                     <button
                       type="button"
                       data-testid="logout"

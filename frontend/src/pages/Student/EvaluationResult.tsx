@@ -91,6 +91,15 @@ const EvaluationResult: React.FC = () => {
 
   if (loading) return <PageSkeleton variant="table" />;
 
+  // โหลดไม่ขึ้น ≠ พี่เลี้ยงยังไม่ประเมิน — เดิมการ์ด "พี่เลี้ยงยังไม่ได้ส่งแบบประเมิน" ขึ้นคู่กับแถบ error
+  if (error && !data) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
   const s15 = data?.sahatkit_15 ?? null;
   const s16 = data?.sahatkit_16 ?? null;
   const hasOne = Boolean((s15 && !s16) || (!s15 && s16));
@@ -251,7 +260,7 @@ const EvaluationResult: React.FC = () => {
         {/* สหกิจ 15 Summary */}
         <div
           data-testid="eval-summary-15"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex items-center justify-between gap-4"
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
         >
           <div className="space-y-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">
@@ -285,7 +294,7 @@ const EvaluationResult: React.FC = () => {
         {/* สหกิจ 16 Summary */}
         <div
           data-testid="eval-summary-16"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex items-center justify-between gap-4"
+          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-sm flex flex-wrap items-center justify-between gap-4"
         >
           <div className="space-y-1">
             <h2 className="text-base font-bold text-gray-900 dark:text-white">

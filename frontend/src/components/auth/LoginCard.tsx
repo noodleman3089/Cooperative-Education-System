@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ReactNode } from 'react';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import AlertBanner from '../ui/AlertBanner';
@@ -30,6 +31,9 @@ export const LoginCard: React.FC<LoginCardProps> = ({
   backLabel = 'ย้อนกลับไปหน้าเลือกสถานะ',
 }) => {
   const navigate = useNavigate();
+
+  // ชื่อแท็บตามหน้าเข้าสู่ระบบที่เปิดอยู่ (คู่กับที่ Sidebar ตั้งให้หน้าใน dashboard)
+  usePageTitle(title);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6] px-4 dark:bg-[#111827]">

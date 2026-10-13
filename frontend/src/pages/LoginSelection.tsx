@@ -37,7 +37,7 @@ const LoginSelection: React.FC = () => {
           </p>
         </div>
 
-        <div className="rounded-2xl border border-gray-200 bg-white p-7 shadow-sm dark:border-gray-800 dark:bg-[#1F2937]">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-7 dark:border-gray-800 dark:bg-[#1F2937]">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 
             <button
@@ -46,7 +46,7 @@ const LoginSelection: React.FC = () => {
               data-testid="login-as-student"
               className="group flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-5 text-left transition-all hover:border-brand-blue hover:shadow-lg hover:shadow-blue-500/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:hover:border-brand-blue"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-brand-blue transition-transform group-hover:scale-110 dark:bg-blue-950/30 dark:text-blue-400">
                   <GraduationCap className="h-6 w-6" />
                 </div>
@@ -68,7 +68,7 @@ const LoginSelection: React.FC = () => {
               data-testid="login-as-personnel"
               className="group flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-5 text-left transition-all hover:border-brand-blue hover:shadow-lg hover:shadow-blue-500/5 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue dark:border-gray-700 dark:bg-gray-800 dark:hover:border-brand-blue"
             >
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-50 text-brand-blue transition-transform group-hover:scale-110 dark:bg-blue-950/30 dark:text-blue-400">
                   <Users className="h-6 w-6" />
                 </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User } from '../types/api';
 import api from '../services/api';
+import { getErrorStatus } from '../utils/errors';
 import { AuthContext, type AuthContextType } from './authContextValue';
 
 export type { AuthContextType };
@@ -32,10 +33,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         localStorage.setItem('auth_user', JSON.stringify(merged));
         setUser(merged);
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        localStorage.removeItem('auth_user');
-        setUser(null);
+        // เซิร์ฟเวอร์บอกชัดว่าไม่มี session (401/403) เท่านั้นจึงล้าง — เซิร์ฟเวอร์สะดุด เน็ตหลุด หรือ 429
+        // ไม่ได้แปลว่าหลุดระบบ: คงผู้ใช้จากแคชไว้ (ไม่มีของลับ) แล้วให้คำขอถัดไปเป็นตัวตัดสิน
+        // (ได้ 401 เมื่อไหร่ `auth:unauthorized` ข้างล่างล้างให้เอง) เดิมล้างทุกกรณี = เด้งไป /login ทั้งที่ cookie ยังดี
+        const status = getErrorStatus(err);
+        const storedUser = status === 401 || status === 403 ? null : localStorage.getItem('auth_user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+        } else {
+          localStorage.removeItem('auth_user');
+          setUser(null);
+        }
       } finally {
         if (!cancelled) setIsLoading(false);
       }

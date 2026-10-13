@@ -83,6 +83,8 @@ const FinalReportSubmission: React.FC = () => {
   const [pendingUpload, setPendingUpload] = useState<{ kind: 'mentor' | 'advisor'; file: File } | null>(null);
   const [confirmingRequest, setConfirmingRequest] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // โหลดไม่ขึ้นตั้งแต่ครั้งแรก — ห้ามแสดง "ยังไม่ได้ส่งร่าง" เป็นข้อเท็จจริงทั้งที่แค่อ่านข้อมูลไม่ได้
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [examDate, setExamDate] = useState<string | null>(null);
 
@@ -110,8 +112,10 @@ const FinalReportSubmission: React.FC = () => {
         if (reportRes.status === 'fulfilled') {
           const resData = (reportRes.value as { data?: FinalReportData })?.data || null;
           setData(resData);
+          setLoadFailed(false);
         } else {
           setError(getErrorMessage(reportRes.reason, 'ไม่สามารถโหลดข้อมูลรายงานได้'));
+          setLoadFailed(true);
         }
 
         if (calRes.status === 'fulfilled') {
@@ -124,6 +128,7 @@ const FinalReportSubmission: React.FC = () => {
       } catch (err) {
         if (!active) return;
         setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูล'));
+        setLoadFailed(true);
       } finally {
         if (active) setLoading(false);
       }
@@ -274,6 +279,14 @@ const FinalReportSubmission: React.FC = () => {
     );
   }
 
+  if (loadFailed && !data) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
       {/* 1. Header Card */}
@@ -350,7 +363,7 @@ const FinalReportSubmission: React.FC = () => {
         </div>
 
         {/* Step 1 content & actions */}
-        <div className="ml-12 space-y-4">
+        <div className="sm:ml-12 space-y-4">
           {latestMentorDraft && (
             <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -482,8 +495,17 @@ const FinalReportSubmission: React.FC = () => {
             <>
               {/* Upload Dropzone */}
               <div
+                // กล่องนี้คือปุ่มเลือกไฟล์ — ต้องไปถึงและกดได้ด้วยคีย์บอร์ด (input ข้างในซ่อนด้วย display:none)
+                role="button"
+                tabIndex={0}
                 onClick={() => step2InputRef.current?.click()}
-                className="border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 bg-gray-50/60 dark:bg-gray-800/30 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    step2InputRef.current?.click();
+                  }
+                }}
+                className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-500 dark:hover:border-blue-400 rounded-2xl p-8 bg-gray-50/60 dark:bg-gray-800/30 flex flex-col items-center justify-center gap-2 cursor-pointer transition text-center"
               >
                 <Upload className="w-8 h-8 text-gray-400 dark:text-gray-500" />
                 <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
@@ -633,7 +655,7 @@ const FinalReportSubmission: React.FC = () => {
           </div>
         </div>
 
-        <div className="ml-12 space-y-4">
+        <div className="sm:ml-12 space-y-4">
           <div className="p-4 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50/70 dark:bg-gray-800/40 text-xs md:text-sm leading-relaxed text-gray-600 dark:text-gray-400">
             ใบนี้เป็นหลักฐานว่าส่งรายงานครบแล้ว ระบบเติมข้อมูลให้เองทั้งใบ (ชื่อ · รหัส · สถานประกอบการ · ชื่อรายงาน · วันที่ส่ง) นักศึกษาไม่ต้องกรอกอะไร — กดขอให้อาจารย์รับรอง แล้วพิมพ์ไปส่งงานสหกิจศึกษาประจำคณะ
           </div>
