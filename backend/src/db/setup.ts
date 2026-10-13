@@ -114,7 +114,20 @@ export async function reseedDatabase() {
       `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'`
     );
     const names = tables.rows.map((r: { tablename: string }) => `"${r.tablename}"`).join(', ');
-    await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
+    // คำสั่งของเคสก่อนหน้าอาจยังวิ่งอยู่ใน backend (งานหลังตอบ response: `writeAudit` · คิวรีของอีเมลแจ้งเตือน)
+    // มันถือล็อกตารางหนึ่งแล้วรออีกตาราง ขณะที่ TRUNCATE ถือกลับด้าน → Postgres ยกเลิก TRUNCATE ด้วย
+    // `deadlock detected` (40P01) แล้วเคสถัดไปแดงทั้งที่ไม่เกี่ยว (พบใน log ของ Postgres 2 ครั้ง 2026-10-13)
+    // · TRUNCATE ที่ถูกยกเลิกไม่ทิ้งอะไรค้าง และอีกฝั่งจบในไม่กี่มิลลิวินาที → รอสั้น ๆ แล้วลองใหม่
+    // · error อื่น หรือชนครบ 5 ครั้ง = โยนตามเดิม ไม่กลืน · `e2e/system/reseed-deadlock` D1 สร้างสภาพนี้ซ้ำได้
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await client.query(`TRUNCATE ${names} RESTART IDENTITY CASCADE`);
+        break;
+      } catch (err) {
+        if ((err as { code?: string }).code !== '40P01' || attempt >= 5) throw err;
+        await new Promise((resolve) => setTimeout(resolve, 50 * attempt));
+      }
+    }
     await seedBaseData(client, () => undefined);
   } finally {
     client.release();
