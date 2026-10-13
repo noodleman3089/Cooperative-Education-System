@@ -309,6 +309,16 @@ const CoopJobApplication: React.FC = () => {
 
   if (loading) return <PageSkeleton variant="form" />;
 
+  // โหลดพัง ≠ ใบว่าง — ถ้าปล่อยฟอร์มเปล่าออกมา กดบันทึกครั้งเดียวจะเขียนค่าว่างทับทั้งใบ
+  // (backend ไม่มี COALESCE ให้ช่องข้อความ) · `server` มีค่าเมื่อเคยโหลดสำเร็จอย่างน้อยหนึ่งครั้ง
+  if (error && !server) {
+    return (
+      <div className="max-w-4xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto space-y-6 page-enter">
       <div>

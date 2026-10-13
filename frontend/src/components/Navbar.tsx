@@ -462,7 +462,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             const notifCount = (isFaculty || isDeptHead) ? (facultyCount ?? 0) : notifications.length;
 
             return (
-              <div className="relative">
+              // จอเล็ก: ไม่ยึดแผงกับปุ่มกระดิ่ง (แผง 320px จะล้นขอบซ้ายจอ) ให้ยึดกับแถบ <nav> แทน
+              <div className="sm:relative">
                 <button
                   type="button"
                   onClick={() => setShowNotifDropdown(!showNotifDropdown)}
@@ -501,7 +502,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                       className="fixed inset-0 z-30"
                       onClick={() => setShowNotifDropdown(false)}
                     ></div>
-                    <div className="absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-96 overflow-y-auto">
+                    <div className="absolute inset-x-2 top-full mt-2 sm:inset-x-auto sm:right-0 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-96 overflow-y-auto">
                       <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
                         <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
                           {currentRole === 'student'

@@ -149,8 +149,11 @@ const WeeklyLog: React.FC = () => {
 
   // Daily log (สหกิจ 08) — key เป็น `${week_number}:${log_date}` เก็บค่าที่กำลังพิมพ์
   const [dailyDrafts, setDailyDrafts] = useState<Record<string, string>>({});
-  // แก้สัปดาห์ที่พี่เลี้ยงรับรองแล้ว = ล้างการรับรองทั้งสัปดาห์ทิ้ง — เตือนก่อนเสมอ
-  const [pendingDailyAction, setPendingDailyAction] = useState<'draft' | 'submitted' | null>(null);
+  // แก้ใบที่พี่เลี้ยงรับรองแล้ว = ล้างการรับรองทิ้ง — เตือนก่อนเสมอ ทั้งรายวัน รายสัปดาห์ และรายเดือน
+  const [pendingCertifiedSave, setPendingCertifiedSave] = useState<{
+    kind: 'daily' | 'weekly' | 'monthly';
+    status: 'draft' | 'submitted';
+  } | null>(null);
 
   // Calculate Weeks & Months from Intent dates
   const { totalWeeks, weekRanges, monthsList } = (() => {
@@ -329,7 +332,7 @@ const WeeklyLog: React.FC = () => {
   /** แก้สัปดาห์ที่พี่เลี้ยงรับรองแล้ว = ล้างการรับรองทิ้ง (backend ทำแบบนี้เสมอ) — เตือนก่อนเสมอ */
   const requestSaveDaily = (status: 'draft' | 'submitted') => {
     if (currentDailyWeek?.mentor_certified_at) {
-      setPendingDailyAction(status);
+      setPendingCertifiedSave({ kind: 'daily', status });
       return;
     }
     handleSaveDaily(status);
@@ -439,6 +442,15 @@ const WeeklyLog: React.FC = () => {
     }
   };
 
+  /** กติกาเดียวกับ `requestSaveDaily` — backend ล้างการรับรองทุกครั้งที่บันทึก รวมบันทึกร่าง */
+  const requestSaveWeekly = (status: 'draft' | 'submitted') => {
+    if (currentWeeklyLog?.mentor_certified_at) {
+      setPendingCertifiedSave({ kind: 'weekly', status });
+      return;
+    }
+    handleSaveWeekly(status);
+  };
+
   // Submit / Save Monthly Log
   const handleSaveMonthly = async (status: 'draft' | 'submitted') => {
     if (monthsList.length === 0) return;
@@ -501,6 +513,17 @@ const WeeklyLog: React.FC = () => {
       setSubmitting(false);
     }
   };
+
+  const requestSaveMonthly = (status: 'draft' | 'submitted') => {
+    if (currentMonthlyLog?.mentor_certified_at) {
+      setPendingCertifiedSave({ kind: 'monthly', status });
+      return;
+    }
+    handleSaveMonthly(status);
+  };
+
+  const pendingKind = pendingCertifiedSave?.kind;
+  const pendingIsMonthly = pendingKind === 'monthly';
 
   // Helper stats for weekly
   const submittedCount = weeklyLogs.filter((l) => l.status === 'submitted').length;
@@ -1111,7 +1134,7 @@ const WeeklyLog: React.FC = () => {
                     type="button"
                     data-testid="worklog-save-draft"
                     disabled={submitting}
-                    onClick={() => handleSaveWeekly('draft')}
+                    onClick={() => requestSaveWeekly('draft')}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
                   >
                     <Save className="w-4 h-4" />
@@ -1121,7 +1144,7 @@ const WeeklyLog: React.FC = () => {
                     type="button"
                     data-testid="worklog-submit"
                     disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
-                    onClick={() => handleSaveWeekly('submitted')}
+                    onClick={() => requestSaveWeekly('submitted')}
                     className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
                       submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
                         ? 'bg-blue-400 cursor-not-allowed'
@@ -1343,7 +1366,7 @@ const WeeklyLog: React.FC = () => {
                     type="button"
                     data-testid="worklog-save-draft"
                     disabled={submitting}
-                    onClick={() => handleSaveMonthly('draft')}
+                    onClick={() => requestSaveMonthly('draft')}
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-gray-600 transition"
                   >
                     <Save className="w-4 h-4" />
@@ -1353,7 +1376,7 @@ const WeeklyLog: React.FC = () => {
                     type="button"
                     data-testid="worklog-submit"
                     disabled={submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'}
-                    onClick={() => handleSaveMonthly('submitted')}
+                    onClick={() => requestSaveMonthly('submitted')}
                     className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-sm font-semibold transition shadow-sm ${
                       submitting || calendarStatus === 'upcoming' || calendarStatus === 'closed'
                         ? 'bg-blue-400 cursor-not-allowed'
@@ -1371,17 +1394,23 @@ const WeeklyLog: React.FC = () => {
       </div>
 
       <ConfirmDialog
-        open={pendingDailyAction !== null}
-        title="สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว"
+        open={pendingCertifiedSave !== null}
+        title={pendingIsMonthly ? 'เดือนนี้พี่เลี้ยงรับรองไปแล้ว' : 'สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว'}
         message={
           <ConfirmSummary
-            lead="การบันทึกครั้งนี้จะล้างการรับรองของพี่เลี้ยงทิ้งทั้งสัปดาห์ และต้องรอให้พี่เลี้ยงรับรองใหม่"
+            lead={`การบันทึกครั้งนี้จะล้างการรับรองของพี่เลี้ยงทิ้งทั้ง${pendingIsMonthly ? 'เดือน' : 'สัปดาห์'} และต้องรอให้พี่เลี้ยงรับรองใหม่`}
             rows={[
-              { label: 'สัปดาห์ที่', value: `สัปดาห์ที่ ${selectedWeek}` },
+              pendingIsMonthly
+                ? { label: 'เดือน', value: monthsList[selectedMonthIndex]?.label ?? '' }
+                : { label: 'สัปดาห์ที่', value: `สัปดาห์ที่ ${selectedWeek}` },
               {
                 label: 'พี่เลี้ยงที่รับรอง',
                 value:
-                  currentDailyWeek?.certified_by_name ||
+                  (pendingKind === 'daily'
+                    ? currentDailyWeek?.certified_by_name
+                    : pendingIsMonthly
+                      ? currentMonthlyLog?.mentor_certified_name
+                      : currentWeeklyLog?.mentor_certified_name) ||
                   dailyIntent?.mentor_name ||
                   intent?.mentor_name ||
                   'พี่เลี้ยง',
@@ -1391,14 +1420,16 @@ const WeeklyLog: React.FC = () => {
           />
         }
         confirmLabel="ยืนยันบันทึก"
-        confirmTestId="daily-confirm-overwrite"
+        confirmTestId={pendingKind === 'daily' ? 'daily-confirm-overwrite' : 'worklog-confirm-overwrite'}
         busy={submitting}
         onConfirm={() => {
-          const action = pendingDailyAction;
-          setPendingDailyAction(null);
-          if (action) handleSaveDaily(action);
+          const pending = pendingCertifiedSave;
+          setPendingCertifiedSave(null);
+          if (pending?.kind === 'daily') handleSaveDaily(pending.status);
+          else if (pending?.kind === 'weekly') handleSaveWeekly(pending.status);
+          else if (pending?.kind === 'monthly') handleSaveMonthly(pending.status);
         }}
-        onCancel={() => setPendingDailyAction(null)}
+        onCancel={() => setPendingCertifiedSave(null)}
       />
     </div>
   );

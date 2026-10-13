@@ -112,4 +112,66 @@ test.describe('บันทึกรายวัน (สหกิจ 08) — ฝ
     );
     expect(cert).toBeNull();
   });
+
+  test('รายสัปดาห์และรายเดือนที่พี่เลี้ยงรับรองแล้ว — บันทึกร่างต้องเจอกล่องเตือนก่อน ยกเลิกแล้วการรับรองยังอยู่', async ({
+    page,
+  }) => {
+    const { studentId, mentorId } = await attachMentorTo('student2@test.com', false, 40);
+
+    await dbExec(
+      `INSERT INTO weekly_logs (student_id, week_number, assigned_work, methods, tools_used, achievements,
+                                 status, submitted_at, mentor_certified_by, mentor_certified_at)
+       VALUES ($1, 1, 'งานเดิม', 'วิธีเดิม', 'เครื่องมือเดิม', 'ผลเดิม', 'submitted', NOW(), $2, NOW())`,
+      [studentId, mentorId]
+    );
+    await dbExec(
+      `INSERT INTO monthly_logs (student_id, year, month, work_summary, effectiveness,
+                                  status, submitted_at, mentor_certified_by, mentor_certified_at)
+       VALUES ($1, EXTRACT(YEAR FROM CURRENT_DATE - 40)::int, EXTRACT(MONTH FROM CURRENT_DATE - 40)::int,
+               'สรุปเดิม', 'ประสิทธิภาพเดิม', 'submitted', NOW(), $2, NOW())`,
+      [studentId, mentorId]
+    );
+    const startMonth = await dbValue<number>('SELECT EXTRACT(MONTH FROM CURRENT_DATE - 40)::int');
+
+    const weeklyCert = () =>
+      dbValue<string | null>(
+        'SELECT mentor_certified_at FROM weekly_logs WHERE student_id = $1 AND week_number = 1',
+        [studentId]
+      );
+    const monthlyCert = () =>
+      dbValue<string | null>('SELECT mentor_certified_at FROM monthly_logs WHERE student_id = $1', [studentId]);
+
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'weekly_log');
+
+    // ── รายสัปดาห์ ──
+    await page.getByTestId('worklog-week-select').selectOption('1');
+    await expect(page.getByText('พี่เลี้ยงรับรองแล้ว (สมศักดิ์ รักเรียน)')).toBeVisible();
+    await page.getByTestId('worklog-save-draft').click();
+
+    // ⛔ ต้องเจอกล่องเตือนก่อนเสมอ — ปุ่มบันทึกร่างเคยยิงทันทีและล้างการรับรองเงียบๆ
+    await expect(page.getByText('สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว')).toBeVisible();
+    await page.getByRole('button', { name: 'ยกเลิก' }).click();
+    await expect(page.getByText('สัปดาห์นี้พี่เลี้ยงรับรองไปแล้ว')).toHaveCount(0);
+    expect(await weeklyCert()).not.toBeNull();
+
+    await page.getByTestId('worklog-save-draft').click();
+    await page.getByTestId('worklog-confirm-overwrite').click();
+    await expect.poll(weeklyCert).toBeNull();
+
+    // ── รายเดือน ──
+    await page.getByTestId('worklog-tab-monthly').click();
+    await page.getByTestId(`monthly-month-${startMonth}`).click();
+    await expect(page.getByText('พี่เลี้ยงรับรองแล้ว (สมศักดิ์ รักเรียน)')).toBeVisible();
+    await page.getByTestId('worklog-save-draft').click();
+
+    await expect(page.getByText('เดือนนี้พี่เลี้ยงรับรองไปแล้ว')).toBeVisible();
+    await page.getByRole('button', { name: 'ยกเลิก' }).click();
+    await expect(page.getByText('เดือนนี้พี่เลี้ยงรับรองไปแล้ว')).toHaveCount(0);
+    expect(await monthlyCert()).not.toBeNull();
+
+    await page.getByTestId('worklog-save-draft').click();
+    await page.getByTestId('worklog-confirm-overwrite').click();
+    await expect.poll(monthlyCert).toBeNull();
+  });
 });

@@ -67,6 +67,8 @@ const StudentProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // โหลดโปรไฟล์พัง (ไม่ใช่ 404 ของคนที่ยังไม่เคยตั้งโปรไฟล์) — ห้ามเปิดฟอร์มเปล่าให้กดบันทึกทับของเดิม
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -114,11 +116,13 @@ const StudentProfile: React.FC = () => {
             : null
         );
         setError(notOnboarded ? null : 'ไม่สามารถดึงข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+        setLoadFailed(!notOnboarded);
         return;
       }
 
       setError(null);
       setNotice(null);
+      setLoadFailed(false);
       const prof = profileResult.value.profile as StudentType;
       setProfile(prof);
 
@@ -166,6 +170,7 @@ const StudentProfile: React.FC = () => {
     } catch (err) {
       console.error('Failed to load student profile:', err);
       setError('ไม่สามารถดึงข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง');
+      setLoadFailed(true);
     } finally {
       setLoading(false);
     }
@@ -342,6 +347,15 @@ const StudentProfile: React.FC = () => {
 
   if (loading) {
     return <PageSkeleton variant="form" />;
+  }
+
+  // `profile` มีค่า = เคยโหลดสำเร็จแล้ว (โหลดซ้ำหลังบันทึกพัง) ค่าในฟอร์มยังเป็นของจริง จึงไม่ต้องซ่อน
+  if (loadFailed && !profile) {
+    return (
+      <div className="max-w-5xl mx-auto py-8">
+        <AlertBanner variant="error" message={error} />
+      </div>
+    );
   }
 
   const initialLetters = (firstName?.[0] || 'ส') + (lastName?.[0] || 'ห');
@@ -714,7 +728,7 @@ const StudentProfile: React.FC = () => {
           <div className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">
             <span className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
               ชื่อภาษาอังกฤษ · เพศ · สัญชาติ · ผู้ติดต่อฉุกเฉิน อยู่ที่{' '}
-              <a href="/dashboard?menu=job_application" className="font-bold text-brand-blue dark:text-blue-400 hover:underline">
+              <a href="/dashboard?menu=job_application" className="py-1.5 font-bold text-brand-blue dark:text-blue-400 hover:underline">
                 ใบสมัครงานสหกิจ (สหกิจ 03)
               </a>{' '}
               เพราะเป็นช่องที่มีเฉพาะบนใบนั้น — ไม่ทำซ้ำสองที่เพื่อไม่ให้ค่าขัดกัน

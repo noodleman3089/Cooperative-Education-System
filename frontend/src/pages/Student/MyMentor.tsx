@@ -45,14 +45,18 @@ const MyMentor: React.FC = () => {
   const [mentorSetBusy, setMentorSetBusy] = useState(false);
   const [mentorSetError, setMentorSetError] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
+  // รอบ background (poll ทุก 10 วิ · กลับมาที่แท็บ) ต้องไม่โยนหน้ากลับเป็น skeleton
+  // และไม่เขียนทับช่องที่นักศึกษากำลังพิมพ์ — อัปเดตเฉพาะข้อมูลที่ใช้แสดงผล
+  const loadData = useCallback(async (isBackground = false) => {
     try {
-      setLoading(true);
-      setLoadError(null);
+      if (!isBackground) {
+        setLoading(true);
+        setLoadError(null);
+      }
       const res = await api.get('/students/dashboard');
       const intent: IntentForm | null = res?.activeIntent ?? null;
       setActiveIntent(intent);
-      if (intent?.mentor) {
+      if (!isBackground && intent?.mentor) {
         setMentorSet({
           name: intent.mentor.name || '',
           email: intent.mentor.email || '',
@@ -62,7 +66,8 @@ const MyMentor: React.FC = () => {
         });
       }
     } catch (err) {
-      setLoadError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลพี่เลี้ยงได้'));
+      // รอบ background พัง = คงข้อมูลรอบล่าสุดไว้ (รอบถัดไปลองใหม่เอง) ไม่แทนฟอร์มที่กำลังกรอกด้วยแถบ error
+      if (!isBackground) setLoadError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลพี่เลี้ยงได้'));
     } finally {
       setLoading(false);
     }

@@ -367,4 +367,26 @@ test.describe('สหกิจ 03 — ใบสมัครงาน (ตัว�
     // ยินยอมแล้ว checkbox หายไป เหลือข้อความยืนยันวันที่แทน
     await expect(page.getByTestId('ca-consent-done')).toBeVisible();
   });
+
+  test('C17: หน้าจอ — โหลดใบสมัครไม่ขึ้น (500) ต้องไม่เปิดฟอร์มเปล่าให้กดบันทึกทับของเดิม', async ({
+    page,
+  }) => {
+    await loginAs(page, 'student2');
+    // จำลองเซิร์ฟเวอร์สะดุดเฉพาะตอนอ่าน — ถ้าหน้าจอยังส่ง PUT ได้ เทสต์ต้องแดง จึงปล่อย PUT ผ่านจริง
+    let putCount = 0;
+    await page.route('**/api/students/coop-application', (route) => {
+      if (route.request().method() === 'GET') {
+        return route.fulfill({ status: 500, json: { message: 'จำลองเซิร์ฟเวอร์ล่ม' } });
+      }
+      putCount += 1;
+      return route.continue();
+    });
+    await goToMenu(page, 'job_application');
+
+    await expect(page.getByRole('alert')).toBeVisible();
+    // ⛔ ไม่มีฟอร์ม ไม่มีปุ่มบันทึก — ฟอร์มเปล่าที่กดบันทึกได้ = เขียนค่าว่างทับทั้งใบ
+    await expect(page.getByTestId('ca-submit')).toHaveCount(0);
+    await expect(page.getByTestId('ca-ethnicity')).toHaveCount(0);
+    expect(putCount).toBe(0);
+  });
 });

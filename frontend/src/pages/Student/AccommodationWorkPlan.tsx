@@ -629,7 +629,7 @@ const AccommodationWorkPlan: React.FC = () => {
           </h3>
           <a
             href="/dashboard?menu=job_application"
-            className="text-xs font-bold text-brand-blue dark:text-blue-400 flex items-center gap-1 hover:underline"
+            className="text-xs font-bold text-brand-blue dark:text-blue-400 flex items-center gap-1 min-h-11 sm:min-h-0 hover:underline"
           >
             แก้ที่ใบสมัครงานสหกิจ (สหกิจ 03) <ExternalLink className="w-3 h-3" />
           </a>
