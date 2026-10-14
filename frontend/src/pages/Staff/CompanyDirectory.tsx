@@ -214,6 +214,8 @@ const CompanyDirectory: React.FC = () => {
   };
 
   const openCreate = () => {
+    // error ของการกระทำก่อนหน้า (รับรอง/ลบ) ต้องไม่ค้างอยู่ใต้กล่องที่เพิ่งเปิด
+    setError(null);
     setEditing(null);
     setForm(EMPTY_FORM);
     setFormError(null);
@@ -221,6 +223,7 @@ const CompanyDirectory: React.FC = () => {
   };
 
   const openEdit = (company: Company) => {
+    setError(null);
     openedParamRef.current = String(company.company_id);
     setEditing(company);
     setForm(toForm(company));
@@ -315,6 +318,8 @@ const CompanyDirectory: React.FC = () => {
   };
 
   const field = (key: keyof CompanyForm) => ({
+    // id คู่กับ htmlFor ของ label — โปรแกรมอ่านหน้าจอและการคลิกที่ป้ายจึงไปถูกช่อง
+    id: `company-${key}`,
     value: form[key],
     onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(prev => ({ ...prev, [key]: e.target.value })),
@@ -403,11 +408,12 @@ const CompanyDirectory: React.FC = () => {
       align: 'center',
       cell: company =>
         company.is_verified ? (
-          <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/40">
+          // รูปทรงเดียวกับ ui/StatusBadge (py-0.5 · whitespace-nowrap) — เดิมป้ายตัดสองบรรทัดจนแถวสูง 52px
+          <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/40">
             รับรองแล้ว
           </span>
         ) : (
-          <span className="inline-block px-2.5 py-1 rounded-full text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/40">
+          <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-bold border bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400 dark:border-amber-900/40">
             ยังไม่รับรอง
           </span>
         ),
@@ -466,11 +472,17 @@ const CompanyDirectory: React.FC = () => {
             >
               <Pencil className="w-3.5 h-3.5" />
             </Button>
+            {/* ปุ่มลบเป็นขอบแดงพื้นขาวเหมือนตารางสาขา — เดิมแดงทึบ เด่นที่สุดในแถวทั้งที่อันตรายที่สุด
+                `!` เพราะสีของ variant secondary อยู่ในคลาสเดียวกันและชนะคลาสธรรมดา */}
             <Button
-              variant="danger"
+              variant="secondary"
               size="sm"
               data-testid="company-delete"
-              onClick={() => setDeleteTarget(company)}
+              className="!border-red-200 !text-red-700 hover:!bg-red-50 dark:!border-red-800 dark:!text-red-300 dark:hover:!bg-red-950/40"
+              onClick={() => {
+                setError(null);
+                setDeleteTarget(company);
+              }}
               title={isBlocked ? `ลบไม่ได้ เพราะมีข้อมูลผูกอยู่ (${usage?.count} รายการ)` : 'ลบออกจากทำเนียบ'}
               aria-label={`ลบ ${company.name_th} ออกจากทำเนียบ`}
             >
@@ -535,7 +547,7 @@ const CompanyDirectory: React.FC = () => {
       <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-6 md:p-8 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white flex items-center gap-2">
               <Building2 className="w-5 h-5 text-brand-blue dark:text-blue-400" />
               ทำเนียบสถานประกอบการ
             </h1>
@@ -703,37 +715,37 @@ const CompanyDirectory: React.FC = () => {
 
               <div className="grid gap-4 sm:grid-cols-4">
                 <div className="sm:col-span-4">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-name_th" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ชื่อสถานประกอบการ *
                   </label>
                   <Input required maxLength={255} {...field('name_th')} />
                 </div>
                 <div className="sm:col-span-4">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-address" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ที่อยู่ *
                   </label>
                   <Input required maxLength={255} {...field('address')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-district" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     อำเภอ/เขต *
                   </label>
                   <Input required maxLength={100} {...field('district')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-province" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     จังหวัด *
                   </label>
                   <Input required maxLength={100} {...field('province')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-postal_code" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     รหัสไปรษณีย์ *
                   </label>
                   <Input required maxLength={10} {...field('postal_code')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-phone" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     หมายเลขโทรศัพท์ *
                   </label>
                   <Input required maxLength={20} {...field('phone')} />
@@ -751,19 +763,19 @@ const CompanyDirectory: React.FC = () => {
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-contact_person" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ชื่อผู้ติดต่อ
                   </label>
                   <Input maxLength={255} {...field('contact_person')} />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-contact_position" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     ตำแหน่ง
                   </label>
                   <Input maxLength={255} {...field('contact_position')} />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  <label htmlFor="company-email" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
                     อีเมลผู้ประสานงาน
                   </label>
                   <Input

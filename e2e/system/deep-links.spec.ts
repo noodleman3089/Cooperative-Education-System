@@ -63,6 +63,31 @@ test.describe('Deep links — ทุกหน้าจอมี URL ของต
     expect(new URL(page.url()).searchParams.get('menu')).toBe('companies');
   });
 
+  // (2026-10-14) เดิมเมนูที่ไม่มีและลิงก์ของใบที่ออกจากคิวแล้ว ได้หน้าแรกเงียบ ๆ โดย URL ค้างค่าผิด ไม่มีข้อความ
+  test('Test 2b: เจ้าหน้าที่ — ?menu= ที่ฝ่ายตัวเองไม่มีถูกแก้เป็นหน้าแรก · ลิงก์ของใบที่ไม่อยู่ในคิวมีข้อความบอก', async ({
+    page,
+  }) => {
+    await seedTestData();
+    await loginAs(page, 'staff1');
+
+    for (const menu of ['no_such_menu', 'weekly_log', 'signature']) {
+      await page.goto(`${APP_URL}/dashboard?menu=${menu}`);
+      await expect.poll(() => new URL(page.url()).searchParams.get('menu'), { message: menu }).toBeNull();
+      await expect(page.getByTestId('nav-dashboard')).toBeVisible();
+    }
+    // เมนูที่มีจริงต้องไม่ถูกแตะ
+    await page.goto(`${APP_URL}/dashboard?menu=calendar`);
+    await expect(page.getByRole('heading', { name: 'ปฏิทินสหกิจศึกษา' })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get('menu')).toBe('calendar');
+
+    await page.goto(`${APP_URL}/dashboard?queue=request&form=99999`);
+    await expect(page.getByTestId('queue-stale-form')).toContainText('ไม่อยู่ในคิวนี้แล้ว');
+    // เปิดคิวตามปกติ (ไม่มี form) ต้องไม่มีข้อความนี้
+    await page.goto(`${APP_URL}/dashboard?queue=request`);
+    await expect(page.getByText('ไม่มีคำร้องรอตรวจในขณะนี้')).toBeVisible();
+    await expect(page.getByTestId('queue-stale-form')).toHaveCount(0);
+  });
+
   test('Test 3: URL ไม่ใช่ด่านสิทธิ์ — นักศึกษาพิมพ์ ?menu=users เองต้องไม่เห็นหน้าเจ้าหน้าที่', async ({
     page,
   }) => {

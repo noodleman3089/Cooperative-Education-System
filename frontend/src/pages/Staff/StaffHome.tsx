@@ -182,9 +182,17 @@ export const StaffHome: React.FC = () => {
   if (!home) {
     return (
       <div className="space-y-4 page-enter">
+        {/* โหลดล้มทั้งหน้า = ต้องมีปุ่มลองใหม่ ไม่ใช่ให้ผู้ใช้รู้เองว่าต้องกด refresh */}
         <AlertBanner
           variant="error"
-          message={error || 'ไม่สามารถโหลดคิวงานวันนี้ได้ กรุณาลองใหม่อีกครั้ง'}
+          message={
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{error || 'ไม่สามารถโหลดคิวงานวันนี้ได้ กรุณาลองใหม่อีกครั้ง'}</span>
+              <Button size="sm" variant="secondary" onClick={() => loadHome()}>
+                ลองใหม่
+              </Button>
+            </div>
+          }
         />
       </div>
     );
@@ -213,7 +221,7 @@ export const StaffHome: React.FC = () => {
           <span className="text-sm font-semibold text-brand-blue dark:text-blue-400">
             {home.semester ? home.semester.label : 'ยังไม่ได้เปิดภาคเรียน'} · {weekdayDate(home.today)}
           </span>
-          <span className="text-sm text-gray-400 dark:text-gray-500">·</span>
+          <span aria-hidden="true" className="text-sm text-gray-600 dark:text-gray-400">·</span>
           <h1 className="inline text-base sm:text-lg font-extrabold text-gray-900 dark:text-white">
             {shownWork > 0 ? `งานที่รอคุณ ${shownWork} เรื่อง` : 'ตอนนี้ไม่มีงานรอคุณ'}
           </h1>

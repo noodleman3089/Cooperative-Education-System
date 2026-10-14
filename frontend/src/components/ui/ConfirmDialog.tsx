@@ -83,12 +83,13 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       </ModalBody>
 
       <ModalFooter>
-        <Button variant="secondary" size="sm" onClick={onCancel} disabled={busy} data-testid={cancelTestId}>
+        {/* ขนาด md เท่าปุ่มในกล่องฟอร์ม (เดิม sm สูง 33–35px บนเดสก์ท็อป ต่างจากกล่องฟอร์ม 44px) · จอสัมผัส ≥ 44px */}
+        <Button variant="secondary" onClick={onCancel} disabled={busy} data-testid={cancelTestId} className="pointer-coarse:min-h-11">
           {cancelLabel}
         </Button>
         <Button
           variant={destructive ? 'danger' : 'primary'}
-          size="sm"
+          className="pointer-coarse:min-h-11"
           onClick={onConfirm}
           loading={busy}
           data-testid={confirmTestId}

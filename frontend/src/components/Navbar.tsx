@@ -412,13 +412,14 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               </svg>
             </button>
           )}
-          <h1
+          {/* ชื่อระบบไม่ใช่หัวเรื่องของหน้า — h1 เป็นของเนื้อหาแต่ละหน้า (เดิมทุกหน้ามี h1 ซ้อนสองตัว) */}
+          <div
             className={`text-base sm:text-lg font-bold text-brand-navy dark:text-white truncate ${
               hasViewSwitcher ? 'hidden sm:block' : ''
             }`}
           >
             ระบบสหกิจศึกษา RMUTTO
-          </h1>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -723,7 +724,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 z-40 mt-2 w-56 overflow-hidden rounded-2xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
+                  <div className="absolute right-0 z-40 mt-2 w-56 max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800">
                     <div className="border-b border-gray-100 px-4 py-2.5 dark:border-gray-700">
                       <p className="truncate text-xs text-gray-600 dark:text-gray-400">
                         {auth.user.email}

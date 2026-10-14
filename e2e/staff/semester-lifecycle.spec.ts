@@ -385,7 +385,7 @@ test.describe('วงจรภาคเรียน', () => {
     await expect(page.getByText('สร้างภาคฤดูร้อน/2570แล้ว (ยังไม่เปิด)')).toBeVisible();
 
     const newId = (await dbValue<number>(`SELECT semester_id FROM coop_semesters WHERE academic_year = 2570`))!;
-    await expect(page.getByTestId(`semester-state-${newId}`)).toContainText('ยังไม่ได้เปิด');
+    await expect(page.getByTestId(`semester-state-${newId}`)).toContainText('ไม่ได้เปิดรับ');
 
     // ข้อความผิดจากเซิร์ฟเวอร์ขึ้นในกล่อง ไม่ใช่เงียบ — ปีซ้ำ
     await page.getByTestId('semester-create-open').click();
@@ -403,7 +403,7 @@ test.describe('วงจรภาคเรียน', () => {
     await page.getByTestId('semester-confirm').click();
 
     await expect(page.getByTestId(`semester-state-${newId}`)).toHaveText('เปิดรับอยู่');
-    await expect(page.getByTestId(`semester-state-${a}`)).toContainText('ยังไม่ได้เปิด');
+    await expect(page.getByTestId(`semester-state-${a}`)).toContainText('ไม่ได้เปิดรับ');
     expect(await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active')).toBe(newId);
 
     // ปิดภาคใหม่ — ใบเก่ายังอยู่ขั้นเดิม

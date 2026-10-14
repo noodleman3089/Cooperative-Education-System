@@ -7,6 +7,7 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import EmptyState from '../../components/ui/EmptyState';
 import DataTable, { type Column } from '../../components/ui/DataTable';
 import { Select } from '../../components/ui/Input';
+import Button from '../../components/ui/Button';
 import { getErrorMessage } from '../../utils/errors';
 
 /**
@@ -126,7 +127,7 @@ export const StudentPipeline: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   // null = ใช้ค่าเริ่มต้นของเซิร์ฟเวอร์ (ภาคที่เปิดใช้งาน / ทุกสาขา)
   // หน้าแรกเจ้าหน้าที่ลิงก์มาที่ภาคเก่าด้วย ?semester_id= — ใช้เป็นค่าเริ่มต้นครั้งแรกเท่านั้น
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [semesterId, setSemesterId] = useState<string>(searchParams.get('semester_id') ?? '');
   const [majorId, setMajorId] = useState<string>('');
 
@@ -156,7 +157,17 @@ export const StudentPipeline: React.FC = () => {
   if (!data) {
     return (
       <div className="space-y-4 page-enter">
-        <AlertBanner variant="error" message={error || 'ไม่สามารถโหลดแดชบอร์ดนักศึกษาตอนนี้ได้'} />
+        <AlertBanner
+          variant="error"
+          message={
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{error || 'ไม่สามารถโหลดแดชบอร์ดนักศึกษาตอนนี้ได้'}</span>
+              <Button size="sm" variant="secondary" onClick={() => load(semesterId, majorId)}>
+                ลองใหม่
+              </Button>
+            </div>
+          }
+        />
       </div>
     );
   }
@@ -206,8 +217,19 @@ export const StudentPipeline: React.FC = () => {
             aria-label="ภาคเรียน"
             data-testid="pipeline-semester"
             value={semesterId || String(data.semester?.semester_id ?? '')}
-            onChange={(e) => setSemesterId(e.target.value)}
-            className="min-h-11 sm:w-56"
+            onChange={(e) => {
+              setSemesterId(e.target.value);
+              // เก็บภาคที่เลือกไว้ใน URL — refresh หรือส่งลิงก์ต่อแล้วยังเป็นภาคเดิม (หน้านี้อ่าน ?semester_id= ตอนเปิดอยู่แล้ว)
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set('semester_id', e.target.value);
+                  return next;
+                },
+                { replace: true }
+              );
+            }}
+            className="min-h-11 sm:w-64"
           >
             {data.semesters.map((s) => (
               <option key={s.semester_id} value={s.semester_id}>
@@ -387,7 +409,7 @@ export const StudentPipeline: React.FC = () => {
                       <span className="text-[13px] text-gray-800 dark:text-gray-100">{g.label}</span>
                       <span
                         data-testid={`pipeline-gap-${g.key}-count`}
-                        className={`text-base font-extrabold tabular-nums ${g.count > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}
+                        className={`shrink-0 whitespace-nowrap text-base font-extrabold tabular-nums ${g.count > 0 ? 'text-amber-800 dark:text-amber-300' : 'text-gray-500 dark:text-gray-400'}`}
                       >
                         {g.count} คน
                       </span>

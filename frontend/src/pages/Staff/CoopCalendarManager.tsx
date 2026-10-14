@@ -284,7 +284,7 @@ const CoopCalendarManager: React.FC = () => {
               aria-label="เลือกภาคการศึกษา"
               value={semesterId ?? ''}
               onChange={(e) => setSemesterId(e.target.value ? Number(e.target.value) : null)}
-              className="appearance-none max-w-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 focus:outline-none"
+              className="appearance-none max-w-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue"
             >
               {semesters.length === 0 && (
                 <option value="">{semestersFailed ? '— โหลดรายชื่อภาคไม่สำเร็จ —' : '— ยังไม่มีภาคการศึกษา —'}</option>
@@ -335,7 +335,10 @@ const CoopCalendarManager: React.FC = () => {
         {/* Text required by e2e test coop-calendar.spec.ts */}
         {unconfigured.length > 0 && (
           <div className="pt-2 border-t border-amber-200/80 dark:border-amber-800/80 text-xs font-semibold text-amber-900 dark:text-amber-200">
-            ⚠️ ยังไม่ได้ตั้งช่วงเวลา {unconfigured.length} กิจกรรม: {unconfigured.map((a) => a.label).join(' · ')}
+            {/* แยกสองกลุ่ม: หน้าแรกนับเฉพาะขั้นที่ล็อกจริง จึงขึ้นเลขน้อยกว่าบรรทัดนี้ — เดิมผู้ใช้ตามปุ่มมาแล้วเจอจำนวนไม่ตรง */}
+            ⚠️ ยังไม่ได้ตั้งช่วงเวลา {unconfigured.length} กิจกรรม (ขั้นที่ล็อกจริง{' '}
+            {unconfigured.filter((a) => a.locks).length} · หมุดบอกเวลา {unconfigured.filter((a) => !a.locks).length}):{' '}
+            {unconfigured.map((a) => a.label).join(' · ')}
             <br />
             ระหว่างที่ยังไม่ตั้ง ระบบเปิดให้นักศึกษาทำรายการได้ตามปกติ (ไม่ล็อก)
           </div>
@@ -433,7 +436,7 @@ const CoopCalendarManager: React.FC = () => {
                   {activity.date_kind === 'deadline' ? (
                     <span className="text-[12px] text-gray-600 dark:text-gray-400">— ไม่ต้องกรอก</span>
                   ) : activity.derived ? (
-                    <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300">
+                    <span className="text-[12px] text-gray-600 dark:text-gray-300">
                       {activity.start_date || 'คำนวณอัตโนมัติ'}
                     </span>
                   ) : (
@@ -454,7 +457,7 @@ const CoopCalendarManager: React.FC = () => {
                   {activity.date_kind === 'single' ? (
                     <span className="text-[12px] text-gray-600 dark:text-gray-400">= วันเริ่ม</span>
                   ) : activity.derived ? (
-                    <span className="text-[12px] font-mono text-gray-600 dark:text-gray-300">
+                    <span className="text-[12px] text-gray-600 dark:text-gray-300">
                       {activity.end_date || 'คำนวณอัตโนมัติ'}
                     </span>
                   ) : (

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
@@ -54,6 +54,8 @@ export const Modal: React.FC<ModalProps> = ({
   'data-testid': testId,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
+  // ชื่อของกล่องสำหรับโปรแกรมอ่านหน้าจอ — เดิม role="dialog" ไม่มีชื่อ ผู้ใช้ไม่รู้ว่ากล่องไหนเปิดอยู่
+  const titleId = useId();
   // ponytail: hold onClose in a ref so inline arrow functions passed from callers
   // do not trigger useEffect re-runs on every keystroke, which was stealing focus via panelRef.focus()
   //
@@ -128,6 +130,7 @@ export const Modal: React.FC<ModalProps> = ({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
+        aria-labelledby={title ? titleId : undefined}
         tabIndex={-1}
         data-ui-modal=""
         data-testid={testId}
@@ -136,7 +139,7 @@ export const Modal: React.FC<ModalProps> = ({
       >
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
-            <h3 className="text-base font-bold text-gray-800 dark:text-white">{title}</h3>
+            <h3 id={titleId} className="text-base font-bold text-gray-800 dark:text-white">{title}</h3>
             {/* gray-500, not -400: the × is a graphic, and WCAG 1.4.11 asks 3:1
                 of a control's icon against its background. gray-400 measured
                 2.6:1 on the modal's white panel — it passed in dark mode only.

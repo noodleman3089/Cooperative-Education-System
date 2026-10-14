@@ -208,7 +208,11 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
   };
 
   const addPreset = (chip: string) => {
-    if (chip === 'อื่น ๆ') return;
+    if (chip === 'อื่น ๆ') {
+      // ไม่มีข้อความให้เติม — พาไปพิมพ์เหตุผลเอง (เดิมกดแล้วไม่มีอะไรเกิดขึ้น ดูเหมือนปุ่มเสีย)
+      document.querySelector<HTMLElement>('[data-testid="officer-reject-reason"]')?.focus();
+      return;
+    }
     setRejectReason((prev) => {
       const clean = prev.trim();
       if (!clean) return chip;

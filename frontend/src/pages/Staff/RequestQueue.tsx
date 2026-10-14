@@ -216,6 +216,10 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
   // Modal Review States - Dispatch
   const [reviewingDispatch, setReviewingDispatch] = useState<DispatchRow | null>(null);
   const [dispatchForm, setDispatchForm] = useState({ document_no: '', start_date: '', end_date: '' });
+  // วันที่เป็นสตริง YYYY-MM-DD เทียบกันตรง ๆ ได้ — เซิร์ฟเวอร์ปฏิเสธช่วงกลับด้านอยู่แล้ว หน้าจอทักก่อนถึงกล่องยืนยัน
+  const dispatchDatesReversed =
+    !!dispatchForm.start_date && !!dispatchForm.end_date && dispatchForm.end_date < dispatchForm.start_date;
+  const [staleForm, setStaleForm] = useState(false);
   const [dispatchBusy, setDispatchBusy] = useState(false);
   const [confirmingDispatch, setConfirmingDispatch] = useState(false);
 
@@ -240,8 +244,13 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
       // Auto-open modal if ?form= is specified in URL
       //
       // ⛔ เฉพาะตอนโหลดจริงเท่านั้น — การโหลดเบื้องหลังต้องไม่เปิด/รีเซ็ตแผงที่ผู้ใช้กำลังใช้อยู่
+      if (!isBackground) setStaleForm(false);
       if (formParam && !isBackground) {
         const formIdNum = Number(formParam);
+        // ลิงก์ของใบที่ออกจากคิวแล้ว (หรือเลขที่ไม่มี) — เดิมได้หน้าคิวเงียบ ๆ ไม่มีแผง ไม่มีข้อความ
+        const queueRows =
+          queueParam === 'acceptance' ? accRows : queueParam === 'dispatch' ? dispRows : reqRows;
+        setStaleForm(!queueRows.some((r) => r.form_id === formIdNum));
         if (queueParam === 'request' || !queueParam) {
           const matched = reqRows.find((r) => r.form_id === formIdNum);
           // แผงผูก key กับ form_id — ตั้งแถวเดิมซ้ำไม่ทำให้ของที่พิมพ์ค้างในแผงหาย
@@ -449,6 +458,11 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
     <div className="space-y-4">
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
+      <AlertBanner
+        variant="info"
+        data-testid="queue-stale-form"
+        message={staleForm ? 'ใบที่เปิดจากลิงก์นี้ไม่อยู่ในคิวนี้แล้ว — อาจถูกดำเนินการไปแล้ว หรือเลขที่ในลิงก์ไม่ถูกต้อง' : null}
+      />
 
       {/*
         ── รายการเดียวของกองที่เลือก (หน้าแรกแบบ B) ──
@@ -919,7 +933,13 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                     min={dispatchForm.start_date || undefined}
                     value={dispatchForm.end_date}
                     onChange={(e) => setDispatchForm((f) => ({ ...f, end_date: e.target.value }))}
+                    error={dispatchDatesReversed}
                   />
+                  {dispatchDatesReversed && (
+                    <p data-testid="dispatch-dates-reversed" className="mt-1 text-xs font-medium text-red-700 dark:text-red-400">
+                      วันสิ้นสุดต้องไม่มาก่อนวันเริ่มปฏิบัติงาน
+                    </p>
+                  )}
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-400 sm:col-span-2">
                   ระบบเติมวันสิ้นสุดไว้ให้เป็น ๑๖ สัปดาห์นับจากวันเริ่ม
@@ -940,7 +960,8 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
                 isDispatchPrepIncomplete(reviewingDispatch) ||
                 !dispatchForm.document_no.trim() ||
                 !dispatchForm.start_date ||
-                !dispatchForm.end_date
+                !dispatchForm.end_date ||
+                dispatchDatesReversed
               }
               data-testid="dispatch-submit"
               onClick={() => setConfirmingDispatch(true)}

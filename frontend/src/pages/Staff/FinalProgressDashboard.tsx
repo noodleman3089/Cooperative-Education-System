@@ -68,6 +68,9 @@ export const FinalProgressDashboard: React.FC = () => {
   const [batchNotifyOpen, setBatchNotifyOpen] = useState(false);
   const [batchNotifying, setBatchNotifying] = useState(false);
 
+  // ปุ่ม "ดูรายคน" ของแถวที่เอกสารครบ — เดิมใช้ alert() ของเบราว์เซอร์ (ไม่เข้าธีม ไม่มีโหมดมืด)
+  const [detailTarget, setDetailTarget] = useState<StudentProgress | null>(null);
+
   // ปิดใบที่ฝึกงาน (accepted → superseded)
   const [closeTarget, setCloseTarget] = useState<StudentProgress | null>(null);
   const [closeKind, setCloseKind] = useState<'sent_back' | 'change_company' | ''>('');
@@ -117,7 +120,8 @@ export const FinalProgressDashboard: React.FC = () => {
       await loadData();
     } catch (err) {
       setNotifyTarget(null);
-      setError(getErrorMessage(err, 'ล้มเหลวในการส่งแจ้งเตือนเนื่องจากเงื่อนไข Cooldown'));
+      // ข้อความสำรองต้องไม่เดาสาเหตุ — สาเหตุเฉพาะ (ไม่มีพี่เลี้ยง · เพิ่งเตือน) มากับข้อความของเซิร์ฟเวอร์อยู่แล้ว
+      setError(getErrorMessage(err, 'ส่งอีเมลเตือนไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setNotifyingMap((prev) => ({ ...prev, [student.studentId]: false }));
     }
@@ -332,25 +336,23 @@ export const FinalProgressDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
+          {/* ปุ่มหลักของหน้าคือการตามงาน ไม่ใช่การส่งออกไฟล์ — เดิมสลับกัน (ส่งออกเป็นน้ำเงินทึบ ตามงานเป็นปุ่มขาว) */}
+          <Button
             data-testid="btn-batch-notify"
             onClick={() => setBatchNotifyOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            icon={<Mail className="w-4 h-4" />}
           >
-            <Mail className="w-4 h-4 text-gray-500" />
             ส่งอีเมลเตือนที่ค้าง
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="secondary"
             data-testid="btn-export-table"
             onClick={handleExportCSV}
             disabled={filteredStudents.length === 0}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+            icon={<Download className="w-4 h-4" />}
           >
-            <Download className="w-4 h-4" />
             ส่งออกเป็นตาราง
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -379,7 +381,7 @@ export const FinalProgressDashboard: React.FC = () => {
               : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
           }`}
         >
-          มีของค้าง ({loadFailed ? '–' : pendingCount})
+          มีของค้าง ({loading || loadFailed ? '–' : pendingCount})
         </button>
 
         <button
@@ -391,7 +393,7 @@ export const FinalProgressDashboard: React.FC = () => {
               : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
           }`}
         >
-          ครบทุกอย่าง ({loadFailed ? '–' : completeCount})
+          ครบทุกอย่าง ({loading || loadFailed ? '–' : completeCount})
         </button>
 
         {majorOptions.length === 1 ? (
@@ -652,6 +654,7 @@ export const FinalProgressDashboard: React.FC = () => {
                                 // ปุ่มนี้ส่งอีเมลถึงพี่เลี้ยงเสมอ จึงใช้ชื่อเดียว · ปิดเมื่อเซิร์ฟเวอร์จะปฏิเสธ (409 ไม่มีพี่เลี้ยง · 429 เพิ่งเตือน) พร้อมบอกเหตุผล
                                 <>
                                   <Button
+                                    variant="secondary"
                                     size="sm"
                                     onClick={() => setNotifyTarget(std)}
                                     disabled={
@@ -676,7 +679,7 @@ export const FinalProgressDashboard: React.FC = () => {
                                 <Button
                                   variant="secondary"
                                   size="sm"
-                                  onClick={() => alert(`ข้อมูลนักศึกษา: ${std.studentName}\nรหัส: ${std.studentCode}\nอาจารย์: ${std.advisorName}\nความคืบหน้า: 100% ครบสมบูรณ์`)}
+                                  onClick={() => setDetailTarget(std)}
                                 >
                                   ดูรายคน
                                 </Button>
@@ -787,6 +790,27 @@ export const FinalProgressDashboard: React.FC = () => {
         onCancel={() => setBatchNotifyOpen(false)}
       />
 
+      {detailTarget && (
+        <Modal onClose={() => setDetailTarget(null)} size="sm" title="ข้อมูลนักศึกษา">
+          <ModalBody>
+            <ConfirmSummary
+              lead="เอกสารและผลประเมินครบทุกรายการ"
+              rows={[
+                { label: 'นักศึกษา', value: `${detailTarget.studentName} (${detailTarget.studentCode})` },
+                { label: 'อาจารย์ที่ปรึกษา', value: detailTarget.advisorName },
+                { label: 'สถานประกอบการ', value: detailTarget.companyName || '—' },
+                { label: 'ความคืบหน้า', value: `${detailTarget.progressPercent}%` },
+              ]}
+            />
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="secondary" size="sm" onClick={() => setDetailTarget(null)}>
+              ปิด
+            </Button>
+          </ModalFooter>
+        </Modal>
+      )}
+
       {/* Dialog สำหรับปิดใบที่ฝึกงาน */}
       {closeTarget && (
         <Modal
@@ -812,7 +836,7 @@ export const FinalProgressDashboard: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  เหตุที่ปิดใบ <span className="text-red-500">*</span>
+                  เหตุที่ปิดใบ <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <select
                   data-testid="close-accepted-kind"
@@ -829,7 +853,7 @@ export const FinalProgressDashboard: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
-                  เหตุผล <span className="text-red-500">*</span>
+                  เหตุผล <span className="text-red-600 dark:text-red-400">*</span>
                 </label>
                 <textarea
                   data-testid="close-accepted-reason"

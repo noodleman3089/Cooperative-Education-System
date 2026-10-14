@@ -300,6 +300,12 @@ export const ImportScreening: React.FC = () => {
       setError('กรุณากรอกรหัสนักศึกษา');
       return;
     }
+    // ตรวจที่หน้าจอก่อนส่ง — เดิมค่านอกช่วงถูกส่งไปแล้วได้ข้อความรวมกลับมา ไม่บอกว่าผิดที่ช่องไหน
+    const gpaText = manualStudentGpa.trim();
+    if (gpaText !== '' && !(Number(gpaText) >= 0 && Number(gpaText) <= 4)) {
+      setError('เกรดเฉลี่ยสะสมต้องอยู่ระหว่าง 0.00–4.00');
+      return;
+    }
 
     setIsAddingStudent(true);
     setError(null);
@@ -334,7 +340,7 @@ export const ImportScreening: React.FC = () => {
       {/* 1. Header Bar matching ImportScreening.dc.html */}
       <div className="space-y-1">
         <h1 className="text-2xl font-extrabold text-gray-900 dark:text-white">
-          รายชื่อนักศึกษา &amp; ผลการเรียน
+          รายชื่อนักศึกษา &amp; เกรด
         </h1>
         <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
           ไฟล์นี้บอกสองอย่างคือ <strong className="font-bold text-gray-800 dark:text-gray-200">เกรดที่ทะเบียนแจ้งมา</strong> และ <strong className="font-bold text-gray-800 dark:text-gray-200">อีเมลที่ใช้ผูกรหัสนักศึกษาเข้ากับบัญชี</strong> — ระบบไม่ได้ใช้ไฟล์นี้ตัดสินว่าใครมีสิทธิ์ออกสหกิจ</p>
@@ -366,6 +372,7 @@ export const ImportScreening: React.FC = () => {
       <div className="flex flex-wrap items-center gap-x-6 border-b border-gray-200 dark:border-gray-700">
         <button
           type="button"
+          aria-current={activeTab === 'bulk' ? 'page' : undefined}
           onClick={() => setTab('bulk')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'bulk'
@@ -377,6 +384,7 @@ export const ImportScreening: React.FC = () => {
         </button>
         <button
           type="button"
+          aria-current={activeTab === 'manual' ? 'page' : undefined}
           onClick={() => setTab('manual')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'manual'
@@ -388,6 +396,7 @@ export const ImportScreening: React.FC = () => {
         </button>
         <button
           type="button"
+          aria-current={activeTab === 'registry' ? 'page' : undefined}
           onClick={() => setTab('registry')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'registry'
@@ -411,7 +420,7 @@ export const ImportScreening: React.FC = () => {
               className={`relative border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center transition-all ${
                 dragOver
                   ? 'border-blue-600 bg-blue-50/20 dark:bg-blue-950/20'
-                  : 'border-blue-200 dark:border-blue-900/40 bg-[#EFF6FF] dark:bg-blue-950/10'
+                  : 'border-blue-200 dark:border-blue-700 bg-[#EFF6FF] dark:bg-blue-950/10'
               }`}
             >
               <Upload className="w-8 h-8 text-blue-600 dark:text-blue-400 mb-2" />
@@ -501,7 +510,8 @@ export const ImportScreening: React.FC = () => {
                     {parsedStudents.length > 0 ? parsedStudents.length : importSummary ? importSummary.importedCount : 0}
                   </div>
                   <div className="text-[12px] font-semibold text-[#15803D] dark:text-emerald-400">
-                    เพิ่มใหม่
+                    {/* ก่อนบันทึกยังไม่รู้ว่าแถวไหนเป็นของใหม่หรือเขียนทับของเดิม — เซิร์ฟเวอร์เป็นผู้บอกหลังบันทึก */}
+                    {parsedStudents.length > 0 ? 'แถวที่อ่านได้' : 'เพิ่มใหม่'}
                   </div>
                 </div>
                 <div className="border border-blue-200 dark:border-blue-800 bg-[#EFF6FF] dark:bg-blue-950/30 rounded-xl p-3">

@@ -114,6 +114,11 @@ test.describe('Student Enrollment Year & Personnel Birth Date E2E Tests', () => 
 
     // 5. Click Save
     await page.getByTestId('personnel-profile-save').click();
+    // (2026-10-14) วันเกิดตั้งได้ครั้งเดียว — ต้องผ่านกล่องยืนยันที่แสดงค่าที่จะบันทึกเป็นวันที่ไทย ยังไม่บันทึกจนกว่าจะกดยืนยัน
+    const birthConfirm = page.getByRole('dialog').filter({ hasText: 'ยืนยันวันเกิด' });
+    await expect(birthConfirm).toContainText('15 พ.ค. 2523');
+    await expect(birthConfirm).toContainText('ตั้งได้ครั้งเดียว');
+    await page.getByTestId('personnel-birth-confirm').click();
     await expect(page.getByText('บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว')).toBeVisible();
 
     // 6. Reload and check if persisted (needs to navigate back to profile menu after reload)

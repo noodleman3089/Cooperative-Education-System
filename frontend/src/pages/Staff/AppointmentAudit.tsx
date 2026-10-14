@@ -97,7 +97,8 @@ export const AppointmentAudit: React.FC = () => {
       await fetchAppointments();
     } catch (err) {
       setConfirmingDraft(null);
-      setError(getErrorMessage(err, 'ไม่สามารถส่งอีเมลได้ กรุณาตรวจสอบว่ามีอีเมลสถานประกอบการ/พี่เลี้ยงหรือไม่'));
+      // ข้อความสำรองต้องไม่เดาสาเหตุ — สาเหตุเฉพาะ (เช่น ไม่มีอีเมลปลายทาง) มากับข้อความของเซิร์ฟเวอร์
+      setError(getErrorMessage(err, 'ส่งหนังสือนัดหมายไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setSendingId(null);
     }
@@ -214,7 +215,7 @@ export const AppointmentAudit: React.FC = () => {
             ร่างรอคุณตรวจ
           </div>
           <div className="text-2xl font-black text-[#1E3A8A] dark:text-blue-400 mt-1">
-            {loadFailed ? '–' : draftCount}
+            {loading || loadFailed ? '–' : draftCount}
           </div>
         </div>
 
@@ -223,7 +224,7 @@ export const AppointmentAudit: React.FC = () => {
             ส่งแล้ว รอบริษัทตอบ
           </div>
           <div className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-            {loadFailed ? '–' : sentCount}
+            {loading || loadFailed ? '–' : sentCount}
           </div>
         </div>
 
@@ -232,7 +233,7 @@ export const AppointmentAudit: React.FC = () => {
             บริษัทขอเลื่อน
           </div>
           <div className="text-2xl font-black text-[#B45309] dark:text-amber-400 mt-1">
-            {loadFailed ? '–' : rescheduleCount}
+            {loading || loadFailed ? '–' : rescheduleCount}
           </div>
         </div>
 
@@ -241,7 +242,7 @@ export const AppointmentAudit: React.FC = () => {
             ยืนยันแล้ว
           </div>
           <div className="text-2xl font-black text-[#15803D] dark:text-emerald-400 mt-1">
-            {loadFailed ? '–' : confirmedCount}
+            {loading || loadFailed ? '–' : confirmedCount}
           </div>
         </div>
       </div>

@@ -550,6 +550,10 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     await expect(page.getByTestId('summary-current-cohort_total')).toHaveText('2');
 
     await page.getByTestId('summary-semester').selectOption(String(b));
+    // (2026-10-14) ภาคที่เลือกอยู่ใน URL — refresh แล้วยังเป็นภาคเดิม (เดิมกลับไปภาคที่เปิดอยู่)
+    await expect(page).toHaveURL(new RegExp(`semester_id=${b}`));
+    await page.reload();
+    await expect(page.getByTestId('summary-semester')).toHaveValue(String(b));
     await expect(page.getByTestId('summary-current-cohort_total')).toHaveText('1');
     // ภาคก่อนของ b (2569/2) คือ a (2569/1)
     await expect(page.getByTestId('summary-previous-cohort_total')).toHaveText('2');

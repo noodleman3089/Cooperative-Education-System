@@ -642,6 +642,7 @@ export const UsersAndMasterData: React.FC = () => {
         <button
           type="button"
           data-testid="users-tab-accounts"
+          aria-current={activeTab === 'accounts' ? 'page' : undefined}
           onClick={() => setActiveTab('accounts')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'accounts'
@@ -654,6 +655,7 @@ export const UsersAndMasterData: React.FC = () => {
         <button
           type="button"
           data-testid="users-tab-preseed"
+          aria-current={activeTab === 'preseed' ? 'page' : undefined}
           onClick={() => setActiveTab('preseed')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'preseed'
@@ -666,6 +668,7 @@ export const UsersAndMasterData: React.FC = () => {
         <button
           type="button"
           data-testid="users-tab-master"
+          aria-current={activeTab === 'master' ? 'page' : undefined}
           onClick={() => setActiveTab('master')}
           className={`py-2.5 text-sm font-bold border-b-2 transition-all cursor-pointer ${
             activeTab === 'master'
@@ -686,7 +689,7 @@ export const UsersAndMasterData: React.FC = () => {
                 บัญชีผู้ใช้
               </span>
               <span className="hint text-xs text-gray-600 dark:text-gray-400">
-                จัดการสิทธิ์และติดตามสถานะการเปิดใช้งานบัญชีทั้งหมด {usersLoadFailed ? '–' : users.length} บัญชี
+                จัดการสิทธิ์และติดตามสถานะการเปิดใช้งานบัญชีทั้งหมด {loadingUsers || usersLoadFailed ? '–' : users.length} บัญชี
               </span>
             </div>
             <button
@@ -845,7 +848,7 @@ export const UsersAndMasterData: React.FC = () => {
                     value={preseedEmployeeCode}
                     onChange={(e) => setPreseedEmployeeCode(e.target.value)}
                     placeholder="เช่น EMP001"
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                   />
                 </div>
                 <div>
@@ -857,7 +860,7 @@ export const UsersAndMasterData: React.FC = () => {
                     type="text"
                     value={preseedFirstName}
                     onChange={(e) => setPreseedFirstName(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -869,7 +872,7 @@ export const UsersAndMasterData: React.FC = () => {
                     type="text"
                     value={preseedLastName}
                     onChange={(e) => setPreseedLastName(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
                 <div>
@@ -880,7 +883,7 @@ export const UsersAndMasterData: React.FC = () => {
                     id="preseed-role"
                     value={preseedRoleName}
                     onChange={(e) => setPreseedRoleName(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="advisor">อาจารย์ที่ปรึกษา (Advisor)</option>
                     <option value="dept_head">หัวหน้าสาขาวิชา (Dept Head)</option>
@@ -896,7 +899,7 @@ export const UsersAndMasterData: React.FC = () => {
                     id="preseed-major"
                     value={preseedMajorId}
                     onChange={(e) => setPreseedMajorId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     <option value="">— ไม่สังกัดสาขาวิชา —</option>
                     {majors.map((m) => (
@@ -918,7 +921,7 @@ export const UsersAndMasterData: React.FC = () => {
                     value={preseedEmail}
                     onChange={(e) => setPreseedEmail(e.target.value)}
                     placeholder="advisor@rmutto.ac.th"
-                    className="w-full text-xs px-3 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                     required
                   />
                 </div>
@@ -1569,7 +1572,7 @@ export const UsersAndMasterData: React.FC = () => {
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   placeholder="name@rmutto.ac.th"
-                  className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                  className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                   required
                 />
               </div>
@@ -1583,7 +1586,7 @@ export const UsersAndMasterData: React.FC = () => {
                   type="password"
                   value={userPassword}
                   onChange={(e) => setUserPassword(e.target.value)}
-                  className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   required
                 />
               </div>
@@ -1592,7 +1595,7 @@ export const UsersAndMasterData: React.FC = () => {
                 <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   บทบาทในระบบ *
                 </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 text-xs">
                   {Object.entries(ROLE_LABELS).filter(([k]) => k !== 'mentor').map(([k, lbl]) => (
                     <label key={k} className="inline-flex items-center gap-2 pointer-coarse:min-h-11 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
@@ -1667,7 +1670,7 @@ export const UsersAndMasterData: React.FC = () => {
       {isEditUserModalOpen && (
         <Modal
           onClose={() => setIsEditUserModalOpen(false)}
-          title={`แก้ไขบัญชี: ${selectedUser?.email}`}
+          title={<span className="break-all">แก้ไขบัญชี: {selectedUser?.email}</span>}
           size="2xl"
         >
           <ModalBody>
@@ -1677,7 +1680,7 @@ export const UsersAndMasterData: React.FC = () => {
                 <span className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   บทบาทในระบบ
                 </span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 text-xs">
                   {Object.entries(ROLE_LABELS).map(([k, lbl]) => (
                     <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input

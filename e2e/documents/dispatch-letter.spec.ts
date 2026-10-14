@@ -383,6 +383,15 @@ test.describe('หนังสือส่งตัว — ออก · ลง�
     await expect(dialog.getByTestId('dispatch-submit')).toBeDisabled();
 
     await dialog.getByTestId('dispatch-document-no').fill('อว 0656.10/หน้าจอ');
+
+    // (2026-10-14) วันสิ้นสุดก่อนวันเริ่ม = ทักใต้ช่องและกดไม่ได้ — เดิมผ่านไปถึงกล่องยืนยันที่แสดงช่วงกลับด้าน
+    // แล้วรอเซิร์ฟเวอร์ตีกลับ (ด่านของเซิร์ฟเวอร์ยังอยู่ · D2)
+    await dialog.getByTestId('dispatch-end-date').fill('2026-01-01');
+    await expect(dialog.getByTestId('dispatch-dates-reversed')).toContainText('วันสิ้นสุดต้องไม่มาก่อนวันเริ่ม');
+    await expect(dialog.getByTestId('dispatch-submit')).toBeDisabled();
+    await dialog.getByTestId('dispatch-end-date').fill('2027-02-21');
+    await expect(dialog.getByTestId('dispatch-dates-reversed')).toHaveCount(0);
+
     await dialog.getByTestId('dispatch-submit').click();
     await page.getByTestId('dispatch-confirm').click();
 

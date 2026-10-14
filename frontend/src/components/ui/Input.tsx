@@ -26,7 +26,8 @@ export type FieldSize = 'sm' | 'md';
  */
 const BASE =
   'w-full rounded-xl border bg-white text-gray-900 transition-colors ' +
-  'focus:outline-none dark:bg-gray-800 dark:text-white ' +
+  // กรอบ focus ชุดเดียวกับ ui/Button — เดิม focus:outline-none เหลือแค่ขอบ 1px เปลี่ยนสี ผู้ใช้คีย์บอร์ดหาตำแหน่งตัวเองยาก
+  'focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue dark:bg-gray-800 dark:text-white ' +
   'placeholder:text-gray-500 dark:placeholder:text-gray-400 ' +
   'disabled:cursor-not-allowed disabled:bg-gray-50 dark:disabled:bg-gray-900';
 

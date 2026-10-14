@@ -4,7 +4,10 @@ import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Button from './ui/Button';
+import ConfirmDialog from './ui/ConfirmDialog';
+import ConfirmSummary from './ui/ConfirmSummary';
 import { Input } from './ui/Input';
+import { formatThaiDate } from '../utils/thaiDate';
 import { AuthContext } from '../context/authContextValue';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 
@@ -78,6 +81,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
   const [lastName, setLastName] = useState('');
   const [academicTitle, setAcademicTitle] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [confirmBirth, setConfirmBirth] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -132,6 +136,16 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
       return;
     }
 
+    // วันเกิดตั้งได้ครั้งเดียว พิมพ์ผิดแล้วแก้เองไม่ได้ — ให้ยืนยันค่าที่จะบันทึกก่อน
+    // (บันทึกชื่อ/ตำแหน่งอย่างเดียวแก้ซ้ำได้ จึงไม่มีกล่องยืนยัน)
+    if (!profile?.birth_date && birthDate) {
+      setConfirmBirth(true);
+      return;
+    }
+    await save();
+  };
+
+  const save = async () => {
     setIsSubmitting(true);
     try {
       const formData = new FormData();
@@ -148,6 +162,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
       console.error('Failed to update personnel profile:', err);
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
+      setConfirmBirth(false);
       alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setIsSubmitting(false);
     }
@@ -436,6 +451,23 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={confirmBirth}
+        title="ยืนยันวันเกิด"
+        message={
+          <ConfirmSummary
+            lead="บันทึกวันเกิดลงโปรไฟล์ของคุณ"
+            rows={[{ label: 'วันเกิด', value: birthDate ? formatThaiDate(birthDate) : '—' }]}
+            lockNote="วันเกิดตั้งได้ครั้งเดียว หากผิดต้องแจ้งเจ้าหน้าที่งานสหกิจให้แก้"
+          />
+        }
+        confirmLabel="ยืนยัน บันทึก"
+        confirmTestId="personnel-birth-confirm"
+        busy={isSubmitting}
+        onConfirm={save}
+        onCancel={() => setConfirmBirth(false)}
+      />
     </div>
   );
 };

@@ -52,7 +52,8 @@ const stateOf = (r: SemesterRow): { text: string; cls: string } =>
           text: `ปิดแล้ว ${formatThaiDate(r.closed_at.slice(0, 10))}`,
           cls: 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200',
         }
-      : { text: 'ยังไม่ได้เปิด / หยุดรับแล้ว', cls: 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300' };
+      : // ไม่ได้เปิดรับและยังไม่ปิดภาค — ระบบไม่เก็บว่าเคยเปิดมาก่อนหรือไม่ จึงใช้คำเดียวที่จริงทั้งสองกรณี
+        { text: 'ไม่ได้เปิดรับ', cls: 'bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300' };
 
 const SemesterManager: React.FC = () => {
   const [rows, setRows] = useState<SemesterRow[] | null>(null);
@@ -98,6 +99,11 @@ const SemesterManager: React.FC = () => {
   };
 
   const submitCreate = async () => {
+    // ช่องปีว่าง Number('') = 0 ถูกส่งไปเซิร์ฟเวอร์ — ทักที่กล่องก่อน
+    if (!/^\d{4}$/.test(year.trim())) {
+      setFormError('กรุณากรอกปีการศึกษาเป็น พ.ศ. 4 หลัก');
+      return;
+    }
     setBusy(true);
     setFormError('');
     try {
@@ -286,7 +292,8 @@ const SemesterManager: React.FC = () => {
                     <dd className="text-base font-extrabold tabular-nums">{r.accepted_forms}</dd>
                   </div>
                   <div>
-                    <dt className="text-gray-600 dark:text-gray-400">รายชื่อรุ่น</dt>
+                    {/* นับเฉพาะรายชื่อที่นำเข้าเข้ารุ่น — "นักศึกษารุ่นนี้" บนหน้าแรกรวมคนที่มีใบคำร้องในภาคด้วย เลขจึงต่างกันได้ */}
+                    <dt className="text-gray-600 dark:text-gray-400">รายชื่อรุ่นที่นำเข้า</dt>
                     <dd className="text-base font-extrabold tabular-nums">{r.cohort_total} คน</dd>
                   </div>
                   <div>

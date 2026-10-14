@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Download } from 'lucide-react';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -107,7 +107,9 @@ export const SemesterSummary: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // '' = ค่าเริ่มต้นของเซิร์ฟเวอร์ (ภาคที่เปิดอยู่ / ภาคล่าสุด)
-  const [semesterId, setSemesterId] = useState('');
+  // ภาคที่เลือกอยู่ใน URL (?semester_id=) — refresh หรือส่งลิงก์ต่อแล้วยังเป็นภาคเดิม
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [semesterId, setSemesterId] = useState(searchParams.get('semester_id') ?? '');
 
   // ตารางสถานประกอบการ: แสดง 10 แห่งแรกพร้อมปุ่ม ดูทั้งหมด
   const [showAllCompanies, setShowAllCompanies] = useState(false);
@@ -210,7 +212,17 @@ export const SemesterSummary: React.FC = () => {
   if (!data) {
     return (
       <div className="space-y-4 page-enter">
-        <AlertBanner variant="error" message={error || 'ไม่สามารถโหลดสรุปภาคเรียนได้'} />
+        <AlertBanner
+          variant="error"
+          message={
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <span>{error || 'ไม่สามารถโหลดสรุปภาคเรียนได้'}</span>
+              <Button size="sm" variant="secondary" onClick={() => load(semesterId)}>
+                ลองใหม่
+              </Button>
+            </div>
+          }
+        />
       </div>
     );
   }
@@ -254,7 +266,17 @@ export const SemesterSummary: React.FC = () => {
             size="sm"
             aria-label="เลือกภาคเรียน"
             value={semesterId || String(semester?.semester_id ?? '')}
-            onChange={(e) => setSemesterId(e.target.value)}
+            onChange={(e) => {
+              setSemesterId(e.target.value);
+              setSearchParams(
+                (prev) => {
+                  const next = new URLSearchParams(prev);
+                  next.set('semester_id', e.target.value);
+                  return next;
+                },
+                { replace: true }
+              );
+            }}
             data-testid="summary-semester"
             className="!w-auto max-w-full"
           >
@@ -407,7 +429,7 @@ export const SemesterSummary: React.FC = () => {
           {/* 4. เวลาที่ใช้ในแต่ละขั้น (existing) */}
           <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
             <div className="p-4 pb-2">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">เวลาที่ใช้ในแต่ละขั้น</h2>
+              <h2 className="text-sm font-bold text-gray-700 dark:text-gray-300">เวลาที่ใช้ในแต่ละขั้น</h2>
               <p className="mt-1 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
                 มัธยฐานของใบที่ระบบรู้เวลาทั้งต้นและปลายขั้น · “n” คือจำนวนใบที่นับได้ — ใบเก่าที่เกิดก่อนระบบเริ่มเก็บเวลาจะไม่ถูกนับ ไม่ได้ถูกเดาเป็น 0
               </p>

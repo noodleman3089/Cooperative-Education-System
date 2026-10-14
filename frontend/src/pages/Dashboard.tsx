@@ -91,6 +91,23 @@ const STUDENT_MENU_IDS: readonly string[] = [
   'memos',
 ];
 
+/** เมนูที่ฝ่ายเจ้าหน้าที่มีจริง — ต้องตรงกับ `case 'staff'` ใน `renderDashboardContent` */
+const STAFF_MENU_IDS: readonly string[] = [
+  'dashboard',
+  'appointments',
+  'announcements',
+  'users',
+  'import',
+  'companies',
+  'calendar',
+  'final_progress',
+  'pipeline',
+  'semesters',
+  'semester_summary',
+  'mentor_followup',
+  'profile',
+];
+
 const STAGE_GATED_STUDENT_MENUS = [
   'accommodation_plan',
   'report_outline',
@@ -215,10 +232,12 @@ const Dashboard: React.FC = () => {
     [setSearchParams, roleParam, currentRole, userViews]
   );
 
-  // นักศึกษาเปิด `?menu=` ที่ฝ่ายตัวเองไม่มี (พิมพ์ผิด หรือของฝ่ายอื่น) ได้หน้าแรกอยู่แล้ว
+  // นักศึกษา/เจ้าหน้าที่เปิด `?menu=` ที่ฝ่ายตัวเองไม่มี (พิมพ์ผิด หรือของฝ่ายอื่น) ได้หน้าแรกอยู่แล้ว
   // — แก้ URL ให้ตรงกับสิ่งที่เห็น ไม่ทิ้งค่าผิดค้างไว้โดยไม่มีเมนูใดถูกเลือก · replace เพื่อไม่ให้ปุ่ม Back วนกลับมา
+  // (ฝ่ายอาจารย์ยังไม่อยู่ในด่านนี้ — เมนูขึ้นกับมุมมองที่สลับได้ ต้องไล่แยก)
   useEffect(() => {
-    if (currentRole !== 'student' || STUDENT_MENU_IDS.includes(activeMenu)) return;
+    const known = currentRole === 'student' ? STUDENT_MENU_IDS : currentRole === 'staff' ? STAFF_MENU_IDS : null;
+    if (!known || known.includes(activeMenu)) return;
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);

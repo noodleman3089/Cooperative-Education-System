@@ -258,6 +258,8 @@ const MentorFollowup: React.FC = () => {
   };
 
   const openEditEmail = (m: MentorFollowupRow) => {
+    // error ของการกระทำก่อนหน้า (เช่น เตือนไม่สำเร็จ) ต้องไม่ค้างอยู่ใต้กล่องที่เพิ่งเปิด
+    setActionError(null);
     setEditTarget(m);
     setEmailDraft(m.email);
     setModalError(null);

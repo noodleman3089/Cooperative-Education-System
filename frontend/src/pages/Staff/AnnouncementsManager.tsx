@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import PageSkeleton from '../../components/ui/Skeleton';
 import { Pin } from 'lucide-react';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDateTime } from '../../utils/thaiDate';
@@ -84,6 +85,9 @@ export const AnnouncementsManager: React.FC = () => {
   };
 
   const handleTogglePin = async (id: number) => {
+    // ล้างข้อความของการกระทำก่อนหน้า — เดิม "เผยแพร่…เรียบร้อยแล้ว" ค้างอยู่หลังกดปักหมุด
+    setError(null);
+    setSuccess(null);
     try {
       await api.patch(`/announcements/${id}/pin`);
       await loadAnnouncements();
@@ -101,6 +105,8 @@ export const AnnouncementsManager: React.FC = () => {
       setPendingDeleteId(null);
       await loadAnnouncements();
     } catch (err) {
+      // ปิดกล่องยืนยันก่อน — แถบ error อยู่บนหน้า ถ้ากล่องยังเปิดผู้ใช้มองไม่เห็นเหตุผลที่ลบไม่ได้
+      setPendingDeleteId(null);
       setError(getErrorMessage(err, 'ไม่สามารถลบข่าวประชาสัมพันธ์ได้'));
     } finally {
       setDeleteBusy(false);
@@ -143,7 +149,7 @@ export const AnnouncementsManager: React.FC = () => {
                 required
                 value={annTitle}
                 onChange={(e) => setAnnTitle(e.target.value)}
-                placeholder="เช่น ประกาศผลการคัดเลือกสหกิจศึกษา ภาคเรียนที่ 1/2570"
+                placeholder="เช่น ประกาศกำหนดการปฐมนิเทศสหกิจศึกษา"
                 className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:border-blue-500"
               />
             </div>
@@ -172,7 +178,7 @@ export const AnnouncementsManager: React.FC = () => {
                 type="url"
                 value={annImage}
                 onChange={(e) => setAnnImage(e.target.value)}
-                placeholder="https://example.com/image.jpg"
+                placeholder="https://…"
                 className="w-full px-3 py-2 text-xs bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:border-blue-500"
               />
               <span className="block text-[11px] text-gray-500 dark:text-gray-400 mt-1 leading-normal">
@@ -235,7 +241,7 @@ export const AnnouncementsManager: React.FC = () => {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-bold text-gray-900 dark:text-white">
-              ข่าวที่เผยแพร่แล้ว · {announcements.length} เรื่อง
+              ข่าวที่เผยแพร่แล้ว{loadingAnnouncements ? '' : ` · ${announcements.length} เรื่อง`}
             </span>
             <span className="text-xs text-gray-600 dark:text-gray-400">
               ปักหมุดได้ไม่จำกัด แต่หน้าแรกนักศึกษาแสดง 3 เรื่องแรก
@@ -243,9 +249,7 @@ export const AnnouncementsManager: React.FC = () => {
           </div>
 
           {loadingAnnouncements ? (
-            <div className="p-8 text-center text-xs text-gray-600 dark:text-gray-400">
-              กำลังโหลดข่าวประชาสัมพันธ์...
-            </div>
+            <PageSkeleton variant="cards" />
           ) : announcements.length === 0 ? (
             <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-8 text-center text-xs text-gray-500 dark:text-gray-400">
               ยังไม่มีข่าวประชาสัมพันธ์ในขณะนี้

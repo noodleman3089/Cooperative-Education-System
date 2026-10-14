@@ -401,7 +401,8 @@ const Sidebar: React.FC<SidebarProps> = ({
             >
               <span className={lockReason && !isActive ? 'flex opacity-40' : 'flex'}>{item.icon}</span>
               {!isCollapsed && (
-                <span className="flex-1 text-left truncate">{item.label}</span>
+                // ตัดบรรทัดแทน truncate: ตัวอักษรใหญ่ป้ายเคยเหลือ "ติดตาม…" แยกเมนูไม่ออก · ขนาดปกติทุกป้ายยังอยู่บรรทัดเดียว
+                <span className="flex-1 text-left leading-snug [overflow-wrap:anywhere]">{item.label}</span>
               )}
               {lockReason && !isCollapsed && (
                 <svg
