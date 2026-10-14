@@ -118,7 +118,7 @@ test.describe('เจ้าหน้าที่เพิ่มบัญชี�
     await dialog.getByTestId('user-add-password').fill('Password123!');
     await dialog.getByTestId('user-add-submit').click();
 
-    await expect(dialog).toContainText('Email is already registered.');
+    await expect(dialog).toContainText('อีเมลนี้มีบัญชีในระบบอยู่แล้ว');
     await expect(dialog).toBeVisible();
   });
 
@@ -201,5 +201,38 @@ test.describe('เจ้าหน้าที่เพิ่มบัญชี�
 
     await expect(dialog).toContainText('User not found.');
     await expect(dialog).toBeVisible();
+  });
+
+  // บั๊กที่คุม (พบ 2026-10-14): บัญชีนักศึกษาที่เจ้าหน้าที่สร้างให้ เข้าด้วยรหัสผ่านแล้วลงหน้าแรก (เห็นคำแนะนำเริ่มต้น — ถูกแล้ว)
+  // แต่ปุ่ม "ไปหน้าข้อมูลส่วนตัว" พาไปหน้าที่บันทึกไม่ได้ (PUT /profile/student 404) และเปิด /onboarding/student
+  // ตรง ๆ ก็ถูกเด้งกลับ จึงตั้งโปรไฟล์ไม่ได้ ยื่นคำร้องไม่ได้เลย · ตอนนี้หน้าข้อมูลส่วนตัวพาต่อไปหน้าตั้งโปรไฟล์
+  test('A7: บัญชีนักศึกษาที่เจ้าหน้าที่สร้าง — จากหน้าแรกไปถึงหน้าตั้งโปรไฟล์ได้ ไม่ติดทางตัน', async ({ page, request }) => {
+    await apiLoginAs(request, 'staff1');
+    const created = await request.post(`${API_URL}/users`, {
+      data: { email: NEW_EMAIL, password: 'Password123!', roles: ['student'] },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+
+    await page.request.post(`${API_URL}/auth/logout`);
+    await page.goto('/login/student');
+    await page.locator('button:has-text("รหัสผ่านเฉพาะระบบ")').first().click();
+    await page.locator('input[type="text"]').first().fill(NEW_EMAIL);
+    await page.locator('input[type="password"]').fill('Password123!');
+    await page.click('button[type="submit"]');
+
+    // ลงหน้าแรกตามเดิม และเห็นคำแนะนำขั้นตอนเริ่มต้นของคนที่ยังไม่มีโปรไฟล์
+    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page.getByText('แนะนำขั้นตอนเริ่มต้น')).toBeVisible();
+
+    await page.getByRole('button', { name: 'ไปหน้าข้อมูลส่วนตัว' }).click();
+    await expect(page).toHaveURL(/\/onboarding\/student/);
+    await expect(page.getByTestId('onboarding-student-code')).toBeVisible();
+    // ยังไม่มีแถว students เกิดขึ้นจากการนำทางอย่างเดียว — สร้างเมื่อกรอกและส่งฟอร์มเท่านั้น
+    expect(
+      await dbValue<number>(
+        `SELECT COUNT(*)::int FROM students s JOIN users u ON u.user_id = s.student_id WHERE u.email = $1`,
+        [NEW_EMAIL]
+      )
+    ).toBe(0);
   });
 });

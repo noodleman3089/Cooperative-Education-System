@@ -115,7 +115,7 @@ export class UserController {
 
       const existingUser = await UserModel.findByEmail(email);
       if (existingUser) {
-        res.status(400).json({ message: 'Email is already registered.' });
+        res.status(400).json({ message: 'อีเมลนี้มีบัญชีในระบบอยู่แล้ว' });
         return;
       }
 

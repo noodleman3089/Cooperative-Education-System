@@ -95,6 +95,11 @@ export class CoopProgressController {
           eval_16.submitted_at as sahatkit16_submitted_at,
           -- Notifications Cooldown
           notif.last_notified_at,
+          -- พี่เลี้ยงที่อาจารย์นิเทศยืนยันแล้ว — เงื่อนไขเดียวกับ sendMentorNotificationHelper (ไม่มี = ปุ่มเตือนต้องปิด)
+          EXISTS (SELECT 1 FROM users u_men WHERE u_men.user_id = inf.mentor_id AND u_men.is_active = TRUE) AS mentor_ready,
+          -- สหกิจ 09 · 10 — จำนวนฉบับที่นักศึกษาส่งแล้ว (ไม่นับร่าง)
+          (SELECT COUNT(*)::int FROM weekly_logs wl WHERE wl.student_id = s.student_id AND wl.status <> 'draft') AS weekly_logs_sent,
+          (SELECT COUNT(*)::int FROM monthly_logs ml WHERE ml.student_id = s.student_id AND ml.status <> 'draft') AS monthly_logs_sent,
           -- ใบที่เจ้าหน้าที่ปิดได้ (accepted) หรือยกเลิกการปิดได้ (superseded) — ส่งออกให้ staff เท่านั้น (ตัดข้างล่าง)
           pf.form_id AS placement_form_id, pf.status AS placement_status,
           pf.closed_kind AS placement_closed_kind, pf.can_reopen AS placement_can_reopen
@@ -233,6 +238,9 @@ export class CoopProgressController {
           sahatkit15SubmittedAt: row.sahatkit15_submitted_at || null,
           sahatkit16SubmittedAt: row.sahatkit16_submitted_at || null,
           lastNotifiedAt: row.last_notified_at || null,
+          mentorReady: row.mentor_ready === true,
+          weeklyLogsSent: row.weekly_logs_sent ?? 0,
+          monthlyLogsSent: row.monthly_logs_sent ?? 0,
           // ปิดใบที่ฝึก / ยกเลิกการปิด เป็นงานของเจ้าหน้าที่คนเดียว — บทบาทอื่นไม่ได้ฟิลด์นี้เลย (SEC-10)
           // ⛔ หน้าจอห้ามเดา `can_reopen` เอง · null = นักศึกษายังไม่มีใบที่ตอบรับหรือถูกปิด
           ...(isStaff

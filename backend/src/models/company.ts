@@ -110,9 +110,11 @@ export class CompanyModel {
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const sql = `
-      SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_fax
-      FROM companies 
-      ${whereClause} 
+      SELECT company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email, contact_phone, contact_fax,
+             -- ที่มาของแถวในทำเนียบ: ผู้สร้างเป็นนักศึกษาหรือไม่ (หน้าจอห้ามเดาจากการมีคนใช้)
+             EXISTS (SELECT 1 FROM students st WHERE st.student_id = companies.created_by) AS created_by_student
+      FROM companies
+      ${whereClause}
       ORDER BY name_th ASC
     `;
 

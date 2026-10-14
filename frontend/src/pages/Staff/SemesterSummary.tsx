@@ -249,14 +249,14 @@ export const SemesterSummary: React.FC = () => {
             ตัวเลขของภาคที่เลือกเทียบกับภาคก่อนหน้า และเวลาที่ใช้ในแต่ละขั้น — คำนวณสดจากข้อมูลจริง ภาคที่ปิดแล้วก็อ่านย้อนหลังได้
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <Select
             size="sm"
             aria-label="เลือกภาคเรียน"
             value={semesterId || String(semester?.semester_id ?? '')}
             onChange={(e) => setSemesterId(e.target.value)}
             data-testid="summary-semester"
-            className="!w-auto"
+            className="!w-auto max-w-full"
           >
             {data.semesters.map((s) => (
               <option key={s.semester_id} value={s.semester_id}>

@@ -69,6 +69,11 @@ export const Modal: React.FC<ModalProps> = ({
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // กล่องซ้อนกัน (กล่องยืนยันบนแผงตรวจ) — ให้กล่องบนสุดรับปุ่มคนเดียว
+      // เดิมทุกกล่องรับพร้อมกัน: Esc ปิดทั้งสองชั้นจนค่าที่พิมพ์หาย และตัวล็อก Tab ของสองกล่องแย่ง focus กัน
+      // portal ต่อท้าย body ตามลำดับที่เปิด ตัวสุดท้ายจึงเป็นตัวบนสุด
+      const panels = document.querySelectorAll('[data-ui-modal]');
+      if (panels[panels.length - 1] !== panelRef.current) return;
       if (e.key === 'Escape') onCloseRef.current();
       // ล็อก focus ไว้ในกล่อง — เดิม Tab พ้นปุ่มสุดท้ายแล้วหลุดไปเมนูที่อยู่หลังฉากมืด
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -124,8 +129,10 @@ export const Modal: React.FC<ModalProps> = ({
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
+        data-ui-modal=""
         data-testid={testId}
-        className={`w-full ${SIZES[size]} max-h-[calc(100vh-3.5rem)] my-auto flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-hidden animate-scale-in ${className}`.trim()}
+        // overflow-y-auto ไม่ใช่ hidden: ตัวอักษรใหญ่บนจอแคบ หัวกับท้ายกล่องสูงเกินแผง ทั้งแผงต้องเลื่อนได้ ไม่งั้นปุ่มท้ายกล่องถูกตัดทิ้ง
+        className={`w-full ${SIZES[size]} max-h-[calc(100vh-3.5rem)] my-auto flex flex-col rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 shadow-2xl outline-none overflow-y-auto animate-scale-in ${className}`.trim()}
       >
         {title && (
           <div className="flex items-center justify-between gap-4 border-b border-gray-100 dark:border-gray-800 px-6 py-4 shrink-0">
@@ -158,7 +165,8 @@ export const ModalBody: React.FC<{ children: ReactNode; className?: string }> = 
   children,
   className = '',
 }) => (
-  <div className={`px-6 py-5 overflow-y-auto flex-1 min-h-0 ${className}`.trim()}>
+  // min-h-24 ไม่ใช่ 0: เดิมเนื้อหาถูกบีบเหลือแต่ padding เมื่อหัวกับท้ายกล่องกินที่หมด
+  <div className={`px-6 py-5 overflow-y-auto flex-1 min-h-24 ${className}`.trim()}>
     {children}
   </div>
 );

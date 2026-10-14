@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import {
@@ -137,10 +137,18 @@ const CompanyDirectory: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // เปิดกล่องแก้ไขจาก ?company= ได้ครั้งเดียวต่อค่า — เดิมดูจาก `!showForm` ตอนกดปิด showForm เป็น false
+  // ก่อนที่พารามิเตอร์จะหายจาก URL กล่องจึงเด้งเปิดกลับทันที ต้องกดปิดสองครั้ง
+  const openedParamRef = useRef<string | null>(null);
   useEffect(() => {
-    if (companyParam && companies.length > 0 && !showForm) {
+    if (!companyParam) {
+      openedParamRef.current = null;
+      return;
+    }
+    if (companies.length > 0 && openedParamRef.current !== companyParam) {
       const target = companies.find(c => c.company_id === Number(companyParam));
       if (target) {
+        openedParamRef.current = companyParam;
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setEditing(target);
         setForm(toForm(target));
@@ -148,7 +156,11 @@ const CompanyDirectory: React.FC = () => {
         setShowForm(true);
       }
     }
-  }, [companyParam, companies, showForm]);
+  }, [companyParam, companies]);
+
+  // โหลดครั้งแรกไม่สำเร็จ — ตัวนับและข้อความ "ยังไม่มี…" ต้องไม่ขึ้นคู่กับแถบ error
+  const loadFailed = !!directory.error && companies.length === 0;
+  const shown = (n: number) => (loadFailed ? '–' : n);
 
   const unverifiedCount = companies.filter(c => !c.is_verified).length;
   const verifiedCount = companies.length - unverifiedCount;
@@ -209,6 +221,7 @@ const CompanyDirectory: React.FC = () => {
   };
 
   const openEdit = (company: Company) => {
+    openedParamRef.current = String(company.company_id);
     setEditing(company);
     setForm(toForm(company));
     setFormError(null);
@@ -346,7 +359,8 @@ const CompanyDirectory: React.FC = () => {
       header: 'ที่มาของแถว',
       cell: company => {
         const usage = companyUsage[company.company_id];
-        const isStudentCreated = !!(company.google_place_id || usage);
+        // ที่มาดูจากผู้สร้างแถว — เดิมดูว่า "มีคนใช้หรือไม่" แถวที่เจ้าหน้าที่เพิ่มเองจึงเปลี่ยนป้ายทันทีที่มีนักศึกษาเลือก
+        const isStudentCreated = company.created_by_student === true;
         return (
           <div className="text-xs">
             <span className="font-medium text-gray-800 dark:text-gray-200">
@@ -354,7 +368,7 @@ const CompanyDirectory: React.FC = () => {
             </span>
             {usage?.studentName && (
               <p className="text-gray-500 dark:text-gray-400 mt-0.5">
-                {usage.studentName}
+                ใช้โดย {usage.studentName}
               </p>
             )}
           </div>
@@ -481,7 +495,7 @@ const CompanyDirectory: React.FC = () => {
           </div>
           <div>
             <span className="text-xs text-gray-500 dark:text-gray-400 font-semibold">ทั้งหมด</span>
-            <h3 className="text-2xl font-black text-gray-900 dark:text-white">{companies.length}</h3>
+            <h3 className="text-2xl font-black text-gray-900 dark:text-white">{shown(companies.length)}</h3>
           </div>
         </div>
 
@@ -491,7 +505,7 @@ const CompanyDirectory: React.FC = () => {
           </div>
           <div>
             <span className="text-xs text-green-700 dark:text-green-400 font-semibold">รับรองแล้ว</span>
-            <h3 className="text-2xl font-black text-green-700 dark:text-green-400">{verifiedCount}</h3>
+            <h3 className="text-2xl font-black text-green-700 dark:text-green-400">{shown(verifiedCount)}</h3>
           </div>
         </div>
 
@@ -501,8 +515,8 @@ const CompanyDirectory: React.FC = () => {
           </div>
           <div>
             <span className="text-xs text-amber-800 dark:text-amber-400 font-semibold">ยังไม่รับรอง</span>
-            <h3 className="text-2xl font-black text-amber-700 dark:text-amber-400">{unverifiedCount}</h3>
-            <span className="text-xs text-amber-800/80 dark:text-amber-400/80">นักศึกษาเพิ่มเอง {unverifiedCount}</span>
+            <h3 className="text-2xl font-black text-amber-700 dark:text-amber-400">{shown(unverifiedCount)}</h3>
+            <span className="text-xs text-amber-800/80 dark:text-amber-400/80">นักศึกษาเพิ่มเอง {shown(unverifiedCount)}</span>
           </div>
         </div>
 
@@ -512,7 +526,7 @@ const CompanyDirectory: React.FC = () => {
           </div>
           <div>
             <span className="text-xs text-red-700 dark:text-red-400 font-semibold">ไม่มีอีเมลผู้ประสานงาน</span>
-            <h3 className="text-2xl font-black text-red-700 dark:text-red-400">{noEmailCount}</h3>
+            <h3 className="text-2xl font-black text-red-700 dark:text-red-400">{shown(noEmailCount)}</h3>
             <span className="text-xs text-red-600 dark:text-red-400">นักศึกษาต้องกรอกเองตอนส่งหนังสือ</span>
           </div>
         </div>
@@ -563,7 +577,7 @@ const CompanyDirectory: React.FC = () => {
             <button
               type="button"
               onClick={() => setStatusFilter('all')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+              className={`pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter === 'all'
                   ? 'bg-blue-50 text-brand-navy border-brand-blue dark:bg-brand-blue dark:text-white font-bold'
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'
@@ -574,7 +588,7 @@ const CompanyDirectory: React.FC = () => {
             <button
               type="button"
               onClick={() => setStatusFilter('verified')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+              className={`pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter === 'verified'
                   ? 'bg-blue-50 text-brand-navy border-brand-blue dark:bg-brand-blue dark:text-white font-bold'
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'
@@ -585,25 +599,25 @@ const CompanyDirectory: React.FC = () => {
             <button
               type="button"
               onClick={() => setStatusFilter('unverified')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+              className={`pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter === 'unverified'
                   ? 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-900/30 dark:text-amber-300 font-bold'
                   : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300'
               }`}
             >
-              ยังไม่รับรอง ({unverifiedCount})
+              ยังไม่รับรอง ({shown(unverifiedCount)})
             </button>
             <button
               type="button"
               data-testid="company-filter-noemail"
               onClick={() => setStatusFilter('noemail')}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+              className={`pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter === 'noemail'
                   ? 'bg-red-50 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-300 font-bold'
                   : 'bg-white text-red-700 border-red-200 hover:bg-red-50 dark:bg-gray-800 dark:border-red-900/40 dark:text-red-400'
               }`}
             >
-              ไม่มีอีเมล ({noEmailCount})
+              ไม่มีอีเมล ({shown(noEmailCount)})
             </button>
           </div>
         </div>
@@ -623,7 +637,13 @@ const CompanyDirectory: React.FC = () => {
               refreshing={directory.refreshing}
               testId="company-directory-table"
               empty={
-                companies.length === 0 ? (
+                loadFailed ? (
+                  <EmptyState
+                    icon={AlertTriangle}
+                    title="โหลดทำเนียบไม่สำเร็จ"
+                    description="กดปุ่มดึงข้อมูลใหม่เพื่อลองอีกครั้ง"
+                  />
+                ) : companies.length === 0 ? (
                   <EmptyState
                     icon={Building2}
                     title="ยังไม่มีสถานประกอบการในทำเนียบ"

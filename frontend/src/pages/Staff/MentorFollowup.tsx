@@ -103,6 +103,10 @@ const INACTIVE_MENTOR_HINT = 'ยังไม่ได้ยืนยันพ�
 
 const hasWork = (m: MentorFollowupRow) => m.pending_total > 0 || m.eval_missing_students > 0;
 
+// ข้อความเดียวกับที่เซิร์ฟเวอร์ตอบ 429 — ปุ่มปิดก่อนถึงกล่องยืนยัน ไม่ต้องกดแล้วค่อยรู้
+const REMIND_COOLDOWN_HINT = 'เตือนพี่เลี้ยงคนนี้ไปแล้วภายใน 24 ชั่วโมง';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const MentorFollowup: React.FC = () => {
   const [mentors, setMentors] = useState<MentorFollowupRow[]>([]);
   const [unassigned, setUnassigned] = useState<MentorFollowupUnassigned[]>([]);
@@ -116,6 +120,10 @@ const MentorFollowup: React.FC = () => {
   const [filter, setFilter] = useState<Filter>('all');
 
   const [remindTarget, setRemindTarget] = useState<MentorFollowupRow | null>(null);
+  // เวลาตอนเปิดหน้า — ห้ามเรียก Date.now() ระหว่าง render
+  const [now] = useState(() => Date.now());
+  const remindedRecently = (m: MentorFollowupRow) =>
+    !!m.last_reminded_at && now - new Date(m.last_reminded_at).getTime() < DAY_MS;
   const [linkTarget, setLinkTarget] = useState<MentorFollowupRow | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<MentorFollowupRow | null>(null);
   const [editTarget, setEditTarget] = useState<MentorFollowupRow | null>(null);
@@ -610,13 +618,15 @@ const MentorFollowup: React.FC = () => {
                         size="sm"
                         data-testid={`mf-remind-${m.mentor_id}`}
                         icon={<BellRing className="h-4 w-4" />}
-                        disabled={!work || !m.is_active}
+                        disabled={!work || !m.is_active || remindedRecently(m)}
                         title={
                           !m.is_active
                             ? INACTIVE_MENTOR_HINT
-                            : work
-                              ? undefined
-                              : 'ไม่มีงานค้างให้เตือน — พี่เลี้ยงตรวจงานและประเมินครบแล้ว'
+                            : !work
+                              ? 'ไม่มีงานค้างให้เตือน — พี่เลี้ยงตรวจงานและประเมินครบแล้ว'
+                              : remindedRecently(m)
+                                ? REMIND_COOLDOWN_HINT
+                                : undefined
                         }
                         onClick={() => setRemindTarget(m)}
                         className="min-h-11 w-full sm:w-auto lg:w-full sm:min-h-0"

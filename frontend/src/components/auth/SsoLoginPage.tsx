@@ -69,7 +69,7 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('sso')}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-1 py-2.5 text-xs font-bold transition-all ${
               activeTab === 'sso'
                 ? 'bg-white text-brand-navy shadow-sm dark:bg-gray-700 dark:text-white'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'
@@ -81,7 +81,7 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('pwd')}
-            className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+            className={`flex min-w-0 items-center justify-center gap-2 rounded-lg px-1 py-2.5 text-xs font-bold transition-all ${
               activeTab === 'pwd'
                 ? 'bg-white text-brand-navy shadow-sm dark:bg-gray-700 dark:text-white'
                 : 'text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white'

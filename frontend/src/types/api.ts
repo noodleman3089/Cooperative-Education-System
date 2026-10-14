@@ -308,6 +308,8 @@ export interface Company {
   /** มือถือ/โทรสารของผู้รับหนังสือ — พิมพ์ลงเอกสารหมายเลข 1 */
   contact_phone?: string | null;
   contact_fax?: string | null;
+  /** ผู้สร้างแถวเป็นนักศึกษา — มากับรายการทำเนียบ */
+  created_by_student?: boolean;
 }
 
 

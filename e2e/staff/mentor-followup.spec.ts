@@ -929,9 +929,12 @@ test.describe('ติดตามพี่เลี้ยง — สิทธิ
     expect(await tokenCount(fx.mentor1)).toBe(1);
 
     // กดซ้ำ → เซิร์ฟเวอร์ 429 · ข้อความขึ้นที่แถบหน้าจอ ไม่เพิ่มแถว
-    await page.getByTestId(`mf-remind-${fx.mentor1}`).click();
-    await page.getByTestId('mf-remind-confirm').click();
-    await expect(page.getByText('เตือนพี่เลี้ยงคนนี้ไปแล้วภายใน 24 ชั่วโมง', { exact: true })).toBeVisible();
+    // (2026-10-14) ปุ่มปิดเองช่วง 24 ชม. พร้อมเหตุผล — เดิมกดได้ ผ่านกล่องยืนยัน แล้วค่อยเจอ 429 · ด่านของเซิร์ฟเวอร์คุมอยู่ที่ F4
+    await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toBeDisabled();
+    await expect(page.getByTestId(`mf-remind-${fx.mentor1}`)).toHaveAttribute(
+      'title',
+      'เตือนพี่เลี้ยงคนนี้ไปแล้วภายใน 24 ชั่วโมง'
+    );
     await expect(page.getByTestId(`mf-remind-count-${fx.mentor1}`)).toContainText('เตือนแล้ว 1 ครั้ง');
     expect(await reminderCount()).toBe(1);
 

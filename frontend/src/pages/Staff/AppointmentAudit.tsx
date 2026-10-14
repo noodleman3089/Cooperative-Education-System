@@ -60,7 +60,8 @@ export const AppointmentAudit: React.FC = () => {
   const [acceptingBusy, setAcceptingBusy] = useState(false);
 
   const [viewingDraft, setViewingDraft] = useState<AppointmentRow | null>(null);
-  const [memoModalOpen, setMemoModalOpen] = useState(false);
+  // โหลดรายการไม่สำเร็จ — ต้องไม่แสดงตัวนับ 0 หรือ "ไม่มีรายการนัดหมาย" คู่กับแถบ error
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const fetchAppointments = useCallback(async () => {
     try {
@@ -68,7 +69,9 @@ export const AppointmentAudit: React.FC = () => {
       setError(null);
       const res = await api.get('/appointments');
       setAppointments(res.data || []);
+      setLoadFailed(false);
     } catch (err) {
+      setLoadFailed(true);
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการโหลดข้อมูลนัดหมาย'));
     } finally {
       setLoading(false);
@@ -158,9 +161,6 @@ export const AppointmentAudit: React.FC = () => {
             อาจารย์ร่างวันเวลา คุณตรวจแล้วสั่งส่งหนังสือนัดหมายไปยังสถานประกอบการ · บริษัทตอบกลับผ่านลิงก์ในอีเมลโดยไม่ต้องล็อกอิน
           </p>
         </div>
-        <span className="text-xs text-gray-600 dark:text-gray-400">
-          ภาคเรียนที่ 1/2570 · สัปดาห์ที่ 6 จาก 16
-        </span>
       </div>
 
       <AlertBanner variant="error" message={error} />
@@ -214,7 +214,7 @@ export const AppointmentAudit: React.FC = () => {
             ร่างรอคุณตรวจ
           </div>
           <div className="text-2xl font-black text-[#1E3A8A] dark:text-blue-400 mt-1">
-            {draftCount}
+            {loadFailed ? '–' : draftCount}
           </div>
         </div>
 
@@ -223,7 +223,7 @@ export const AppointmentAudit: React.FC = () => {
             ส่งแล้ว รอบริษัทตอบ
           </div>
           <div className="text-2xl font-black text-gray-900 dark:text-white mt-1">
-            {sentCount}
+            {loadFailed ? '–' : sentCount}
           </div>
         </div>
 
@@ -232,7 +232,7 @@ export const AppointmentAudit: React.FC = () => {
             บริษัทขอเลื่อน
           </div>
           <div className="text-2xl font-black text-[#B45309] dark:text-amber-400 mt-1">
-            {rescheduleCount}
+            {loadFailed ? '–' : rescheduleCount}
           </div>
         </div>
 
@@ -241,7 +241,7 @@ export const AppointmentAudit: React.FC = () => {
             ยืนยันแล้ว
           </div>
           <div className="text-2xl font-black text-[#15803D] dark:text-emerald-400 mt-1">
-            {confirmedCount}
+            {loadFailed ? '–' : confirmedCount}
           </div>
         </div>
       </div>
@@ -267,7 +267,7 @@ export const AppointmentAudit: React.FC = () => {
                 {appointments.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="p-8 text-center text-gray-500 dark:text-gray-400">
-                      ไม่มีรายการนัดหมายในขณะนี้
+                      {loadFailed ? 'โหลดรายการนัดหมายไม่สำเร็จ กรุณาโหลดหน้านี้ใหม่' : 'ไม่มีรายการนัดหมายในขณะนี้'}
                     </td>
                   </tr>
                 ) : (
@@ -456,15 +456,8 @@ export const AppointmentAudit: React.FC = () => {
             <span>บันทึกข้อความขออนุมัติเดินทางไปราชการ</span>
           </div>
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
-            คู่มือกำหนดว่าอาจารย์ต้องได้รับอนุมัติเดินทางก่อนออกนิเทศ · ระบบออกเอกสารนี้ให้ได้แล้ว — ปุ่มอยู่ฝั่งอาจารย์ และเจ้าหน้าที่สั่งออกแทนได้จากที่นี่
+            คู่มือกำหนดว่าอาจารย์ต้องได้รับอนุมัติเดินทางก่อนออกนิเทศ · อาจารย์นิเทศพิมพ์บันทึกข้อความนี้เองจากหน้า “ติดตามการนิเทศ” หลังนัดได้รับการยืนยัน — หน้านี้ออกแทนไม่ได้
           </p>
-          <button
-            type="button"
-            onClick={() => setMemoModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50"
-          >
-            ออกบันทึกข้อความให้อาจารย์
-          </button>
         </div>
       </div>
 
@@ -589,34 +582,6 @@ export const AppointmentAudit: React.FC = () => {
                   className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold"
                 >
                   ตรวจแล้ว สั่งส่งอีเมล
-                </button>
-              </div>
-            </div>
-          </ModalBody>
-        </Modal>
-      )}
-
-      {/* Travel Memo Helper Modal */}
-      {memoModalOpen && (
-        <Modal
-          onClose={() => setMemoModalOpen(false)}
-          title="ออกบันทึกข้อความขออนุมัติเดินทางไปราชการ"
-        >
-          <ModalBody>
-            <div className="space-y-3 text-xs">
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                ระบบได้สร้างแบบฟอร์มขออนุมัติเดินทางไปราชการเพื่อการนิเทศสหกิจศึกษาตามระเบียบมหาวิทยาลัย อาจารย์สามารถกดขออนุมัติได้จากหน้า &quot;ติดตามการนิเทศ&quot; หรือเจ้าหน้าที่สามารถพิมพ์หนังสือบันทึกข้อความสรุปได้
-              </p>
-              <div className="p-3 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-300 rounded-xl">
-                พร้อมพิมพ์หนังสือบันทึกข้อความรวมตามรอบการนิเทศประจำภาคการศึกษา
-              </div>
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={() => setMemoModalOpen(false)}
-                  className="px-4 py-1.5 rounded-lg bg-blue-600 text-white font-bold"
-                >
-                  ปิดหน้าต่าง
                 </button>
               </div>
             </div>

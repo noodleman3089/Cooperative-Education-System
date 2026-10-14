@@ -4,7 +4,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { Pin } from 'lucide-react';
 import { getErrorMessage } from '../../utils/errors';
-import { formatThaiDate } from '../../utils/thaiDate';
+import { formatThaiDateTime } from '../../utils/thaiDate';
 import type { Announcement } from '../../types/api';
 
 /**
@@ -38,7 +38,8 @@ export const AnnouncementsManager: React.FC = () => {
       const res = await api.get('/announcements');
       setAnnouncements(res?.data || []);
     } catch (err) {
-      console.error('Failed to load announcements:', err);
+      // โหลดพังต้องขึ้น error — เดิมเงียบ หน้าจอเลยอ่านเป็น "ยังไม่มีข่าว"
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดข่าวประชาสัมพันธ์ได้'));
     } finally {
       setLoadingAnnouncements(false);
     }
@@ -207,18 +208,18 @@ export const AnnouncementsManager: React.FC = () => {
               </span>
             </button>
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex flex-wrap gap-2 pt-1">
               <button
                 type="submit"
                 disabled={isSubmittingAnn}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
+                className="pointer-coarse:min-h-11 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
               >
                 {isSubmittingAnn ? 'กำลังเผยแพร่...' : 'เผยแพร่'}
               </button>
               <button
                 type="button"
                 onClick={handleResetForm}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
+                className="pointer-coarse:min-h-11 px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600"
               >
                 ล้างฟอร์ม
               </button>
@@ -271,7 +272,8 @@ export const AnnouncementsManager: React.FC = () => {
                         </span>
                       )}
                       <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                        {formatThaiDate(ann.created_at)}
+                        {/* created_at เป็น timestamp — formatThaiDate รับเฉพาะ YYYY-MM-DD (เคยขึ้น "NaN ต.ค.") */}
+                        {formatThaiDateTime(ann.created_at)}
                       </span>
                     </div>
 
@@ -319,10 +321,10 @@ export const AnnouncementsManager: React.FC = () => {
           {/* Bottom Notice Card matching Announcements.dc.html */}
           <div className="p-4 sm:p-5 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 space-y-1.5">
             <div className="text-xs font-bold text-gray-900 dark:text-white">
-              ⛔ ไม่มีระบบแจ้งเตือนกลางและไม่มีกระดิ่ง
+              ช่องทางแจ้งเตือนของระบบ
             </div>
             <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-              ข่าวที่นี่ + อีเมลเดิม + รายการค้างบนหน้าแรกของแต่ละฝ่าย คือทั้งหมดของการแจ้งเตือนในระบบนี้ · อย่าเสนอตาราง notification ใหม่
+              ข่าวที่นี่ อีเมล และรายการค้างบนหน้าแรกของแต่ละฝ่าย คือช่องทางแจ้งเตือนทั้งหมดของระบบนี้
             </p>
           </div>
         </div>

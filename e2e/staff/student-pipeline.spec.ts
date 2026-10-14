@@ -279,18 +279,19 @@ test.describe('แดชบอร์ดเจ้าหน้าที่ — น
 
     await apiLoginAs(request, 'staff1');
     const res = await request.post(`${API_URL}/students/import`, {
-      data: { csv: 'student_code,cumulative_gpa,email\nIMP-0001,3.10,imp1@example.com\nIMP-0002,2.90,imp2@example.com\n' },
+      // รหัสต้องตรงรูปแบบ 12 หลัก-1 หลัก (2026-10-14 · การนำเข้าตรวจรูปแบบเดียวกับตอนตั้งโปรไฟล์)
+      data: { csv: 'student_code,cumulative_gpa,email\n256699000001-1,3.10,imp1@example.com\n256699000002-2,2.90,imp2@example.com\n' },
     });
     expect(res.status(), await res.text()).toBe(200);
 
     expect(
-      await dbValue<string>(`SELECT COUNT(*) FROM semester_cohort WHERE semester_id = $1 AND student_code LIKE 'IMP-%'`, [sem])
+      await dbValue<string>(`SELECT COUNT(*) FROM semester_cohort WHERE semester_id = $1 AND student_code LIKE '2566990000%'`, [sem])
     ).toBe('2');
     expect(await dbValue<string>(`SELECT COUNT(*) FROM semester_cohort WHERE semester_id = $1`, [old])).toBe('0');
 
     // นำเข้าซ้ำไม่เพิ่มแถว (รายชื่อรุ่นไม่ซ้ำ)
-    await request.post(`${API_URL}/students/import`, { data: { csv: 'student_code,cumulative_gpa,email\nIMP-0001,3.10,imp1@example.com\n' } });
-    expect(await dbValue<string>(`SELECT COUNT(*) FROM semester_cohort WHERE semester_id = $1 AND student_code LIKE 'IMP-%'`, [sem])).toBe('2');
+    await request.post(`${API_URL}/students/import`, { data: { csv: 'student_code,cumulative_gpa,email\n256699000001-1,3.10,imp1@example.com\n' } });
+    expect(await dbValue<string>(`SELECT COUNT(*) FROM semester_cohort WHERE semester_id = $1 AND student_code LIKE '2566990000%'`, [sem])).toBe('2');
 
     const body = await pipeline(request);
     expect(stageCount(body, 'not_registered')).toBe(2);

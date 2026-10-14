@@ -63,6 +63,8 @@ export const UsersAndMasterData: React.FC = () => {
 
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  // โหลดรายการบัญชีไม่สำเร็จ — ห้ามขึ้น "ทั้งหมด 0 บัญชี" คู่กับแถบ error
+  const [usersLoadFailed, setUsersLoadFailed] = useState(false);
 
   // Pre-seed personnel states
   const [preseededPersonnel, setPreseededPersonnel] = useState<PreseedPersonnelRow[]>([]);
@@ -151,8 +153,11 @@ export const UsersAndMasterData: React.FC = () => {
       setUsers(usersData || []);
       setPersonnelList(personnelData || []);
       setMajors(masterData.majors || []);
+      setUsersLoadFailed(false);
     } catch (err) {
-      console.error('Failed to load users:', err);
+      // โหลดพังต้องขึ้น error — เดิม console.error อย่างเดียว หน้าจอเลยอ่านเป็น "ทั้งหมด 0 บัญชี"
+      setUsersLoadFailed(true);
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดรายการบัญชีผู้ใช้ได้'));
     } finally {
       setLoadingUsers(false);
     }
@@ -168,7 +173,7 @@ export const UsersAndMasterData: React.FC = () => {
       setPreseededPersonnel(preseedData || []);
       setMajors(masterData.majors || []);
     } catch (err) {
-      console.error('Failed to load preseed personnel or majors:', err);
+      setError(getErrorMessage(err, 'ไม่สามารถโหลดรายชื่อบุคลากรตั้งต้นได้'));
     } finally {
       setLoadingPreseed(false);
     }
@@ -633,7 +638,7 @@ export const UsersAndMasterData: React.FC = () => {
       <AlertBanner variant="success" message={success} />
 
       {/* 2. Tab Bar matching UsersAndMasterData.dc.html */}
-      <div className="flex items-center gap-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-x-6 border-b border-gray-200 dark:border-gray-700">
         <button
           type="button"
           data-testid="users-tab-accounts"
@@ -678,10 +683,10 @@ export const UsersAndMasterData: React.FC = () => {
           <div className="p-4 sm:px-5 border-b border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gray-50/50 dark:bg-gray-700/30">
             <div>
               <span className="text-[16px] font-bold text-gray-900 dark:text-white block">
-                แท็บ “บัญชีผู้ใช้”
+                บัญชีผู้ใช้
               </span>
               <span className="hint text-xs text-gray-600 dark:text-gray-400">
-                จัดการสิทธิ์และติดตามสถานะการเปิดใช้งานบัญชีทั้งหมด {users.length} บัญชี
+                จัดการสิทธิ์และติดตามสถานะการเปิดใช้งานบัญชีทั้งหมด {usersLoadFailed ? '–' : users.length} บัญชี
               </span>
             </div>
             <button
@@ -695,7 +700,7 @@ export const UsersAndMasterData: React.FC = () => {
                 setIsAddUserModalOpen(true);
               }}
               data-testid="user-add-open"
-              className="btn inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+              className="btn inline-flex items-center gap-1.5 pointer-coarse:min-h-11 px-3.5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
             >
               <Plus className="w-3.5 h-3.5" /> เพิ่มบัญชี
             </button>
@@ -760,7 +765,7 @@ export const UsersAndMasterData: React.FC = () => {
                               type="button"
                               data-testid={`user-edit-${u.user_id}`}
                               onClick={() => handleEditUserClick(u)}
-                              className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                              className="pointer-coarse:min-h-11 px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                             >
                               แก้ไข
                             </button>
@@ -795,10 +800,10 @@ export const UsersAndMasterData: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                  รายชื่อบุคลากรตั้งต้น (Preseed Personnel)
+                  รายชื่อบุคลากรตั้งต้น
                 </h3>
                 <p className="hint text-xs text-gray-500 dark:text-gray-400">
-                  รายชื่ออาจารย์และหัวหน้าสาขาวิชาที่รอให้อาจารย์เข้าสู่ระบบด้วย Google เพื่อผูกบัญชี (Claim)
+                  รายชื่ออาจารย์และหัวหน้าสาขาวิชาที่รอให้อาจารย์เข้าสู่ระบบด้วย Google เพื่อผูกบัญชี
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -903,7 +908,7 @@ export const UsersAndMasterData: React.FC = () => {
                 </div>
                 <div>
                   <label htmlFor="preseed-email" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                    อีเมลมหาวิทยาลัย * (SEC-01)
+                    อีเมลมหาวิทยาลัย *
                   </label>
                   {/* ⛔ บังคับ — เซิร์ฟเวอร์ปฏิเสธแถวที่ไม่มีอีเมลอยู่แล้ว เพราะมันคือสิ่งเดียว
                       ที่ผูกรหัสนี้กับคนคนเดียวตอน claim · กันที่ฟอร์มด้วยจะได้ไม่ต้องกดแล้วเด้ง */}
@@ -920,7 +925,7 @@ export const UsersAndMasterData: React.FC = () => {
                 <div className="sm:col-span-2 md:col-span-3 flex justify-end">
                   <button
                     type="submit"
-                    className="btn inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                    className="btn inline-flex items-center gap-1.5 pointer-coarse:min-h-11 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white"
                   >
                     <UserPlus className="w-3.5 h-3.5" /> เพิ่มบุคลากรตั้งต้น
                   </button>
@@ -971,7 +976,7 @@ export const UsersAndMasterData: React.FC = () => {
                       <th className="p-3">บทบาท</th>
                       <th className="p-3">สาขาวิชา</th>
                       <th className="p-3">อีเมล</th>
-                      <th className="p-3">สถานะ Claim (SEC-01)</th>
+                      <th className="p-3">สถานะการผูกบัญชี</th>
                       <th className="p-3 text-center">จัดการ</th>
                     </tr>
                   </thead>
@@ -1023,7 +1028,7 @@ export const UsersAndMasterData: React.FC = () => {
                                   type="button"
                                   data-testid={`preseed-delete-${p.employee_code}`}
                                   onClick={() => setPendingDeletePreseed(p)}
-                                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                  className="pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                                 >
                                   ลบรหัสนี้
                                 </button>
@@ -1045,7 +1050,7 @@ export const UsersAndMasterData: React.FC = () => {
       {activeTab === 'master' && (
         <div className="space-y-4">
           <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
-            ก่อนหน้านี้แก้รายชื่อสาขาได้ทางเดียวคือเข้าไปแก้ในฐานข้อมูลตรง ๆ · การเพิ่ม/แก้/ลบ คณะและสาขาอยู่บนหน้าจอนี้แล้ว
+            เพิ่ม แก้ไข และลบ คณะและสาขาวิชาได้ที่หน้าจอนี้
             <span className="block mt-0.5 text-gray-600 dark:text-gray-400">
               ⛔ การย้ายนักศึกษารายคนไปสาขาอื่น <strong className="font-bold">ไม่ได้ทำที่นี่</strong> — ทำที่หน้า “รายชื่อนักศึกษา &amp; เกรด”
             </span>
@@ -1066,7 +1071,7 @@ export const UsersAndMasterData: React.FC = () => {
                       setDialogError(null);
                       setFacultyForm({ faculty_id: null, name: '' });
                     }}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                    className="inline-flex items-center gap-1 pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
                   >
                     <Plus className="h-3.5 w-3.5" />
                     เพิ่มคณะ
@@ -1122,7 +1127,7 @@ export const UsersAndMasterData: React.FC = () => {
                                     name: f.faculty_name_th,
                                   });
                                 }}
-                                className="px-2 py-1 rounded-lg text-[11px] font-bold border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                className="pointer-coarse:min-h-11 px-2 py-1 rounded-lg text-[11px] font-bold borderborder-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
                               >
                                 แก้ชื่อ
                               </button>
@@ -1134,7 +1139,7 @@ export const UsersAndMasterData: React.FC = () => {
                                   setFacultyDeleteTyped('');
                                   setPendingDeleteFaculty(f);
                                 }}
-                                className="px-2 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                className="pointer-coarse:min-h-11 px-2 py-1 rounded-lg text-[11px] font-bold borderborder-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                               >
                                 ลบ
                               </button>
@@ -1168,7 +1173,7 @@ export const UsersAndMasterData: React.FC = () => {
                           major_name_th: '',
                         });
                       }}
-                      className="inline-flex shrink-0 items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                      className="inline-flex shrink-0 items-center gap-1 pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
                     >
                       <Plus className="h-3.5 w-3.5" />
                       เพิ่มสาขาวิชา
@@ -1233,7 +1238,7 @@ export const UsersAndMasterData: React.FC = () => {
                                         major_name_th: m.major_name_th,
                                       });
                                     }}
-                                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                                    className="pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-gray-300 text-gray-700 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
                                   >
                                     แก้ไข
                                   </button>
@@ -1245,7 +1250,7 @@ export const UsersAndMasterData: React.FC = () => {
                                   {students > 0 ? (
                                     <span
                                       data-testid={`master-major-delete-blocked-${m.major_id}`}
-                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-400"
+                                      className="pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-gray-200 bg-gray-50 text-gray-500 cursor-not-allowed dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-400"
                                       title={`ลบไม่ได้ — มีนักศึกษาสังกัดอยู่ ${students} คน`}
                                     >
                                       ลบไม่ได้ · {students} คนสังกัด
@@ -1258,7 +1263,7 @@ export const UsersAndMasterData: React.FC = () => {
                                         setDialogError(null);
                                         setPendingDeleteMajor(m);
                                       }}
-                                      className="px-2.5 py-1 rounded-lg text-[11px] font-bold border border-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
+                                      className="pointer-coarse:min-h-11 px-2.5 py-1 rounded-lg text-[11px] font-bold borderborder-red-200 text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/40"
                                     >
                                       ลบ
                                     </button>
@@ -1321,7 +1326,7 @@ export const UsersAndMasterData: React.FC = () => {
                   type="submit"
                   data-testid="master-faculty-save"
                   disabled={facultyBusy}
-                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                  className="pointer-coarse:min-h-11 px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
                 >
                   {facultyBusy ? 'กำลังบันทึก...' : 'บันทึก'}
                 </button>
@@ -1415,7 +1420,7 @@ export const UsersAndMasterData: React.FC = () => {
                   type="submit"
                   data-testid="master-major-save"
                   disabled={majorBusy}
-                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                  className="pointer-coarse:min-h-11 px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
                 >
                   {majorBusy ? 'กำลังบันทึก...' : 'บันทึก'}
                 </button>
@@ -1563,7 +1568,7 @@ export const UsersAndMasterData: React.FC = () => {
                   type="email"
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
-                  placeholder="name@rmutto.ac.th หรือ อีเมลบริษัท"
+                  placeholder="name@rmutto.ac.th"
                   className="w-full text-xs px-3 py-2 border rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
                   required
                 />
@@ -1589,7 +1594,7 @@ export const UsersAndMasterData: React.FC = () => {
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   {Object.entries(ROLE_LABELS).filter(([k]) => k !== 'mentor').map(([k, lbl]) => (
-                    <label key={k} className="inline-flex items-center gap-2 cursor-pointer text-gray-700 dark:text-gray-300">
+                    <label key={k} className="inline-flex items-center gap-2 pointer-coarse:min-h-11 cursor-pointer text-gray-700 dark:text-gray-300">
                       <input
                         type="checkbox"
                         data-testid={`user-add-role-${k}`}
@@ -1604,7 +1609,7 @@ export const UsersAndMasterData: React.FC = () => {
                   ))}
                 </div>
                 <p className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-                  พี่เลี้ยงถูกเปิดบัญชีอัตโนมัติเมื่อเจ้าหน้าที่กดรับแบบตอบรับ
+                  บัญชีพี่เลี้ยงเปิดเมื่ออาจารย์นิเทศยืนยันพี่เลี้ยงที่นักศึกษาระบุ ไม่ต้องสร้างที่นี่
                 </p>
               </div>
               {needsMajor && (
@@ -1640,7 +1645,7 @@ export const UsersAndMasterData: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsAddUserModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border"
+                  className="pointer-coarse:min-h-11 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-200"
                 >
                   ยกเลิก
                 </button>
@@ -1648,7 +1653,7 @@ export const UsersAndMasterData: React.FC = () => {
                   type="submit"
                   data-testid="user-add-submit"
                   disabled={isSubmittingUser}
-                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                  className="pointer-coarse:min-h-11 px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
                 >
                   {isSubmittingUser ? 'กำลังบันทึก...' : 'สร้างบัญชี'}
                 </button>
@@ -1747,14 +1752,14 @@ export const UsersAndMasterData: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsEditUserModalOpen(false)}
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg border"
+                  className="pointer-coarse:min-h-11 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 dark:border-gray-600 dark:text-gray-200"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmittingUser}
-                  className="px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                  className="pointer-coarse:min-h-11 px-4 py-1.5 text-xs font-bold rounded-lg bg-blue-600 text-white disabled:opacity-50"
                 >
                   {isSubmittingUser ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
                 </button>

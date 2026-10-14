@@ -41,6 +41,10 @@ interface StudentProgress {
   sahatkit15Score: number | null;
   sahatkit16Score: number | null;
   lastNotifiedAt: string | null;
+  /** มีพี่เลี้ยงที่อาจารย์นิเทศยืนยันแล้ว — ไม่มี = เซิร์ฟเวอร์ไม่ส่งอีเมลเตือนให้ */
+  mentorReady: boolean;
+  weeklyLogsSent: number;
+  monthlyLogsSent: number;
   placement?: {
     form_id: number;
     status: 'accepted' | 'superseded';
@@ -56,6 +60,8 @@ export const FinalProgressDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [selectedMajor, setSelectedMajor] = useState<string>('all');
   const [error, setError] = useState<string | null>(null);
+  // โหลดรายชื่อไม่สำเร็จ — ต้องไม่แสดง "(0)" หรือ "ไม่พบข้อมูล" คู่กับแถบ error เพราะไม่ได้แปลว่าไม่มีนักศึกษา
+  const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [notifyingMap, setNotifyingMap] = useState<Record<number, boolean>>({});
   const [notifyTarget, setNotifyTarget] = useState<StudentProgress | null>(null);
@@ -82,7 +88,9 @@ export const FinalProgressDashboard: React.FC = () => {
       setError(null);
       const res = await api.get('/coop-progress/dashboard');
       setStudents(res.data || []);
+      setLoadFailed(false);
     } catch (err) {
+      setLoadFailed(true);
       setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลความคืบหน้าได้'));
     } finally {
       setLoading(false);
@@ -124,20 +132,28 @@ export const FinalProgressDashboard: React.FC = () => {
       const pendingStudents = students.filter(
         (s) => !s.progressDetails.evaluation15Submitted || !s.progressDetails.evaluation16Submitted
       );
+      // ข้ามคนที่ยังไม่มีพี่เลี้ยงที่ยืนยันแล้วและคนที่เพิ่งเตือน — ตรงกับที่กล่องยืนยันบอกไว้ และเซิร์ฟเวอร์ปฏิเสธสองกลุ่มนี้อยู่แล้ว
+      const targets = pendingStudents.filter((s) => s.mentorReady && !isCooldownActive(s.lastNotifiedAt));
       let sentCount = 0;
-      for (const s of pendingStudents) {
-        if (!isCooldownActive(s.lastNotifiedAt)) {
-          try {
-            await api.post(`/final-reports/notify-mentor/${s.studentId}`);
-            sentCount++;
-          } catch {
-            // Ignore single failures in batch
-          }
+      let failedCount = 0;
+      for (const s of targets) {
+        try {
+          await api.post(`/final-reports/notify-mentor/${s.studentId}`);
+          sentCount++;
+        } catch {
+          // รายเดียวล้มไม่หยุดทั้งชุด แต่ต้องนับไว้บอกผู้ใช้ — เดิมกลืนเงียบแล้วขึ้นว่าสำเร็จ
+          failedCount++;
         }
       }
       setBatchNotifyOpen(false);
-      setSuccess(`ส่งอีเมลเตือนไปยังผู้มีเอกสารค้างสำเร็จ ${sentCount} ราย`);
       await loadData();
+      if (failedCount > 0) {
+        setError(`ส่งอีเมลเตือนสำเร็จ ${sentCount} ราย · ส่งไม่สำเร็จ ${failedCount} ราย กรุณาลองใหม่อีกครั้ง`);
+      } else if (targets.length === 0) {
+        setSuccess('ไม่มีอีเมลที่ต้องส่ง — ทุกคนเพิ่งถูกเตือนใน 24 ชั่วโมง หรือยังไม่มีพี่เลี้ยงที่ยืนยันแล้ว');
+      } else {
+        setSuccess(`ส่งอีเมลเตือนไปยังผู้มีเอกสารค้างสำเร็จ ${sentCount} ราย`);
+      }
     } catch (err) {
       setBatchNotifyOpen(false);
       setError(getErrorMessage(err, 'ส่งอีเมลเตือนเป็นกลุ่มไม่สำเร็จ'));
@@ -315,7 +331,7 @@ export const FinalProgressDashboard: React.FC = () => {
             <strong className="font-bold text-gray-800 dark:text-gray-200">ไม่ใช่ผ่าน/ไม่ผ่าน</strong> เพราะอาจารย์เป็นผู้ตัดเกรด
           </p>
         </div>
-        <div className="flex items-center gap-2.5">
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
             type="button"
             data-testid="btn-batch-notify"
@@ -363,7 +379,7 @@ export const FinalProgressDashboard: React.FC = () => {
               : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
           }`}
         >
-          มีของค้าง ({pendingCount})
+          มีของค้าง ({loadFailed ? '–' : pendingCount})
         </button>
 
         <button
@@ -375,7 +391,7 @@ export const FinalProgressDashboard: React.FC = () => {
               : 'border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
           }`}
         >
-          ครบทุกอย่าง ({completeCount})
+          ครบทุกอย่าง ({loadFailed ? '–' : completeCount})
         </button>
 
         {majorOptions.length === 1 ? (
@@ -466,7 +482,9 @@ export const FinalProgressDashboard: React.FC = () => {
                 {filteredStudents.length === 0 ? (
                   <tr>
                     <td colSpan={10} className="p-8 text-center text-gray-500 dark:text-gray-400">
-                      ไม่พบข้อมูลนักศึกษาตรงตามเงื่อนไขที่เลือก
+                      {loadFailed
+                        ? 'โหลดรายชื่อไม่สำเร็จ กดปุ่มดึงข้อมูลใหม่เพื่อลองอีกครั้ง'
+                        : 'ไม่พบข้อมูลนักศึกษาตรงตามเงื่อนไขที่เลือก'}
                     </td>
                   </tr>
                 ) : (
@@ -479,10 +497,6 @@ export const FinalProgressDashboard: React.FC = () => {
                         : p.evaluation15Submitted
                         ? 'มีแค่ 15'
                         : '–';
-
-                    const needsMentorReminder =
-                      std.finalReportStatus !== 'not_submitted' &&
-                      (!p.evaluation15Submitted || !p.evaluation16Submitted);
 
                     return (
                       <tr
@@ -526,17 +540,22 @@ export const FinalProgressDashboard: React.FC = () => {
                         </td>
 
                         {/* 5. สหกิจ 09 รายสัปดาห์ */}
-                        <td className="p-3 text-center font-bold">
-                          <span className={complete ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}>
-                            {complete ? '16 / 16' : '6 / 6'}
-                          </span>
+                        {/* นับจากฉบับที่ส่งแล้วจริง (ไม่นับร่าง) — เดิมเป็นเลขตายตัว 6 / 6 ทุกแถว · ไม่ใส่ตัวหารเพราะระบบไม่รู้ว่าแต่ละคนต้องส่งกี่ฉบับ */}
+                        <td className="p-3 text-center font-bold" title="จำนวนฉบับที่นักศึกษาส่งแล้ว ไม่นับฉบับร่าง">
+                          {std.weeklyLogsSent > 0 ? (
+                            <span className="text-gray-900 dark:text-white">{std.weeklyLogsSent} ฉบับ</span>
+                          ) : (
+                            <span className="font-normal text-gray-600 dark:text-gray-400">–</span>
+                          )}
                         </td>
 
                         {/* 6. สหกิจ 10 รายเดือน */}
-                        <td className="p-3 text-center font-bold">
-                          <span className={complete ? 'text-emerald-700 dark:text-emerald-400' : 'text-emerald-700 dark:text-emerald-400'}>
-                            {complete ? '4 / 4' : '1 / 1'}
-                          </span>
+                        <td className="p-3 text-center font-bold" title="จำนวนฉบับที่นักศึกษาส่งแล้ว ไม่นับฉบับร่าง">
+                          {std.monthlyLogsSent > 0 ? (
+                            <span className="text-gray-900 dark:text-white">{std.monthlyLogsSent} ฉบับ</span>
+                          ) : (
+                            <span className="font-normal text-gray-600 dark:text-gray-400">–</span>
+                          )}
                         </td>
 
                         {/* 7. สหกิจ 11 โครงร่าง */}
@@ -629,18 +648,30 @@ export const FinalProgressDashboard: React.FC = () => {
                           ) : (
                             // ปุ่มในแถวใช้ ui/Button size sm — บนจอสัมผัสสูง 44px (เดิมเขียนคลาสเอง สูง 17–26px ชิดกัน 6px กดผิดปุ่มง่าย)
                             <div className="flex flex-col items-end gap-2">
-                              {needsMentorReminder ? (
-                                <Button
-                                  size="sm"
-                                  onClick={() => setNotifyTarget(std)}
-                                  disabled={isCooldownActive(std.lastNotifiedAt) || notifyingMap[std.studentId]}
-                                >
-                                  เตือนพี่เลี้ยง
-                                </Button>
-                              ) : !complete ? (
-                                <Button size="sm" onClick={() => setNotifyTarget(std)}>
-                                  ส่งอีเมลเตือน
-                                </Button>
+                              {!complete ? (
+                                // ปุ่มนี้ส่งอีเมลถึงพี่เลี้ยงเสมอ จึงใช้ชื่อเดียว · ปิดเมื่อเซิร์ฟเวอร์จะปฏิเสธ (409 ไม่มีพี่เลี้ยง · 429 เพิ่งเตือน) พร้อมบอกเหตุผล
+                                <>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setNotifyTarget(std)}
+                                    disabled={
+                                      !std.mentorReady ||
+                                      isCooldownActive(std.lastNotifiedAt) ||
+                                      notifyingMap[std.studentId]
+                                    }
+                                  >
+                                    เตือนพี่เลี้ยง
+                                  </Button>
+                                  {!std.mentorReady ? (
+                                    <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                                      ยังไม่มีพี่เลี้ยงที่ยืนยันแล้ว
+                                    </span>
+                                  ) : isCooldownActive(std.lastNotifiedAt) ? (
+                                    <span className="text-[11px] text-gray-600 dark:text-gray-400">
+                                      เตือนแล้วใน 24 ชั่วโมง
+                                    </span>
+                                  ) : null}
+                                </>
                               ) : (
                                 <Button
                                   variant="secondary"
@@ -686,7 +717,7 @@ export const FinalProgressDashboard: React.FC = () => {
             <span>ทำไมคอลัมน์ประเมินเขียนว่า “ครบทั้ง 2 ใบ” ไม่ใช่ “ผ่าน”</span>
           </div>
           <p className="text-xs leading-relaxed text-[#92400E] dark:text-amber-200/90">
-            ระบบรู้แค่ว่า <strong>มีใบประเมินเข้ามาแล้วหรือยัง</strong> · การตัดเกรดเป็นของอาจารย์ ป้ายที่เขียนว่า “ผ่าน” จึงเป็นคำที่สัญญาเกินกว่าข้อมูลที่มี — เคยพลาดมาแล้ว
+            ระบบรู้แค่ว่า <strong>มีใบประเมินเข้ามาแล้วหรือยัง</strong> · การตัดเกรดเป็นของอาจารย์ ป้ายที่เขียนว่า “ผ่าน” จึงเป็นคำที่สัญญาเกินกว่าข้อมูลที่มี
             <br />
             ทั้งสองใบเป็นของ <strong>พี่เลี้ยง</strong> ทั้งคู่ (สหกิจ 15 เต็ม 100 ใช้ตัดเกรด · สหกิจ 16 เต็ม 70 ประเมินตัวเล่ม) — ไม่ใช่ใบของอาจารย์
           </p>
@@ -699,7 +730,7 @@ export const FinalProgressDashboard: React.FC = () => {
           <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-300">
             เลขบัตรประชาชน เชื้อชาติ และศาสนา ที่ใช้พิมพ์ใบสมัคร สหกิจ 03 จะถูกลบอัตโนมัติ <strong>90 วันหลังพี่เลี้ยงส่งครบทั้ง สหกิจ 15 และ 16</strong>
             <br />
-            ⛔ ไม่มีปุ่มให้ใครกดลบ และไม่มีปุ่ม “ปิดสหกิจ” — นโยบายลบข้อมูลที่ต้องรอคนกดคือนโยบายที่ไม่มีใครกด
+            ระบบลบให้เองตามกำหนด ไม่ต้องกดปุ่มใด
           </p>
         </div>
       </div>

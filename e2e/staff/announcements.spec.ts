@@ -46,6 +46,9 @@ test.describe('ข่าวประชาสัมพันธ์ (PR Announcem
     // Verify success banner and announcement item listed
     await expect(page.getByText('เผยแพร่ข่าวประชาสัมพันธ์เรียบร้อยแล้ว')).toBeVisible();
     await expect(page.getByText(testTitle)).toBeVisible();
+    // วันที่บนการ์ดต้องอ่านได้ — เดิมส่ง timestamp เข้าตัวจัดรูปที่รับเฉพาะ YYYY-MM-DD จึงขึ้น "NaN ต.ค. 2569" ทุกข่าว
+    await expect(page.getByText(/NaN/)).toHaveCount(0);
+    await expect(page.getByText(/\d{1,2} \S+ 25\d{2} \d{2}:\d{2} น\./).first()).toBeVisible();
     // ปักหมุดต้องเข้าฐานจริง ไม่ใช่แค่สวิตช์บนจอเปลี่ยนสี
     await expect
       .poll(async () =>

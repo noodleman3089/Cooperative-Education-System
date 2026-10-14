@@ -5,6 +5,9 @@ import { sanitizeCsvCell } from '../middlewares/validation';
 import { sendUnexpectedError } from '../utils/httpError';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// รูปแบบเดียวกับที่ /profile/setup บังคับตอนนักศึกษาตั้งโปรไฟล์ (middlewares/validation.ts) —
+// รหัสที่ไม่ตรงรูปแบบนี้เข้าทะเบียนได้แต่ไม่มีใครผูกบัญชีได้ จึงต้องตกตั้งแต่ตอนนำเข้า
+const STUDENT_CODE_REGEX = /^\d{12}-\d$/;
 
 /**
  * ตำแหน่งคอลัมน์เมื่อไฟล์ไม่มีหัวตาราง: `student_code,cumulative_gpa,email`
@@ -92,6 +95,12 @@ export class StaffImportController {
           if (parts.length >= 1) {
             const student_code = cell(parts, col.student_code);
             if (!student_code) continue;
+            if (!STUDENT_CODE_REGEX.test(student_code)) {
+              invalidRows.push(
+                `${student_code.slice(0, 40)} (รหัสนักศึกษาต้องเป็นตัวเลข 12 หลัก ตามด้วยขีดกลางและเลข 1 หลัก)`
+              );
+              continue;
+            }
 
             // DATA-01: the GPA column used to be ignored and every imported row was
             // written as a flat 3.00, overwriting real transcript values on re-import.
@@ -124,9 +133,34 @@ export class StaffImportController {
         }
       }
 
+      // อีเมลหนึ่งผูกได้รหัสเดียว — อีเมลคือสิ่งที่ผูกรหัสกับบัญชีตอนตั้งโปรไฟล์ สองรหัสใช้อีเมลเดียวกันจึงเป็นการพิมพ์ผิดเสมอ
+      // ตรวจทั้งกับทะเบียนที่มีอยู่และกับแถวก่อนหน้าในไฟล์เดียวกัน · แถวที่ชนตกไปพร้อมเหตุผล แถวอื่นเดินต่อ
+      const emails = studentsToImport.map((r) => r.email).filter((e): e is string => !!e);
+      if (emails.length > 0) {
+        const taken = await query(
+          'SELECT student_code, email FROM eligible_students_list WHERE email = ANY($1::text[])',
+          [emails]
+        );
+        const ownerOf = new Map<string, string>(
+          taken.rows.map((r) => [String(r.email).toLowerCase(), r.student_code as string])
+        );
+        const accepted: StudentImportRow[] = [];
+        for (const row of studentsToImport) {
+          const owner = row.email ? ownerOf.get(row.email) : undefined;
+          if (row.email && owner && owner !== row.student_code) {
+            invalidRows.push(`${row.student_code} (อีเมล ${row.email} ผูกกับรหัส ${owner} อยู่แล้ว)`);
+            continue;
+          }
+          if (row.email) ownerOf.set(row.email, row.student_code);
+          accepted.push(row);
+        }
+        studentsToImport.length = 0;
+        studentsToImport.push(...accepted);
+      }
+
       if (studentsToImport.length === 0) {
         res.status(400).json({
-          message: 'No valid student records found to import.',
+          message: 'ไม่มีแถวที่นำเข้าได้ กรุณาตรวจรหัสนักศึกษา เกรดเฉลี่ย และอีเมล',
           invalidRows,
         });
         return;

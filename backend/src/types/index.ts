@@ -135,6 +135,8 @@ export interface Company {
   /** มือถือ/โทรสารของผู้รับหนังสือ — พิมพ์ลงเอกสารหมายเลข 1 */
   contact_phone?: string | null;
   contact_fax?: string | null;
+  /** เฉพาะรายการทำเนียบ (`listCompanies`) — ผู้สร้างแถวเป็นนักศึกษา */
+  created_by_student?: boolean;
 }
 
 export interface CoopSemester {

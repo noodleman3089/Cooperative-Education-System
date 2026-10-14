@@ -76,7 +76,7 @@ test.describe('Personnel Onboarding via CSV Import and Manual Add (Experimental)
     //    "เตรียมรายชื่อบุคลากรล่วงหน้า" เป็น "บุคลากรตั้งต้น" ตาม spec-E ข้อ 10
     //    → คลิกด้วย testid ที่สเปกกำหนดไว้ ไม่ใช่ข้อความป้ายซึ่งเป็นของที่เปลี่ยนได้
     await page.locator('[data-testid="users-tab-preseed"]').click();
-    await expect(page.locator('text=รายชื่อบุคลากรตั้งต้น (Preseed Personnel)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'รายชื่อบุคลากรตั้งต้น' })).toBeVisible();
     await page.locator('button:has-text("นำเข้า CSV")').click();
 
     // 4. Prepare mock CSV
@@ -157,7 +157,7 @@ test.describe('Personnel Onboarding via CSV Import and Manual Add (Experimental)
 
     // 3. Switch to Pre-seed sub-tab (เหตุผลที่ใช้ testid อยู่ในเคสบน)
     await page.locator('[data-testid="users-tab-preseed"]').click();
-    await expect(page.locator('text=รายชื่อบุคลากรตั้งต้น (Preseed Personnel)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'รายชื่อบุคลากรตั้งต้น' })).toBeVisible();
 
     // 4. Switch to Manual Add Tab
     await page.locator('button:has-text("เพิ่มรายคน")').click();
@@ -245,7 +245,7 @@ test.describe('Personnel Onboarding via CSV Import and Manual Add (Experimental)
     await loginAs(page, 'staff1');
     await goToMenu(page, 'users');
     await page.locator('[data-testid="users-tab-preseed"]').click();
-    await expect(page.locator('text=รายชื่อบุคลากรตั้งต้น (Preseed Personnel)')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'รายชื่อบุคลากรตั้งต้น' })).toBeVisible();
 
     // แถวที่ผูกบัญชีแล้วต้องไม่มีปุ่มลบให้กดเลย
     await expect(page.locator('[data-testid="preseed-delete-EMP3002"]')).toHaveCount(0);

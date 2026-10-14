@@ -217,10 +217,30 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           setNotifications([]);
         }
       } else if (currentRole === 'staff') {
-        // คิวจริงของเจ้าหน้าที่คือคำร้องที่นักศึกษาอัปโหลดกลับมาแล้วรอตรวจรับ
-        // ไม่ใช่ `approved_by_dept_head` ซึ่งคือใบที่ตัวเองกดรับไปแล้ว
-        const res = await api.get('/intents?status=pending_officer_request');
-        setNotifications(res || []);
+        // นับจากชุดเดียวกับหน้าแรก (`GET /staff/home` สามกองงาน) — เดิมนับเฉพาะคำร้องรอตรวจรับ
+        // กระดิ่งจึงบอก 0 ทั้งที่หน้าแรกบอกว่ามีแบบตอบรับ/หนังสือส่งตัวรออยู่ · แต่ละรายการพาไปกองของตัวเอง
+        const res = await api.get('/staff/home');
+        const staffQueues: { key: 'request' | 'acceptance' | 'dispatch'; title: string }[] = [
+          { key: 'request', title: 'คำร้องรอคุณตรวจรับ' },
+          { key: 'acceptance', title: 'แบบตอบรับรอคุณตรวจ' },
+          { key: 'dispatch', title: 'หนังสือส่งตัวรอออก' },
+        ];
+        const items: NotificationItem[] = [];
+        let total = 0;
+        for (const q of staffQueues) {
+          const count: number = res?.tiles?.[q.key]?.count ?? 0;
+          if (count > 0) {
+            total += count;
+            items.push({
+              id: `queue_${q.key}`,
+              title: q.title,
+              description: `${count} รายการ`,
+              url: `/dashboard?queue=${q.key}`,
+            });
+          }
+        }
+        setFacultyCount(total);
+        setNotifications(items);
       } else if (currentRole === 'dean') {
         const res = await api.get('/documents');
         const pendingDocs = ((res || []) as NotificationItem[]).filter((d) => d.status === 'pending_sign');
@@ -476,7 +496,9 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
           {auth?.user && ['advisor', 'supervisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (() => {
             const isFaculty = currentRole === 'advisor' || currentRole === 'supervisor';
             const isDeptHead = currentRole === 'dept_head';
-            const notifCount = (isFaculty || isDeptHead) ? (facultyCount ?? 0) : notifications.length;
+            // เจ้าหน้าที่: รายการในกระดิ่งเป็นกองงาน (ไม่ใช่ใบรายใบ) ตัวเลขจึงมาจากผลรวมของกอง เหมือนฝ่ายอาจารย์
+            const isStaff = currentRole === 'staff';
+            const notifCount = (isFaculty || isDeptHead || isStaff) ? (facultyCount ?? 0) : notifications.length;
 
             return (
               // จอเล็ก: ไม่ยึดแผงกับปุ่มกระดิ่ง (แผง 320px จะล้นขอบซ้ายจอ) ให้ยึดกับแถบ <nav> แทน
@@ -564,7 +586,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                               );
                             }
 
-                            if (isFaculty || isDeptHead) {
+                            if (isFaculty || isDeptHead || isStaff) {
                               return (
                                 <button
                                   key={index}

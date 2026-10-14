@@ -119,6 +119,29 @@ test.describe('ขั้น 2 — แผงรับคำร้องของ�
     await expect(confirm.getByTestId('confirm-summary')).toContainText('อว 0656.10/11');
     await expect(confirm).not.toContainText('ทรานแซกชัน');
     await expect(confirm).not.toContainText('SEC-');
+
+    // กล่องยืนยันซ้อนบนแผง (2026-10-14): ปุ่มของกล่องบนต้องเป็นของกล่องบนคนเดียว
+    // · Tab วนในกล่องบนและไปถึง "ยกเลิก" ได้ — เดิมตัวล็อก focus ของสองกล่องแย่งกัน ติดอยู่ที่ปุ่มปิดตลอด
+    const focused: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      await page.keyboard.press('Tab');
+      focused.push(
+        await page.evaluate(() => {
+          const el = document.activeElement;
+          return (el?.textContent || el?.getAttribute('aria-label') || '').trim();
+        })
+      );
+    }
+    expect(focused.some((t) => t.includes('ยกเลิก')), `ลำดับ focus: ${focused.join(' | ')}`).toBe(true);
+    expect(
+      await page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]')?.textContent?.includes('ยืนยันการรับคำร้อง')),
+      'focus ต้องอยู่ในกล่องยืนยัน ไม่หลุดไปแผงข้างหลัง'
+    ).toBe(true);
+    // · Esc ปิดเฉพาะกล่องบน — เดิมปิดทั้งสองชั้น เลขที่หนังสือที่พิมพ์ไว้หาย
+    await page.keyboard.press('Escape');
+    await expect(confirm).toBeHidden();
+    await expect(panel).toBeVisible();
+    await expect(panel.getByTestId('officer-document-no')).toHaveValue('อว 0656.10/11');
   });
 
   test('P2: นักศึกษาเปลี่ยนไฟล์ระหว่างแผงเปิด → แถบเตือน ปุ่มรับปิดจนกดดูไฟล์ใหม่ · ของที่พิมพ์ค้างไม่หาย', async ({

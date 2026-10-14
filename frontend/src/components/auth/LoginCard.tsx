@@ -35,9 +35,10 @@ export const LoginCard: React.FC<LoginCardProps> = ({
   // ชื่อแท็บตามหน้าเข้าสู่ระบบที่เปิดอยู่ (คู่กับที่ Sidebar ตั้งให้หน้าใน dashboard)
   usePageTitle(title);
 
+  // ระยะขอบผูกกับความกว้างจอด้วย min(rem, vw): ตัวอักษรใหญ่ 200% บนจอ 320px เดิม padding กินที่จนแท็บเหลือ 51px ข้อความถูกตัด
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6] px-4 dark:bg-[#111827]">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl border border-gray-100 dark:bg-[#1F2937] dark:border-gray-800 page-enter">
+    <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6] px-[min(1rem,4vw)] dark:bg-[#111827]">
+      <div className="w-full max-w-md rounded-2xl bg-white p-[min(2rem,8vw)] shadow-xl border border-gray-100 dark:bg-[#1F2937] dark:border-gray-800 page-enter">
         <button
           type="button"
           onClick={() => navigate(backTo)}

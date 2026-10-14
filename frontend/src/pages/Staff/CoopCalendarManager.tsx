@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Plus, Trash2, Save, ChevronDown } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
+import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
@@ -90,14 +91,25 @@ const CoopCalendarManager: React.FC = () => {
     { event_id: number; label: string; isCustom: boolean } | null
   >(null);
 
+  // โหลดรายชื่อภาคไม่สำเร็จ ≠ ยังไม่มีภาค — ห้ามขึ้นข้อความชวนไปเปิดภาคเรียนคู่กับแถบ error
+  const [semestersFailed, setSemestersFailed] = useState(false);
+
+  // แถบคำตอบอยู่หัวหน้า แต่ปุ่มที่กดอยู่ลึกลงไปได้ถึงท้ายหน้า (หน้านี้สูงกว่าสองจอ) — เลื่อนไปหาแถบทุกครั้งที่มีข้อความใหม่
+  const alertRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error || success) alertRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [error, success]);
+
   const loadSemesters = useCallback(async () => {
     try {
       const master = await api.get('/master-data');
       const list = (master?.semesters ?? []) as CoopCalendarSemester[];
       setSemesters(list);
+      setSemestersFailed(false);
       const active = list.find((s) => s.is_active);
       if (active) setSemesterId(active.semester_id);
     } catch (err) {
+      setSemestersFailed(true);
       setError(getErrorMessage(err, 'ไม่สามารถโหลดรายชื่อภาคการศึกษาได้'));
     }
   }, []);
@@ -261,19 +273,22 @@ const CoopCalendarManager: React.FC = () => {
             ปฏิทินสหกิจศึกษา
           </h1>
           <p className="text-[13px] text-gray-600 dark:text-gray-400 leading-relaxed">
-            รายการกิจกรรมมาจากเซิร์ฟเวอร์ทั้งหมด — คุณกรอกได้แค่ <em className="italic font-semibold">วันที่</em> ตามชนิดที่กระดาษกำหนด · เพิ่มกิจกรรมของคณะเองได้ที่ท้ายตาราง
+            รายการกิจกรรมกำหนดไว้ตามปฏิทินสหกิจของคณะ — คุณกรอกได้แค่ <em className="italic font-semibold">วันที่</em> ตามชนิดที่กระดาษกำหนด · เพิ่มกิจกรรมของคณะเองได้ที่ท้ายตาราง
           </p>
         </div>
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="relative">
+        {/* flex-wrap + min-w-0: จอ 360px ปุ่มบันทึกเคยล้นขอบขวาจนทั้งหน้าเลื่อนแนวนอน */}
+        <div className="flex flex-wrap items-center gap-2.5 min-w-0 sm:shrink-0">
+          <div className="relative min-w-0 max-w-full">
             <select
               id="calendar-semester"
               aria-label="เลือกภาคการศึกษา"
               value={semesterId ?? ''}
               onChange={(e) => setSemesterId(e.target.value ? Number(e.target.value) : null)}
-              className="appearance-none bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 focus:outline-none"
+              className="appearance-none max-w-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 focus:outline-none"
             >
-              {semesters.length === 0 && <option value="">— ยังไม่มีภาคการศึกษา —</option>}
+              {semesters.length === 0 && (
+                <option value="">{semestersFailed ? '— โหลดรายชื่อภาคไม่สำเร็จ —' : '— ยังไม่มีภาคการศึกษา —'}</option>
+              )}
               {semesters.map((s) => (
                 <option key={s.semester_id} value={s.semester_id}>
                   {semesterLabel(s.semester, s.academic_year)} {s.is_active ? '(กำลังใช้งาน)' : ''}
@@ -294,10 +309,13 @@ const CoopCalendarManager: React.FC = () => {
         </div>
       </div>
 
-      <AlertBanner variant="error" message={error} />
-      <AlertBanner variant="success" message={success} />
+      <div ref={alertRef} className="space-y-4 empty:hidden">
+        <AlertBanner variant="error" message={error} />
+        <AlertBanner variant="success" message={success} />
+      </div>
 
-      {!data?.semester && (
+      {/* data ยังไม่มี = โหลดไม่สำเร็จ (มีแถบ error แล้ว) — ข้อความนี้ขึ้นเฉพาะเมื่อโหลดได้และไม่มีภาคที่เปิดจริง */}
+      {data && !data.semester && (
         <AlertBanner
           variant="info"
           message="ยังไม่มีภาคการศึกษาที่เปิดใช้งาน จึงยังกำหนดปฏิทินไม่ได้ กรุณาเปิดใช้งานภาคการศึกษาก่อน"
@@ -307,11 +325,11 @@ const CoopCalendarManager: React.FC = () => {
       {/* 2. Fail-Open Warning Card matching CoopCalendar.dc.html */}
       <div className="border border-amber-300 dark:border-amber-800 bg-[#FFFBEB] dark:bg-amber-950/30 rounded-2xl p-4 sm:p-5 text-amber-900 dark:text-amber-200 shadow-sm space-y-2">
         <div className="text-sm font-bold text-amber-900 dark:text-amber-300">
-          ช่องที่เว้นว่าง = ระบบยังไม่ล็อกขั้นตอนนั้น (fail-open โดยตั้งใจ)
+          ช่องที่เว้นว่าง = ระบบยังไม่ล็อกขั้นตอนนั้น
         </div>
         <div className="text-xs leading-relaxed text-amber-900/90 dark:text-amber-300/90">
-          ปฏิทินเดาผิดแล้วปิดระบบใส่นักศึกษาทั้งรุ่น แย่กว่าปล่อยผ่าน — ปฏิทินจึงไม่ fail closed แบบด่านสิทธิ์ <strong className="font-bold">แต่ต้องไม่เงียบ</strong> หน้านี้และหน้าแรกจึงบอกเสมอว่าอันไหนยังว่าง<br />
-          “วันนี้” ที่ใช้ตัดสินมาจากฐานข้อมูลตามเวลาไทยเสมอ ไม่ใช่นาฬิกาเบราว์เซอร์ — ตัวเลขที่นักศึกษาเห็นกับด่านที่ปฏิเสธคำขอจึงตอบตรงกัน
+          ขั้นที่ยังไม่ได้ตั้งวัน นักศึกษาทำรายการได้ตลอด — ระบบไม่ปิดเอง เพื่อไม่ให้นักศึกษาทั้งรุ่นถูกกันออกเพราะปฏิทินยังกรอกไม่ครบ หน้านี้และหน้าแรกจึงบอกเสมอว่าอันไหนยังว่าง<br />
+          “วันนี้” ที่ใช้ตัดสินเป็นเวลาไทยของระบบ ไม่ใช่นาฬิกาของเครื่องคุณ
         </div>
 
         {/* Text required by e2e test coop-calendar.spec.ts */}
@@ -328,11 +346,12 @@ const CoopCalendarManager: React.FC = () => {
       <div className="card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
         {/* Table Header */}
         <div className="hidden lg:grid lg:grid-cols-12 gap-3 px-5 py-3.5 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300">
-          <div className="lg:col-span-5">กิจกรรม</div>
+          {/* กิจกรรม 4 · ผ่อนผัน 2 (เดิม 5 · 1): ช่องวันผ่อนผันเคยกว้าง 77px อ่านวันที่ที่กรอกไม่ออก */}
+          <div className="lg:col-span-4">กิจกรรม</div>
           <div className="lg:col-span-1">ชนิดวันที่</div>
           <div className="lg:col-span-2">วันเริ่ม</div>
           <div className="lg:col-span-2">วันสิ้นสุด</div>
-          <div className="lg:col-span-1">ผ่อนผันถึง</div>
+          <div className="lg:col-span-2">ผ่อนผันถึง</div>
           <div className="lg:col-span-1 text-center">สถานะวันนี้</div>
         </div>
 
@@ -353,8 +372,8 @@ const CoopCalendarManager: React.FC = () => {
                     : 'hover:bg-gray-50/60 dark:hover:bg-gray-700/30'
                 }`}
               >
-                {/* 1. กิจกรรม (col-span-5) */}
-                <div className="lg:col-span-5 space-y-1">
+                {/* 1. กิจกรรม (col-span-4) */}
+                <div className="lg:col-span-4 space-y-1">
                   <span className="text-[14px] font-bold text-gray-900 dark:text-white leading-snug block">
                     {activity.label}
                   </span>
@@ -396,7 +415,7 @@ const CoopCalendarManager: React.FC = () => {
                         value={draft.note}
                         onChange={(e) => setDraft(activity.activity_key, { note: e.target.value })}
                         placeholder="หมายเหตุ (ถ้ามี) เช่น ส่งที่ห้องงานสหกิจศึกษา..."
-                        className="w-full max-w-sm text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        className="w-full max-w-sm pointer-coarse:min-h-11 text-xs px-2.5 py-1 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300 focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                   )}
@@ -424,7 +443,7 @@ const CoopCalendarManager: React.FC = () => {
                       data-testid={`calendar-start-${activity.activity_key}`}
                       value={draft.start_date}
                       onChange={(e) => setDraft(activity.activity_key, { start_date: e.target.value })}
-                      className="inp w-full max-w-[135px] px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500"
+                      className="inp w-full max-w-[135px] pointer-coarse:min-h-11 px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500"
                     />
                   )}
                 </div>
@@ -445,7 +464,7 @@ const CoopCalendarManager: React.FC = () => {
                       data-testid={`calendar-end-${activity.activity_key}`}
                       value={draft.end_date}
                       onChange={(e) => setDraft(activity.activity_key, { end_date: e.target.value })}
-                      className={`inp w-full max-w-[135px] px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border rounded-lg focus:ring-1 focus:ring-blue-500 ${
+                      className={`inp w-full max-w-[135px] pointer-coarse:min-h-11 px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border rounded-lg focus:ring-1 focus:ring-blue-500 ${
                         isUnconfiguredAndLocks
                           ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-950/30'
                           : 'border-gray-300 dark:border-gray-600'
@@ -454,8 +473,8 @@ const CoopCalendarManager: React.FC = () => {
                   )}
                 </div>
 
-                {/* 5. ผ่อนผันถึง (col-span-1) */}
-                <div className="lg:col-span-1">
+                {/* 5. ผ่อนผันถึง (col-span-2) */}
+                <div className="lg:col-span-2">
                   <span className="lg:hidden text-xs text-gray-600 dark:text-gray-400 font-bold mr-1">ผ่อนผัน: </span>
                   {activity.derived ? (
                     <span className="hint text-[11px] text-gray-500 dark:text-gray-400">
@@ -470,7 +489,7 @@ const CoopCalendarManager: React.FC = () => {
                       data-testid={`calendar-late-${activity.activity_key}`}
                       value={draft.late_end_date}
                       onChange={(e) => setDraft(activity.activity_key, { late_end_date: e.target.value })}
-                      className="inp w-full max-w-[135px] px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500"
+                      className="inp w-full max-w-[135px] pointer-coarse:min-h-11 px-2.5 py-1.5 text-[13px] text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-1 focus:ring-blue-500"
                     />
                   )}
                 </div>
@@ -504,16 +523,30 @@ const CoopCalendarManager: React.FC = () => {
                   )}
 
                   {!activity.derived && (
-                    <button
-                      type="button"
+                    // ปุ่มรายแถวเป็นปุ่มรอง — ปุ่มหลักของหน้าคือ "บันทึกทั้งหน้า" ตัวเดียว (เดิมน้ำเงินทึบ 10 ปุ่มแข่งกัน)
+                    <Button
+                      variant="secondary"
+                      size="sm"
                       onClick={() => handleSaveActivity(activity)}
                       disabled={isSaving}
                       data-testid="calendar-save"
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all shadow-sm disabled:opacity-50"
+                      icon={<Save className="w-3.5 h-3.5" />}
                     >
-                      <Save className="w-3.5 h-3.5" />
                       {isSaving ? 'กำลังบันทึก...' : 'บันทึก'}
-                    </button>
+                    </Button>
+                  )}
+                  {/* ล้างช่วงที่ตั้งไว้ = ลบแถวกำหนดการ ขั้นนี้กลับไปเป็น "ยังไม่ได้ตั้ง" — เดิมตั้งแล้วถอนไม่ได้ (บันทึกค่าว่างถูกปฏิเสธ) */}
+                  {!activity.derived && activity.event_id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      data-testid={`calendar-clear-${activity.activity_key}`}
+                      onClick={() =>
+                        setPendingDelete({ event_id: activity.event_id!, label: activity.label, isCustom: false })
+                      }
+                    >
+                      ล้างช่วงเวลา
+                    </Button>
                   )}
                 </div>
               </li>
@@ -623,7 +656,7 @@ const CoopCalendarManager: React.FC = () => {
               onClick={handleAddCustom}
               disabled={addingCustom || !customTitle.trim()}
               data-testid="calendar-custom-add"
-              className="btn inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
+              className="btn inline-flex items-center gap-1.5 pointer-coarse:min-h-11 px-3 py-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg disabled:opacity-50"
             >
               <Plus className="w-3.5 h-3.5" />
               {addingCustom ? 'กำลังเพิ่ม...' : 'เพิ่มกำหนดการ'}
@@ -631,17 +664,18 @@ const CoopCalendarManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Right: สองอย่างที่หน้านี้ห้ามทำ */}
+        {/* Right: ข้อควรรู้ของหน้านี้ — เหตุผลเชิงเทคนิคอยู่ที่ backend/src/utils/coopCalendar.ts:
+            กิจกรรมที่ล็อกจริงต้องมีโค้ดฝั่งเซิร์ฟเวอร์เรียกใช้ จึงไม่เปิดให้เพิ่มจากหน้าจอ */}
         <div className="card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 shadow-sm space-y-3">
           <h3 className="text-base font-bold text-gray-900 dark:text-white">
-            สองอย่างที่หน้านี้ห้ามทำ
+            ข้อควรรู้ของหน้านี้
           </h3>
           <div className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300 space-y-3">
             <p>
-              ⛔ <strong className="font-bold text-gray-900 dark:text-white">ห้ามให้เจ้าหน้าที่เพิ่ม “กิจกรรมที่ล็อกได้” เอง</strong> — รายการที่ล็อกจริงต้องมีโค้ดฝั่งเซิร์ฟเวอร์เรียกใช้ กิจกรรมที่ไม่มีใครเรียกคือคำสัญญาลอย ๆ ว่าระบบทำอะไรให้
+              <strong className="font-bold text-gray-900 dark:text-white">รายการที่เพิ่มเองเป็นหมุดบอกเวลาเท่านั้น</strong> — นักศึกษาเห็นในปฏิทิน แต่ไม่ล็อกขั้นตอนใด ขั้นที่ล็อกจริงมีเฉพาะแถวที่ติดป้าย “ล็อกจริง” ในตารางด้านบน
             </p>
             <p>
-              ⛔ <strong className="font-bold text-gray-900 dark:text-white">ห้ามกรอกวันเดียวกันลงทั้งช่องเริ่มและช่องสิ้นสุดของแถวชนิด “เส้นตาย”</strong> — จะกลับหัวจากกระดาษทันที (“ภายในวันที่ 10” จะกลายเป็น “เฉพาะวันที่ 10”) หน้าจอจึงปิดช่องวันเริ่มของแถวชนิดนี้ไปเลย
+              <strong className="font-bold text-gray-900 dark:text-white">แถวชนิด “เส้นตาย” กรอกเฉพาะวันสิ้นสุด</strong> — “ภายในวันที่ 10” ไม่เท่ากับ “เฉพาะวันที่ 10” หน้าจอจึงปิดช่องวันเริ่มของแถวชนิดนี้ไว้
             </p>
           </div>
         </div>
@@ -650,9 +684,13 @@ const CoopCalendarManager: React.FC = () => {
       <ConfirmDialog
         open={!!pendingDelete}
         level={1}
-        title="ยืนยันการลบกำหนดการ"
-        message={`ลบกำหนดการ "${pendingDelete?.label}"`}
-        confirmLabel="ลบกำหนดการ"
+        title={pendingDelete?.isCustom === false ? 'ยืนยันการล้างช่วงเวลา' : 'ยืนยันการลบกำหนดการ'}
+        message={
+          pendingDelete?.isCustom === false
+            ? `ล้างช่วงเวลาของ "${pendingDelete.label}" — ขั้นนี้กลับไปเป็นยังไม่ได้ตั้ง นักศึกษาทำรายการได้ตลอดจนกว่าจะตั้งใหม่`
+            : `ลบกำหนดการ "${pendingDelete?.label}"`
+        }
+        confirmLabel={pendingDelete?.isCustom === false ? 'ล้างช่วงเวลา' : 'ลบกำหนดการ'}
         destructive
         onConfirm={handleConfirmDelete}
         onCancel={() => setPendingDelete(null)}

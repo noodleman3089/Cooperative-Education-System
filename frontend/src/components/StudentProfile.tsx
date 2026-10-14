@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../context/authContextValue';
 import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile as StudentType, LanguageProficiency } from '../types/api';
@@ -22,6 +24,8 @@ interface Major {
 }
 
 const StudentProfile: React.FC = () => {
+  const auth = useContext(AuthContext);
+  const navigate = useNavigate();
   const [profile, setProfile] = useState<StudentType | null>(null);
   const [majors, setMajors] = useState<Major[]>([]);
 
@@ -110,6 +114,17 @@ const StudentProfile: React.FC = () => {
 
       if (profileResult.status === 'rejected') {
         const notOnboarded = getErrorStatus(profileResult.reason) === 404;
+        // ยังไม่มีแถว students: หน้านี้ "แก้" ได้แต่ "สร้าง" ไม่ได้ (PUT /profile/student ตอบ 404) เดิมจึงเป็นทางตัน —
+        // คำแนะนำบนหน้าแรกพามาที่นี่ กรอกครบแล้วบันทึกไม่ได้ · พาไปหน้าตั้งโปรไฟล์ซึ่งสร้างแถวได้จริงแทน
+        // `isFirstTime` เป็นธงนำทางฝั่งหน้าจอที่ ProtectedRoute/OnboardingStudent อ่าน ไม่ใช่สิทธิ์ (ด่านจริงอยู่ที่ /profile/setup)
+        if (notOnboarded && auth?.user?.roles?.includes('student')) {
+          // พักไว้ในตัวแปรก่อนโดยตั้งใจ — `isFirstTime` ไม่ได้อยู่ในชนิด User (แบบเดียวกับ OnboardingStudent)
+          const flaggedUser = { ...auth.user, isFirstTime: true };
+          auth.login(flaggedUser);
+          localStorage.setItem('onboarding_type', 'student');
+          navigate('/onboarding/student', { replace: true });
+          return;
+        }
         setNotice(
           notOnboarded
             ? 'ยังไม่มีข้อมูลประวัติของคุณในระบบ กรุณากรอกข้อมูลแล้วกดปุ่มบันทึกข้อมูลส่วนตัว'
@@ -179,6 +194,9 @@ const StudentProfile: React.FC = () => {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProfile();
+    // โหลดครั้งเดียวตอนเปิดหน้า — loadProfile อ่าน auth/navigate เฉพาะตอนพาคนที่ยังไม่มีโปรไฟล์ไปหน้าตั้งโปรไฟล์
+    // ใส่เป็น dependency จะทำให้โหลดซ้ำทุกครั้งที่ context เปลี่ยน
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {

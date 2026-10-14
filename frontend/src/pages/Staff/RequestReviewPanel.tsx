@@ -95,6 +95,7 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
   // ใบที่หนังสือถูกถอนกลับยังคงเลขเดิม (มักใช้เลขเดิมรับใหม่) — เติมให้ แก้ได้ · ใบที่ยังไม่เคยรับ = ว่าง
   const [documentNo, setDocumentNo] = useState(row.officer_document_no ?? '');
   const [rejecting, setRejecting] = useState(false);
+  const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [confirming, setConfirming] = useState(false);
   /** เซิร์ฟเวอร์เตือนว่าเลขซ้ำกับใบอื่น — ถามยืนยันก่อนส่งซ้ำพร้อมธงยอมรับ */
@@ -181,11 +182,13 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
     if (!rejectReason.trim()) return;
     setBusy(true);
     setError(null);
+    setRejectError(null);
     try {
       await api.patch(`/intents/${formId}/officer-reject`, { reason: rejectReason.trim() });
       onDone(`ตีกลับคำร้องของ ${row.student_code || ''} แล้ว`);
     } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถตีกลับคำร้องได้'));
+      // แสดงเหนือปุ่มยืนยันตีกลับ — แถบ error หลักอยู่หัวคอลัมน์ซึ่งเลื่อนพ้นจอไปแล้วตอนพิมพ์เหตุผล
+      setRejectError(getErrorMessage(err, 'ไม่สามารถตีกลับคำร้องได้'));
     } finally {
       setBusy(false);
     }
@@ -555,6 +558,7 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
                       placeholder="ระบุเหตุผลที่ตีกลับ เช่น ลายเซ็นหัวหน้าสาขาวิชายังไม่ครบ"
                       className="w-full text-sm"
                     />
+                    <AlertBanner variant="error" message={rejectError} />
                     <div className="flex flex-wrap items-center gap-2">
                       <Button variant="secondary" className="min-h-11" onClick={() => setRejecting(false)}>
                         ย้อนกลับ

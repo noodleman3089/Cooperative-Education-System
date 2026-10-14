@@ -60,26 +60,38 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     const { a, b } = await twoSemesters();
     await apiLoginAs(request, 'staff1');
 
-    const toB = await importCsv(request, ['IMP-B1', 'IMP-B2'], b);
+    const toB = await importCsv(request, ['256699000011-1', '256699000012-2'], b);
     expect(toB.status(), await toB.text()).toBe(200);
     expect((await toB.json()).summary.semesterId).toBe(b);
     expect(await cohortOf(b)).toEqual([
-      { student_code: 'IMP-B1', source: 'import' },
-      { student_code: 'IMP-B2', source: 'import' },
+      { student_code: '256699000011-1', source: 'import' },
+      { student_code: '256699000012-2', source: 'import' },
     ]);
     expect(await cohortOf(a)).toEqual([]);
 
-    const toActive = await importCsv(request, ['IMP-A1']);
+    const toActive = await importCsv(request, ['256699000021-1']);
     expect(toActive.status(), await toActive.text()).toBe(200);
-    expect(await cohortOf(a)).toEqual([{ student_code: 'IMP-A1', source: 'import' }]);
+    expect(await cohortOf(a)).toEqual([{ student_code: '256699000021-1', source: 'import' }]);
 
-    const bad = await importCsv(request, ['IMP-X'], 987654);
+    const bad = await importCsv(request, ['256699000099-9'], 987654);
     expect(bad.status()).toBe(400);
     expect((await bad.json()).message).toContain('ภาคเรียน');
-    const notNumber = await importCsv(request, ['IMP-X'], 'abc');
+    const notNumber = await importCsv(request, ['256699000099-9'], 'abc');
     expect(notNumber.status()).toBe(400);
+    // รหัสผิดรูปแบบ (ไม่ใช่ 12 หลัก-1 หลัก) = ตกทั้งแถวพร้อมเหตุผล — onboarding ไม่รับรหัสแบบนี้ เข้าทะเบียนไปก็ไม่มีใครผูกได้
+    const badCode = await importCsv(request, ['640101991']);
+    expect(badCode.status()).toBe(400);
+    expect((await badCode.json()).invalidRows.join(' ')).toContain('12 หลัก');
+    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM eligible_students_list WHERE student_code = '640101991'`)).toBe(0);
+    // อีเมลเดียวผูกสองรหัสไม่ได้ — แถวที่ชนตก รหัสเดิมยังอยู่
+    const dupEmail = await request.post(`${API_URL}/students/import`, {
+      data: { csv: 'student_code,cumulative_gpa,email\n256699000041-1,3.00,256699000011-1@example.com\n' },
+    });
+    expect(dupEmail.status()).toBe(400);
+    expect((await dupEmail.json()).invalidRows.join(' ')).toContain('ผูกกับรหัส 256699000011-1 อยู่แล้ว');
+    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM eligible_students_list WHERE student_code = '256699000041-1'`)).toBe(0);
     // ปฏิเสธก่อนเขียนอะไร — ไม่มีแถวค้างในรายชื่อกลาง
-    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM eligible_students_list WHERE student_code = 'IMP-X'`)).toBe(0);
+    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM eligible_students_list WHERE student_code = '256699000099-9'`)).toBe(0);
   });
 
   test('C2: รายชื่อรุ่น — เจ้าหน้าที่เท่านั้น · ถอดได้เฉพาะคนที่ยังไม่มีใบ · ลง audit', async ({ request }) => {
@@ -554,9 +566,9 @@ test.describe('วงจรภาคเรียน เฟส 1–2', () => {
     await goToMenu(page, 'import');
     await page.getByTestId('import-target-semester').selectOption(String(b));
     await page.getByText('เพิ่มทีละคน').click();
-    await page.getByPlaceholder('เช่น 256410100101-2').fill('IMP-UI-1');
+    await page.getByPlaceholder('เช่น 256410100101-2').fill('256699000031-1');
     await page.locator('form button[type="submit"]').click();
-    await expect.poll(async () => dbValue<number>(`SELECT COUNT(*)::int FROM semester_cohort WHERE semester_id = $1 AND student_code = 'IMP-UI-1'`, [b]), { timeout: 15_000 }).toBe(1);
-    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM semester_cohort WHERE semester_id = $1 AND student_code = 'IMP-UI-1'`, [a])).toBe(0);
+    await expect.poll(async () => dbValue<number>(`SELECT COUNT(*)::int FROM semester_cohort WHERE semester_id = $1 AND student_code = '256699000031-1'`, [b]), { timeout: 15_000 }).toBe(1);
+    expect(await dbValue<number>(`SELECT COUNT(*)::int FROM semester_cohort WHERE semester_id = $1 AND student_code = '256699000031-1'`, [a])).toBe(0);
   });
 });

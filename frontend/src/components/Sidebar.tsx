@@ -315,7 +315,7 @@ const Sidebar: React.FC<SidebarProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="md:hidden p-2.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
+              className="md:hidden p-3.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-300 transition-colors cursor-pointer"
               title="ปิดเมนู"
               aria-label="ปิดเมนู"
             >

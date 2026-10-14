@@ -90,6 +90,8 @@ export const ImportScreening: React.FC = () => {
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // โหลดทะเบียนไม่สำเร็จ — ตัวนับต้องไม่ขึ้น 0 คู่กับแถบ error
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -106,8 +108,10 @@ export const ImportScreening: React.FC = () => {
         setRegistryMajorId(list[0].major_id ?? null);
         setRegistryGpa(list[0].cumulative_gpa ? String(list[0].cumulative_gpa) : '');
       }
+      setLoadFailed(false);
     } catch (err) {
       console.error(err);
+      setLoadFailed(true);
       setError(getErrorMessage(err, 'ไม่สามารถเรียกรายชื่อนักศึกษาและข้อมูลสาขาได้ กรุณาลองใหม่อีกครั้ง'));
     } finally {
       setLoadingData(false);
@@ -203,6 +207,11 @@ export const ImportScreening: React.FC = () => {
             rejected.push(`แถวที่ ${rowNo}: ไม่พบรหัสนักศึกษา`);
             return;
           }
+          // รูปแบบเดียวกับที่นักศึกษาต้องกรอกตอนตั้งโปรไฟล์ — เซิร์ฟเวอร์ตรวจซ้ำอีกชั้น
+          if (!/^\d{12}-\d$/.test(student_code)) {
+            rejected.push(`${student_code}: รหัสนักศึกษาต้องเป็นตัวเลข 12 หลัก ตามด้วยขีดกลางและเลข 1 หลัก`);
+            return;
+          }
 
           const rawGpa = row.cumulative_gpa ?? row['เกรดเฉลี่ย'] ?? row['GPAX'];
           const cumulative_gpa =
@@ -270,6 +279,11 @@ export const ImportScreening: React.FC = () => {
       const res = await api.post('/students/import', { csv: csvString, semester_id: targetSemester });
       setImportSummary(res.summary);
       setSuccess('นำเข้ารายชื่อนักศึกษาและเกรดเรียบร้อยแล้ว');
+      // แถวที่เซิร์ฟเวอร์ไม่รับ (เช่น อีเมลซ้ำกับรหัสอื่น) ต้องบอกเหตุผล ไม่ใช่หายไปเงียบ ๆ
+      const serverRejected: string[] = res.summary?.invalidRows ?? [];
+      if (serverRejected.length > 0) {
+        setError(`มี ${serverRejected.length} แถวที่ไม่ได้นำเข้า — ${serverRejected.join(' · ')}`);
+      }
       setParsedStudents([]);
       setRejectedRows([]);
       await loadData();
@@ -301,7 +315,13 @@ export const ImportScreening: React.FC = () => {
       setManualStudentEmail('');
       await loadData();
     } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลนักศึกษาได้'));
+      // เซิร์ฟเวอร์บอกเหตุผลรายแถวมาใน invalidRows — เดิมแสดงแต่ข้อความรวม ผู้ใช้ต้องเดาว่าผิดที่รหัส เกรด หรืออีเมล
+      const reasons = (err as { response?: { data?: { invalidRows?: string[] } } })?.response?.data?.invalidRows;
+      setError(
+        reasons && reasons.length > 0
+          ? `บันทึกไม่ได้ — ${reasons.join(' · ')}`
+          : getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลนักศึกษาได้')
+      );
     } finally {
       setIsAddingStudent(false);
     }
@@ -330,7 +350,7 @@ export const ImportScreening: React.FC = () => {
           value={targetSemester}
           onChange={(e) => setTargetSemester(e.target.value)}
           data-testid="import-target-semester"
-          className="rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+          className="max-w-full min-w-0 pointer-coarse:min-h-11 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
         >
           <option value="">ภาคที่เปิดอยู่</option>
           {semesters.map((s) => (
@@ -343,7 +363,7 @@ export const ImportScreening: React.FC = () => {
       </label>
 
       {/* 3. Tab Bar */}
-      <div className="flex items-center gap-6 border-b border-gray-200 dark:border-gray-700">
+      <div className="flex flex-wrap items-center gap-x-6 border-b border-gray-200 dark:border-gray-700">
         <button
           type="button"
           onClick={() => setTab('bulk')}
@@ -375,7 +395,7 @@ export const ImportScreening: React.FC = () => {
               : 'border-transparent text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
           }`}
         >
-          รายชื่อในทะเบียนกลาง ({registeredStudents.length})
+          รายชื่อในทะเบียนกลาง ({loadFailed ? '–' : registeredStudents.length})
         </button>
       </div>
 
@@ -388,7 +408,7 @@ export const ImportScreening: React.FC = () => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              className={`border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center transition-all ${
+              className={`relative border-2 border-dashed rounded-2xl p-8 flex flex-col items-center justify-center transition-all ${
                 dragOver
                   ? 'border-blue-600 bg-blue-50/20 dark:bg-blue-950/20'
                   : 'border-blue-200 dark:border-blue-900/40 bg-[#EFF6FF] dark:bg-blue-950/10'
@@ -398,19 +418,21 @@ export const ImportScreening: React.FC = () => {
               <span className="text-[15px] font-bold text-blue-900 dark:text-blue-200">
                 ลากไฟล์ CSV หรือ Excel มาวางที่นี่
               </span>
-              <label
-                htmlFor="screening-file-input"
-                className="text-xs text-blue-700 dark:text-blue-400 underline cursor-pointer mt-1"
-              >
-                หรือ เลือกไฟล์จากเครื่อง
-              </label>
+              {/* sr-only ไม่ใช่ hidden และวางก่อน label: ช่องเลือกไฟล์ต้องรับ focus จากปุ่ม Tab ได้ (เดิม display:none ใช้คีย์บอร์ดเลือกไฟล์ไม่ได้)
+                  แล้วให้ label แสดงกรอบ focus แทนผ่าน peer */}
               <input
                 id="screening-file-input"
                 type="file"
                 accept=".csv,.xlsx,.xls"
                 onChange={handleFileChange}
-                className="hidden"
+                className="sr-only peer"
               />
+              <label
+                htmlFor="screening-file-input"
+                className="text-xs text-blue-700 dark:text-blue-400 underline cursor-pointer mt-1 rounded peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-blue"
+              >
+                หรือ เลือกไฟล์จากเครื่อง
+              </label>
             </div>
 
             <div className="space-y-2">
@@ -547,10 +569,10 @@ export const ImportScreening: React.FC = () => {
             {/* แก้ทะเบียนรายคน (SEC-05) */}
             <div className="card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 shadow-sm space-y-3">
               <span className="text-[16px] font-bold text-gray-900 dark:text-white block">
-                แก้ทะเบียนรายคน (SEC-05)
+                แก้ทะเบียนรายคน
               </span>
               <span className="hint text-[12px] text-gray-500 dark:text-gray-400">
-                รหัสนักศึกษา · สาขาวิชา · เกรดสะสม เป็น <strong className="font-bold text-gray-800 dark:text-gray-200">ฟิลด์ของเซิร์ฟเวอร์</strong> — นักศึกษาแก้เองไม่ได้ หน้าโปรไฟล์แสดงแบบอ่านอย่างเดียว · เจ้าหน้าที่แก้ที่นี่และทุกครั้งลง audit log
+                <strong className="font-bold text-gray-800 dark:text-gray-200">รหัสนักศึกษา</strong> นักศึกษาแก้เองไม่ได้ · เกรดสะสมนักศึกษาแก้เองได้ที่หน้าโปรไฟล์ และย้ายสาขาเองได้เฉพาะตอนที่ไม่มีคำร้องค้างอยู่ · เจ้าหน้าที่แก้แทนได้ที่นี่ ระบบบันทึกประวัติการแก้ทุกครั้ง
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -562,7 +584,7 @@ export const ImportScreening: React.FC = () => {
                     id="reg-student-select"
                     value={selectedStudentId ?? ''}
                     onChange={(e) => handleSelectStudentForEdit(Number(e.target.value))}
-                    className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     {registeredStudents.map((st) => (
                       <option key={st.student_id} value={st.student_id}>
@@ -580,7 +602,7 @@ export const ImportScreening: React.FC = () => {
                     id="reg-major-select"
                     value={registryMajorId ?? ''}
                     onChange={(e) => setRegistryMajorId(Number(e.target.value))}
-                    className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   >
                     {majors.map((m) => (
                       <option key={m.major_id} value={m.major_id}>
@@ -602,7 +624,7 @@ export const ImportScreening: React.FC = () => {
                     max="4"
                     value={registryGpa}
                     onChange={(e) => setRegistryGpa(e.target.value)}
-                    className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                   />
                 </div>
               </div>
@@ -615,7 +637,7 @@ export const ImportScreening: React.FC = () => {
                 type="button"
                 onClick={handleUpdateRegistry}
                 disabled={isUpdatingRegistry || !selectedStudentId}
-                className="btn inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+                className="btn inline-flex items-center gap-1.5 pointer-coarse:min-h-11 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
               >
                 <Save className="w-3.5 h-3.5" />
                 {isUpdatingRegistry ? 'กำลังบันทึก...' : 'บันทึกทะเบียน'}
@@ -642,7 +664,7 @@ export const ImportScreening: React.FC = () => {
                 placeholder="เช่น 256410100101-2"
                 value={manualStudentCode}
                 onChange={(e) => setManualStudentCode(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <div>
@@ -655,7 +677,7 @@ export const ImportScreening: React.FC = () => {
                 placeholder="เช่น 3.25"
                 value={manualStudentGpa}
                 onChange={(e) => setManualStudentGpa(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <div>
@@ -668,13 +690,13 @@ export const ImportScreening: React.FC = () => {
                 placeholder="student@rmutto.ac.th"
                 value={manualStudentEmail}
                 onChange={(e) => setManualStudentEmail(e.target.value)}
-                className="w-full text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
+                className="w-full pointer-coarse:min-h-11 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-xl bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-300"
               />
             </div>
             <button
               type="submit"
               disabled={isAddingStudent}
-              className="btn px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+              className="btn pointer-coarse:min-h-11 px-4 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
             >
               {isAddingStudent ? 'กำลังบันทึก...' : 'เพิ่มนักศึกษา'}
             </button>

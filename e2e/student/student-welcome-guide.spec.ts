@@ -96,9 +96,11 @@ test.describe('คำแนะนำขั้นตอนเริ่มต้�
       .waitFor({ state: 'detached', timeout: 10_000 })
       .catch(() => {});
 
-    // ไปถึงหน้าโปรไฟล์จริง — guide เป็นของแดชบอร์ดจึงต้องหายไปด้วย
-    // (หน้าโปรไฟล์ไม่มีแท็บแล้วหลังรีเมค — ใช้หัวหน้า h1 ของหน้าแทน)
-    await expect(page.getByRole('heading', { name: 'ข้อมูลส่วนตัวและเรซูเม่', level: 1 })).toBeVisible();
+    // (2026-10-14) คนที่ยังไม่มีแถว students ถูกพาต่อไปหน้าตั้งโปรไฟล์ — หน้าข้อมูลส่วนตัวแก้ได้แต่สร้างไม่ได้
+    // เดิมหยุดที่หน้าข้อมูลส่วนตัว กรอกครบแล้วกดบันทึกได้ 404 (PUT /profile/student) = ทางตัน ยื่นคำร้องไม่ได้เลย
+    await expect(page).toHaveURL(/\/onboarding\/student/);
+    await expect(page.getByRole('heading', { name: 'ข้อมูลนักศึกษา' })).toBeVisible();
+    await expect(page.getByTestId('onboarding-student-code')).toBeVisible();
     await expect(page.getByText(GUIDE_BADGE)).toHaveCount(0);
   });
 

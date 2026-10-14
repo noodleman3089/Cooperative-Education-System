@@ -139,6 +139,46 @@ test.describe('ปฏิทินสหกิจศึกษา', () => {
     await expect(dialog.locator('li span[title]')).toHaveCount(1);
   });
 
+  // เดิมตั้งช่วงแล้วถอนไม่ได้ — บันทึกค่าว่างถูกปฏิเสธ 400 และแถวมาตรฐานไม่มีปุ่มลบ
+  // ตั้งผิดแถวจึงกลายเป็นด่านที่ล็อกจริงค้างอยู่ ทั้งที่หน้าเดียวกันบอกว่า "ช่องที่เว้นว่าง = ยังไม่ล็อก"
+  test('C1b: ตั้งช่วงแล้วล้างกลับเป็น "ยังไม่ได้ตั้ง" ได้จากหน้าจอ', async ({ page }) => {
+    await seedTestData();
+    const now = await today();
+
+    await loginAs(page, 'staff1');
+    await goToMenu(page, 'calendar');
+
+    // ยังไม่ตั้ง = ไม่มีอะไรให้ล้าง
+    await expect(page.getByTestId('calendar-clear-report_outline')).toHaveCount(0);
+
+    await page.locator('#start-report_outline').fill(shift(now, -3));
+    await page.locator('#end-report_outline').fill(shift(now, 30));
+    await page
+      .locator('li')
+      .filter({ hasText: 'ส่งโครงร่างรายงานการปฏิบัติงาน' })
+      .getByRole('button', { name: 'บันทึก' })
+      .click();
+    await expect(page.getByText(/ยังไม่ได้ตั้งช่วงเวลา 8 กิจกรรม/)).toBeVisible();
+
+    // ล้าง = ต้องผ่านกล่องยืนยันที่บอกชื่อกิจกรรมและผลที่ตามมา
+    await page.getByTestId('calendar-clear-report_outline').click();
+    const dialog = page.getByRole('dialog').filter({ hasText: 'ยืนยันการล้างช่วงเวลา' });
+    await expect(dialog).toContainText('ส่งโครงร่างรายงานการปฏิบัติงาน');
+    await expect(dialog).toContainText('นักศึกษาทำรายการได้ตลอด');
+    expect(
+      await dbValue<number>(`SELECT COUNT(*)::int FROM coop_calendar_events WHERE activity_key = 'report_outline'`)
+    ).toBe(1);
+    await dialog.getByRole('button', { name: 'ล้างช่วงเวลา' }).click();
+
+    await expect(page.getByText(/ล้างช่วงเวลาของ .* แล้ว/)).toBeVisible();
+    await expect(page.getByText(/ยังไม่ได้ตั้งช่วงเวลา 9 กิจกรรม/)).toBeVisible();
+    await expect(page.getByTestId('calendar-clear-report_outline')).toHaveCount(0);
+    await expect(page.locator('#start-report_outline')).toHaveValue('');
+    expect(
+      await dbValue<number>(`SELECT COUNT(*)::int FROM coop_calendar_events WHERE activity_key = 'report_outline'`)
+    ).toBe(0);
+  });
+
   test('C2: fail-open — ยังไม่ตั้งปฏิทิน ต้องทำรายการได้และเมนูต้องไม่มีกุญแจ', async ({
     page,
     request,
