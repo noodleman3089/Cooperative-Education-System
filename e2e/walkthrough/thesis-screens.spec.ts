@@ -144,7 +144,8 @@ test.describe('walkthrough: ภาพหน้าจอบทที่ 4', () =>
   test('thesis-screens', async ({ page, request }) => {
     test.setTimeout(900_000);
     const walk = createWalk('thesis-screens', 'ภาพหน้าจอบทที่ 4 — 26 ภาพที่ยังไม่มีในชุดเดิม', {
-      keep: ONLY.length > 0,
+      // keep เสมอ — โฟลเดอร์นี้ใช้ร่วมกับ `thesis-placement.spec.ts` (ภาพที่มี PDF) · index รวมขั้นเดิมจาก sidecar
+      keep: true,
       notes: [
         'ชื่อไฟล์ = เลขภาพในเล่ม (4.11.png …) · 4.61a/4.61b และ 4.64a/4.64b เป็นสองภาพ',
         'ข้อมูลทั้งหมดเป็นของปลอม (@test.com / @example.com) · ฐานถูกรีเซ็ตแล้วลงชุดเดโม (seedDemo) ก่อนถ่าย',
@@ -256,6 +257,9 @@ test.describe('walkthrough: ภาพหน้าจอบทที่ 4', () =>
 
       // ───────────────────────── พี่เลี้ยง mentor1 ─────────────────────────
       await loginAs(page, 'mentor1');
+      await shoot('4.71', 'พี่เลี้ยง', 'หน้าแรกพี่เลี้ยง — มีบันทึกรอรับรองและนักศึกษาในความดูแล', async () => {
+        await open(page, 'dashboard');
+      });
       await shoot('4.72', 'พี่เลี้ยง', 'รับรองงานนักศึกษา — มีบันทึกรอรับรอง', async () => {
         await open(page, 'certify');
       });
@@ -330,6 +334,9 @@ test.describe('walkthrough: ภาพหน้าจอบทที่ 4', () =>
          ON CONFLICT (semester_id, activity_key) WHERE activity_key IS NOT NULL DO UPDATE
             SET start_date = EXCLUDED.start_date, end_date = EXCLUDED.end_date`
       );
+      await shoot('4.32', 'อาจารย์ที่ปรึกษา', 'หน้าแรกอาจารย์ที่ปรึกษา — มีเล่มรายงานรอตรวจรับ', async () => {
+        await open(page, 'dashboard', 'advisor');
+      });
       await shoot('4.34', 'อาจารย์ที่ปรึกษา', 'ตรวจรับเล่มรายงาน (สหกิจ 14) — เล่มของนักศึกษารอตรวจ (ทางลัด: ไฟล์เล่มเป็นแถวจำลอง)', async () => {
         await open(page, 'final_evaluation', 'advisor');
         await page.getByText('สมหญิง ใจดี').first().click();

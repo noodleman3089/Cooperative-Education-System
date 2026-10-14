@@ -15,7 +15,7 @@ export interface Walk {
   /** ผูกตัวเก็บ console error / pageerror — เรียกกับทุก page ที่ใช้ */
   watch(page: Page): void;
   /** ถ่ายภาพ fullPage หลังการกระทำ + บันทึกขั้น */
-  step(page: Page, who: string, caption: string, opts?: { file?: string }): Promise<void>;
+  step(page: Page, who: string, caption: string, opts?: { file?: string; fullPage?: boolean }): Promise<void>;
   /** เขียน index.html */
   finish(): Promise<void>;
 }
@@ -54,16 +54,34 @@ function pathOf(url: string): string {
   }
 }
 
-/** `keep` = ไม่ล้างภาพเดิมของโฟลว์ (ใช้ตอนถ่ายซ่อมเฉพาะบางภาพ — index.html จะมีเฉพาะภาพของรอบนั้น) */
-export function createWalk(flow: string, title: string, opts: { keep?: boolean; notes?: string[] } = {}): Walk {
+/**
+ * `keep`      = ไม่ล้างภาพเดิมของโฟลว์ และรวมรายการขั้นเดิมจาก sidecar (`<indexName>.json`) เข้ากับรอบนี้ — ถ่ายซ่อมบางภาพได้โดย index ไม่หาย
+ * `indexName` = ชื่อไฟล์ index (ค่าเริ่มต้น index.html) — หลาย spec ใช้โฟลเดอร์เดียวกันได้โดยแต่ละตัวมี index ของตัวเอง
+ * `notes`     = หมายเหตุหัว index (ทางลัด · ข้อจำกัดของภาพ)
+ */
+export function createWalk(
+  flow: string,
+  title: string,
+  opts: { keep?: boolean; notes?: string[]; indexName?: string } = {}
+): Walk {
   const dir = path.join(ROOT_OUT, flow);
   const steps: StepRecord[] = [];
   const pageErrors: string[] = [];
+  const indexName = opts.indexName ?? 'index.html';
+  const sidecar = path.join(dir, indexName.replace(/\.html$/, '.json'));
 
   // ล้างเฉพาะ .png / index.html ของโฟลว์นี้ — ไม่แตะอย่างอื่น ไม่แตะโฟลเดอร์แม่
   fs.mkdirSync(dir, { recursive: true });
   for (const f of opts.keep ? [] : fs.readdirSync(dir)) {
-    if (f === 'index.html' || f.endsWith('.png')) fs.unlinkSync(path.join(dir, f));
+    if (f === indexName || f.endsWith('.png') || f === path.basename(sidecar)) fs.unlinkSync(path.join(dir, f));
+  }
+  let previous: StepRecord[] = [];
+  if (opts.keep) {
+    try {
+      previous = JSON.parse(fs.readFileSync(sidecar, 'utf8')) as StepRecord[];
+    } catch {
+      previous = [];
+    }
   }
 
   /** page.evaluate ที่ทนต่อการนำทางกลางคัน (context ถูกทำลาย) — ลองซ้ำหนึ่งครั้ง */
@@ -143,8 +161,9 @@ export function createWalk(flow: string, title: string, opts: { keep?: boolean; 
       // แอปเลื่อนใน container ข้างใน (main · modal) ไม่ใช่ที่ document — fullPage อย่างเดียวได้แค่ความสูง viewport
       // จึงขยาย viewport ตามส่วนที่ถูกซ่อนในตัวเลื่อน (วัดซ้ำ เพราะ max-h ของ modal อิง vh) แล้วคืนค่าหลังถ่าย
       const original = page.viewportSize();
+      const fullPage = opts?.fullPage !== false;
       try {
-        if (original) {
+        if (original && fullPage) {
           for (let i = 0; i < 4; i++) {
             const hidden = await safeEval(
               page,
@@ -166,7 +185,7 @@ export function createWalk(flow: string, title: string, opts: { keep?: boolean; 
             await page.waitForTimeout(250);
           }
         }
-        await page.screenshot({ path: path.join(dir, file), fullPage: true });
+        await page.screenshot({ path: path.join(dir, file), fullPage });
       } finally {
         if (original) await page.setViewportSize(original);
       }
@@ -183,6 +202,14 @@ export function createWalk(flow: string, title: string, opts: { keep?: boolean; 
     },
 
     async finish() {
+      // รวมขั้นเดิม (ที่ไม่ได้ถ่ายใหม่รอบนี้) เข้ากับขั้นของรอบนี้ แล้วเรียงตามชื่อไฟล์ — เลขขั้นเรียงใหม่ทั้งชุด
+      const fresh = new Set(steps.map((s) => s.file));
+      const merged = [...previous.filter((p) => !fresh.has(p.file)), ...steps].sort((a, b) =>
+        a.file.localeCompare(b.file, 'en', { numeric: true })
+      );
+      steps.length = 0;
+      merged.forEach((m, i) => steps.push({ ...m, n: i + 1 }));
+      fs.writeFileSync(sidecar, JSON.stringify(steps), 'utf8');
       const flagged = steps.filter((s) => s.flags.length > 0).length;
       const created = new Date().toLocaleString('th-TH', { dateStyle: 'long', timeStyle: 'short' });
 
@@ -256,7 +283,7 @@ ${body}
 </body>
 </html>
 `;
-      fs.writeFileSync(path.join(dir, 'index.html'), html, 'utf8');
+      fs.writeFileSync(path.join(dir, indexName), html, 'utf8');
     },
   };
 }
