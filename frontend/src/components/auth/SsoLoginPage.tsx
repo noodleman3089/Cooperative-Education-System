@@ -168,7 +168,8 @@ export const SsoLoginPage: React.FC<SsoLoginPageProps> = ({
                   <button
                     type="button"
                     onClick={() => setActiveTab('sso')}
-                    className="font-bold underline text-brand-navy dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200"
+                    // py-3 -my-3 = พื้นที่กดสูง 44px โดยบรรทัดข้อความไม่ขยับ
+                    className="py-3 -my-3 font-bold underline text-brand-navy dark:text-blue-300 hover:text-blue-700 dark:hover:text-blue-200"
                   >
                     เข้าด้วย Google
                   </button>{' '}

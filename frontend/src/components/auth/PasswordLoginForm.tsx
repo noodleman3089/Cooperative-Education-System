@@ -94,7 +94,8 @@ export const PasswordLoginForm: React.FC<PasswordLoginFormProps> = ({
         <button
           type="button"
           onClick={() => navigate('/forgot-password')}
-          className="text-xs text-brand-blue hover:text-brand-navy font-medium transition-colors dark:text-blue-400 dark:hover:text-blue-300"
+          // py-3 -my-3 = พื้นที่กดสูง 44px โดยข้อความอยู่ที่เดิม
+          className="py-3 -my-3 text-xs text-brand-blue hover:text-brand-navy font-medium transition-colors dark:text-blue-400 dark:hover:text-blue-300"
         >
           ลืมรหัสผ่าน?
         </button>

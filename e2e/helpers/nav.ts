@@ -49,6 +49,7 @@ export type NavId =
   | 'announcements'
   | 'appointments'
   | 'calendar'
+  | 'companies'
   | 'semesters'
   | 'semester_summary'
   | 'users'

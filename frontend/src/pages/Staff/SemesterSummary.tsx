@@ -456,7 +456,8 @@ export const SemesterSummary: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/dashboard?menu=pipeline')}
-                className="shrink-0 text-xs font-bold text-brand-blue hover:underline dark:text-blue-400"
+                // py-3 -my-3 = พื้นที่กดสูง 44px โดยข้อความอยู่ที่เดิม
+                className="shrink-0 py-3 -my-3 text-xs font-bold text-brand-blue hover:underline dark:text-blue-400"
               >
                 เปิดหน้า นักศึกษาตอนนี้
               </button>

@@ -616,47 +616,44 @@ export const FinalProgressDashboard: React.FC = () => {
                                   : ''}
                               </span>
                               {std.placement.can_reopen && (
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
                                   data-testid={`reopen-accepted-${std.studentCode}`}
                                   onClick={() => setReopenTarget(std)}
-                                  className="text-[11px] font-semibold text-brand-blue dark:text-blue-400 hover:underline"
                                 >
                                   ยกเลิกการปิด
-                                </button>
+                                </Button>
                               )}
                             </div>
                           ) : (
-                            <div className="flex flex-col items-end gap-1.5">
+                            // ปุ่มในแถวใช้ ui/Button size sm — บนจอสัมผัสสูง 44px (เดิมเขียนคลาสเอง สูง 17–26px ชิดกัน 6px กดผิดปุ่มง่าย)
+                            <div className="flex flex-col items-end gap-2">
                               {needsMentorReminder ? (
-                                <button
-                                  type="button"
+                                <Button
+                                  size="sm"
                                   onClick={() => setNotifyTarget(std)}
                                   disabled={isCooldownActive(std.lastNotifiedAt) || notifyingMap[std.studentId]}
-                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:opacity-50"
                                 >
                                   เตือนพี่เลี้ยง
-                                </button>
+                                </Button>
                               ) : !complete ? (
-                                <button
-                                  type="button"
-                                  onClick={() => setNotifyTarget(std)}
-                                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors"
-                                >
+                                <Button size="sm" onClick={() => setNotifyTarget(std)}>
                                   ส่งอีเมลเตือน
-                                </button>
+                                </Button>
                               ) : (
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
                                   onClick={() => alert(`ข้อมูลนักศึกษา: ${std.studentName}\nรหัส: ${std.studentCode}\nอาจารย์: ${std.advisorName}\nความคืบหน้า: 100% ครบสมบูรณ์`)}
-                                  className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-50"
                                 >
                                   ดูรายคน
-                                </button>
+                                </Button>
                               )}
                               {std.placement?.status === 'accepted' && (
-                                <button
-                                  type="button"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
                                   data-testid={`close-accepted-${std.studentCode}`}
                                   onClick={() => {
                                     setCloseTarget(std);
@@ -664,10 +661,9 @@ export const FinalProgressDashboard: React.FC = () => {
                                     setCloseReason('');
                                     setCloseError(null);
                                   }}
-                                  className="text-[11px] text-gray-500 hover:text-red-600 dark:text-gray-400 dark:hover:text-red-400 underline transition-colors"
                                 >
                                   ปิดใบที่ฝึก
-                                </button>
+                                </Button>
                               )}
                             </div>
                           )}

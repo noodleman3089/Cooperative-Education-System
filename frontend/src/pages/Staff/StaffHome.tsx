@@ -347,7 +347,8 @@ export const StaffHome: React.FC = () => {
               type="button"
               data-testid="staff-home-pipeline-open"
               onClick={() => go({ menu: 'pipeline' })}
-              className="text-xs font-semibold text-brand-blue hover:underline dark:text-blue-400"
+              // py-3 -my-3 = พื้นที่กดสูง 44px โดยข้อความอยู่ที่เดิม
+              className="py-3 -my-3 text-xs font-semibold text-brand-blue hover:underline dark:text-blue-400"
             >
               ดูรายคน
             </button>
