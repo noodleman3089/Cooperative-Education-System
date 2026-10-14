@@ -101,25 +101,4 @@ router.post(
   StudentController.submitAccommodationAndPlan
 );
 
-// Route: GET /api/students/:id/work-plan (พี่เลี้ยงและอาจารย์เปิดดูก่อนลงนาม)
-router.get(
-  '/:id/work-plan',
-  authorizeRoles('mentor', 'advisor', 'staff', 'dean', 'dept_head'),
-  StudentController.getWorkPlanForReview
-);
-
-// Route: PATCH /api/students/:id/work-plan/approve (Mentor เท่านั้น — สหกิจ 07 หน้า 3 ลงนามแค่นักศึกษา + พี่เลี้ยง)
-router.patch(
-  '/:id/work-plan/approve',
-  authorizeRoles('mentor'),
-  StudentController.approveWorkPlan
-);
-
-// Route: PATCH /api/students/:id/work-plan/reject (Mentor เท่านั้น)
-router.patch(
-  '/:id/work-plan/reject',
-  authorizeRoles('mentor'),
-  StudentController.rejectWorkPlan
-);
-
 export default router;

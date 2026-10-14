@@ -20,7 +20,7 @@ import { walkToSigned, confirmMentor, SAMPLE_MENTOR } from '../helpers/intent';
  *   ถ้านักศึกษาระบุแล้วลิงก์ออกเอง นักศึกษาใส่อีเมลเพื่อนแล้วได้คนประเมินสหกิจ 15 ของตัวเอง
  *
  * รอบแก้ 2026-10-10 (เจ้าของสั่ง): คนยืนยัน = อาจารย์นิเทศ (`supervisor_id`) คนเดียว เจ้าหน้าที่ยืนยันไม่ได้ ไม่มีทางสำรอง
- *   · ระบุพี่เลี้ยงได้เมื่อใบ `accepted` **และถึงวันเริ่มฝึกแล้ว**
+ *   · ระบุพี่เลี้ยงได้เมื่อใบ `accepted` (ปลดล็อกระบุได้ทันที ไม่ต้องรอถึงวันเริ่มฝึก)
  *
  * A1 กดรับได้โดยไม่มีพี่เลี้ยง · ช่องพี่เลี้ยงตอนอัปโหลดถูกเมิน · ไม่ต้องส่งวันเริ่มงาน
  * A2 ระบุได้เฉพาะใบ accepted ของตัวเอง · ก่อนยืนยันบัญชีปิดและไม่มีลิงก์
@@ -28,7 +28,7 @@ import { walkToSigned, confirmMentor, SAMPLE_MENTOR } from '../helpers/intent';
  * A4 ยืนยันแล้ว: บัญชีเปิด มีลิงก์ นักศึกษาแก้ไม่ได้ · ข้อจำกัดระดับบัญชี
  * A5 SEC-03 ทั้งตอนระบุและตอนยืนยัน
  * A6 ปลายน้ำ: ไม่ส่งอีเมลถึงพี่เลี้ยงที่ยังไม่ยืนยัน · หน้าติดตาม/ท่อ/หน้าแรกนักศึกษา/หน้าแรกฝ่ายนิเทศเห็นสามสภาพ
- * A7 ล็อกวันที่: ยังไม่ถึงวันเริ่มฝึก = 409 `internship_not_started` · ถึงแล้ว/ไม่มีวันเริ่ม = ระบุได้
+ * A7 ปลดล็อกวันที่: ใบ accepted ระบุพี่เลี้ยงได้ทันที (200 OK) แม้ยังไม่ถึงวันเริ่มฝึก · หน้าแรก mentor_locked = false
  * A8 นักศึกษาที่ยังไม่มีอาจารย์นิเทศ: ระบุได้ ค้างรอยืนยัน ไม่มีใครยืนยันได้จนกว่าจะจัดสรร
  *
  * การส่งเมลไม่ออกเน็ต (`MAIL_DRY_RUN=true` ใน playwright.config.ts) · ข้อมูลทั้งหมดเป็นของปลอม
@@ -604,60 +604,56 @@ test.describe('พี่เลี้ยงหลังเริ่มฝึก �
     expect(notified.status(), await notified.text()).toBe(200);
   });
 
-  test('A7: ล็อกวันที่ — ใบ accepted ที่ยังไม่ถึงวันเริ่มฝึก = 409 internship_not_started ไม่มีบัญชีพี่เลี้ยงเกิด · วันนี้ ผ่านมาแล้ว หรือไม่มีวันเริ่ม = ระบุได้ · หน้าแรกนักศึกษาได้สถานะล็อกจากเซิร์ฟเวอร์', async ({
+  test('A7: ปลดล็อกระบุพี่เลี้ยงทันทีหลัง accepted — แม้ยังไม่ถึงวันเริ่มฝึก (พรุ่งนี้/อดีต/ไม่มีวันเริ่ม) ก็ระบุได้ทันที 200 OK · หน้าแรกนักศึกษาได้สถานะ mentor_locked เป็น false', async ({
     request,
   }) => {
     test.setTimeout(120_000);
     const formId = await putForm('accepted');
     const [today, tomorrow, yesterday] = [await day(), await day(1), await day(-1)];
-    const usersBefore = await dbValue<string>('SELECT COUNT(*) FROM users');
     const lockOf = async () => {
       await apiLoginAs(request, 'student2');
       const intent = (await (await request.get(`${API_URL}/students/dashboard`)).json()).activeIntent;
       return { locked: intent.mentor_locked, opens_on: intent.mentor_opens_on };
     };
 
-    // พรุ่งนี้เริ่มฝึก = ยังระบุไม่ได้ · ข้อความบอกวันที่เปิด · ไม่มีบัญชีเกิด ใบไม่ถูกแตะ
-    await setStart(formId, tomorrow);
-    const early = await postMentor(request, formId);
-    expect(early.status(), await early.text()).toBe(409);
-    expect(await early.json()).toMatchObject({ code: 'internship_not_started', opens_on: tomorrow });
-    expect((await early.json()).message).toContain('ยังไม่ถึงวันเริ่มปฏิบัติงาน');
-    expect(await mentorIdOf(formId)).toBeNull();
-    expect(await dbValue<string>('SELECT COUNT(*) FROM users')).toBe(usersBefore);
-    expect(await dbValue<string>('SELECT COUNT(*) FROM users WHERE email = $1', [MENTOR_EMAIL])).toBe('0');
-    expect(await stagesOf(formId)).toEqual([]);
-    expect(await lockOf()).toEqual({ locked: true, opens_on: tomorrow });
-
-    // ใบที่ยังไม่ accepted = ล็อก แต่ไม่มีวันเปิดให้บอก (ยังไม่รู้ว่าจะได้ที่ฝึกไหม)
+    // ใบที่ยังไม่ accepted = ล็อก (ยังไม่รู้ว่าจะได้ที่ฝึกไหม)
     await dbExec("UPDATE intent_forms SET status = 'pending_officer_approval' WHERE form_id = $1", [formId]);
     expect(await lockOf()).toEqual({ locked: true, opens_on: null });
     await dbExec("UPDATE intent_forms SET status = 'accepted' WHERE form_id = $1", [formId]);
 
-    // ไม่มีวันเริ่ม (ปฏิทินไม่ได้ตั้ง) = ไม่ล็อกด้วยวันที่ — เดาผิดคือปิดใส่นักศึกษาทั้งรุ่น
+    // พรุ่งนี้เริ่มฝึก = สถานะ accepted แล้ว สามารถระบุพี่เลี้ยงล่วงหน้าได้ทันที (200 OK)
+    await setStart(formId, tomorrow);
+    expect(await lockOf()).toEqual({ locked: false, opens_on: null });
+    const early = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-early@example.com' }));
+    expect(early.status(), await early.text()).toBe(200);
+    expect(await mentorIdOf(formId)).toBe((await account('mentor-a7-early@example.com'))!.user_id);
+    expect(await stagesOf(formId)).toEqual(['mentor_set']);
+
+    // ไม่มีวันเริ่ม (ปฏิทินไม่ได้ตั้ง) = ไม่ล็อกด้วยวันที่ และระบุได้ (แก้คนเดิมได้ตราบที่ยังไม่ถูกยืนยัน)
     await setStart(formId, null);
     expect(await lockOf()).toEqual({ locked: false, opens_on: null });
     const noDate = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-nodate@example.com' }));
     expect(noDate.status(), await noDate.text()).toBe(200);
 
-    // วันนี้คือวันเริ่มฝึก = ระบุได้ (แก้คนเดิมได้ตราบที่ยังไม่ถูกยืนยัน)
+    // วันนี้คือวันเริ่มฝึก = ระบุได้
     await setStart(formId, today);
     expect(await lockOf()).toEqual({ locked: false, opens_on: null });
     const onDay = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-today@example.com' }));
     expect(onDay.status(), await onDay.text()).toBe(200);
 
-    // เริ่มฝึกไปแล้ว = ระบุได้
+    // เริ่มฝึกไปแล้ว (เมื่อวาน) = ระบุได้
     await setStart(formId, yesterday);
-    const after = await postMentor(request, formId);
+    expect(await lockOf()).toEqual({ locked: false, opens_on: null });
+    const after = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-yesterday@example.com' }));
     expect(after.status(), await after.text()).toBe(200);
-    expect(await mentorIdOf(formId)).toBe((await account(MENTOR_EMAIL))!.user_id);
+    expect(await mentorIdOf(formId)).toBe((await account('mentor-a7-yesterday@example.com'))!.user_id);
 
-    // ระบุไว้แล้วแต่เจ้าหน้าที่เลื่อนวันเริ่มออกไป (แก้ตอนออกหนังสือส่งตัว) = แก้พี่เลี้ยงไม่ได้จนถึงวันใหม่ · คนเดิมยังอยู่
+    // แม้วันเริ่มฝึกจะถูกเลื่อนออกไปในอนาคต (พรุ่งนี้) = แก้พี่เลี้ยงได้ทันที ไม่ถูก 409 บล็อก
     await setStart(formId, tomorrow);
+    expect(await lockOf()).toEqual({ locked: false, opens_on: null });
     const relocked = await postMentor(request, formId, mentorBody({ email: 'mentor-a7-late@example.com' }));
-    expect(relocked.status(), await relocked.text()).toBe(409);
-    expect((await relocked.json()).code).toBe('internship_not_started');
-    expect(await mentorIdOf(formId)).toBe((await account(MENTOR_EMAIL))!.user_id);
+    expect(relocked.status(), await relocked.text()).toBe(200);
+    expect(await mentorIdOf(formId)).toBe((await account('mentor-a7-late@example.com'))!.user_id);
   });
 
   test('A8: นักศึกษาที่ยังไม่มีอาจารย์นิเทศ — ระบุพี่เลี้ยงได้ แต่ค้างรอยืนยัน ไม่มีใครยืนยันได้ (รวมเจ้าหน้าที่) จนหัวหน้าสาขาจัดสรร แล้วอาจารย์นิเทศคนนั้นยืนยันได้', async ({

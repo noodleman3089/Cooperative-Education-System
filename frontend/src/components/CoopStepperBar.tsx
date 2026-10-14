@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
 export interface MilestoneSubStep {
   id: string;
@@ -31,10 +31,11 @@ const CoopStepperBar: React.FC<CoopStepperBarProps> = ({ phases, activePhaseId }
   // State for expanding/collapsing the sub-stepper detail view
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
 
-  // Logic Lens Fix: Synchronize selectedPhaseId when activePhaseId prop updates from parent
-  useEffect(() => {
+  const [prevActivePhaseId, setPrevActivePhaseId] = useState(activePhaseId);
+  if (activePhaseId !== prevActivePhaseId) {
+    setPrevActivePhaseId(activePhaseId);
     setSelectedPhaseId(activePhaseId);
-  }, [activePhaseId]);
+  }
 
   const handleSelectPhase = (phaseId: number) => {
     setSelectedPhaseId(phaseId);

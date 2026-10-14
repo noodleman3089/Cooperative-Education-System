@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { useDashboardData } from '../../hooks/useDashboardData';
@@ -75,8 +75,6 @@ const MentorEvaluation: React.FC = () => {
   const formParam = searchParams.get('form');
 
   const [students, setStudents] = useState<Student[]>([]);
-  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
-  const [activeForm, setActiveForm] = useState<FormCode>('sahatkit_15');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -91,6 +89,33 @@ const MentorEvaluation: React.FC = () => {
   const [wouldHire, setWouldHire] = useState('');
   const [reportTitleTh, setReportTitleTh] = useState('');
   const [reportTitleEn, setReportTitleEn] = useState('');
+
+  const selectedStudent = useMemo(() => {
+    if (!studentParam) return null;
+    return (
+      students.find(
+        (s) => String(s.student_id) === studentParam || s.student_code === studentParam
+      ) ?? null
+    );
+  }, [students, studentParam]);
+
+  const activeForm: FormCode =
+    formParam === '16' || formParam === 'sahatkit_16' ? 'sahatkit_16' : 'sahatkit_15';
+
+  // Reset form state when active student or form changes (React render-phase state adjustment)
+  const [prevFormTarget, setPrevFormTarget] = useState<string>('');
+  const currentFormTarget = `${studentParam || ''}-${activeForm}`;
+  if (currentFormTarget !== prevFormTarget) {
+    setPrevFormTarget(currentFormTarget);
+    setScores(blankScores(FORM_META[activeForm].items));
+    setStrength('');
+    setImprovement('');
+    setComments('');
+    setWouldHire('');
+    setReportTitleTh('');
+    setReportTitleEn('');
+    setError(null);
+  }
 
   const meta = FORM_META[activeForm];
   const unscored = meta.items.filter((item) => scores[item.key] === '' || scores[item.key] === undefined);
@@ -126,22 +151,9 @@ const MentorEvaluation: React.FC = () => {
 
   useDashboardData(loadStudents, []);
 
-  const resetForm = (form: FormCode) => {
-    setScores(blankScores(FORM_META[form].items));
-    setStrength('');
-    setImprovement('');
-    setComments('');
-    setWouldHire('');
-    setReportTitleTh('');
-    setReportTitleEn('');
-  };
-
   const handleSelectStudent = (student: Student) => {
-    setSelectedStudent(student);
     setSuccess(null);
     setError(null);
-    setActiveForm('sahatkit_15');
-    resetForm('sahatkit_15');
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -154,10 +166,8 @@ const MentorEvaluation: React.FC = () => {
   };
 
   const handleSwitchForm = (form: FormCode) => {
-    setActiveForm(form);
     setError(null);
     setSuccess(null);
-    resetForm(form);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -169,7 +179,6 @@ const MentorEvaluation: React.FC = () => {
   };
 
   const handleBackToList = () => {
-    setSelectedStudent(null);
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -180,43 +189,6 @@ const MentorEvaluation: React.FC = () => {
       { replace: true }
     );
   };
-
-  // ponytail: auto-select student and form from deep-link query params (?student=<id>&form=15|16)
-  useEffect(() => {
-    if (!studentParam) {
-      if (selectedStudent) {
-        setSelectedStudent(null);
-      }
-      return;
-    }
-    if (students.length === 0) return;
-
-    const targetForm: FormCode =
-      formParam === '16' || formParam === 'sahatkit_16' ? 'sahatkit_16' : 'sahatkit_15';
-
-    const matched = students.find(
-      (s) => String(s.student_id) === studentParam || s.student_code === studentParam
-    );
-    if (!matched) return;
-
-    if (!selectedStudent || selectedStudent.student_id !== matched.student_id) {
-      setSelectedStudent(matched);
-      setActiveForm(targetForm);
-      resetForm(targetForm);
-    } else {
-      if (
-        selectedStudent.final_report_status !== matched.final_report_status ||
-        selectedStudent.sahatkit15_score !== matched.sahatkit15_score ||
-        selectedStudent.sahatkit16_score !== matched.sahatkit16_score
-      ) {
-        setSelectedStudent(matched);
-      }
-      if (activeForm !== targetForm) {
-        setActiveForm(targetForm);
-        resetForm(targetForm);
-      }
-    }
-  }, [studentParam, formParam, students, selectedStudent, activeForm]);
 
   const handleScoreChange = (key: string, val: number | '') =>
     setScores((prev) => ({ ...prev, [key]: val }));

@@ -141,7 +141,7 @@ export class PersonnelController {
           c.name_th as company_name, c.address as company_address, c.province as company_province, c.district as company_district, c.google_place_id,
           m.name as mentor_name, m.phone as mentor_phone,
           a.house_no, a.building, a.room_no, a.soi, a.road,
-          a.subdistrict, a.district, a.province, a.postal_code, a.address_legacy,
+          a.subdistrict, a.district, a.province, a.postal_code,
           a.latitude as accommodation_lat, a.longitude as accommodation_lng,
           a.phone as accommodation_phone, a.mobile_phone as accommodation_mobile,
           s.emergency_contact_name AS emergency_contact, s.emergency_relationship, s.emergency_phone,

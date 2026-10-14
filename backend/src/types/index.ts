@@ -34,7 +34,6 @@ export interface Student {
   advisor_last_name?: string | null;
   province_id: number | null;
   cumulative_gpa: number | null;
-  claimed_gpa?: number | null;
   section?: string | null;
   resume_file: string | null;
   /** path สัมพัทธ์ใต้ `uploads/` เหมือน resume_file — NULL = ยังไม่เคยอัปโหลด */
@@ -176,24 +175,15 @@ export interface SubmitIntentBody {
 
 // Sprint 3 Entities
 
-export interface DocumentTemplate {
-  template_id: number;
-  name: string;
-  file_path: string;
-  type: string;
-}
-
 export interface OfficialDocument {
   doc_id: number;
   document_number?: string | null;
   type: string;
   student_id: number;
   company_id: number;
-  template_id: number;
   generated_file_path: string | null;
   status: 'created' | 'pending_sign' | 'signed' | 'rejected';
   dean_signature_date: Date | string | null;
-  docusign_envelope_id?: string | null;
 }
 
 // Sprint 3 Request Bodies
@@ -202,12 +192,6 @@ export interface UpdateCompanyContactInfoBody {
   contact_person: string;
   contact_position: string;
   email: string;
-}
-
-export interface GenerateDocumentBody {
-  student_id: number;
-  company_id: number;
-  template_id: number;
 }
 
 export interface BatchSignDocumentsBody {

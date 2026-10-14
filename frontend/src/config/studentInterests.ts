@@ -54,12 +54,6 @@ export const MAJOR_RECOMMENDED_JOBS: Record<string, readonly string[]> = {
     'งานวิจัยและพัฒนา (R&D)',
     'งานเอกสารและธุรการ (Admin)',
   ],
-  CPE01: [
-    'งานวิศวกรรม (Engineering)',
-    'งานไอทีและโปรแกรมมิ่ง (IT/Programming)',
-    'งานโรงงานและฝ่ายผลิต (Production)',
-    'งานวิจัยและพัฒนา (R&D)',
-  ],
   MM01: [
     'งานออกแบบ (Design)',
     'งานไอทีและโปรแกรมมิ่ง (IT/Programming)',

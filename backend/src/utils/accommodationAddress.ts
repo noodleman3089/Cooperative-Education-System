@@ -20,8 +20,6 @@ export interface AccommodationAddressParts {
   district?: string | null;
   province?: string | null;
   postal_code?: string | null;
-  /** ค่าเก่าก่อนแตกช่อง — ใช้เมื่อยังไม่มีใครกรอกช่องย่อย */
-  address_legacy?: string | null;
 }
 
 const clean = (v: string | null | undefined): string => (v ?? '').trim();
@@ -55,9 +53,7 @@ export function formatAccommodationAddress(
     clean(a.postal_code),
   ].filter(Boolean);
 
-  // ยังไม่มีใครกรอกช่องย่อย = แถวเก่าก่อน 2026-09-03 → คืนค่าเดิมไปก่อน
-  // ดีกว่าคืนค่าว่างแล้วอาจารย์นิเทศเห็นว่า "ไม่มีที่พัก" ทั้งที่มีข้อมูลอยู่
-  return parts.length > 0 ? parts.join(' ') : clean(a.address_legacy);
+  return parts.join(' ');
 }
 
 /**

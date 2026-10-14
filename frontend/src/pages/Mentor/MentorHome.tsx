@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import Button from '../../components/ui/Button';
@@ -11,14 +11,13 @@ import {
   Clock,
   AlertTriangle,
   FileText,
-  Calendar,
   Info,
   ArrowRight,
   ClipboardList,
 } from 'lucide-react';
 
 interface PendingItem {
-  kind: 'weekly_log' | 'monthly_log' | 'daily_log' | 'work_plan' | 'report_outline' | 'report_draft';
+  kind: 'weekly_log' | 'monthly_log' | 'daily_log' | 'report_outline' | 'report_draft';
   id: number;
   student_id: number;
   student_name: string;
@@ -63,25 +62,28 @@ const MentorHome: React.FC = () => {
   const [sortBy, setSortBy] = useState<'longest' | 'student' | 'kind'>('longest');
   const [togglingStudentId, setTogglingStudentId] = useState<number | null>(null);
 
-  // Load pending queue and students
-  const loadData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await api.get('/mentor/pending');
-      setItems(res?.items || []);
-      setStudents(res?.students || []);
-    } catch (err) {
-      console.error('Failed to load mentor pending items:', err);
-      setError(getErrorMessage(err, 'ไม่สามารถโหลดรายการที่รอรับรองได้ กรุณาลองใหม่อีกครั้ง'));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api.get('/mentor/pending');
+        if (cancelled) return;
+        setItems(res?.items || []);
+        setStudents(res?.students || []);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to load mentor pending items:', err);
+        setError(getErrorMessage(err, 'ไม่สามารถโหลดรายการที่รอรับรองได้ กรุณาลองใหม่อีกครั้ง'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Handle Sort
   const sortedItems = useMemo(() => {
@@ -106,9 +108,7 @@ const MentorHome: React.FC = () => {
 
   // Navigate to item target screen
   const handleOpenItem = (item: PendingItem) => {
-    if (item.kind === 'work_plan') {
-      setSearchParams({ role: 'mentor', menu: 'certify', student: String(item.student_id), tab: 'plan' });
-    } else if (item.kind === 'report_draft') {
+    if (item.kind === 'report_draft') {
       setSearchParams({ role: 'mentor', menu: 'certify', student: String(item.student_id), tab: 'draft' });
     } else if (item.kind === 'report_outline') {
       setSearchParams({ role: 'mentor', menu: 'report_outlines' });
@@ -275,8 +275,6 @@ const MentorHome: React.FC = () => {
                         <span className="text-brand-blue dark:text-blue-400 font-semibold">{item.student_name}</span>
                       </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-                        {item.kind === 'work_plan' &&
-                          `นักศึกษาลงชื่อแล้วเมื่อ ${formatThaiDate(item.submitted_at)} · กำหนดลงนามภายในสัปดาห์ที่ 2 ของการปฏิบัติงาน`}
                         {item.kind === 'weekly_log' &&
                           `ช่วงวันที่ ${formatThaiDate(item.period_start)} – ${formatThaiDate(item.period_end)} · รับรองรวดเดียวได้จากหน้าถัดไป`}
                         {item.kind === 'monthly_log' &&
@@ -294,15 +292,13 @@ const MentorHome: React.FC = () => {
                   {/* Open action button */}
                   <div className="shrink-0 flex sm:justify-end">
                     <Button
-                      variant={overdue || item.kind === 'work_plan' || item.kind === 'weekly_log' ? 'primary' : 'secondary'}
+                      variant={overdue || item.kind === 'weekly_log' ? 'primary' : 'secondary'}
                       size="sm"
                       data-testid="mentor-queue-open"
                       onClick={() => handleOpenItem(item)}
                       className="gap-1.5 w-full sm:w-auto shadow-xs"
                     >
-                      {item.kind === 'work_plan'
-                        ? 'เปิดตรวจและลงนาม'
-                        : item.kind === 'report_outline'
+                      {item.kind === 'report_outline'
                         ? 'เปิดพิจารณา'
                         : item.kind === 'report_draft'
                         ? 'เปิดตรวจร่างรายงาน'
@@ -460,22 +456,6 @@ const MentorHome: React.FC = () => {
                     >
                       <ClipboardList className="w-3.5 h-3.5 mr-1" />
                       รับรองบันทึก
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() =>
-                        setSearchParams({
-                          role: 'mentor',
-                          menu: 'certify',
-                          student: String(st.student_id),
-                          tab: 'plan',
-                        })
-                      }
-                      className="text-xs"
-                    >
-                      <Calendar className="w-3.5 h-3.5 mr-1" />
-                      แผนปฏิบัติงาน
                     </Button>
                     <Button
                       variant="secondary"

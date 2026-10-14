@@ -6,8 +6,9 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import { AuthContext } from '../../context/authContextValue';
 import api from '../../services/api';
 import type { IntentForm, StudentRow } from '../../types/api';
-import { Search, Calendar, Check, AlertCircle } from 'lucide-react';
+import { Search, Calendar, AlertCircle } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import IntentReviewModal from '../../components/IntentReviewModal';
 import { getErrorMessage } from '../../utils/errors';
@@ -54,26 +55,6 @@ interface DailyLogItem {
   mentor_certified_at?: string | null;
 }
 
-interface WorkPlanTopic {
-  topic_id: number;
-  seq: number;
-  topic: string;
-  months: number[];
-}
-
-interface WorkPlanData {
-  student: {
-    student_id: number;
-    student_code: string;
-    full_name: string;
-    company_name?: string | null;
-  };
-  months: Array<{ index: number; year: number; month: number; name?: string }>;
-  topics: WorkPlanTopic[];
-  weekly: Array<{ week_number: number; tasks?: string | null }>;
-  student_signed_at?: string | null;
-}
-
 interface DailyLogResponse {
   intent?: {
     daily_log_required?: boolean;
@@ -106,7 +87,9 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
   // Scope: 'mine' (default) vs 'major'
   const scope = searchParams.get('scope') === 'major' ? 'major' : 'mine';
-  const activeTab = searchParams.get('tab') || 'weekly';
+  const tabParam = searchParams.get('tab');
+  const activeTab: 'weekly' | 'monthly' | 'daily' =
+    tabParam === 'monthly' ? 'monthly' : tabParam === 'daily' ? 'daily' : 'weekly';
 
   const [intents, setIntents] = useState<IntentForm[]>([]);
   const [students, setStudents] = useState<StudentRow[]>([]);
@@ -129,7 +112,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
   const [weeklyLogs, setWeeklyLogs] = useState<WeeklyLogItem[]>([]);
   const [monthlyLogs, setMonthlyLogs] = useState<MonthlyLogItem[]>([]);
   const [dailyData, setDailyData] = useState<DailyLogResponse | null>(null);
-  const [workPlan, setWorkPlan] = useState<WorkPlanData | null>(null);
 
   const loadData = useCallback(async (isBackground = false) => {
     try {
@@ -171,9 +153,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
         } else if (activeTab === 'daily') {
           const res = await api.get(`/daily-logs/student/${selectedStudentId}`);
           if (!cancelled) setDailyData(res || null);
-        } else if (activeTab === 'plan') {
-          const res = await api.get(`/students/${selectedStudentId}/work-plan`);
-          if (!cancelled) setWorkPlan(res || null);
         }
         if (!cancelled) {
           setPanelError(null);
@@ -233,7 +212,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
       setWeeklyLogs([]);
       setMonthlyLogs([]);
       setDailyData(null);
-      setWorkPlan(null);
     }
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -247,7 +225,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     setWeeklyLogs([]);
     setMonthlyLogs([]);
     setDailyData(null);
-    setWorkPlan(null);
     setPanelError(null);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -266,7 +243,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     });
   };
 
-  const handleTabChange = (newTab: string) => {
+  const handleTabChange = (newTab: 'weekly' | 'monthly' | 'daily') => {
     if (newTab !== activeTab) {
       setPanelLoading(true);
       setPanelError(null);
@@ -442,9 +419,10 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                             </div>
                           ) : studentIntent ? (
                             <div>
-                              <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
-                                {intentDisplayStatus(studentIntent.status, studentIntent.cover_letter_status)}
-                              </span>
+                              <StatusBadge
+                                status={intentDisplayStatus(studentIntent.status, studentIntent.cover_letter_status)}
+                                domain="intent"
+                              />
                             </div>
                           ) : (
                             <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
@@ -499,7 +477,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                 ) : (
                   <tr>
                     <td colSpan={isSupervisorView ? 6 : 4} className="py-10 text-center text-gray-500 dark:text-gray-400 text-xs">
-                      ไม่พบข้อมูลนักศึกษาที่ตรงตามเงื่อนไข
+                      {error ? 'เกิดข้อผิดพลาดในการโหลดข้อมูลรายชื่อนักศึกษา' : 'ไม่พบข้อมูลนักศึกษาที่ตรงตามเงื่อนไข'}
                     </td>
                   </tr>
                 )}
@@ -602,18 +580,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                   }`}
                 >
                   รายวัน (08)
-                </button>
-                <button
-                  type="button"
-                  data-testid="advisor-student-tab-plan"
-                  onClick={() => handleTabChange('plan')}
-                  className={`pb-2.5 px-3 border-b-2 font-sans cursor-pointer transition-colors whitespace-nowrap ${
-                    activeTab === 'plan'
-                      ? 'border-[#2563EB] text-[#1E3A8A] dark:text-blue-400 font-bold'
-                      : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-                  }`}
-                >
-                  แผนงาน (07)
                 </button>
               </div>
             </div>
@@ -769,7 +735,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                     อ่านอย่างเดียว · การรับรองรายงานเป็นของพนักงานที่ปรึกษา
                   </p>
                 </div>
-              ) : activeTab === 'daily' ? (
+              ) : (
                 /* Tab 3: Daily Logs */
                 <div className="space-y-3">
                   {dailyData?.intent && dailyData.intent.daily_log_required === false ? (
@@ -808,69 +774,6 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                   )}
                   <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
                     อ่านอย่างเดียว · การรับรองรายงานเป็นของพนักงานที่ปรึกษา
-                  </p>
-                </div>
-              ) : (
-                /* Tab 4: Work Plan (07 Page 3) */
-                <div className="space-y-3">
-                  <div className="text-xs font-bold text-gray-800 dark:text-gray-200">
-                    แผนปฏิบัติงานสหกิจศึกษา (สหกิจ 07 หน้า 3)
-                  </div>
-                  {workPlan?.topics && workPlan.topics.length > 0 ? (
-                    <div className="space-y-3">
-                      <div className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden">
-                        <table className="w-full text-xs text-left">
-                          <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-                            <tr>
-                              <th className="py-2.5 px-3 text-center font-bold text-gray-600 dark:text-gray-300 w-8">#</th>
-                              <th className="py-2.5 px-3 font-bold text-gray-600 dark:text-gray-300">หัวข้องาน</th>
-                              {workPlan.months?.map((m) => (
-                                <th key={m.index} className="py-2.5 px-2 text-center font-bold text-gray-600 dark:text-gray-300">
-                                  {m.name || `เดือน ${m.index}`}
-                                </th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {workPlan.topics.map((t) => (
-                              <tr key={t.seq} data-testid={`plan-topic-${t.seq}`} className="hover:bg-gray-50/50 dark:hover:bg-gray-800/30">
-                                <td className="py-2.5 px-3 text-center font-bold text-gray-600 dark:text-gray-400">{t.seq}</td>
-                                <td className="py-2.5 px-3 font-medium text-gray-800 dark:text-gray-200">{t.topic}</td>
-                                {workPlan.months?.map((m) => {
-                                  const isMarked = t.months.includes(m.index);
-                                  return (
-                                    <td key={m.index} data-testid={`plan-cell-${t.seq}-${m.index}`} className="py-2.5 px-2 text-center">
-                                      {isMarked ? (
-                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-md bg-blue-50 dark:bg-blue-950/40 text-brand-blue dark:text-blue-400">
-                                          <Check className="w-3.5 h-3.5 stroke-[3]" />
-                                        </span>
-                                      ) : (
-                                        <span className="text-gray-300 dark:text-gray-400 font-bold">–</span>
-                                      )}
-                                    </td>
-                                  );
-                                })}
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Student confirmation status */}
-                      {workPlan.student_signed_at && (
-                        <div className="p-3 bg-green-50/50 dark:bg-green-950/20 border border-green-200 dark:border-green-900/40 rounded-xl text-xs text-green-700 dark:text-green-300 flex items-center gap-1.5">
-                          <Check className="h-4 w-4 text-green-600 shrink-0" />
-                          นักศึกษายืนยันแผนการปฏิบัติงานนี้เรียบร้อยแล้ว
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="py-10 text-center text-xs text-gray-500 dark:text-gray-400">
-                      นักศึกษายังไม่ได้จัดทำแผนปฏิบัติงาน (สหกิจ 07 หน้า 3)
-                    </div>
-                  )}
-                  <p className="text-[13px] text-gray-500 dark:text-gray-400 mt-1">
-                    อ่านอย่างเดียว · แผนงาน สหกิจ 07 หน้า 3 ลงนามโดยนักศึกษาและพนักงานที่ปรึกษา (ไม่มีปุ่มรับรอง)
                   </p>
                 </div>
               )}

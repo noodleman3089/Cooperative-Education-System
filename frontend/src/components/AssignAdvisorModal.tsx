@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import api from '../services/api';
 import AlertBanner from './ui/AlertBanner';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
@@ -54,13 +54,15 @@ const AssignAdvisorModal: React.FC<AssignAdvisorModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
     if (isOpen) {
       setSelectedAdvisorId(initialAdvisorId);
       setSelectedSupervisorId(initialSupervisorId);
       setError(null);
     }
-  }, [isOpen, initialAdvisorId, initialSupervisorId]);
+  }
 
   const handleAssignSubmit = async () => {
     if (selectedAdvisorId === '' || selectedSupervisorId === '') {

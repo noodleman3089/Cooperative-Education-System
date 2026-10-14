@@ -4,7 +4,7 @@ import { Student } from '../types';
 export class StudentModel {
   static async findByStudentId(studentId: number): Promise<Student | null> {
     const res = await query(
-      `SELECT s.student_id, s.student_code, s.major_id, s.province_id, s.cumulative_gpa, s.claimed_gpa, s.section,
+      `SELECT s.student_id, s.student_code, s.major_id, s.province_id, s.cumulative_gpa, s.section,
               s.resume_file, s.profile_image, s.advisor_id, s.supervisor_id,
               s.name_prefix, s.first_name, s.last_name, s.nickname, s.year_level, s.birth_date, s.alt_email, s.phone,
               s.current_address, s.parent_name, s.parent_phone, s.enrollment_year,

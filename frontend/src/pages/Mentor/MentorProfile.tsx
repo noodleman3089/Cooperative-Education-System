@@ -45,34 +45,37 @@ const MentorProfile: React.FC = () => {
   const [department, setDepartment] = useState('');
   const [phone, setPhone] = useState('');
 
-  const loadProfile = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const res = await api.get('/profile/me');
-      const prof: MentorProfileData | undefined = res.profile;
-      if (prof) {
-        setProfile(prof);
-        setName(prof.name || '');
-        setPosition(prof.position || '');
-        setDepartment(prof.department || '');
-        setPhone(prof.phone || '');
-      }
-    } catch (err) {
-      console.error('Failed to load mentor profile:', err);
-      setError(
-        getErrorStatus(err) === 404
-          ? 'ยังไม่พบข้อมูลพี่เลี้ยงของบัญชีนี้ในระบบ กรุณาติดต่อผู้ประสานงานของสถานประกอบการ'
-          : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadProfile();
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api.get('/profile/me');
+        if (cancelled) return;
+        const prof: MentorProfileData | undefined = res.profile;
+        if (prof) {
+          setProfile(prof);
+          setName(prof.name || '');
+          setPosition(prof.position || '');
+          setDepartment(prof.department || '');
+          setPhone(prof.phone || '');
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to load mentor profile:', err);
+        setError(
+          getErrorStatus(err) === 404
+            ? 'ยังไม่พบข้อมูลพี่เลี้ยงของบัญชีนี้ในระบบ กรุณาติดต่อผู้ประสานงานของสถานประกอบการ'
+            : 'ไม่สามารถเรียกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {

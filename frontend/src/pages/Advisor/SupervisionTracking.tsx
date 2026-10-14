@@ -4,12 +4,11 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import api from '../../services/api';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import { AuthContext } from '../../context/authContextValue';
-import { MapPin, Calendar, Send, ChevronDown, ChevronUp, Printer } from 'lucide-react';
+import { MapPin, Calendar, Send, Printer } from 'lucide-react';
 import SupervisionLogForm from './SupervisionLogForm';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import { getErrorMessage } from '../../utils/errors';
-import type { WeeklyPlan } from '../../types/api';
 
 /** นักศึกษาในความดูแล พร้อมข้อมูลที่พักและแผนงาน สำหรับวางแผนนิเทศ */
 interface SupervisedStudent {
@@ -33,7 +32,6 @@ interface SupervisedStudent {
   accommodation_maps_link?: string | null;
   emergency_contact?: string | null;
   emergency_phone?: string | null;
-  weekly_plans?: WeeklyPlan[];
 }
 
 /** นัดหมายนิเทศหนึ่งครั้ง เท่าที่หน้าจอนี้อ่าน */
@@ -117,9 +115,6 @@ const SupervisionTracking: React.FC = () => {
 
   // Scope: 'mine' (supervisor of student) vs 'advisor_only'
   const [scope, setScope] = useState<'mine' | 'advisor_only'>('mine');
-
-  // Expanded weekly plan accordion per student ID
-  const [expandedPlans, setExpandedPlans] = useState<Record<number, boolean>>({});
 
   // Which appointment the "agreed out of band" confirmation is asking about.
   const [bypassingId, setBypassingId] = useState<number | null>(null);
@@ -316,10 +311,6 @@ const SupervisionTracking: React.FC = () => {
       next.set('visit', visit.toString());
       return next;
     });
-  };
-
-  const toggleExpandPlan = (studentId: number) => {
-    setExpandedPlans(prev => ({ ...prev, [studentId]: !prev[studentId] }));
   };
 
   // Filter students based on role scope
@@ -963,46 +954,6 @@ const SupervisionTracking: React.FC = () => {
                         </button>
                       </div>
                     </div>
-                  </div>
-                )}
-
-                {/* Collapsible Weekly Plans (System 3) for backwards compatibility with E2E */}
-                {student.weekly_plans && student.weekly_plans.length > 0 && (
-                  <div className="border-t border-gray-100 dark:border-gray-800 p-4 bg-gray-50/30 dark:bg-gray-900/30">
-                    <button
-                      type="button"
-                      onClick={() => toggleExpandPlan(student.student_id)}
-                      className="flex items-center justify-between w-full text-left text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                    >
-                      <span>แผนปฏิบัติงานรายสัปดาห์: ({student.weekly_plans.length} สัปดาห์)</span>
-                      {expandedPlans[student.student_id] ? (
-                        <ChevronUp className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-gray-400 dark:text-gray-500" />
-                      )}
-                    </button>
-
-                    {expandedPlans[student.student_id] && (
-                      <div className="mt-3 max-h-[160px] overflow-y-auto border border-gray-200 dark:border-gray-800 rounded-xl divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-800">
-                        {student.weekly_plans.map((p: WeeklyPlan) => (
-                          <div key={p.plan_id} className="p-2.5 text-xs flex justify-between gap-4">
-                            <div>
-                              <span className="font-bold block text-gray-700 dark:text-gray-300">
-                                สัปดาห์ที่ {p.week_number}
-                              </span>
-                              <span className="text-gray-500 dark:text-gray-400 block mt-0.5">
-                                {p.tasks}
-                              </span>
-                            </div>
-                            <span className="text-[11px] text-gray-500 dark:text-gray-400 self-start whitespace-nowrap">
-                              {p.start_date && p.end_date
-                                ? `${new Date(p.start_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })} - ${new Date(p.end_date).toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })}`
-                                : ''}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </div>

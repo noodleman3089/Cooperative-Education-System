@@ -41,7 +41,6 @@ export interface AccommodationFormData {
   district: string | null;
   province: string | null;
   postal_code: string | null;
-  address_legacy: string | null;
   phone: string | null;
   mobile_phone: string | null;
   fax: string | null;
@@ -63,7 +62,7 @@ export async function fetchAccommodationFormData(
             c.name_th  AS company_name_th,
             c.address  AS company_address,
             a.house_no, a.building, a.room_no, a.soi, a.road,
-            a.subdistrict, a.district, a.province, a.postal_code, a.address_legacy,
+            a.subdistrict, a.district, a.province, a.postal_code,
             a.phone, a.mobile_phone, a.fax, a.email,
             a.latitude::text AS latitude, a.longitude::text AS longitude,
             s.emergency_contact_name, s.emergency_relationship, s.emergency_phone

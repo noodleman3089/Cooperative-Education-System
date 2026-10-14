@@ -1377,7 +1377,7 @@ const StudentDashboard: React.FC = () => {
       )}
 
       {/* สองใบนี้คือสิ่งที่นักศึกษาถามบ่อยที่สุดหลังจาก "ตอนนี้ต้องทำอะไร" */}
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <section className="flex flex-col gap-3.5 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h3 className="text-sm font-bold text-gray-900 dark:text-white">ที่ฝึกงานของคุณ</h3>
           {activeIntent?.company_name_th ? (
@@ -1435,7 +1435,7 @@ const StudentDashboard: React.FC = () => {
                   domain="intent"
                   status={intentDisplayStatus(activeIntent.status, coverLetterStatus)}
                   // ป้ายยาว ("คณบดีลงนามแล้ว · รอสถานประกอบการตอบรับ") ต้องตัดบรรทัดได้ — เดิมล้นการ์ดที่จอ 360
-                  className="mt-1 max-w-full self-start whitespace-normal! text-left"
+                  className="mt-1 max-w-full self-start whitespace-normal! break-words text-left"
                 />
               </div>
             </div>

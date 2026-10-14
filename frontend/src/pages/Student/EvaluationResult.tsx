@@ -68,6 +68,12 @@ const EvaluationResult: React.FC = () => {
       if (!isBackground) setLoading(true);
       const res = await api.get('/final-evaluations/my-result');
       const resData = (res as { data?: EvaluationResultData })?.data || null;
+      if (resData?.is_open === false) {
+        setLockedReason((res as { message?: string })?.message || 'ยังไม่ถึงเวลาที่เปิดให้ดูผลประเมิน');
+        setData(resData);
+        setError(null);
+        return;
+      }
       setData(resData);
       setError(null);
       setLockedReason(null);

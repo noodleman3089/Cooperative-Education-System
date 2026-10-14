@@ -142,7 +142,7 @@ const QUEUE_COPY: Record<QueueKind, { title: string; order: string; empty: strin
   },
 };
 
-const QUEUE_ROW = 'flex flex-wrap items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5';
+const QUEUE_ROW = 'flex flex-wrap items-center justify-between gap-2.5 rounded-xl border px-3.5 py-2.5 max-w-full min-w-0';
 
 /** ค่าว่าง (ไม่ทราบ) ไปท้ายเสมอ — ใบที่ไม่รู้อายุต้องไม่ถูกดันขึ้นหัวรายการเหมือนรอนานสุด */
 const byNullsLast =
@@ -168,11 +168,11 @@ function requestWaitText(row: RequestFormRow): string {
 const QueueWho: React.FC<{
   row: { first_name?: string | null; last_name?: string | null; student_code?: string; company_name_th?: string };
 }> = ({ row }) => (
-  <div className="min-w-0 flex-[1_1_300px]">
-    <span className="text-[15px] font-bold text-gray-900 dark:text-gray-100">
+  <div className="min-w-0 w-full sm:w-auto sm:flex-1">
+    <span className="text-[15px] font-bold text-gray-900 dark:text-gray-100 break-words">
       {[row.first_name, row.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'} · {row.student_code || '-'}
     </span>{' '}
-    <span className="text-[13px] text-gray-700 dark:text-gray-300">· {row.company_name_th || '-'}</span>
+    <span className="text-[13px] text-gray-700 dark:text-gray-300 break-words">· {row.company_name_th || '-'}</span>
   </div>
 );
 
@@ -553,7 +553,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             <div key={row.form_id} className={`${QUEUE_ROW} border-gray-200 dark:border-gray-700`}>
               <QueueWho row={row} />
               <span
-                className={`text-[13px] ${
+                className={`text-[13px] break-words max-w-full ${
                   row.acceptance_submitted_late
                     ? 'font-bold text-amber-800 dark:text-amber-300'
                     : 'text-gray-600 dark:text-gray-400'
@@ -582,7 +582,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               {row.dispatch_recall && (
                 <span
                   data-testid={`dispatch-recall-badge-${row.form_id}`}
-                  className="rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-900 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200"
+                  className="rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-bold text-purple-900 dark:border-purple-800 dark:bg-purple-950/40 dark:text-purple-200 break-words max-w-full"
                 >
                   {row.dispatch_recall.by === 'dean' ? 'คณบดีตีกลับ' : 'ดึงกลับ'}
                 </span>
@@ -590,12 +590,12 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               {getDispatchPrepBadgeText(row) && (
                 <span
                   data-testid={`dispatch-prep-${row.form_id}`}
-                  className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+                  className="rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-bold text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 break-words max-w-full"
                 >
                   {getDispatchPrepBadgeText(row)}
                 </span>
               )}
-              <span className="text-[13px] text-gray-600 dark:text-gray-400">
+              <span className="text-[13px] text-gray-600 dark:text-gray-400 break-words max-w-full">
                 {row.start_date ? `เริ่มงาน ${formatThaiDate(row.start_date)}` : 'ยังไม่มีวันเริ่มงาน'}
               </span>
               <Button

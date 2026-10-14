@@ -384,13 +384,9 @@ const Dashboard: React.FC = () => {
       }
     }
 
-    // กฎล็อกเมนู "พี่เลี้ยงของฉัน" (คำสั่งเจ้าของ 2026-10-10):
-    // ล็อกจนกว่า BOTH: ใบ accepted AND ถึงวันเริ่มฝึกแล้ว (อ่านจาก mentor_locked และ mentor_opens_on)
+    // กฎล็อกเมนู "พี่เลี้ยงของฉัน": ล็อกจนกว่าสถานประกอบการตอบรับ (ใบ accepted) ระบุได้ทันที
     if (stage.mentorLocked) {
-      locks['my_mentor'] =
-        stage.intentStatus !== 'accepted'
-          ? 'ระบุพี่เลี้ยงได้หลังได้ที่ฝึกงานแล้ว'
-          : `ระบุพี่เลี้ยงได้ตั้งแต่วันเริ่มฝึก (${stage.mentorOpensOn ? formatThaiDate(stage.mentorOpensOn) : '—'})`;
+      locks['my_mentor'] = 'ระบุพี่เลี้ยงได้หลังได้ที่ฝึกงานแล้ว';
     }
 
     return locks;

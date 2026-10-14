@@ -21,7 +21,9 @@ export const useGoogleSignIn = (
 ): GoogleSignInStatus => {
   const [status, setStatus] = useState<GoogleSignInStatus>('loading');
   const callbackRef = useRef(onCredential);
-  callbackRef.current = onCredential;
+  useEffect(() => {
+    callbackRef.current = onCredential;
+  });
 
   useEffect(() => {
     const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;

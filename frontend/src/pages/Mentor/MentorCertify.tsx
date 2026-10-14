@@ -15,7 +15,6 @@ import {
   AlertTriangle,
   Clock,
   FileText,
-  Calendar,
   Check,
   Download,
   AlertCircle,
@@ -60,57 +59,6 @@ interface GenericLog {
   effectiveness?: string;
 }
 
-interface WorkPlanTopic {
-  topic_id: number;
-  seq: number;
-  topic: string;
-  months: number[];
-}
-
-// เดือนจริงจาก backend เป็นตัวเลขล้วน (ปี ค.ศ. + เดือน) — หน้าจอเป็นคนแปลงเป็นชื่อเดือนไทย/พ.ศ. เอง
-interface WorkPlanMonth {
-  index: number;
-  year: number;
-  month: number;
-}
-
-interface WorkPlanApproval {
-  approver_role: string;
-  status: 'pending' | 'approved' | 'rejected';
-  approved_at?: string | null;
-  comment?: string | null;
-  created_at?: string;
-  approver_name?: string | null;
-}
-
-interface WorkPlanWeeklyItem {
-  week_number: number;
-  start_date: string | null;
-  end_date: string | null;
-  tasks: string | null;
-}
-
-interface WorkPlanData {
-  student: {
-    student_id?: number;
-    student_code?: string;
-    full_name?: string;
-    major_name_th?: string | null;
-    faculty_name_th?: string | null;
-    company_name?: string | null;
-    start_date?: string | null;
-    end_date?: string | null;
-  };
-  months: WorkPlanMonth[];
-  topics: WorkPlanTopic[];
-  weekly: WorkPlanWeeklyItem[];
-  student_signed_at: string | null;
-  approvals: {
-    mentor?: WorkPlanApproval;
-    advisor?: WorkPlanApproval;
-  };
-}
-
 interface FinalReportDraft {
   report_id: number;
   student_id: number;
@@ -130,7 +78,8 @@ const MentorCertify: React.FC = () => {
   const navigate = useNavigate();
 
   const studentIdParam = searchParams.get('student');
-  const activeTab = (searchParams.get('tab') as 'logs' | 'plan' | 'draft') || 'logs';
+  const tabParam = searchParams.get('tab');
+  const activeTab: 'logs' | 'draft' = tabParam === 'draft' ? 'draft' : 'logs';
 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,35 +97,18 @@ const MentorCertify: React.FC = () => {
   const [isBatchCertifying, setIsBatchCertifying] = useState<boolean>(false);
   const [isCertifyingSingle, setIsCertifyingSingle] = useState<boolean>(false);
   // รับรอง/ลงนามแล้วพี่เลี้ยงยกเลิกเองไม่ได้ — ทุกทางต้องผ่านกล่องยืนยันที่บอกว่ากำลังทำกับใคร ใบไหน
-  const [pendingConfirm, setPendingConfirm] = useState<'single' | 'batch' | 'plan' | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<'single' | 'batch' | null>(null);
 
   // Return modal state
   const [isReturnModalOpen, setIsReturnModalOpen] = useState<boolean>(false);
   const [returnComment, setReturnComment] = useState<string>('');
   const [isReturning, setIsReturning] = useState<boolean>(false);
 
-  // Tab 2: Work Plan state
-  const [workPlan, setWorkPlan] = useState<WorkPlanData | null>(null);
-  const [isPlanApproving, setIsPlanApproving] = useState<boolean>(false);
-  const [isPlanRejectModalOpen, setIsPlanRejectModalOpen] = useState<boolean>(false);
-  const [planRejectComment, setPlanRejectComment] = useState<string>('');
-  const [isPlanRejecting, setIsPlanRejecting] = useState<boolean>(false);
-
-  // Tab 3: Report Draft state
+  // Tab 2: Report Draft state
   const [drafts, setDrafts] = useState<FinalReportDraft[]>([]);
   const [outlineTopic, setOutlineTopic] = useState<string>('');
   const [draftComment, setDraftComment] = useState<string>('');
   const [isDraftReviewing, setIsDraftReviewing] = useState<boolean>(false);
-
-  // เดือนจาก backend เป็นเลข 1–12 ล้วน (ไม่ได้ผูกกับปฏิทินตายตัวว่าเริ่ม พ.ย.) — แปลงเป็นชื่อย่อไทย + ปี พ.ศ. ที่นี่
-  const THAI_MONTH_SHORT = [
-    '', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.',
-    'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.',
-  ];
-  const formatMonthColumn = (m: WorkPlanMonth) => {
-    const shortLabel = `${THAI_MONTH_SHORT[m.month] || '–'} ${String((m.year + 543) % 100).padStart(2, '0')}`;
-    return { label: `เดือนที่ ${m.index}`, shortLabel };
-  };
 
   // Format date helper
   const formatThaiDate = (dateStr?: string | null) => {
@@ -211,53 +143,57 @@ const MentorCertify: React.FC = () => {
   };
 
   // Initial load: Fetch mentor students
-  const loadInitialData = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const pendingRes = await api.get('/mentor/pending');
-      const stdList: StudentInfo[] = pendingRes?.students || [];
-      setStudentsList(stdList);
-
-      let targetStudent: StudentInfo | null = null;
-      if (studentIdParam) {
-        targetStudent = stdList.find((s) => s.student_id === Number(studentIdParam)) || null;
-      }
-      if (!targetStudent && stdList.length > 0) {
-        targetStudent = stdList[0];
-        // Sync URL with first student
-        setSearchParams(
-          (prev) => {
-            const next = new URLSearchParams(prev);
-            next.set('student', String(targetStudent?.student_id));
-            if (!next.get('tab')) next.set('tab', 'logs');
-            return next;
-          },
-          { replace: true }
-        );
-      }
-      setSelectedStudent(targetStudent);
-    } catch (err) {
-      console.error('Failed to load mentor students:', err);
-      setError(getErrorMessage(err, 'ไม่สามารถโหลดรายชื่อนักศึกษาได้'));
-    } finally {
-      setLoading(false);
-    }
-  }, [studentIdParam, setSearchParams]);
-
   useEffect(() => {
-    loadInitialData();
-  }, [loadInitialData]);
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const pendingRes = await api.get('/mentor/pending');
+        if (cancelled) return;
+        setError(null);
+        const stdList: StudentInfo[] = pendingRes?.students || [];
+        setStudentsList(stdList);
+
+        let targetStudent: StudentInfo | null = null;
+        if (studentIdParam) {
+          targetStudent = stdList.find((s) => s.student_id === Number(studentIdParam)) || null;
+        }
+        if (!targetStudent && stdList.length > 0) {
+          targetStudent = stdList[0];
+          // Sync URL with first student
+          setSearchParams(
+            (prev) => {
+              const next = new URLSearchParams(prev);
+              next.set('student', String(targetStudent?.student_id));
+              if (!next.get('tab')) next.set('tab', 'logs');
+              return next;
+            },
+            { replace: true }
+          );
+        }
+        setSelectedStudent(targetStudent);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to load mentor students:', err);
+        setError(getErrorMessage(err, 'ไม่สามารถโหลดรายชื่อนักศึกษาได้'));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [studentIdParam, setSearchParams]);
 
   // Load logs for current student (Tab 1)
   const loadStudentLogs = useCallback(async (studentId: number) => {
     try {
-      setError(null);
       const [weeklyRes, monthlyRes] = await Promise.allSettled([
         api.get(`/weekly-logs/student/${studentId}`),
         api.get(`/monthly-logs/student/${studentId}`),
       ]);
+      setError(null);
 
       const unifiedLogs: GenericLog[] = [];
 
@@ -329,28 +265,13 @@ const MentorCertify: React.FC = () => {
     }
   }, []);
 
-  // Load work plan for current student (Tab 2)
-  // ⛔ เส้นเดียวคือ GET /students/:id/work-plan — ไม่มีทาง fallback ไปที่อื่นและไม่มีการแต่งข้อมูลปลอม
-  //    ไม่มีหัวข้อ/ไม่มีเดือน = EmptyState ที่ฝั่ง render (ดู activeTab === 'plan' ด้านล่าง)
-  const loadStudentWorkPlan = useCallback(async (studentId: number) => {
-    try {
-      setError(null);
-      const res = await api.get(`/students/${studentId}/work-plan`);
-      setWorkPlan(res);
-    } catch (err) {
-      console.error('Failed to load work plan:', err);
-      setWorkPlan(null);
-      setError(getErrorMessage(err, 'ไม่สามารถโหลดแผนปฏิบัติงานได้'));
-    }
-  }, []);
-
-  // Load report draft (Tab 3) — เส้นเดียวคือ GET /final-reports/mentor (spec-D 15.7 · B10)
+  // Load report draft (Tab 2) — เส้นเดียวคือ GET /final-reports/mentor (spec-D 15.7 · B10)
   // ⛔ ไม่มีการแต่งเวอร์ชัน/ไฟล์/ความเห็นปลอมอีกต่อไป — คืนเฉพาะร่างจริงของนักศึกษาคนนี้
   //    หัวข้อรายงาน (report_title) มากับแถวนี้อยู่แล้ว ไม่ต้องยิง /outlines/company แยก
   const loadStudentDraft = useCallback(async (studentId: number) => {
     try {
-      setError(null);
       const rows: FinalReportDraft[] = await api.get('/final-reports/mentor');
+      setError(null);
       const studentDrafts = rows.filter((r) => r.student_id === studentId);
       setDrafts(studentDrafts);
       setOutlineTopic(studentDrafts[0]?.report_title || '');
@@ -366,18 +287,107 @@ const MentorCertify: React.FC = () => {
   useEffect(() => {
     if (!selectedStudent?.student_id) return;
     const sId = selectedStudent.student_id;
+    let cancelled = false;
 
-    if (activeTab === 'logs') {
-      loadStudentLogs(sId);
-    } else if (activeTab === 'plan') {
-      loadStudentWorkPlan(sId);
-    } else if (activeTab === 'draft') {
-      loadStudentDraft(sId);
-    }
-  }, [selectedStudent, activeTab, loadStudentLogs, loadStudentWorkPlan, loadStudentDraft]);
+    const load = async () => {
+      if (activeTab === 'logs') {
+        try {
+          const [weeklyRes, monthlyRes] = await Promise.allSettled([
+            api.get(`/weekly-logs/student/${sId}`),
+            api.get(`/monthly-logs/student/${sId}`),
+          ]);
+          if (cancelled) return;
+          setError(null);
+          const unifiedLogs: GenericLog[] = [];
+          if (weeklyRes.status === 'fulfilled' && weeklyRes.value?.data) {
+            const wRows = weeklyRes.value.data;
+            for (const w of wRows) {
+              unifiedLogs.push({
+                kind: 'weekly_log',
+                id: w.weekly_log_id,
+                week_or_month_label: `บันทึกประจำสัปดาห์ที่ ${w.week_number} (สหกิจ 09)`,
+                start_date: w.start_date,
+                end_date: w.end_date,
+                submitted_at: w.submitted_at,
+                status: w.mentor_certified_at ? 'approved' : w.returned_comment ? 'returned' : w.status,
+                mentor_certified_at: w.mentor_certified_at,
+                mentor_certified_name: w.mentor_certified_name,
+                returned_comment: w.returned_comment,
+                external_file_path: w.external_file_path,
+                summary: w.summary,
+                assigned_work: w.assigned_work,
+                methods: w.methods,
+                tools_used: w.tools_used,
+                achievements: w.achievements,
+                problems: w.problems,
+              });
+            }
+          }
+          if (monthlyRes.status === 'fulfilled' && monthlyRes.value?.data) {
+            const mRows = monthlyRes.value.data;
+            for (const m of mRows) {
+              unifiedLogs.push({
+                kind: 'monthly_log',
+                id: m.monthly_log_id,
+                week_or_month_label: `บันทึกประจำเดือน (สหกิจ 10)`,
+                start_date: m.start_date,
+                end_date: m.end_date,
+                submitted_at: m.submitted_at,
+                status: m.mentor_certified_at ? 'approved' : m.returned_comment ? 'returned' : m.status,
+                mentor_certified_at: m.mentor_certified_at,
+                mentor_certified_name: m.mentor_certified_name,
+                returned_comment: m.returned_comment,
+                external_file_path: m.external_file_path,
+                summary: m.summary,
+                work_summary: m.work_summary,
+                effectiveness: m.effectiveness,
+              });
+            }
+          }
+          unifiedLogs.sort((a, b) => {
+            const aPending = a.status === 'submitted';
+            const bPending = b.status === 'submitted';
+            if (aPending && !bPending) return -1;
+            if (!aPending && bPending) return 1;
+            return new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime();
+          });
+          setLogs(unifiedLogs);
+          if (unifiedLogs.length > 0) {
+            setSelectedLogId(unifiedLogs[0].id);
+            setSelectedLogKind(unifiedLogs[0].kind);
+          } else {
+            setSelectedLogId(null);
+          }
+        } catch (err) {
+          if (cancelled) return;
+          console.error('Failed to load logs:', err);
+        }
+      } else if (activeTab === 'draft') {
+        try {
+          const rows: FinalReportDraft[] = await api.get('/final-reports/mentor');
+          if (cancelled) return;
+          setError(null);
+          const studentDrafts = rows.filter((r) => r.student_id === sId);
+          setDrafts(studentDrafts);
+          setOutlineTopic(studentDrafts[0]?.report_title || '');
+        } catch (err) {
+          if (cancelled) return;
+          console.error('Failed to load student draft:', err);
+          setDrafts([]);
+          setOutlineTopic('');
+          setError(getErrorMessage(err, 'ไม่สามารถโหลดร่างรายงานได้'));
+        }
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudent?.student_id, activeTab]);
 
   // Handle Tab Switch
-  const handleTabChange = (tab: 'logs' | 'plan' | 'draft') => {
+  const handleTabChange = (tab: 'logs' | 'draft') => {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -507,47 +517,7 @@ const MentorCertify: React.FC = () => {
     }
   };
 
-  // Approve Work Plan (Tab 2)
-  const handleApproveWorkPlan = async () => {
-    if (!selectedStudent) return;
-    try {
-      setIsPlanApproving(true);
-      setError(null);
-      await api.patch(`/students/${selectedStudent.student_id}/work-plan/approve`);
-      setSuccess('ลงนามรับรองแผนปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว ระบบจะส่งต่อให้อาจารย์ที่ปรึกษาโดยอัตโนมัติ');
-      await loadStudentWorkPlan(selectedStudent.student_id);
-    } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถลงนามรับรองแผนปฏิบัติงานได้'));
-    } finally {
-      setIsPlanApproving(false);
-    }
-  };
-
-  // Reject Work Plan (Tab 2)
-  const handleConfirmRejectPlan = async () => {
-    if (!selectedStudent) return;
-    if (!planRejectComment.trim()) {
-      setError('กรุณาระบุเหตุผลหรือข้อเสนอแนะในการขอให้นักศึกษาแก้ไขแผนงาน');
-      return;
-    }
-    try {
-      setIsPlanRejecting(true);
-      setError(null);
-      await api.patch(`/students/${selectedStudent.student_id}/work-plan/reject`, {
-        comment: planRejectComment.trim(),
-      });
-      setSuccess('ส่งกลับแผนปฏิบัติงานให้นักศึกษาแก้ไขเรียบร้อยแล้ว');
-      setIsPlanRejectModalOpen(false);
-      setPlanRejectComment('');
-      await loadStudentWorkPlan(selectedStudent.student_id);
-    } catch (err) {
-      setError(getErrorMessage(err, 'ไม่สามารถส่งกลับแผนปฏิบัติงานได้'));
-    } finally {
-      setIsPlanRejecting(false);
-    }
-  };
-
-  // Review Draft (Tab 3)
+  // Review Draft (Tab 2)
   const handleReviewDraft = async (status: 'approved' | 'rejected') => {
     const targetDraft = drafts.find((d) => d.status === 'pending') || drafts[0];
     if (!targetDraft) return;
@@ -671,20 +641,6 @@ const MentorCertify: React.FC = () => {
                 {pendingLogsCount}
               </span>
             )}
-          </button>
-
-          <button
-            data-testid="certify-tab-plan"
-            type="button"
-            onClick={() => handleTabChange('plan')}
-            className={`flex items-center gap-2 py-3.5 px-4 font-bold text-sm border-b-2 transition-colors whitespace-nowrap ${
-              activeTab === 'plan'
-                ? 'border-brand-blue text-brand-blue dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            แผนปฏิบัติงาน (สหกิจ 07 หน้า 3)
           </button>
 
           <button
@@ -988,7 +944,7 @@ const MentorCertify: React.FC = () => {
                         data-testid="certify-return"
                         disabled={isCertifyingSingle || isReturning}
                         onClick={() => setIsReturnModalOpen(true)}
-                        className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                        className="text-amber-800! border-amber-300! hover:bg-amber-50! dark:text-amber-300! dark:border-amber-700! dark:hover:bg-amber-950/40!"
                       >
                         ขอให้นักศึกษาแก้ไข
                       </Button>
@@ -1016,256 +972,7 @@ const MentorCertify: React.FC = () => {
           </div>
         )}
 
-        {/* Tab 2: Work Plan (07 Page 3) */}
-        {activeTab === 'plan' && (
-          <div className="p-4 sm:p-6 lg:p-8 space-y-6">
-            {!workPlan || workPlan.months.length === 0 ? (
-              <div className="p-12 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                <EmptyState
-                  title="ยังไม่มีวันเริ่ม/สิ้นสุดปฏิบัติงาน"
-                  description="ระบบยังคำนวณเดือนปฏิบัติงานไม่ได้ เพราะสถานประกอบการยังไม่ได้ยืนยันวันเริ่ม/สิ้นสุด"
-                />
-              </div>
-            ) : workPlan.topics.length === 0 ? (
-              <div className="p-12 text-center border border-dashed border-gray-200 dark:border-gray-800 rounded-xl">
-                <EmptyState
-                  title="นักศึกษายังไม่ได้ส่งแผนปฏิบัติงาน"
-                  description="เมื่อนักศึกษากรอกและส่งแผนปฏิบัติงาน (สหกิจ 07 หน้า 3) แล้ว รายการจะปรากฏที่นี่ให้ท่านตรวจและลงนาม"
-                />
-              </div>
-            ) : (
-              <>
-                {/* Header info card */}
-                <div className="border border-gray-200 dark:border-gray-800 rounded-xl bg-gray-50/60 dark:bg-gray-800/30 p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                      ชื่อ – นามสกุล นักศึกษา
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {workPlan.student.full_name || selectedStudent?.full_name}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                      รหัสประจำตัวนักศึกษา
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {workPlan.student.student_code || selectedStudent?.student_code}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                      สาขาวิชา
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {workPlan.student.major_name_th || selectedStudent?.major_name_th}
-                    </span>
-                  </div>
-                  <div className="sm:col-span-2 lg:col-span-3">
-                    <span className="text-2xs text-gray-500 dark:text-gray-400 block font-medium">
-                      สถานประกอบการ
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {workPlan.student.company_name || '–'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Matrix Table */}
-                <div className="space-y-2">
-                  <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1">
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white">
-                      เมทริกซ์หัวข้องาน × เดือนที่ปฏิบัติงาน
-                    </h3>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      จำนวนเดือนคำนวณจากวันจริง ไม่ได้ตายตัวที่ 4 เดือน (สเปก D ข้อ 8.1)
-                    </span>
-                  </div>
-
-                  <div
-                    data-testid="plan-matrix"
-                    className="border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden shadow-xs"
-                  >
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse text-sm">
-                        <thead>
-                          <tr className="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 text-xs font-bold text-gray-600 dark:text-gray-300">
-                            <th className="py-3.5 px-4 w-12 text-center">ลำดับ</th>
-                            <th className="py-3.5 px-4">หัวข้องาน</th>
-                            {workPlan.months.map((m) => {
-                              const col = formatMonthColumn(m);
-                              return (
-                                <th key={m.index} className="py-3.5 px-3 text-center w-24">
-                                  {col.label}
-                                  <span className="block text-2xs font-normal text-gray-600 dark:text-gray-400">
-                                    ({col.shortLabel})
-                                  </span>
-                                </th>
-                              );
-                            })}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                          {workPlan.topics.map((t) => (
-                            <tr
-                              key={t.seq}
-                              data-testid={`plan-topic-${t.seq}`}
-                              className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20"
-                            >
-                              <td className="py-3.5 px-4 text-center font-bold text-gray-600 dark:text-gray-400 text-xs">
-                                {t.seq}
-                              </td>
-                              <td className="py-3.5 px-4 font-semibold text-gray-900 dark:text-gray-100">
-                                {t.topic}
-                              </td>
-                              {workPlan.months.map((m) => {
-                                const isMarked = t.months.includes(m.index);
-                                return (
-                                  <td
-                                    key={m.index}
-                                    data-testid={`plan-cell-${t.seq}-${m.index}`}
-                                    className="py-3.5 px-3 text-center"
-                                  >
-                                    {isMarked ? (
-                                      <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-blue-100 dark:bg-blue-900/40 text-brand-blue dark:text-blue-400">
-                                        <Check className="w-4 h-4 stroke-[3]" />
-                                      </span>
-                                    ) : (
-                                      <span className="text-gray-300 dark:text-gray-400 font-bold">–</span>
-                                    )}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expandable weekly plans if available */}
-                {workPlan.weekly.length > 0 && (
-                  <details className="border border-gray-200 dark:border-gray-800 rounded-xl p-4 bg-gray-50/30 dark:bg-gray-800/20">
-                    <summary className="text-xs font-bold text-gray-700 dark:text-gray-300 cursor-pointer select-none">
-                      ดูแผนรายสัปดาห์ประกอบ (ข้อมูลสนับสนุน ไม่ได้พิมพ์ลงหน้า 3)
-                    </summary>
-                    <div className="mt-3 space-y-2 text-xs text-gray-600 dark:text-gray-400">
-                      {workPlan.weekly.map((wp) => (
-                        <div key={wp.week_number} className="flex gap-2">
-                          <span className="font-bold shrink-0">สัปดาห์ที่ {wp.week_number}:</span>
-                          <span>{wp.tasks || '–'}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                )}
-
-                {/* Signatures Section */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                  {/* Student Signature */}
-                  <div
-                    data-testid="plan-sign-student"
-                    className="border border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20 rounded-xl p-4 space-y-1.5"
-                  >
-                    <span className="text-xs font-bold text-green-700 dark:text-green-400 block">
-                      ฝ่ายนักศึกษา
-                    </span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                      {workPlan.student.full_name || selectedStudent?.full_name}
-                    </span>
-                    {workPlan.student_signed_at ? (
-                      <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                        <CheckCircle className="w-3.5 h-3.5" />
-                        ยืนยันแผนนี้แล้วเมื่อ {formatThaiDateTime(workPlan.student_signed_at)}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1">
-                        <Clock className="w-3.5 h-3.5" />
-                        ยังไม่ได้ส่งให้ท่านลงนาม
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Mentor Signature */}
-                  <div
-                    data-testid="plan-sign-mentor"
-                    className={`border rounded-xl p-4 space-y-1.5 ${
-                      workPlan.approvals.mentor?.status === 'approved'
-                        ? 'border-green-200 dark:border-green-900/40 bg-green-50/40 dark:bg-green-950/20'
-                        : 'border-amber-200 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20'
-                    }`}
-                  >
-                    <span
-                      className={`text-xs font-bold block ${
-                        workPlan.approvals.mentor?.status === 'approved'
-                          ? 'text-green-700 dark:text-green-400'
-                          : 'text-amber-700 dark:text-amber-400'
-                      }`}
-                    >
-                      ฝ่ายพนักงานที่ปรึกษา (พี่เลี้ยง)
-                    </span>
-                    {workPlan.approvals.mentor?.status === 'approved' ? (
-                      <>
-                        <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                          {workPlan.approvals.mentor.approver_name || 'ลงนามแล้ว'}
-                        </span>
-                        <span className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          ลงนามรับรองแล้วเมื่อ {formatThaiDateTime(workPlan.approvals.mentor.approved_at)}
-                        </span>
-                      </>
-                    ) : !workPlan.student_signed_at ? (
-                      <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                        รอนักศึกษาส่งแผนงานก่อน
-                      </span>
-                    ) : (
-                      <>
-                        <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                          รอท่านลงนาม
-                        </span>
-                        <span className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed block">
-                          เมื่อท่านลงนาม แผนงานนี้จะถูกส่งต่อไปยังอาจารย์ที่ปรึกษาเพื่อพิจารณาต่อโดยอัตโนมัติ
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Actions for Work Plan — กดได้ก็ต่อเมื่อนักศึกษาส่งแล้วเท่านั้น */}
-                {workPlan.approvals.mentor?.status !== 'approved' && workPlan.student_signed_at && (
-                  <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      ท่านเป็นด่านแรก · อาจารย์ที่ปรึกษาจะเห็นแผนนี้หลังจากท่านลงนามแล้วเท่านั้น
-                    </span>
-                    <div className="flex items-center gap-3">
-                      <Button
-                        variant="secondary"
-                        data-testid="plan-reject"
-                        disabled={isPlanApproving || isPlanRejecting}
-                        onClick={() => setIsPlanRejectModalOpen(true)}
-                        className="text-amber-700 border-amber-300 hover:bg-amber-50"
-                      >
-                        ขอให้นักศึกษาแก้ไข
-                      </Button>
-                      <Button
-                        variant="primary"
-                        data-testid="plan-approve"
-                        disabled={isPlanApproving || isPlanRejecting}
-                        onClick={() => setPendingConfirm('plan')}
-                        className="shadow-sm"
-                      >
-                        {isPlanApproving ? 'กำลังลงนาม...' : 'ลงนามรับรองแผนนี้'}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Tab 3: Report Draft (16) */}
+        {/* Tab 2: Report Draft (16) */}
         {activeTab === 'draft' && (
           <div className="p-4 sm:p-6 lg:p-8 space-y-6">
             {/* Outline Topic Banner */}
@@ -1385,7 +1092,7 @@ const MentorCertify: React.FC = () => {
                       variant="secondary"
                       disabled={isDraftReviewing}
                       onClick={() => handleReviewDraft('rejected')}
-                      className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                      className="text-amber-800! border-amber-300! hover:bg-amber-50! dark:text-amber-300! dark:border-amber-700! dark:hover:bg-amber-950/40!"
                     >
                       ส่งกลับให้แก้ไข
                     </Button>
@@ -1471,55 +1178,13 @@ const MentorCertify: React.FC = () => {
         </Modal>
       )}
 
-      {/* Reject Work Plan Modal */}
-      {isPlanRejectModalOpen && (
-        <Modal
-          onClose={() => setIsPlanRejectModalOpen(false)}
-          title="ขอให้นักศึกษาแก้ไขแผนปฏิบัติงาน"
-        >
-          <ModalBody>
-            <div className="space-y-4">
-              <p className="text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
-                กรุณาระบุข้อเสนอแนะในการปรับปรุงแผนงาน แผนจะกลับไปเป็นร่างของนักศึกษาเพื่อแก้ไขและส่งให้ท่านตรวจใหม่อีกครั้ง
-              </p>
-              <Textarea
-                data-testid="plan-reject-comment"
-                rows={4}
-                value={planRejectComment}
-                onChange={(e) => setPlanRejectComment(e.target.value)}
-                placeholder="ระบุเหตุผล เช่น หัวข้อที่ 2 ควรกินระยะเวลาถึงเดือนที่ 3 เพื่อให้ครอบคลุมการทดสอบระบบ"
-              />
-            </div>
-          </ModalBody>
-          <ModalFooter>
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setIsPlanRejectModalOpen(false)}>
-                ยกเลิก
-              </Button>
-              <Button
-                variant="primary"
-                disabled={isPlanRejecting || !planRejectComment.trim()}
-                onClick={handleConfirmRejectPlan}
-                className="bg-amber-600 hover:bg-amber-700 text-white"
-              >
-                {isPlanRejecting ? 'กำลังส่งกลับ...' : 'ยืนยันขอให้แก้ไข'}
-              </Button>
-            </div>
-          </ModalFooter>
-        </Modal>
-      )}
-
       {/* ยืนยันก่อนรับรอง/ลงนาม — ทำแล้วพี่เลี้ยงยกเลิกเองไม่ได้ */}
       <ConfirmDialog
         open={pendingConfirm !== null}
-        title={pendingConfirm === 'plan' ? 'ยืนยันลงนามรับรองแผนปฏิบัติงาน' : 'ยืนยันการรับรองบันทึก'}
+        title="ยืนยันการรับรองบันทึก"
         message={
           <ConfirmSummary
-            lead={
-              pendingConfirm === 'plan'
-                ? 'ลงนามรับรองแผนปฏิบัติงาน (สหกิจ 07) ของนักศึกษา'
-                : 'รับรองบันทึกการปฏิบัติงานของนักศึกษา'
-            }
+            lead="รับรองบันทึกการปฏิบัติงานของนักศึกษา"
             rows={[
               {
                 label: 'นักศึกษา',
@@ -1528,9 +1193,7 @@ const MentorCertify: React.FC = () => {
               {
                 label: 'สิ่งที่รับรอง',
                 value:
-                  pendingConfirm === 'plan'
-                    ? 'แผนปฏิบัติงาน (สหกิจ 07)'
-                    : pendingConfirm === 'single'
+                  pendingConfirm === 'single'
                     ? currentLog?.week_or_month_label || 'บันทึกการปฏิบัติงาน'
                     : `บันทึกที่เลือก ${selectedBatchIds.length} รายการ`,
               },
@@ -1538,14 +1201,13 @@ const MentorCertify: React.FC = () => {
             lockNote="ยืนยันแล้วท่านจะยกเลิกเองไม่ได้ กรุณาตรวจว่าอ่านเนื้อหาครบแล้ว"
           />
         }
-        confirmLabel={pendingConfirm === 'plan' ? 'ยืนยันลงนาม' : 'ยืนยันรับรอง'}
+        confirmLabel="ยืนยันรับรอง"
         cancelLabel="กลับไปอ่าน"
         confirmTestId="certify-confirm"
-        busy={isCertifyingSingle || isBatchCertifying || isPlanApproving}
+        busy={isCertifyingSingle || isBatchCertifying}
         onConfirm={async () => {
           if (pendingConfirm === 'single') await handleCertifySingle();
           if (pendingConfirm === 'batch') await handleExecuteBatchCertify();
-          if (pendingConfirm === 'plan') await handleApproveWorkPlan();
           setPendingConfirm(null);
         }}
         onCancel={() => setPendingConfirm(null)}

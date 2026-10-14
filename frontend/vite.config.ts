@@ -13,6 +13,7 @@ export default defineConfig({
   cacheDir: process.env.E2E_VITE_CACHE_DIR || 'node_modules/.vite',
   server: {
     host: true,
+    allowedHosts: true,
     proxy: {
       '/api': {
         target: process.env.E2E_API_TARGET || 'http://localhost:5000',

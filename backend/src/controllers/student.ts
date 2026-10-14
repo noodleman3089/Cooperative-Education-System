@@ -106,12 +106,9 @@ export class StudentController {
         const intentQuery = await query(
           `SELECT i.form_id, i.company_id, c.name_th as company_name_th,
                   i.status, i.start_date, i.acceptance_evidence_path,
-                  -- ล็อกการระบุพี่เลี้ยง: ต้อง accepted และถึงวันเริ่มฝึกแล้ว (เงื่อนไขเดียวกับ setMentorWithTransaction)
-                  -- ไม่มีวันเริ่ม = ไม่ล็อกด้วยวันที่ · mentor_opens_on = วันที่จะเปิดให้ระบุ (เฉพาะใบ accepted ที่ยังไม่ถึงวัน)
-                  NOT (i.status = 'accepted'
-                       AND (i.start_date IS NULL OR i.start_date <= (NOW() AT TIME ZONE 'Asia/Bangkok')::date)) AS mentor_locked,
-                  CASE WHEN i.status = 'accepted' AND i.start_date > (NOW() AT TIME ZONE 'Asia/Bangkok')::date
-                       THEN i.start_date::text END AS mentor_opens_on,
+                  -- ล็อกการระบุพี่เลี้ยง: ต้อง accepted เท่านั้น (ระบุล่วงหน้าได้ทันที ไม่ล็อกด้วยวันเริ่มฝึก)
+                  (i.status != 'accepted') AS mentor_locked,
+                  NULL::text AS mentor_opens_on,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,
@@ -228,7 +225,7 @@ export class StudentController {
       //   ⛔ ติดป้ายเมื่อ **มีหลักฐานชัด** เท่านั้น: เลขที่ตรงกับใบที่ปิดแล้ว และไม่ตรงกับใบที่ยังเดินอยู่
       //      หาใบไม่เจอ / เลขที่ว่าง = ไม่รู้ = ไม่ติดป้าย (ใช้ `=` ไม่ใช่ IS NOT DISTINCT FROM — NULL ต้องไม่จับคู่กัน)
       const docQuery = await query(
-        `SELECT d.doc_id, d.type, d.status, d.generated_file_path, d.dean_signature_date, d.docusign_envelope_id,
+        `SELECT d.doc_id, d.type, d.status, d.generated_file_path, d.dean_signature_date,
                 c.name_th as company_name_th,
                 COALESCE(f.matched > 0 AND f.still_open = 0, FALSE) AS of_closed_request
          FROM official_documents d

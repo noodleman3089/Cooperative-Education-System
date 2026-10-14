@@ -119,15 +119,17 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     return labels[role] || role;
   };
 
-  // Fetch notifications based on role
-  const fetchNotifications = async () => {
-    if (!auth?.user) return;
+  useEffect(() => {
+    let cancelled = false;
+    const fetchNotifications = async () => {
+      if (!auth?.user) return;
     try {
       if (currentRole === 'advisor' || currentRole === 'supervisor') {
         // ยิงซ้ำกับ AdvisorHome.tsx โดยตั้งใจ — กระดิ่งอยู่ทุกหน้า ไม่ใช่แค่หน้าแรกอาจารย์
         // จึงต้องมีข้อมูลของตัวเองเสมอ แม้ผู้ใช้ไม่ได้เปิดหน้าแรกอยู่ · การแชร์ผลจะต้องมี
         // context/store ใหม่ ซึ่งเกินขอบเขตแก้จุดนี้ (ดู PROMPT-sonnet-R5 ข้อ ง)
         const res = await api.get(`/faculty/home/advisor?view=${currentRole}`);
+        if (cancelled) return;
         if (res && res.tiles) {
           const items: NotificationItem[] = [];
           if (currentRole === 'advisor') {
@@ -324,13 +326,12 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     } catch (err) {
       console.error('Failed to fetch notifications:', err);
     }
-  };
+    };
 
-  useEffect(() => {
-    fetchNotifications();
+    void fetchNotifications();
 
     const handleUpdate = () => {
-      fetchNotifications();
+      void fetchNotifications();
     };
 
     const handleOpenReview = (e: Event) => {
@@ -343,6 +344,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     window.addEventListener('intent-updated', handleUpdate);
     window.addEventListener('open-intent-review', handleOpenReview);
     return () => {
+      cancelled = true;
       window.removeEventListener('intent-updated', handleUpdate);
       window.removeEventListener('open-intent-review', handleOpenReview);
     };

@@ -33,35 +33,47 @@ const WeeklyLogViewModal: React.FC<WeeklyLogViewModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTabWeek, setActiveTabWeek] = useState<number | null>(null);
 
-  const fetchStudentLogs = async (id: number) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const res = await api.get(`/weekly-logs/student/${id}`);
-      const fetchedLogs: WeeklyLogItem[] = res?.data || [];
-      setLogs(fetchedLogs);
-
-      if (fetchedLogs.length > 0) {
-        // Default to latest submitted week
-        setActiveTabWeek(fetchedLogs[fetchedLogs.length - 1].week_number);
-      } else {
-        setActiveTabWeek(1);
-      }
-    } catch (err) {
-      console.error('Failed to fetch student weekly logs:', err);
-      setError('ไม่สามารถโหลดข้อมูลบันทึกรายสัปดาห์ของนักศึกษาได้');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (isOpen && studentId) {
-      fetchStudentLogs(studentId);
-    } else {
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
+    if (!isOpen) {
       setLogs([]);
       setActiveTabWeek(null);
+      setLoading(false);
+    } else if (studentId) {
+      setLoading(true);
     }
+  }
+
+  useEffect(() => {
+    if (!isOpen || !studentId) return;
+
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await api.get(`/weekly-logs/student/${studentId}`);
+        if (cancelled) return;
+        setError(null);
+        const fetchedLogs: WeeklyLogItem[] = res?.data || [];
+        setLogs(fetchedLogs);
+        if (fetchedLogs.length > 0) {
+          setActiveTabWeek(fetchedLogs[fetchedLogs.length - 1].week_number);
+        } else {
+          setActiveTabWeek(1);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Failed to fetch student weekly logs:', err);
+        setError('ไม่สามารถโหลดข้อมูลบันทึกรายสัปดาห์ของนักศึกษาได้');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, [isOpen, studentId]);
 
   if (!isOpen) return null;

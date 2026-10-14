@@ -31,10 +31,10 @@ router.post(
   AcceptanceController.failByStudent
 );
 
-// Officer Acceptance approval/rejection (Staff, Dept Head only)
+// Officer Acceptance approval/rejection (Staff only)
 router.put(
   '/:intent_id/officer-approve',
-  authorizeRoles('staff', 'dept_head'),
+  authorizeRoles('staff'),
   AcceptanceController.approveByOfficer
 );
 

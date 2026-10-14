@@ -206,11 +206,10 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     );
   });
 
-  test('S7: แถวเก่าที่มีแต่ที่อยู่ก้อนเดียว → ยังอ่านเห็น ไม่หายไปเงียบๆ', async ({ request }) => {
+  test('S7: แถวเก่าที่มีแต่ที่อยู่ก้อนเดียว → ประเมินเป็นสตริงว่าง ไม่ fallback หา address_legacy', async ({ request }) => {
     const studentId = await seedAcceptedIntent();
     await dbExec(
-      // ⛔ ผู้ติดต่อฉุกเฉินย้ายไปอยู่บน `students` แล้ว (migration 013) คอลัมน์ที่นี่
-      //    เหลือเป็น `*_legacy` อ่านอย่างเดียว — เทสต์นี้สนใจแค่ที่อยู่ก้อนเดิม
+      // ⛔ address_legacy ถูกตัดออกจากการแสดงผล — แถวเก่าที่ไม่มีช่องย่อยประเมินเป็นสตริงว่าง
       `INSERT INTO accommodations (student_id, address_legacy)
        VALUES ($1, '77/7 ถ.เก่า ต.เก่า อ.เก่า จ.เก่า 11111')`,
       [studentId]
@@ -219,8 +218,7 @@ test.describe('สหกิจ 06 — แบบแจ้งรายละเอ
     await apiLoginAs(request, 'student2');
     const read = await request.get(`${API_URL}/students/${studentId}/accommodation-plan`);
     const acc = (await read.json()).accommodation;
-    expect(acc.formatted_address).toBe('77/7 ถ.เก่า ต.เก่า อ.เก่า จ.เก่า 11111');
-    expect(acc.address_legacy).toBe('77/7 ถ.เก่า ต.เก่า อ.เก่า จ.เก่า 11111');
+    expect(acc.formatted_address).toBe('');
   });
 
   test('S8: SEC-06 — อาจารย์นอกความดูแลอ่านที่พักไม่ได้ (ที่อยู่บ้านคือ PII)', async ({

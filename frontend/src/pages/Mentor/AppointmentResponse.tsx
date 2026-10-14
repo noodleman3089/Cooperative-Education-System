@@ -48,7 +48,7 @@ const AppointmentResponse: React.FC = () => {
   // "กรุณาเลือกเพื่อยืนยันหรือขอเลื่อนวันนัดหมาย" and two buttons — no student,
   // no date, no time, no company — so answering meant going back to the email.
   const [info, setInfo] = useState<AppointmentInfo | null>(null);
-  const [infoLoading, setInfoLoading] = useState(true);
+  const [infoLoading, setInfoLoading] = useState(Boolean(token));
   const [infoError, setInfoError] = useState<string | null>(null);
 
   const [action, setAction] = useState<'accept' | 'reschedule' | null>(null);
@@ -58,26 +58,29 @@ const AppointmentResponse: React.FC = () => {
   const isAwaitingResponse = Boolean(info && (info.status === 'pending_company' || info.status === 'rescheduled'));
 
   useEffect(() => {
-    if (!token) {
-      setInfoLoading(false);
-      return;
-    }
+    if (!token) return;
 
+    let cancelled = false;
     const load = async () => {
       try {
         const payload = JSON.parse(atob(token.split('.')[1]));
         const res = await api.post(`/appointments/${payload.appointment_id}/respond-info`, { token });
-        setInfo(res.data || null);
+        if (!cancelled) setInfo(res.data || null);
       } catch (err) {
-        setInfoError(getErrorMessage(err)
-          ? 'ลิงก์นี้หมดอายุหรือไม่ถูกต้อง กรุณาติดต่อเจ้าหน้าที่สหกิจศึกษา'
-          : 'ไม่สามารถโหลดรายละเอียดการนัดหมายได้ กรุณาลองใหม่อีกครั้ง');
+        if (!cancelled) {
+          setInfoError(getErrorMessage(err)
+            ? 'ลิงก์นี้หมดอายุหรือไม่ถูกต้อง กรุณาติดต่อเจ้าหน้าที่สหกิจศึกษา'
+            : 'ไม่สามารถโหลดรายละเอียดการนัดหมายได้ กรุณาลองใหม่อีกครั้ง');
+        }
       } finally {
-        setInfoLoading(false);
+        if (!cancelled) setInfoLoading(false);
       }
     };
 
     load();
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   if (!token) {

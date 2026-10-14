@@ -220,15 +220,6 @@ export interface StudentMemoItem {
   semester?: string | null;
 }
 
-/** แผนปฏิบัติงานหนึ่งสัปดาห์ในแผน 16 สัปดาห์ */
-export interface WeeklyPlan {
-  plan_id?: number;
-  week_number: number;
-  start_date: string;
-  end_date: string;
-  tasks: string;
-}
-
 /** สรุปผลการนำเข้าไฟล์รายชื่อ — ใช้ทั้งฝั่งนักศึกษาและบุคลากร */
 export interface ImportSummary {
   totalProcessed: number;
@@ -426,13 +417,6 @@ export interface Semester {
   is_active: boolean;
 }
 
-export interface DocumentTemplate {
-  template_id: number;
-  name: string;
-  file_path: string;
-  type: string;
-}
-
 export interface OfficialDocument {
   doc_id: number;
   type: string;
@@ -442,7 +426,6 @@ export interface OfficialDocument {
   generated_file_path?: string | null;
   status: string;
   dean_signature_date?: string | null;
-  docusign_envelope_id?: string | null;
   /** ชื่อสถานประกอบการที่หนังสือฉบับนี้ส่งถึง — `GET /students/dashboard` */
   company_name_th?: string | null;
   /** หนังสือของคำร้องที่ปิดไปแล้ว ใช้ยื่นไม่ได้อีก (เซิร์ฟเวอร์จับคู่ด้วยเลขที่หนังสือ) — `GET /students/dashboard` */

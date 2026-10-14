@@ -48,7 +48,6 @@ export interface MentorFollowupRow {
     weekly_log: number;
     monthly_log: number;
     daily_log: number;
-    work_plan: number;
     report_outline: number;
     report_draft: number;
   };
@@ -91,7 +90,6 @@ const KIND_LABELS: Array<[keyof MentorFollowupRow['pending_by_kind'], string]> =
   ['weekly_log', 'บันทึกสัปดาห์'],
   ['monthly_log', 'บันทึกเดือน'],
   ['daily_log', 'บันทึกรายวัน'],
-  ['work_plan', 'แผนปฏิบัติงาน'],
   ['report_outline', 'โครงร่าง'],
   ['report_draft', 'ร่างรายงาน'],
 ];

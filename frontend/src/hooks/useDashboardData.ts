@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 
 /** Kept at the value the five hand-written copies had all settled on. */
 const POLL_INTERVAL_MS = 10_000;
@@ -22,7 +22,9 @@ export function useDashboardData(
   // Held in a ref so a caller redefining `load` every render — which all of
   // them do — does not tear down and restart the interval on every render.
   const loadRef = useRef(load);
-  loadRef.current = load;
+  useLayoutEffect(() => {
+    loadRef.current = load;
+  });
 
   useEffect(() => {
     loadRef.current();

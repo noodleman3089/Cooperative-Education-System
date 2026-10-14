@@ -5,7 +5,6 @@ import api, { API_BASE_URL } from '../../services/api';
 import {
   ExternalLink,
   Printer,
-  Info,
 } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import { getErrorMessage } from '../../utils/errors';
@@ -87,7 +86,6 @@ const AccommodationWorkPlan: React.FC = () => {
   const [savedOnServer, setSavedOnServer] = useState(false);
 
   const [accommodation, setAccommodation] = useState<Accommodation>(BLANK_ACCOMMODATION);
-  const [legacyAddress, setLegacyAddress] = useState('');
   const [thaiAddress, setThaiAddress] = useState<ProvinceItem[]>([]);
 
   const [emergencyContact, setEmergencyContact] = useState<EmergencyContact>({
@@ -106,7 +104,6 @@ const AccommodationWorkPlan: React.FC = () => {
   const loadData = async () => {
     setIsLoading(true);
     let loadedAcc: Accommodation = BLANK_ACCOMMODATION;
-    let loadedLegacy = '';
 
     try {
       const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
@@ -137,7 +134,6 @@ const AccommodationWorkPlan: React.FC = () => {
           emergency_relationship: a.emergency_relationship || '',
           emergency_phone: a.emergency_phone || '',
         };
-        loadedLegacy = a.house_no ? '' : a.address_legacy || '';
       } else {
         loadedAcc = { ...BLANK_ACCOMMODATION, section: loadedSection };
       }
@@ -157,7 +153,6 @@ const AccommodationWorkPlan: React.FC = () => {
       setLoadState((prev) => (prev === 'ok' ? 'ok' : 'failed'));
     } finally {
       setAccommodation(loadedAcc);
-      setLegacyAddress(loadedLegacy);
 
       savedSnapshot.current = snapshotOf(loadedAcc);
 
@@ -584,24 +579,6 @@ const AccommodationWorkPlan: React.FC = () => {
             />
           </div>
         </div>
-
-        {legacyAddress && (
-          <div
-            data-testid="legacy-address"
-            className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50"
-          >
-            <Info className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
-            <div className="text-xs">
-              <span className="font-bold text-gray-700 dark:text-gray-300">
-                ที่อยู่ที่เคยกรอกไว้ก่อนระบบแยกช่อง:
-              </span>{' '}
-              <span className="text-gray-600 dark:text-gray-400">“{legacyAddress}”</span>
-              <span className="block mt-0.5 text-gray-500 dark:text-gray-400">
-                (แสดงอย่างเดียว แก้ไม่ได้ มีไว้ให้คัดลอกมาลงช่องด้านบน)
-              </span>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Card 3: ปักหมุดตำแหน่งที่พักบนแผนที่ */}
