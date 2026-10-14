@@ -15,7 +15,7 @@ export interface Walk {
   /** ผูกตัวเก็บ console error / pageerror — เรียกกับทุก page ที่ใช้ */
   watch(page: Page): void;
   /** ถ่ายภาพ fullPage หลังการกระทำ + บันทึกขั้น */
-  step(page: Page, who: string, caption: string): Promise<void>;
+  step(page: Page, who: string, caption: string, opts?: { file?: string }): Promise<void>;
   /** เขียน index.html */
   finish(): Promise<void>;
 }
@@ -54,14 +54,15 @@ function pathOf(url: string): string {
   }
 }
 
-export function createWalk(flow: string, title: string): Walk {
+/** `keep` = ไม่ล้างภาพเดิมของโฟลว์ (ใช้ตอนถ่ายซ่อมเฉพาะบางภาพ — index.html จะมีเฉพาะภาพของรอบนั้น) */
+export function createWalk(flow: string, title: string, opts: { keep?: boolean; notes?: string[] } = {}): Walk {
   const dir = path.join(ROOT_OUT, flow);
   const steps: StepRecord[] = [];
   const pageErrors: string[] = [];
 
   // ล้างเฉพาะ .png / index.html ของโฟลว์นี้ — ไม่แตะอย่างอื่น ไม่แตะโฟลเดอร์แม่
   fs.mkdirSync(dir, { recursive: true });
-  for (const f of fs.readdirSync(dir)) {
+  for (const f of opts.keep ? [] : fs.readdirSync(dir)) {
     if (f === 'index.html' || f.endsWith('.png')) fs.unlinkSync(path.join(dir, f));
   }
 
@@ -91,7 +92,7 @@ export function createWalk(flow: string, title: string): Walk {
       });
     },
 
-    async step(page, who, caption) {
+    async step(page, who, caption, opts) {
       // รอหน้านิ่ง: ไม่มี screen-loading ค้าง (เหมือน goToMenu) + network นิ่งสั้นๆ
       // ไม่ใช้ networkidle เป็นเงื่อนไขเดียว — แอป poll อยู่ จึงให้ timeout แล้วถ่ายต่อ
       await page
@@ -136,7 +137,8 @@ export function createWalk(flow: string, title: string): Walk {
       }
 
       const n = steps.length + 1;
-      const file = `${String(n).padStart(2, '0')}.png`;
+      // `opts.file` = ตั้งชื่อไฟล์เอง (เช่น `4.11.png` ตามเลขภาพในเล่ม) · ไม่ระบุ = เลขขั้นเรียงลำดับเหมือนเดิม
+      const file = opts?.file ?? `${String(n).padStart(2, '0')}.png`;
 
       // แอปเลื่อนใน container ข้างใน (main · modal) ไม่ใช่ที่ document — fullPage อย่างเดียวได้แค่ความสูง viewport
       // จึงขยาย viewport ตามส่วนที่ถูกซ่อนในตัวเลื่อน (วัดซ้ำ เพราะ max-h ของ modal อิง vh) แล้วคืนค่าหลังถ่าย
@@ -205,6 +207,10 @@ export function createWalk(flow: string, title: string): Walk {
         })
         .join('\n');
 
+      const notesHtml = opts.notes?.length
+        ? `<section class="step"><h2>หมายเหตุ</h2><ul>${opts.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}</ul></section>`
+        : '';
+
       const html = `<!doctype html>
 <html lang="th">
 <head>
@@ -241,6 +247,7 @@ img { max-width:100%; height:auto; border:1px solid var(--line); border-radius:8
 <main>
 <h1>${escapeHtml(title)}</h1>
 <p class="sub">สร้างเมื่อ ${escapeHtml(created)} · <b>${steps.length}</b> ขั้น · ติดป้ายเตือน <b>${flagged}</b> ขั้น</p>
+${notesHtml}
 <nav><ol>
 ${toc}
 </ol></nav>
