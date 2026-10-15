@@ -1,11 +1,9 @@
 import { Request, Response } from 'express';
 import { UserModel, VALID_ROLES } from '../models/user';
-import { StudentModel } from '../models/student';
 import { PersonnelModel } from '../models/personnel';
 import { MasterModel } from '../models/master';
 import { query } from '../config/database';
 import { hashPassword } from '../utils/password';
-import { sanitizeCsvCell } from '../middlewares/validation';
 import { AuditAction, writeAudit } from '../utils/audit';
 import { MENTOR_ROLE_EXCLUSIVE_MESSAGE, sendUnexpectedError } from '../utils/httpError';
 import { replaceDeptHeadInMajor } from '../utils/deptHead';
@@ -330,142 +328,6 @@ export class UserController {
       res.status(200).json({ message: 'User and all associated profiles deleted successfully.' });
     } catch (error) {
       sendUnexpectedError(res, error, 'Delete User Error', 'An internal server error occurred while deleting the user.');
-    }
-  }
-
-  /**
-   * Import multiple users and pre-populate USER, STUDENT, and PERSONNEL tables.
-   * Route: POST /api/users/import
-   */
-  static async importUsers(req: Request, res: Response): Promise<void> {
-    try {
-      interface RawImportUser {
-        email: string;
-        role: string; // e.g., 'student', 'advisor', 'dept_head'
-        student_code?: string;
-        major_code?: string; // e.g. 'CS01' to resolve major_id
-        province_name?: string; // e.g. 'กรุงเทพมหานคร' to resolve province_id
-        cumulative_gpa?: number;
-        e_signature_file?: string;
-      }
-
-      let usersToImport: RawImportUser[] = [];
-
-      // 1. Determine input format (JSON or CSV)
-      const contentType = req.headers['content-type'] || '';
-      if (contentType.includes('application/json')) {
-        usersToImport = req.body.users || [];
-      } else if (typeof req.body === 'string') {
-        const lines = req.body.split(/\r?\n/);
-        const startIdx = lines[0].toLowerCase().includes('email') ? 1 : 0;
-        
-        for (let i = startIdx; i < lines.length; i++) {
-          const line = lines[i].trim();
-          if (!line) continue;
-          
-          const parts = line.split(',');
-          if (parts.length >= 2) {
-            usersToImport.push({
-              email: sanitizeCsvCell(parts[0] || ''),
-              role: sanitizeCsvCell(parts[1] || ''),
-              student_code: parts[2] ? sanitizeCsvCell(parts[2]) : undefined,
-              major_code: parts[3] ? sanitizeCsvCell(parts[3]) : undefined,
-              province_name: parts[4] ? sanitizeCsvCell(parts[4]) : undefined,
-              cumulative_gpa: parts[5] && parts[5].trim() ? parseFloat(sanitizeCsvCell(parts[5])) : undefined,
-              e_signature_file: parts[6] ? sanitizeCsvCell(parts[6]) : undefined
-            });
-          }
-        }
-      }
-
-      if (usersToImport.length === 0) {
-        res.status(400).json({ message: 'No users found to import.' });
-        return;
-      }
-
-      let importedCount = 0;
-      let skippedCount = 0;
-      const skippedEmails: string[] = [];
-
-      // 2. Iterate and pre-populate
-      for (const item of usersToImport) {
-        const email = item.email ? item.email.trim().toLowerCase() : '';
-        const role = item.role ? item.role.trim().toLowerCase() : '';
-
-        if (!email || !role) {
-          skippedCount++;
-          continue;
-        }
-
-        try {
-          // Check duplicate
-          const existingUser = await UserModel.findByEmail(email);
-          if (existingUser) {
-            skippedCount++;
-            skippedEmails.push(email);
-            continue;
-          }
-
-          // Create base user without password (password_hash is null for SSO)
-          const user = await UserModel.createUser(email, null, role);
-
-          // Populate profile tables if major_code is specified
-          if (item.major_code) {
-            // Resolve major_id by code
-            const majorRes = await query('SELECT major_id FROM master_major WHERE major_code = $1 LIMIT 1', [item.major_code]);
-            const majorId = majorRes.rowCount && majorRes.rowCount > 0 ? majorRes.rows[0].major_id : 1;
-
-            if (role === 'student' && item.student_code) {
-              // Resolve province_id
-              let provinceId = 1;
-              if (item.province_name) {
-                const provinceRes = await query('SELECT province_id FROM master_province WHERE province_name_th = $1 LIMIT 1', [item.province_name]);
-                if (provinceRes.rowCount && provinceRes.rowCount > 0) {
-                  provinceId = provinceRes.rows[0].province_id;
-                }
-              }
-
-              // Create Student profile
-              await StudentModel.createStudent(
-                user.user_id,
-                item.student_code,
-                majorId,
-                provinceId,
-                item.cumulative_gpa !== undefined ? item.cumulative_gpa : 3.00
-              );
-            } else if (['advisor', 'dean', 'staff', 'dept_head'].includes(role)) {
-              // Create Personnel profile
-              await PersonnelModel.createPersonnel(
-                user.user_id,
-                majorId,
-                item.e_signature_file || null
-              );
-              // SB-G2: ไฟล์นำเข้าเป็นของเจ้าหน้าที่ — แถวหัวหน้าสาขาแทนคนเก่าในสาขานั้น
-              if (role === 'dept_head') {
-                await replaceDeptHeadInMajor(user.user_id, req);
-              }
-            }
-          }
-
-          importedCount++;
-        } catch (err) {
-          console.error(`Failed to import user ${email}:`, err);
-          skippedCount++;
-          skippedEmails.push(email);
-        }
-      }
-
-      res.status(200).json({
-        message: 'Import process completed.',
-        summary: {
-          totalProcessed: usersToImport.length,
-          importedCount,
-          skippedCount,
-          skippedEmails
-        }
-      });
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Import Users Error', 'An internal server error occurred during user import.');
     }
   }
 }

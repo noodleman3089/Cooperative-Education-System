@@ -23,7 +23,4 @@ router.put('/:id', UserController.updateUser);
 // Route: DELETE /api/users/:id (Remove user account)
 router.delete('/:id', UserController.deleteUser);
 
-// Route: POST /api/users/import (Import multiple accounts from JSON/CSV)
-router.post('/import', UserController.importUsers);
-
 export default router;
