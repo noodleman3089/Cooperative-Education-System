@@ -30,6 +30,7 @@ import {
   sanitizeRows,
 } from '../utils/coopApplicationHistory';
 import { fetchCoopApplicationView } from '../utils/coopApplicationView';
+import { classifyStudent, TIER_ORDER } from '../utils/studentAttention';
 
 export class StudentController {
   /**
@@ -845,6 +846,102 @@ export class StudentController {
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(res, error, 'Get Students List Error', 'An internal server error occurred while retrieving student list.');
+    }
+  }
+
+  /**
+   * ตรวจสอบสถานะนักศึกษาทั้งสาขา เรียงตามความสำคัญ (ต้องรีบ → ติดขัด → ตามแผน → เสร็จสิ้น)
+   * Route: GET /api/students/status-board
+   * Access: advisor · dept_head — ขอบเขต = สาขาของผู้เรียกเท่านั้น (SEC-06 fail closed ผ่าน `resolveMajorScope`)
+   *
+   * ⛔ ส่งแค่สถานะ/ปัญหาเป็นรหัส + จำนวน — ไม่ส่งเนื้อ 03 · ที่อยู่ · เบอร์ (SEC-12)
+   * กติกาจัดลำดับอยู่ที่ `utils/studentAttention.ts` ที่เดียว
+   */
+  static async getStatusBoard(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const { majorId } = await resolveMajorScope(req.user.userId, req.user.roles);
+      if (majorId === null) {
+        res.status(403).json({ message: 'Forbidden. No major scope for this account.' });
+        return;
+      }
+
+      const result = await query(
+        `WITH d AS (SELECT (NOW() AT TIME ZONE 'Asia/Bangkok')::date AS today)
+         SELECT s.student_id, s.student_code, s.first_name, s.last_name, s.profile_image,
+                s.advisor_id, s.supervisor_id,
+                ${COOP03_REQUIRED_COLUMNS.map((c) => `s.${c}`).join(', ')},
+                i.form_id AS intent_form_id, i.status AS intent_status, i.dispatch_document_no, i.start_date::text AS start_date,
+                c.name_th AS company_name,
+                (d.today - (i.created_at AT TIME ZONE 'Asia/Bangkok')::date) AS intent_age_days,
+                COALESCE(i.acceptance_due_date < d.today, FALSE) AS acceptance_overdue,
+                COALESCE(i.start_date <= d.today, FALSE) AS placement_started,
+                (d.today - COALESCE((wl.last_at AT TIME ZONE 'Asia/Bangkok')::date, i.start_date)) AS log_gap_days,
+                EXISTS (SELECT 1 FROM accommodations a WHERE a.student_id = s.student_id) AS accommodation_submitted,
+                (SELECT COUNT(DISTINCT f.form_code)::int FROM final_evaluations f
+                  WHERE f.student_id = s.student_id AND f.evaluator_role = 'mentor') AS mentor_forms_done
+           FROM students s
+           CROSS JOIN d
+           LEFT JOIN LATERAL (
+             SELECT form_id, company_id, status, dispatch_document_no, start_date, created_at, acceptance_due_date
+               FROM intent_forms
+              WHERE student_id = s.student_id AND status <> 'superseded'
+              ORDER BY form_id DESC LIMIT 1
+           ) i ON TRUE
+           LEFT JOIN companies c ON c.company_id = i.company_id
+           LEFT JOIN LATERAL (
+             SELECT MAX(submitted_at) AS last_at FROM weekly_logs
+              WHERE student_id = s.student_id AND status <> 'draft'
+           ) wl ON TRUE
+          WHERE s.major_id = $1
+          ORDER BY s.student_code ASC`,
+        [majorId]
+      );
+
+      const students = (result.rows as Record<string, unknown>[])
+        .map((row) => {
+          const verdict = classifyStudent({
+            intent_status: (row.intent_status as string | null) ?? null,
+            dispatch_document_no: (row.dispatch_document_no as string | null) ?? null,
+            intent_age_days: (row.intent_age_days as number | null) ?? null,
+            acceptance_overdue: Boolean(row.acceptance_overdue),
+            placement_started: Boolean(row.placement_started),
+            log_gap_days: (row.log_gap_days as number | null) ?? null,
+            coop03_missing_count: coop03MissingKeys(row).length,
+            accommodation_submitted: Boolean(row.accommodation_submitted),
+            mentor_forms_done: Number(row.mentor_forms_done ?? 0),
+            advisor_id: (row.advisor_id as number | null) ?? null,
+            supervisor_id: (row.supervisor_id as number | null) ?? null,
+          });
+          return {
+            student_id: row.student_id,
+            student_code: row.student_code,
+            first_name: row.first_name,
+            last_name: row.last_name,
+            profile_image: row.profile_image ?? null,
+            company_name: row.company_name ?? null,
+            intent_form_id: row.intent_form_id ?? null,
+            advisor_id: row.advisor_id ?? null,
+            supervisor_id: row.supervisor_id ?? null,
+            ...verdict,
+          };
+        })
+        .sort(
+          (a, b) =>
+            TIER_ORDER[a.tier] - TIER_ORDER[b.tier] ||
+            b.issues.length - a.issues.length ||
+            String(a.student_code).localeCompare(String(b.student_code))
+        );
+
+      const counts = { urgent: 0, attention: 0, ontrack: 0, done: 0 };
+      for (const s of students) counts[s.tier] += 1;
+      res.status(200).json({ counts, students });
+    } catch (error) {
+      if (sendAccessError(res, error)) return;
+      sendUnexpectedError(res, error, 'Get Status Board Error', 'เกิดข้อผิดพลาดขณะโหลดสถานะนักศึกษา');
     }
   }
 

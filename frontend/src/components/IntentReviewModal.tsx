@@ -3,6 +3,7 @@ import api, { API_BASE_URL } from '../services/api';
 import { Download, CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/statusLabels';
+import { formatThaiDate } from '../utils/thaiDate';
 
 /**
  * ⛔ `currentRole` กับ `onSuccess` ถูกถอดออก 2026-08-27 — มันมีไว้ให้ปุ่มอนุมัติ/ตีกลับ
@@ -35,6 +36,12 @@ interface IntentDetail {
   company_contact_person?: string | null;
   company_phone?: string | null;
   start_date?: string | null;
+  /** ผู้ลงนามบนกระดาษที่เจ้าหน้าที่คีย์ — มีเฉพาะที่ส่งถึงบุคลากร (SEC-10) */
+  advisor_signer_name?: string | null;
+  advisor_signed_date?: string | null;
+  dept_head_signer_name?: string | null;
+  dept_head_signed_date?: string | null;
+  officer_document_no?: string | null;
   status: string;
 }
 
@@ -142,6 +149,37 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                   </a>
                 </div>
               </div>
+            </div>
+
+            {/* ผู้ลงนามบนแบบคำร้อง (เอกสารหมายเลข 1) — เจ้าหน้าที่คีย์จากกระดาษตอนรับคำร้อง · ยังไม่รับ = ยังไม่มี */}
+            <div
+              data-testid="intent-signers"
+              className="space-y-2 rounded-xl border border-gray-100 bg-gray-50 p-4 text-xs text-gray-700 dark:border-gray-800 dark:bg-gray-800 dark:text-gray-300"
+            >
+              <h4 className="border-b pb-1.5 text-sm font-bold text-brand-navy dark:border-gray-700 dark:text-white">
+                การลงนามบนแบบคำร้อง
+              </h4>
+              {intentDetail.advisor_signer_name || intentDetail.dept_head_signer_name ? (
+                <>
+                  <p>
+                    <span className="font-medium text-gray-600 dark:text-gray-400">อาจารย์ที่ปรึกษา:</span>{' '}
+                    {intentDetail.advisor_signer_name || '-'}
+                    {intentDetail.advisor_signed_date ? ` · ลงวันที่ ${formatThaiDate(intentDetail.advisor_signed_date.slice(0, 10))}` : ''}
+                  </p>
+                  <p>
+                    <span className="font-medium text-gray-600 dark:text-gray-400">หัวหน้าสาขาวิชา:</span>{' '}
+                    {intentDetail.dept_head_signer_name || '-'}
+                    {intentDetail.dept_head_signed_date ? ` · ลงวันที่ ${formatThaiDate(intentDetail.dept_head_signed_date.slice(0, 10))}` : ''}
+                  </p>
+                  {intentDetail.officer_document_no && (
+                    <p>
+                      <span className="font-medium text-gray-600 dark:text-gray-400">เลขที่หนังสือออก:</span> {intentDetail.officer_document_no}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <p className="text-gray-600 dark:text-gray-400">ยังไม่มีการบันทึกผู้ลงนาม — เจ้าหน้าที่ยังไม่ได้รับคำร้อง</p>
+              )}
             </div>
 
             {/* ⛔ ปุ่ม อนุมัติ/ตีกลับ และแผงเลือกเหตุผล ถูกถอดออก 2026-08-27

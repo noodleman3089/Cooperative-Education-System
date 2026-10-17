@@ -33,7 +33,6 @@ const OutlineReview = lazy(() => import('./Advisor/OutlineReview'));
 const FacultyMemos = lazy(() => import('./Faculty/FacultyMemos'));
 const DeptHeadHome = lazy(() => import('./DeptHead/DeptHeadHome'));
 const AdvisorAssignment = lazy(() => import('./DeptHead/AdvisorAssignment'));
-const PetitionTracking = lazy(() => import('./DeptHead/PetitionTracking'));
 const DeanSignQueue = lazy(() => import('./Dean/DeanSignQueue'));
 const DeanSignature = lazy(() => import('./Dean/DeanSignature'));
 const StaffHome = lazy(() => import('./Staff/StaffHome'));
@@ -561,7 +560,8 @@ const Dashboard: React.FC = () => {
         // ลิงก์เก่า ?menu=students (ตรวจสอบคุณสมบัติ — ถอดออก 2026-09-14) ไปหน้ารายชื่อที่ยังมีอยู่
         //   แทนที่จะเปิดหน้าว่าง · เมนูที่พาไปหน้าอื่นไม่ได้คือเมนูตาย
         if (activeMenu === 'students' || activeMenu === 'assignment') return <AdvisorAssignment />;
-        if (activeMenu === 'approval') return <PetitionTracking />;
+        // ลิงก์เก่า ?menu=approval (ติดตามคำร้อง — ถอดเมนูแล้ว 2026-10-18 ย้ายมาเป็นบอร์ด "ตรวจสอบสถานะนักศึกษา" บนหน้าแรก)
+        //   ตกลงไปหน้าแรกแทนหน้าว่าง
         return <DeptHeadHome />;
         
       case 'dean':

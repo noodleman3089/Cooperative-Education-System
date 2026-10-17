@@ -4,11 +4,9 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import { skeletonFor } from '../../components/ui/skeletonFor';
 import { useDashboardData } from '../../hooks/useDashboardData';
 import api from '../../services/api';
-import type { IntentForm } from '../../types/api';
 import { FileText, Calendar, ChevronRight } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
-import StatusBadge from '../../components/ui/StatusBadge';
-import { intentDisplayStatus } from '../../utils/intentStatus';
+import StudentStatusBoard from '../../components/StudentStatusBoard';
 import { formatThaiDate } from '../../utils/thaiDate';
 import { AuthContext } from '../../context/authContextValue';
 import { getErrorMessage } from '../../utils/errors';
@@ -42,12 +40,6 @@ interface AdvisorHomeProps {
   view?: 'advisor' | 'supervisor';
 }
 
-const intentStudentName = (intent?: IntentForm | null): string =>
-  [intent?.first_name, intent?.last_name].filter(Boolean).join(' ').trim()
-  || intent?.student_name
-  || intent?.student_code
-  || 'ไม่ระบุชื่อ';
-
 const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -58,7 +50,6 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     propView || (roleParam === 'supervisor' ? 'supervisor' : 'advisor');
 
   const [dashboardPayload, setDashboardPayload] = useState<AdvisorHomePayload | null>(null);
-  const [intents, setIntents] = useState<IntentForm[]>([]);
   const [showIntentsTable, setShowIntentsTable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,18 +92,6 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
         );
         setDashboardPayload(homeRes);
         setError(null);
-
-        // Fetch intents list only for the advisor tracking card
-        if (currentView === 'advisor') {
-          try {
-            const intentsRes = await api.get('/intents');
-            setIntents(intentsRes || []);
-          } catch (err) {
-            if (!isBackground) {
-              setError(getErrorMessage(err, 'โหลดรายการใบความจำนงที่ติดตามไม่ได้'));
-            }
-          }
-        }
       } catch (err: unknown) {
         if (!isBackground) {
           setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลหน้าแรกของอาจารย์ได้ กรุณาลองใหม่อีกครั้ง'));
@@ -205,11 +184,6 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
     defaultSubtitle: '',
     viewAllUrl: '/dashboard',
   };
-
-  const DEAD_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
-  const trackedIntents = intents.filter(
-    (i) => !DEAD_INTENT_STATUSES.includes(i.status)
-  );
 
   return (
     <div
@@ -803,104 +777,15 @@ const AdvisorHome: React.FC<AdvisorHomeProps> = ({ view: propView }) => {
         )}
       </div>
 
-      {/* Collapsible Intent Tracking card (Advisor view only) */}
+      {/* ตรวจสอบสถานะนักศึกษา (ฝ่ายที่ปรึกษา) — เรียงตามความสำคัญ · เปิดรายคนที่หน้านักศึกษา */}
       {currentView === 'advisor' && (
-        <div className="space-y-4">
-          <div
-            data-testid="advisor-intent-tracking"
-            className="card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 sm:p-5 flex items-center justify-between gap-4 shadow-sm"
-          >
-            <div>
-              <span className="text-sm font-bold text-gray-900 dark:text-white block">
-                ระบบตรวจสอบใบความจำนง (อาจารย์ที่ปรึกษา)
-              </span>
-              <span className="text-xs text-gray-500 dark:text-gray-400 block mt-0.5">
-                ใบความจำนงของนักศึกษาในสาขา {trackedIntents.length} ใบ ไปถึงขั้นไหนแล้ว — อ่านอย่างเดียว เปิดรายละเอียดด้วยปุ่ม “ตรวจทาน”
-              </span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowIntentsTable(!showIntentsTable)}
-              className="px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 text-xs font-bold text-gray-700 dark:text-gray-300 transition-colors shrink-0 cursor-pointer"
-            >
-              {showIntentsTable ? 'ซ่อนตารางติดตาม' : 'เปิดตารางติดตาม'}
-            </button>
-          </div>
-
-          {showIntentsTable && (
-            <div className="card bg-white rounded-2xl border border-gray-200 overflow-hidden dark:bg-gray-900 dark:border-gray-800 shadow-sm page-enter">
-              <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50/60 dark:bg-gray-800/50 dark:border-gray-800">
-                <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                  ใบความจำนงของนักศึกษาในความดูแล ({trackedIntents.length} รายการ)
-                </span>
-                <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
-                  การลงนามอนุมัติอยู่บนแบบคำร้องที่นักศึกษานำมาให้เซ็น — หน้านี้ไว้ติดตามว่านักศึกษาในความดูแลยื่นที่ไหนและไปถึงขั้นไหนแล้ว
-                </p>
-              </div>
-
-              {trackedIntents.length > 0 ? (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-left text-xs">
-                    <thead>
-                      <tr className="bg-gray-50/50 border-b border-gray-200 text-gray-600 dark:text-gray-400 dark:bg-gray-800/40 dark:border-gray-800">
-                        <th className="p-3.5 font-semibold">นักศึกษา</th>
-                        <th className="p-3.5 font-semibold">สถานประกอบการ</th>
-                        <th className="p-3.5 font-semibold">สถานะ</th>
-                        <th className="p-3.5 font-semibold text-right">การจัดการ</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                      {trackedIntents.map((intent) => (
-                        <tr
-                          key={intent.form_id}
-                          className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20"
-                        >
-                          <td className="p-3.5 font-medium text-gray-800 dark:text-gray-200">
-                            <span className="block font-bold">{intentStudentName(intent)}</span>
-                            <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                              รหัส: {intent.student_code}
-                            </span>
-                          </td>
-                          <td className="p-3.5 text-gray-600 dark:text-gray-400 font-medium">
-                            {intent.company_name_th}
-                          </td>
-                          <td className="p-3.5">
-                            <StatusBadge
-                              status={intentDisplayStatus(
-                                intent.status,
-                                intent.cover_letter_status
-                              )}
-                              domain="intent"
-                            />
-                          </td>
-                          <td className="p-3.5 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                window.dispatchEvent(
-                                  new CustomEvent('open-intent-review', {
-                                    detail: intent.form_id,
-                                  })
-                                )
-                              }
-                              className="py-1 px-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 font-bold transition-all text-gray-700 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800 text-xs cursor-pointer"
-                            >
-                              ตรวจทาน
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400 text-xs">
-                  ยังไม่มีนักศึกษาในความดูแลยื่นใบความจำนง
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <StudentStatusBoard
+          myUserId={auth?.user?.userId}
+          actionFor={(s) => ({
+            label: 'เปิดรายละเอียด',
+            onClick: () => navigate(`/dashboard?role=advisor&menu=students&student=${s.student_id}`),
+          })}
+        />
       )}
 
       {/* Bottom informational guidelines cards */}

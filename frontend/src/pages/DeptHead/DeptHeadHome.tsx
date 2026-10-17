@@ -6,6 +6,7 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import EmptyState from '../../components/ui/EmptyState';
+import StudentStatusBoard from '../../components/StudentStatusBoard';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../../utils/errors';
 
@@ -106,7 +107,7 @@ const DeptHeadHome: React.FC = () => {
     );
   }
 
-  const { major, students_total, unassigned, pipeline, evaluation, today } = data;
+  const { major, students_total, unassigned, evaluation, today } = data;
   const remainingUnassignedCount = Math.max(0, unassigned.students_affected - unassigned.items.length);
 
   return (
@@ -175,122 +176,27 @@ const DeptHeadHome: React.FC = () => {
         </div>
       )}
 
-      {/* ══ เส้นทางคำร้องของสาขา — อ่านอย่างเดียว ไม่มีปุ่ม ══ */}
-      <div className="flex flex-col gap-2.5">
-        <div className="flex justify-between items-baseline">
-          <h2 className="text-[19px] font-bold text-gray-900 dark:text-white">
-            คำร้องเอกสารหมายเลข 1 ของสาขาอยู่ตรงไหน
-          </h2>
-          <button
-            type="button"
-            onClick={() => setSearchParams({ menu: 'approval' })}
-            className="text-[13px] font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors bg-transparent border-none p-0 cursor-pointer"
-          >
-            เปิดตารางติดตาม
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {/* 1. รอลงนามบนกระดาษ */}
-          <button
-            type="button"
-            data-testid="dept-home-stage-paper"
-            data-count={pipeline.paper}
-            onClick={() => setSearchParams({ menu: 'approval', stage: 'paper' })}
-            className="rounded-[14px] p-[14px_16px] flex flex-col gap-1 box-border bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-all text-left shadow-sm"
-          >
-            <span className="text-[13px] font-bold text-gray-700 dark:text-gray-200">
-              รอลงนามบนกระดาษ
-            </span>
-            <span className="text-[28px] leading-[1.2] font-extrabold text-gray-900 dark:text-white">
-              {pipeline.paper}
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              นักศึกษาจะนำมาให้คุณเซ็น
-            </span>
-          </button>
-
-          {/* 2. ค้างที่เจ้าหน้าที่ (เทาเส้นประ ไม่มีปุ่ม) */}
-          <button
-            type="button"
-            data-testid="dept-home-stage-staff"
-            data-count={pipeline.staff}
-            onClick={() => setSearchParams({ menu: 'approval', stage: 'staff' })}
-            className="rounded-[14px] p-[14px_16px] flex flex-col gap-1 box-border bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-all text-left"
-          >
-            <span className="text-[13px] font-bold text-gray-600 dark:text-gray-400">
-              ค้างที่เจ้าหน้าที่
-            </span>
-            <span className="text-[28px] leading-[1.2] font-extrabold text-gray-600 dark:text-gray-400">
-              {pipeline.staff}
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              อัปโหลดแล้ว รอรับคำร้อง
-            </span>
-          </button>
-
-          {/* 3. ค้างที่คณบดี (เทาเส้นประ ไม่มีปุ่ม) */}
-          <button
-            type="button"
-            data-testid="dept-home-stage-dean"
-            data-count={pipeline.dean}
-            onClick={() => setSearchParams({ menu: 'approval', stage: 'dean' })}
-            className="rounded-[14px] p-[14px_16px] flex flex-col gap-1 box-border bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-all text-left"
-          >
-            <span className="text-[13px] font-bold text-gray-600 dark:text-gray-400">
-              ค้างที่คณบดี
-            </span>
-            <span className="text-[28px] leading-[1.2] font-extrabold text-gray-600 dark:text-gray-400">
-              {pipeline.dean}
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              หนังสือขอความอนุเคราะห์
-            </span>
-          </button>
-
-          {/* 4. รอบริษัทตอบ (เทาเส้นประ ไม่มีปุ่ม) */}
-          <button
-            type="button"
-            data-testid="dept-home-stage-company"
-            data-count={pipeline.company}
-            onClick={() => setSearchParams({ menu: 'approval', stage: 'company' })}
-            className="rounded-[14px] p-[14px_16px] flex flex-col gap-1 box-border bg-gray-50 dark:bg-gray-800/40 border border-dashed border-gray-300 dark:border-gray-700 cursor-pointer hover:border-gray-400 dark:hover:border-gray-500 transition-all text-left"
-          >
-            <span className="text-[13px] font-bold text-gray-600 dark:text-gray-400">
-              รอบริษัทตอบ
-            </span>
-            <span className="text-[28px] leading-[1.2] font-extrabold text-gray-600 dark:text-gray-400">
-              {pipeline.company}
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              หนังสือออกไปแล้ว
-            </span>
-          </button>
-
-          {/* 5. ได้ที่ฝึกแล้ว */}
-          <button
-            type="button"
-            data-testid="dept-home-stage-accepted"
-            data-count={pipeline.accepted}
-            onClick={() => setSearchParams({ menu: 'approval', stage: 'accepted' })}
-            className="rounded-[14px] p-[14px_16px] flex flex-col gap-1 box-border bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-500 transition-all text-left shadow-sm"
-          >
-            <span className="text-[13px] font-bold text-gray-700 dark:text-gray-200">
-              ได้ที่ฝึกแล้ว
-            </span>
-            <span className="text-[28px] leading-[1.2] font-extrabold text-emerald-700 dark:text-emerald-400">
-              {pipeline.accepted}
-            </span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">
-              บริษัทตอบรับ
-            </span>
-          </button>
-        </div>
-
-        <span className="text-xs text-gray-600 dark:text-gray-400">
-          กองสีเทาเส้นประ = ค้างที่คนอื่น ไม่มีปุ่มโดยตั้งใจ · ยังไม่ยื่นเลย {pipeline.not_submitted} คน
-        </span>
-      </div>
+      {/* ══ ตรวจสอบสถานะนักศึกษา — เรียงตามความสำคัญ (แทนตารางติดตามคำร้องเดิม 2026-10-18)
+          ปุ่ม "ดูคำร้อง" เปิดรายละเอียดใบความจำนง + ผู้ลงนามบนกระดาษ · "จัดสรรอาจารย์" มีเฉพาะแถวที่ขาดอาจารย์ ══ */}
+      <StudentStatusBoard
+        actionFor={(s) => {
+          const actions: { label: string; onClick: () => void }[] = [];
+          if (s.intent_form_id !== null) {
+            const formId = s.intent_form_id;
+            actions.push({
+              label: 'ดูคำร้อง',
+              onClick: () => window.dispatchEvent(new CustomEvent('open-intent-review', { detail: formId })),
+            });
+          }
+          if (s.issues.some((i) => i.code === 'no_advisor' || i.code === 'no_supervisor')) {
+            actions.push({
+              label: 'จัดสรรอาจารย์',
+              onClick: () => setSearchParams({ menu: 'assignment', filter: 'incomplete' }),
+            });
+          }
+          return actions;
+        }}
+      />
 
       {/* ══ สองการ์ดล่าง ══ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-[18px] items-start">

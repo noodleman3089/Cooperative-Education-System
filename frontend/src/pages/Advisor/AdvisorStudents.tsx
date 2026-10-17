@@ -6,12 +6,23 @@ import { useDashboardData } from '../../hooks/useDashboardData';
 import { AuthContext } from '../../context/authContextValue';
 import api from '../../services/api';
 import type { IntentForm, StudentRow } from '../../types/api';
-import { Search, Calendar, AlertCircle } from 'lucide-react';
+import { Search, Calendar, AlertCircle, ArrowLeft } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import IntentReviewModal from '../../components/IntentReviewModal';
 import CoopFormsViewModal from '../../components/CoopFormsViewModal';
+import StudentAvatar from '../../components/StudentAvatar';
+import {
+  STEP_LABEL,
+  STEP_LINE,
+  TIER_LABEL,
+  TIER_ORDER,
+  isUrgentIssue,
+  issueText,
+  type StatusBoardPayload,
+  type StatusBoardStudent,
+} from '../../utils/studentAttention';
 import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLogItem {
@@ -73,6 +84,23 @@ interface SupervisorScoreRow {
   sahatkit16Score: number | null;
 }
 
+/** ข้อมูลติดต่อของนักศึกษาหนึ่งคน (ที่พัก · พี่เลี้ยง · ฉุกเฉิน) จาก `GET /students/:id/accommodation-plan` */
+interface StudentContactInfo {
+  accommodation: {
+    formatted_address?: string | null;
+    phone?: string | null;
+    mobile_phone?: string | null;
+    latitude?: string | number | null;
+    longitude?: string | number | null;
+  } | null;
+  company_job_info: {
+    company_name?: string | null;
+    mentor_name?: string | null;
+    mentor_phone?: string | null;
+  } | null;
+  emergency_contact: { name?: string | null; relationship?: string | null; phone?: string | null };
+}
+
 interface AdvisorStudentsProps {
   currentRole?: string;
 }
@@ -104,6 +132,14 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
   // Intent Modal
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
   const [viewingForms, setViewingForms] = useState(false);
+  // สถานะ/ปัญหาของทุกคนในสาขา (เซิร์ฟเวอร์จัดชั้นให้ — ดู utils/studentAttention) และข้อมูลติดต่อของคนที่เปิดอยู่
+  const [board, setBoard] = useState<Map<number, StatusBoardStudent>>(new Map());
+  // เก็บคู่กับ student_id — เปลี่ยนคนแล้วผลของคนก่อนหน้าต้องไม่โผล่ค้าง
+  const [contactState, setContactState] = useState<{
+    id: number;
+    data?: StudentContactInfo;
+    error?: string;
+  } | null>(null);
 
   // Panel data state for selected student
   const studentIdParam = searchParams.get('student');
@@ -119,12 +155,14 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     try {
       if (!isBackground) setLoading(true);
       setError(null);
-      const [intentsRes, studentsRes, scoresRes] = await Promise.all([
+      const [intentsRes, studentsRes, scoresRes, boardRes] = await Promise.all([
         api.get('/intents'),
         api.get('/students'),
         // คะแนนสหกิจ 15 · 16 — ฝ่ายนิเทศเท่านั้น ฝ่ายที่ปรึกษาไม่ยิง endpoint นี้
         isSupervisorView ? api.get('/coop-progress/dashboard?view=supervisor') : null,
+        api.get('/students/status-board'),
       ]);
+      setBoard(new Map(((boardRes as StatusBoardPayload).students || []).map((s) => [s.student_id, s])));
       setIntents(intentsRes || []);
       setStudents(studentsRes || []);
       setSupervisorScores(scoresRes?.data ?? []);
@@ -181,6 +219,25 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     };
   }, [selectedStudentId, activeTab]);
 
+  // ข้อมูลติดต่อ (ที่พัก · พี่เลี้ยง · ฉุกเฉิน) ของคนที่เปิดอยู่ — 403 ขึ้นเป็นข้อความ ไม่ใช่การ์ดว่าง
+  React.useEffect(() => {
+    if (!selectedStudentId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await api.get(`/students/${selectedStudentId}/accommodation-plan`);
+        if (!cancelled) setContactState({ id: selectedStudentId, data });
+      } catch (err) {
+        if (!cancelled) {
+          setContactState({ id: selectedStudentId, error: getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลติดต่อได้') });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedStudentId]);
+
   if (loading) {
     return <PageSkeleton variant={skeletonFor('advisor', 'students')} />;
   }
@@ -202,9 +259,23 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
     const search = searchText.toLowerCase().trim();
     if (!search) return true;
     return fullName.includes(search) || studentCode.includes(search) || company.includes(search);
-  });
+  }).sort(
+    // ต้องรีบขึ้นก่อน — ลำดับในชั้นเดียวกันคงตามรหัสนักศึกษาที่เซิร์ฟเวอร์เรียงมาให้ (sort เสถียร)
+    (a, b) =>
+      TIER_ORDER.indexOf(board.get(a.student_id)?.tier ?? 'ontrack') -
+      TIER_ORDER.indexOf(board.get(b.student_id)?.tier ?? 'ontrack')
+  );
 
   const selectedStudent = students.find(s => s.student_id === selectedStudentId) || null;
+  const selectedBoard = selectedStudent ? board.get(selectedStudent.student_id) ?? null : null;
+  const contactInfo = contactState && contactState.id === selectedStudentId ? contactState : null;
+  const contactData = contactInfo?.data ?? null;
+  const pin = contactData?.accommodation;
+  const mapsLink =
+    pin && pin.latitude != null && pin.longitude != null &&
+    Number.isFinite(Number(pin.latitude)) && Number.isFinite(Number(pin.longitude))
+      ? `https://maps.google.com/?q=${Number(pin.latitude)},${Number(pin.longitude)}`
+      : null;
   const selectedStudentIntent = selectedStudent ? intents.find(i => i.student_id === selectedStudent.student_id) : null;
 
   const handleSelectStudent = (s: StudentRow) => {
@@ -273,7 +344,8 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
       {/* Main Layout: 2 Columns when student is selected */}
       <div className="flex gap-5 items-start flex-col xl:flex-row">
-        {/* Left Column: Student Table Card */}
+        {/* รายชื่อ — เปิดรายคนแล้วรายชื่อหลบ หน้านักศึกษากว้างเต็ม (แบบ B · URL `?student=`) */}
+        {!selectedStudent && (
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden flex flex-col flex-grow min-w-0 w-full">
           {/* Top Bar with Scope Pill Switcher and Search */}
           <div className="p-4 sm:p-5 flex flex-wrap items-center gap-3 border-b border-gray-100 dark:border-gray-800">
@@ -371,7 +443,13 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                       >
                         {/* Student Column */}
                         <td className="py-3.5 px-4 align-top">
-                          <span className="block text-[14px] font-bold text-gray-900 dark:text-white">
+                          <StudentAvatar
+                            firstName={student.first_name}
+                            lastName={student.last_name}
+                            image={board.get(student.student_id)?.profile_image}
+                            size={36}
+                          />
+                          <span className="mt-1.5 block text-[14px] font-bold text-gray-900 dark:text-white">
                             {student.first_name ? `${student.first_name} ${student.last_name}` : 'ไม่ระบุชื่อ'}
                           </span>
                           <span className="block text-xs text-gray-500 dark:text-gray-400 mt-0.5 font-mono">
@@ -410,6 +488,22 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
                         {/* Status Column */}
                         <td className="py-3.5 px-4 align-top">
+                          {(board.get(student.student_id)?.issues ?? []).length > 0 && (
+                            <div className="mb-1.5 flex flex-wrap gap-1">
+                              {board.get(student.student_id)!.issues.map((i) => (
+                                <span
+                                  key={i.code}
+                                  className={`rounded-full border px-2 py-0.5 text-[11px] font-bold ${
+                                    isUrgentIssue(i)
+                                      ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
+                                      : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                                  }`}
+                                >
+                                  {issueText(i)}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {studentIntent?.status === 'accepted' ? (
                             <div>
                               <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#ECFDF5] text-[#065F46] border border-[#A7F3D0] dark:bg-green-950/40 dark:text-green-300 dark:border-green-800">
@@ -502,56 +596,186 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
             </div>
           </div>
         </div>
+        )}
 
-        {/* Right Column: Student Details Panel matching AdvisorStudents.dc.html */}
+        {/* หน้านักศึกษารายคน */}
         {selectedStudent && (
           <div
             data-testid="advisor-student-panel"
-            className="w-full xl:w-[470px] shrink-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden flex flex-col"
+            className="w-full min-w-0 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl shadow-sm overflow-hidden flex flex-col"
           >
             {/* Panel Top Header */}
-            <div className="p-5 pb-0 flex flex-col gap-3">
-              <div className="flex justify-between items-start gap-2">
-                <div className="min-w-0">
-                  <h3 className="text-[17px] font-bold text-gray-900 dark:text-white truncate">
+            <div className="p-5 pb-0 flex flex-col gap-4">
+              <div>
+                <button
+                  type="button"
+                  data-testid="advisor-student-back"
+                  onClick={handleClosePanel}
+                  className="inline-flex min-h-11 items-center gap-1 text-sm font-semibold text-brand-blue hover:underline dark:text-blue-400"
+                >
+                  <ArrowLeft className="h-4 w-4" aria-hidden="true" /> กลับรายชื่อ
+                </button>
+              </div>
+
+              {/* หัวหน้านักศึกษา — รูป · ชื่อ · สถานะ · ปุ่มเอกสาร */}
+              <div className="flex flex-wrap items-start gap-4">
+                <StudentAvatar
+                  firstName={selectedStudent.first_name}
+                  lastName={selectedStudent.last_name}
+                  image={selectedBoard?.profile_image}
+                  size={84}
+                  portrait
+                />
+                <div className="min-w-0 flex-[1_1_240px]">
+                  <h3 className="break-words text-xl font-extrabold text-gray-900 dark:text-white">
                     {selectedStudent.first_name ? `${selectedStudent.first_name} ${selectedStudent.last_name}` : 'ไม่ระบุชื่อ'}
                   </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                  <p className="mt-0.5 break-words text-[13px] text-gray-700 dark:text-gray-300">
                     {selectedStudent.student_code}
-                    {selectedStudentIntent?.company_contact_person
-                      ? ` · พี่เลี้ยง: ${selectedStudentIntent.company_contact_person}`
-                      : selectedStudent.major_name_th
-                        ? ` · ${selectedStudent.major_name_th}`
-                        : ''}
+                    {selectedStudent.major_name_th ? ` · ${selectedStudent.major_name_th}` : ''}
+                    {selectedStudent.cumulative_gpa != null && selectedStudent.cumulative_gpa !== ''
+                      ? ` · เกรด ${selectedStudent.cumulative_gpa}`
+                      : ''}
                   </p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {selectedStudentIntent && (
-                    <button
-                      type="button"
-                      onClick={() => setSelectedIntentId(selectedStudentIntent.form_id)}
-                      className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                    >
-                      ใบความจำนง
-                    </button>
+                  {selectedBoard && (
+                    <div data-testid="advisor-student-status" data-tier={selectedBoard.tier} className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-full border border-gray-300 bg-gray-50 px-2.5 py-0.5 text-xs font-bold text-gray-800 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100">
+                        {TIER_LABEL[selectedBoard.tier]} · {STEP_LABEL[selectedBoard.step]}
+                      </span>
+                      {selectedBoard.issues.map((i) => (
+                        <span
+                          key={i.code}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                            isUrgentIssue(i)
+                              ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200'
+                              : 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200'
+                          }`}
+                        >
+                          {issueText(i)}
+                        </span>
+                      ))}
+                    </div>
                   )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     data-testid="advisor-student-view-forms"
                     onClick={() => setViewingForms(true)}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                    className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
                   >
                     สหกิจ 03 · 06
                   </button>
-                  <button
-                    type="button"
-                    onClick={handleClosePanel}
-                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
-                  >
-                    ปิดหน้าต่าง
-                  </button>
+                  {selectedStudentIntent && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedIntentId(selectedStudentIntent.form_id)}
+                      className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 text-sm font-semibold text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                    >
+                      ใบความจำนง
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* เส้นสถานะ — ถึงขั้นไหนแล้ว */}
+              {selectedBoard && selectedBoard.step !== 'rejected' && selectedBoard.step !== 'other' && selectedBoard.step !== 'no_request' && (
+                <ol data-testid="advisor-student-steps" className="flex flex-wrap gap-1.5 text-xs">
+                  {STEP_LINE.map((st, idx) => {
+                    const currentIdx = STEP_LINE.findIndex((x) => x.key === selectedBoard.step);
+                    const state = idx < currentIdx ? 'past' : idx === currentIdx ? 'now' : 'next';
+                    return (
+                      <li
+                        key={st.key}
+                        data-state={state}
+                        className={`rounded-full border px-2.5 py-1 ${
+                          state === 'now'
+                            ? 'border-blue-600 bg-blue-600 font-bold text-white dark:border-blue-500 dark:bg-blue-600'
+                            : state === 'past'
+                              ? 'border-green-300 bg-green-50 font-medium text-green-900 dark:border-green-800 dark:bg-green-950/40 dark:text-green-200'
+                              : 'border-gray-200 bg-white text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'
+                        }`}
+                      >
+                        {st.label}
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+
+              {/* ข้อมูลติดต่อ — ที่อาจารย์ต้องใช้ตอนเดินทางไปนิเทศ */}
+              {contactInfo?.error ? (
+                <AlertBanner variant="warning" message={contactInfo.error} />
+              ) : (
+                <div data-testid="advisor-student-contact" className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+                  {[
+                    {
+                      title: 'ติดต่อนักศึกษา',
+                      lines: [
+                        contactData?.accommodation?.mobile_phone || selectedStudent.phone || null,
+                      ],
+                    },
+                    {
+                      title: 'สถานประกอบการและพี่เลี้ยง',
+                      lines: [
+                        contactData?.company_job_info?.company_name || selectedStudent.company_name || null,
+                        contactData?.company_job_info?.mentor_name
+                          ? `${contactData.company_job_info.mentor_name}${contactData.company_job_info.mentor_phone ? ` · ${contactData.company_job_info.mentor_phone}` : ''}`
+                          : null,
+                      ],
+                    },
+                    {
+                      title: 'ที่พัก',
+                      lines: [
+                        contactData?.accommodation?.formatted_address || null,
+                        contactData?.accommodation?.phone || null,
+                      ],
+                      link: mapsLink,
+                    },
+                    {
+                      title: 'ผู้ติดต่อฉุกเฉิน',
+                      lines: [
+                        contactData?.emergency_contact?.name
+                          ? `${contactData.emergency_contact.name}${contactData.emergency_contact.relationship ? ` (${contactData.emergency_contact.relationship})` : ''}`
+                          : null,
+                        contactData?.emergency_contact?.phone || null,
+                      ],
+                    },
+                  ].map((card) => {
+                    const filled = card.lines.filter((l): l is string => Boolean(l));
+                    return (
+                      <div
+                        key={card.title}
+                        className="rounded-xl border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800/60"
+                      >
+                        <div className="text-xs font-medium text-gray-600 dark:text-gray-400">{card.title}</div>
+                        {!contactInfo ? (
+                          <div className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">กำลังโหลด...</div>
+                        ) : filled.length === 0 ? (
+                          <div className="mt-1 text-[13px] text-gray-600 dark:text-gray-400">ยังไม่ได้กรอก</div>
+                        ) : (
+                          filled.map((l) => (
+                            <div key={l} className="mt-1 break-words text-[13px] font-semibold text-gray-900 dark:text-gray-100">
+                              {l}
+                            </div>
+                          ))
+                        )}
+                        {'link' in card && card.link && (
+                          <a
+                            href={card.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            data-testid="advisor-student-maps"
+                            className="mt-1.5 inline-block text-[13px] font-bold text-brand-blue underline hover:no-underline dark:text-blue-400"
+                          >
+                            เปิดแผนที่
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* 4 Tabs matching AdvisorStudents.dc.html */}
               <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700 overflow-x-auto text-[14px]">

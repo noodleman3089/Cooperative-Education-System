@@ -680,6 +680,10 @@ export class IntentFormController {
                 -- แผงรับคำร้องของเจ้าหน้าที่ถามเส้นนี้ทุก 2 วินาทีระหว่างเปิดอยู่ เพื่อรู้ว่านักศึกษาเปลี่ยนไฟล์ (path เปลี่ยน)
                 -- หรือยกเลิกคำร้อง (404) — ด่านจริงอยู่ที่ officer-approve ซึ่งเทียบ path ภายใต้ FOR UPDATE
                 i.request_form_path, i.submitted_late, i.late_reason,
+                -- ผู้ลงนามบนกระดาษที่เจ้าหน้าที่คีย์ตอนรับคำร้อง — บุคลากรเท่านั้น (ตัดให้ role อื่นด้านล่าง · SEC-10)
+                i.advisor_signer_name, i.advisor_signed_date::text AS advisor_signed_date,
+                i.dept_head_signer_name, i.dept_head_signed_date::text AS dept_head_signed_date,
+                i.officer_document_no,
                 (SELECT MAX(e.entered_at) FROM intent_stage_events e
                   WHERE e.form_id = i.form_id AND e.stage = 'request_uploaded') AS request_uploaded_at,
                 s.student_id, s.student_code, s.year_level, s.cumulative_gpa, s.resume_file,
@@ -730,6 +734,15 @@ export class IntentFormController {
       if (!isAuthorized) {
         res.status(403).json({ message: 'Forbidden. You do not have access to view this intent form.' });
         return;
+      }
+
+      // ⛔ ผู้ลงนามบนกระดาษ + เลขที่หนังสือ ให้บุคลากรเท่านั้น — นักศึกษาเจ้าของใบไม่ได้รับจากเส้นนี้ (ไม่เคยได้)
+      if (!roles.some((r: string) => ['staff', 'dean', 'advisor', 'dept_head'].includes(r))) {
+        delete row.advisor_signer_name;
+        delete row.advisor_signed_date;
+        delete row.dept_head_signer_name;
+        delete row.dept_head_signed_date;
+        delete row.officer_document_no;
       }
 
       // ⛔ ประวัติการตีกลับ (เหตุผล + ชื่อเจ้าหน้าที่ที่กด) และสถานะบันทึกข้อความชี้แจง ให้ **เจ้าหน้าที่เท่านั้น**

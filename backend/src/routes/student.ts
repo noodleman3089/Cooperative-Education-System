@@ -38,6 +38,13 @@ router.get(
   StudentController.getStudents
 );
 
+// Route: GET /api/students/status-board (Advisor & Dept Head — ทั้งสาขา เรียงตามความสำคัญ)
+router.get(
+  '/status-board',
+  authorizeRoles('advisor', 'dept_head'),
+  StudentController.getStatusBoard
+);
+
 // Route: POST /api/students/import (Staff & Dept Head only)
 router.post(
   '/import',
