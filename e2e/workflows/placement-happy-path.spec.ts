@@ -5,7 +5,7 @@ import path from 'path';
 import { API_URL } from '../helpers/env';
 import { loginAs } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
-import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard } from '../helpers/intent';
+import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard, statusBoardRow } from '../helpers/intent';
 import { dbValue } from '../helpers/db';
 
 test.describe('Cooperative Education System Workflow E2E Tests', () => {
@@ -51,17 +51,20 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     //
     // ⚠️ ตั้งแต่ 2026-08-26 ทั้งสองบทบาทลงนามบนกระดาษ (แบบคำร้องเอกสารหมายเลข 1)
     // หน้าจอเหลือไว้ติดตามอย่างเดียว — ยืนยันตรงนี้ว่าปุ่มหายไปจริง ไม่ใช่แค่กดไม่ได้
+    // 2026-10-18: ตารางติดตามคำร้องถูกแทนด้วยบอร์ด "ตรวจสอบสถานะนักศึกษา" บนหน้าแรก
+    const studentId = await dbValue<number>("SELECT user_id FROM users WHERE email = 'student2@test.com'");
+
     await loginAs(page, 'advisor1');
-    // ตารางติดตามใบความจำนงพับอยู่ใต้การ์ดตั้งแต่ F6 (spec-F ข้อ 3.3)
-    await page.getByRole('button', { name: 'เปิดตารางติดตาม' }).click();
-    await expect(page.locator('main').getByText('640101001')).toBeVisible();
+    await expect(await statusBoardRow(page, studentId as number)).toContainText('640101001');
     await expect(page.locator('main button:has-text("อนุมัติ")')).toHaveCount(0);
     await logout(page);
     await expect(page).toHaveURL(/\/login/);
 
     await loginAs(page, 'head1');
-    await goToMenu(page, 'approval');
-    await expect(page.locator('text=640101001')).toBeVisible();
+    // เมนู "ติดตามคำร้อง" ของหัวหน้าสาขาถูกถอดแล้ว — แถวบนบอร์ดมีปุ่ม "ดูคำร้อง" แทน
+    const headRow = await statusBoardRow(page, studentId as number);
+    await expect(headRow).toContainText('640101001');
+    await expect(headRow.getByRole('button', { name: 'ดูคำร้อง' })).toBeVisible();
     await expect(page.locator('main button:has-text("อนุมัติ")')).toHaveCount(0);
     await logout(page);
     await expect(page).toHaveURL(/\/login/);
@@ -106,7 +109,8 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
 
     // ⛔ DocuSign ถูกถอดออกทั้งหมด 2026-08-26 — เหลือทางเดียวคือระบบวาดหนังสือ
     // พร้อมลายเซ็นให้เลย จึงเหลือข้อความเดียว ไม่ต้อง .or() อีก
-    await expect(page.locator('text=ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว')).toBeVisible();
+    // 2026-10-18: ลงนามเพียงฉบับเดียว (ติ๊กหนึ่งรายการ) ได้ข้อความของฉบับเดียว — "แบบกลุ่ม" ขึ้นเมื่อเลือกหลายฉบับ
+    await expect(page.locator('text=ลงนามเรียบร้อยแล้ว — นักศึกษาได้รับหนังสือและเห็นในระบบทันที')).toBeVisible();
 
     // Logout Dean
     await logout(page);
@@ -153,12 +157,11 @@ test.describe('Cooperative Education System Workflow E2E Tests', () => {
     await expect(page.getByTestId('proof-form')).not.toContainText('ชื่อ-นามสกุล พี่เลี้ยง');
     // ไม่ถามวันเริ่มปฏิบัติงานแล้ว — ใบได้วันจากปฏิทินสหกิจ เจ้าหน้าที่แก้ได้ตอนออกหนังสือส่งตัว
     await expect(page.getByTestId('proof-start-date')).toHaveCount(0);
-    // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
+    // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21)
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
-    await page.getByTestId('proof-signed-date').fill(
-      new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
-    );
+    // ไม่ถามวันที่ลงนามแล้ว — ระบบส่งวันนี้ให้เอง (2026-10-18) จึงไม่มีทางส่งวันอนาคตจากหน้าจอ
+    await expect(page.getByTestId('proof-signed-date')).toHaveCount(0);
 
     // Prepare mock evidence file for upload
     const evidencePath = path.resolve(process.cwd(), 'e2e/fixtures/mock_evidence.png');

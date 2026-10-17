@@ -4,39 +4,22 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL } from '../helpers/env';
 import { withDb, dbRow, dbValue, dbExec } from '../helpers/db';
 import { apiLoginAs, loginAs } from '../helpers/auth';
-import { goToMenu } from '../helpers/nav';
-import { PDFParse } from 'pdf-parse';
+import { goToMenu, logout } from '../helpers/nav';
 
 /**
- * อ่านข้อความจริงในไฟล์ PDF
+ * ดูใบ **สหกิจ 03** (ใบสมัครงาน) และ **สหกิจ 06** (แบบแจ้งที่พัก) ในระบบ
  *
- * ⛔ **อย่าเทียบไบต์ดิบเพื่อดูเนื้อหา** — `pdf-lib` เก็บทั้งหน้าไว้ใน object stream
- * ที่ถูกบีบอัด ทั้ง `/Type /Page` และตัวหนังสือจึงหาไม่เจอในไบต์ตรงๆ · การเช็คแบบนั้น
- * จะ "ผ่าน" หรือ "ตก" ด้วยเหตุผลที่ไม่เกี่ยวกับสิ่งที่เราอยากรู้เลย
- */
-async function readPdf(bytes: Buffer): Promise<{ text: string; pages: number }> {
-  const parser = new PDFParse({ data: new Uint8Array(bytes) });
-  try {
-    const result = await parser.getText();
-    return { text: result.text, pages: result.pages.length };
-  } finally {
-    await parser.destroy();
-  }
-}
-
-/**
- * ปุ่มพิมพ์ของ **สหกิจ 03** (ใบสมัครงาน ๓ หน้า) และ **สหกิจ 06** (แบบแจ้งที่พัก ๑ หน้า)
- *
- * ทั้งสองใบเป็น **ทางออกสำรอง** ไม่ใช่ขั้นตอนบังคับ — สถานประกอบการที่มีบัญชีอ่านใบสมัคร
- * ในระบบได้อยู่แล้ว และอาจารย์นิเทศเปิดที่พัก/หมุดในระบบได้เลย · ไม่มีใครกดเลย ระบบต้องเดินครบ
+ * ⚠️ 2026-10-18 เจ้าของสั่งถอด PDF + ปุ่มพิมพ์ทั้งสองใบ (`…/print` ถูกลบ) — ผู้ตรวจเปิดดูในหน้าจอแทน
+ * (`CoopFormsViewModal`) ชื่อไฟล์ยังเป็น `coop-form-print` เพื่อไม่ให้เอกสารที่อ้างชื่อไฟล์เพี้ยน
  *
  * สิ่งที่ชุดนี้คุมเรียงตามความสำคัญ:
- *   1. ⛔⛔ **ใครเปิดใบ สหกิจ 03 ได้** — ใบนี้คือ *จุดเดียวในระบบ* ที่เลขบัตรประชาชน
- *      เชื้อชาติ และศาสนาถูกถอดรหัสออกมาเป็นค่าจริง (SEC-12) เส้นทางจึงต้องไม่รับ `id`
- *      จากผู้เรียก และต้องไม่มี role อื่นเปิดได้เลย แม้แต่เจ้าหน้าที่หรือบริษัทที่ผูกกันอยู่
- *   2. **ทุกครั้งที่เปิดต้องมีแถวใน `audit_log`** — SEC-07 · การเปิดค่าจริงต้องตามย้อนได้
- *   3. **สหกิจ 06 ใช้ด่านเดียวกับหน้าอ่านที่พัก** (SEC-06 fail closed) ไม่ใช่ด่านใหม่ที่หลวมกว่า
- *   4. **ได้ PDF จริง** ไม่ใช่หน้า error ที่ถูกส่งมาพร้อม 200
+ *   1. ⛔⛔ **ใครเปิดใบ สหกิจ 03 ได้** — `GET /students/:id/coop-application` คือ *จุดเดียวในระบบ*
+ *      ที่เลขบัตรประชาชน เชื้อชาติ และศาสนาถูกถอดรหัสออกมาเป็นค่าจริง (SEC-12)
+ *      เปิดได้เฉพาะเจ้าหน้าที่ · หัวหน้าสาขา · อาจารย์ที่ปรึกษา/นิเทศของนักศึกษาคนนั้น (SEC-06 fail closed)
+ *      นักศึกษาเอง · พี่เลี้ยง · คณบดี เปิดไม่ได้
+ *   2. **ทุกครั้งที่เปิดต้องมีแถวใน `audit_log`** (`student.coop_application_viewed`) — SEC-07
+ *   3. **เส้นทาง `…/print` ต้องไม่มีอยู่แล้ว** — ไม่มี PDF ที่ถอดรหัสค่าจริงออกไปนอกหน้าจอ
+ *   4. **สหกิจ 06 ใช้ด่านเดียวกับหน้าอ่านที่พัก** (อาจารย์ที่ไม่ได้ดูแลเปิดไม่ได้)
  *   5. **"ห้อง" ลงคอลัมน์ของ `students` ไม่ใช่ของ `accommodations`** — ฟอร์มจริงถามไว้
  *      ข้าง "ชั้นปีที่" (รอบ 55 เคยเดาผิดว่าเป็นเลขห้องพัก ตอนที่ยังไม่มีไฟล์ `.docx`)
  */
@@ -124,9 +107,14 @@ async function fillSensitive(request: APIRequestContext): Promise<void> {
   expect(res.status(), await res.text()).toBe(200);
 }
 
-const PRINT_03 = `${API_URL}/students/coop-application/print`;
+/** สหกิจ 03 ฉบับผู้ตรวจ — เส้นทางเดียวที่ค่าจริงของข้อมูลอ่อนไหวออกจากฐาน */
+const VIEW_03 = (sid: number) => `${API_URL}/students/${sid}/coop-application`;
+const AUDIT_VIEWED = 'student.coop_application_viewed';
 
-test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
+const countViewedAudit = async () =>
+  Number(await dbValue<string>('SELECT COUNT(*) FROM audit_log WHERE action = $1', [AUDIT_VIEWED]));
+
+test.describe('ดูใบ สหกิจ 03 / 06 ในระบบ', () => {
   test.beforeEach(async ({ page }) => {
     await page.route('**/maps.googleapis.com/**', (route) => route.abort());
     await seedTestData();
@@ -134,190 +122,175 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
 
   // ── ๑. สิทธิ์ของใบ สหกิจ 03 ────────────────────────────────────────────────
 
-  test('F1: มีแต่นักศึกษาเจ้าของเท่านั้นที่เปิดใบ สหกิจ 03 ได้ — พี่เลี้ยง/เจ้าหน้าที่/อาจารย์เปิดไม่ได้', async ({
+  test('F1: ใบ สหกิจ 03 ฉบับผู้ตรวจ — นักศึกษา/พี่เลี้ยง/คณบดี/อาจารย์ที่ไม่ได้ดูแลเปิดไม่ได้', async ({
     request,
   }) => {
+    const sid = await studentId();
     await seedAcceptedIntent();
 
-    // ⛔ ใบพิมพ์มีชั้น C (เลขบัตร · เชื้อชาติ · ศาสนา) ครบ — ฝั่งสถานประกอบการ (พี่เลี้ยง) ต้องเปิดไม่ได้
-    for (const who of ['mentor1', 'staff1', 'advisor1', 'head1', 'dean1'] as const) {
+    // ⛔ ฉบับนี้มีชั้น C (เลขบัตร · เชื้อชาติ · ศาสนา) เป็นค่าจริง — ฝั่งสถานประกอบการและตัวนักศึกษาเองเปิดไม่ได้
+    //    (นักศึกษาเห็นของตัวเองแบบมาสก์ที่ `GET /students/coop-application` เท่านั้น — ดู F11)
+    for (const who of ['student2', 'mentor1', 'dean1', 'advisor2'] as const) {
       await apiLoginAs(request, who);
-      const res = await request.get(PRINT_03);
-      expect(res.status(), `${who} ต้องเปิดใบ สหกิจ 03 ไม่ได้`).toBe(403);
+      const res = await request.get(VIEW_03(sid));
+      expect(res.status(), `${who} ต้องเปิดใบ สหกิจ 03 ฉบับผู้ตรวจไม่ได้`).toBe(403);
     }
 
-    await apiLoginAs(request, 'student2');
-    const ok = await request.get(PRINT_03);
-    expect(ok.status(), await ok.text()).toBe(200);
-  });
-
-  test('F2: ไม่มีเส้นทางที่รับ id ของนักศึกษาคนอื่นสำหรับใบ สหกิจ 03', async ({ request }) => {
-    const sid = await studentId();
-    await apiLoginAs(request, 'student2');
-
-    // ⛔ ด่านที่แท้จริงคือ "ไม่มี route แบบนี้" ไม่ใช่ "route มีแต่ตรวจสิทธิ์ไว้"
-    //    เพราะการมีอยู่ของมันคือช่อง IDOR ที่รอให้ใครสักคนตรวจหลุด
-    for (const path of [
-      `${API_URL}/students/${sid}/coop-application/print`,
-      `${API_URL}/students/9999/coop-application/print`,
-    ]) {
-      const res = await request.get(path);
-      expect([403, 404], `${path} ต้องไม่ใช่เส้นทางที่ใช้งานได้`).toContain(res.status());
-      if (res.status() === 200) throw new Error('เส้นทางที่รับ id ไม่ควรมีอยู่');
+    // ผู้ตรวจที่มีสิทธิ์: เจ้าหน้าที่ · หัวหน้าสาขาของนักศึกษา · อาจารย์ที่ปรึกษาของนักศึกษาคนนี้
+    for (const who of ['staff1', 'head1', 'advisor1'] as const) {
+      await apiLoginAs(request, who);
+      const res = await request.get(VIEW_03(sid));
+      expect(res.status(), `${who}: ${await res.text()}`).toBe(200);
     }
   });
 
-  test('F3: การพิมพ์ใบ สหกิจ 03 ลง audit_log ทุกครั้ง พร้อมบอกว่าถอดรหัสอะไรออกมา', async ({
+  test('F2: เส้นทาง …/print ของสหกิจ 03 และ 06 ถูกลบแล้ว — ไม่มี PDF ที่ถอดรหัสค่าจริงออกไป', async ({
     request,
   }) => {
+    const sid = await studentId();
+    await seedAcceptedIntent();
+
+    // ⛔ ตั้งใจไม่ให้มีเส้นทางพิมพ์เหลือเลย ไม่ว่าใครเรียก (เจ้าของสั่ง 2026-10-18)
+    for (const who of ['student2', 'staff1'] as const) {
+      await apiLoginAs(request, who);
+      for (const path of [
+        `${API_URL}/students/coop-application/print`,
+        `${API_URL}/students/${sid}/coop-application/print`,
+        `${API_URL}/students/${sid}/accommodation-plan/print`,
+      ]) {
+        const res = await request.get(path);
+        expect(res.status(), `${who} → ${path} ต้องไม่ใช่เส้นทางที่ใช้งานได้`).toBe(404);
+      }
+    }
+  });
+
+  test('F3: การเปิดใบ สหกิจ 03 ลง audit_log ทุกครั้ง พร้อมบอกว่าถอดรหัสอะไรออกมา — เปิดไม่สำเร็จไม่ลง', async ({
+    request,
+  }) => {
+    const sid = await studentId();
     await seedAcceptedIntent();
     await apiLoginAs(request, 'student2');
     await fillSensitive(request);
 
-    const before = Number(
-      await dbValue<string>(
-        "SELECT COUNT(*) FROM audit_log WHERE action = 'student.coop_application_printed'"
-      )
-    );
+    const before = await countViewedAudit();
 
-    const res = await request.get(PRINT_03);
+    // ถูกปฏิเสธ → ไม่ได้ถอดรหัสอะไรออกไป จึงไม่มีแถว
+    await apiLoginAs(request, 'mentor1');
+    expect((await request.get(VIEW_03(sid))).status()).toBe(403);
+
+    await apiLoginAs(request, 'staff1');
+    const res = await request.get(VIEW_03(sid));
     expect(res.status(), await res.text()).toBe(200);
 
     // `writeAudit` เป็น fire-and-forget — แถวลงหลัง response จึงต้อง poll
-    await expect
-      .poll(
-        async () =>
-          Number(
-            await dbValue<string>(
-              "SELECT COUNT(*) FROM audit_log WHERE action = 'student.coop_application_printed'"
-            )
-          ),
-        { timeout: 10_000 }
-      )
-      .toBe(before + 1);
+    await expect.poll(countViewedAudit, { timeout: 10_000 }).toBe(before + 1);
 
-    const row = await dbRow<{ detail: { decrypted: Record<string, boolean> } }>(
-      `SELECT detail FROM audit_log
-        WHERE action = 'student.coop_application_printed'
-        ORDER BY audit_id DESC LIMIT 1`
+    const row = await dbRow<{
+      subject_id: number;
+      detail: { decrypted: Record<string, boolean> };
+    }>(
+      `SELECT subject_id, detail FROM audit_log
+        WHERE action = $1
+        ORDER BY audit_id DESC LIMIT 1`,
+      [AUDIT_VIEWED]
     );
+    expect(Number(row?.subject_id)).toBe(sid);
     expect(row?.detail.decrypted).toEqual({
       national_id: true,
       ethnicity: true,
       religion: true,
     });
+
+    // เปิดอีกครั้งต้องมีอีกแถว ไม่ใช่นับครั้งเดียว
+    await request.get(VIEW_03(sid));
+    await expect.poll(countViewedAudit, { timeout: 10_000 }).toBe(before + 2);
   });
 
   // ── ๒. ตัวไฟล์ ────────────────────────────────────────────────────────────
 
-  test('F4: ใบ สหกิจ 03 ออกมาเป็น PDF จริง ๓ หน้า และยังออกได้เมื่อยังไม่ได้กรอกอะไรเลย', async ({
+  test('F4: ใบ สหกิจ 03 ฉบับผู้ตรวจได้ค่าจริงของข้อมูลอ่อนไหว (ไม่ใช่มาสก์) และเปิดได้เมื่อยังไม่ได้กรอกอะไรเลย', async ({
     request,
   }) => {
-    await apiLoginAs(request, 'student2');
+    const sid = await studentId();
+    await apiLoginAs(request, 'staff1');
 
-    // ⛔ ใบสมัครที่ยังกรอกไม่ครบต้องพิมพ์ได้ — บนกระดาษนักศึกษาพิมพ์ฟอร์มเปล่าไปเขียนมือ
-    //    ก็เป็นเรื่องปกติ · การบังคับกรอกครบคือการแต่งกติกาที่กระดาษไม่ได้มี
-    const blank = await request.get(PRINT_03);
+    // ⛔ ใบที่ยังกรอกไม่ครบต้องเปิดได้ — ผู้ตรวจต้องเห็นว่านักศึกษายังขาดอะไร ไม่ใช่เจอ error
+    const blank = await request.get(VIEW_03(sid));
     expect(blank.status(), await blank.text()).toBe(200);
-    expect(blank.headers()['content-type']).toContain('application/pdf');
+    const blankBody = await blank.json();
+    expect(blankBody.national_id).toBeNull();
+    expect(blankBody.missing_required.length).toBeGreaterThan(0);
 
+    await apiLoginAs(request, 'student2');
     await fillSensitive(request);
-    const filled = await request.get(PRINT_03);
+
+    await apiLoginAs(request, 'staff1');
+    const filled = await request.get(VIEW_03(sid));
     expect(filled.status()).toBe(200);
+    const body = await filled.json();
 
-    const bytes = await filled.body();
-    expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    // ⛔⛔ **หัวใจของ endpoint นี้** — ค่าจริงต้องถึงผู้ตรวจ ไม่ใช่มาสก์
+    //    ถ้าวันหนึ่งใครเผลอเอา `maskNationalId` มาใส่ตรงนี้ ผู้ตรวจจะอ่านบัตรไม่ได้จริง
+    //    และไม่มีอะไรอื่นในระบบจับได้เลย เพราะทุก endpoint อื่นมาสก์หมด
+    expect(body.national_id).toBe('1234567890123');
+    expect(body.ethnicity).toBe('ไทย');
+    expect(body.religion).toBe('พุทธ');
+    expect(JSON.stringify(body)).not.toContain('x-xxxx-xxxxx');
+    // ⛔ ciphertext/iv/tag ต้องไม่หลุดออกไปกับค่าที่ถอดแล้ว
+    expect(JSON.stringify(body)).not.toMatch(/_ciphertext|_iv|_tag/);
 
-    const { text, pages } = await readPdf(bytes);
-    // ต้นฉบับพิมพ์ "หน้าที่ ๑/๓" ไว้ท้ายกระดาษ — จำนวนหน้าจึงเป็นข้อกำหนดของฟอร์ม
-    // ไม่ใช่ผลพลอยได้ของความยาวเนื้อหา
-    expect(pages).toBe(3);
-    expect(text).toContain('หน้าที่ 3/3');
-
-    // ⛔⛔ **หัวใจของ endpoint นี้** — ค่าจริงต้องไปถึงกระดาษ ไม่ใช่มาสก์
-    //    ถ้าวันหนึ่งใครเผลอเอา `maskNationalId` มาใส่ตรงนี้ ใบสมัครจะพิมพ์ออกมา
-    //    ใช้ไม่ได้จริง และไม่มีอะไรอื่นในระบบจับได้เลย เพราะทุก endpoint อื่นมาสก์หมด
-    expect(text).toContain('1 2345 67890 12 3');
-    expect(text).toContain('พุทธ');
-    expect(text).not.toContain('x-xxxx-xxxxx');
-
-    // ช่องที่เป็นหัวใจของฟอร์มต้องมีจริง ไม่ใช่หน้าเปล่าที่นับได้ ๓ หน้า
-    for (const heading of [
-      'ใบสมัครงานสหกิจศึกษา',
-      'ข้อมูลส่วนตัวนักศึกษา',
-      'ข้อมูลครอบครัว',
-      'จุดมุ่งหมายอาชีพ',
-      'ความสามารถพิเศษทางภาษา',
-      'ประวัติการศึกษา',
-    ]) {
-      expect(text, `ใบ สหกิจ 03 ต้องมีหัวข้อ "${heading}"`).toContain(heading);
-    }
+    // ข้อมูลทั่วไปของใบมาครบ — ไม่ใช่ก้อนเปล่าที่ได้ 200
+    expect(body.first_name_en).toBe('Somchai');
+    expect(body.family_info?.father?.name).toBe('สมศักดิ์ สายดี');
+    expect(body.language_proficiency?.[0]).toMatchObject({ language: 'ภาษาอังกฤษ' });
   });
 
-  test('F5: ใบ สหกิจ 06 ออกมาเป็น PDF จริง และใบที่มีพิกัดใหญ่กว่าใบที่ไม่มี (คิวอาร์โค้ด)', async ({
+  test('F5: สหกิจ 06 — อาจารย์ที่ปรึกษาและเจ้าหน้าที่อ่านที่พักพร้อมพิกัดได้ ยังไม่กรอกก็เปิดได้', async ({
     request,
   }) => {
     const sid = await seedAcceptedIntent();
-    await apiLoginAs(request, 'student2');
-
-    // ยังไม่กรอกที่พัก → ยังพิมพ์ฟอร์มเปล่าได้
-    const empty = await request.get(`${API_URL}/students/${sid}/accommodation-plan/print`);
-    expect(empty.status(), await empty.text()).toBe(200);
-    expect(empty.headers()['content-type']).toContain('application/pdf');
-    const emptyBytes = await empty.body();
-    expect(emptyBytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
-
-    expect((await submitAccommodation(request, sid)).status()).toBe(200);
-    const withPin = await request.get(`${API_URL}/students/${sid}/accommodation-plan/print`);
-    expect(withPin.status()).toBe(200);
-    const pinBytes = await withPin.body();
-
-    // คิวอาร์โค้ดเป็นรูปฝังในไฟล์ ใบที่มีหมุดจึงต้องใหญ่กว่าอย่างเห็นได้ชัด
-    // ⛔ อย่าเทียบว่า "เท่ากันเป๊ะ" กับใบที่วาดซ้ำ — `pdf-lib` ฝัง CreationDate ไว้ใน
-    //    สตรีมที่ถูกบีบอัด สองครั้งจึงไม่เคยได้ขนาดเท่ากัน (บทเรียนจาก dispatch-letter D6)
-    expect(pinBytes.length).toBeGreaterThan(emptyBytes.length + 300);
-
-    const { text, pages } = await readPdf(pinBytes);
-    expect(pages).toBe(1);
-    expect(text).toContain('แบบแจ้งรายละเอียดของสถานประกอบการในปฏิบัติงานสหกิจศึกษา');
-    // ตัวอ่านยุบช่องว่างซ้อนให้เหลือช่องเดียว — เทียบด้วยช่องเดียวเสมอ
-    expect(text).toContain('เรียน หัวหน้าสหกิจศึกษาและการฝึกงานวิชาชีพประจำคณะ');
-    // ที่อยู่ต้องแตกลงช่องของมันจริง ไม่ใช่ยัดก้อนเดียวลงช่องแรก
-    expect(text).toContain('88/9');
-    expect(text).toContain('ลาดยาว');
-    // พิกัดถูกพิมพ์กำกับคิวอาร์ไว้ด้วย เผื่อพิมพ์ขาวดำแล้วสแกนไม่ติด
-    expect(text).toContain('13.8459123');
-
-    // ⛔ ห้ามมี "ยังไม่ได้ปักหมุด" เมื่อปักแล้ว — ข้อความนั้นบอกอาจารย์นิเทศผิด
-    expect(text).not.toContain('ยังไม่ได้ปักหมุด');
-    expect((await readPdf(emptyBytes)).text).toContain('ยังไม่ได้ปักหมุด');
-  });
-
-  // ── ๓. สิทธิ์ของใบ สหกิจ 06 ───────────────────────────────────────────────
-
-  test('F6: ใบ สหกิจ 06 ใช้ด่านเดียวกับหน้าอ่านที่พัก — อาจารย์ที่ไม่ได้ดูแลเปิดไม่ได้', async ({
-    request,
-  }) => {
-    const sid = await seedAcceptedIntent();
-    await apiLoginAs(request, 'student2');
-    expect((await submitAccommodation(request, sid)).status()).toBe(200);
-
-    const printPath = `${API_URL}/students/${sid}/accommodation-plan/print`;
     const readPath = `${API_URL}/students/${sid}/accommodation-plan`;
 
-    // ⛔ ปุ่มพิมพ์ต้องไม่หลวมกว่าหน้าอ่าน — ถ้าใครแก้ด่านหน้าอ่านให้แน่นขึ้นแล้วลืมตรงนี้
-    //    เทสต์นี้จะแดง เพราะมันเทียบสองเส้นทางกันเอง ไม่ได้ตรึงตัวเลขไว้
+    // ยังไม่กรอกที่พัก → ผู้ตรวจเปิดได้ (ไม่ใช่ error)
+    await apiLoginAs(request, 'staff1');
+    const empty = await request.get(readPath);
+    expect(empty.status(), await empty.text()).toBe(200);
+    expect((await empty.json()).accommodation).toBeNull();
+
+    await apiLoginAs(request, 'student2');
+    expect((await submitAccommodation(request, sid)).status()).toBe(200);
+
+    for (const who of ['staff1', 'advisor1'] as const) {
+      await apiLoginAs(request, who);
+      const res = await request.get(readPath);
+      expect(res.status(), `${who}: ${await res.text()}`).toBe(200);
+      const acc = (await res.json()).accommodation;
+      // ที่อยู่ต้องแตกลงช่องของมันจริง และพิกัดต้องมา (ใช้ปักหมุดในหน้าจอ)
+      expect(acc.house_no, who).toBe('88/9');
+      expect(acc.subdistrict, who).toBe('ลาดยาว');
+      expect(Number(acc.latitude), who).toBeCloseTo(13.8459123, 5);
+      expect(Number(acc.longitude), who).toBeCloseTo(100.5612345, 5);
+    }
+  });
+
+  // ── ๓. สิทธิ์ของสหกิจ 06 ──────────────────────────────────────────────────
+
+  test('F6: สหกิจ 06 — อาจารย์ที่ไม่ได้ดูแลและพี่เลี้ยงอ่านที่พักไม่ได้', async ({ request }) => {
+    const sid = await seedAcceptedIntent();
+    await apiLoginAs(request, 'student2');
+    expect((await submitAccommodation(request, sid)).status()).toBe(200);
+
+    const readPath = `${API_URL}/students/${sid}/accommodation-plan`;
+
+    // ⛔ เดิมเทียบกับปุ่มพิมพ์ว่า "ต้องไม่หลวมกว่า" — ปุ่มพิมพ์ถูกลบแล้ว จึงตรึงที่หน้าอ่านโดยตรง
     for (const who of ['advisor2', 'mentor1'] as const) {
       await apiLoginAs(request, who);
-      const printed = await request.get(printPath);
-      const read = await request.get(readPath);
-      expect(printed.status(), `${who}: ปุ่มพิมพ์ต้องตอบเท่าหน้าอ่าน`).toBe(read.status());
-      expect(printed.status()).not.toBe(200);
+      const res = await request.get(readPath);
+      expect(res.status(), `${who} ต้องอ่านที่พักของนักศึกษาที่ไม่ได้ดูแลไม่ได้`).not.toBe(200);
     }
 
-    // อาจารย์ที่ปรึกษาของนักศึกษาคนนี้เปิดได้ — หัวใบเขียนว่า "เรียน หัวหน้าสหกิจศึกษาฯ"
     await apiLoginAs(request, 'advisor1');
-    expect((await request.get(printPath)).status()).toBe(200);
+    expect((await request.get(readPath)).status()).toBe(200);
   });
 
   // ── ๔. ช่องที่เพิ่มมาจากไฟล์ `.docx` ตัวจริง ────────────────────────────────
@@ -389,40 +362,61 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
 
   // ── ๕. หน้าจอ ─────────────────────────────────────────────────────────────
 
-  test('F10: ปุ่มพิมพ์อยู่บนหน้าจอทั้งสองใบ และชี้ไปที่เส้นทางที่ถูกต้อง', async ({ page }) => {
-    await seedAcceptedIntent();
-    await loginAs(page, 'student2');
-
-    await goToMenu(page, 'job_application');
-    const print03 = page.getByTestId('ca-print');
-    await expect(print03).toBeVisible();
-    await expect(print03).toHaveAttribute('href', /\/students\/coop-application\/print$/);
-    // ผู้ใช้ต้องรู้ก่อนกดว่าไฟล์นี้มีค่าจริงของข้อมูลอ่อนไหวอยู่
-    await expect(page.getByText('เลขบัตรประชาชน เชื้อชาติ และศาสนาเป็นค่าจริง')).toBeVisible();
-
-    await goToMenu(page, 'accommodation_plan');
+  test('F10: หน้าจอนักศึกษาไม่มีปุ่มพิมพ์แล้ว · อาจารย์เปิดดูใบ 03 ในหน้าจอได้ค่าจริงและลง audit', async ({
+    page,
+    request,
+  }) => {
     const sid = await studentId();
-    await expect(page.getByTestId('acc-section')).toBeVisible();
-    const print06 = page.getByTestId('acc-print');
-    await expect(print06).toBeVisible();
-    await expect(print06).toHaveAttribute(
-      'href',
-      new RegExp(`/students/${sid}/accommodation-plan/print$`)
-    );
-  });
-
-  test('F11: ค่าจริงของข้อมูลอ่อนไหวไม่เคยออกทางหน้าจอ แม้จะพิมพ์ใบได้', async ({ request }) => {
+    await seedAcceptedIntent();
     await apiLoginAs(request, 'student2');
     await fillSensitive(request);
 
-    // ⛔ ปุ่มพิมพ์ต้องไม่ทำให้ใครเผลอเปิดค่าจริงใน endpoint ที่หน้าจอใช้
+    // ฝั่งนักศึกษา: ไม่มีปุ่มพิมพ์ และไม่มีข้อความเตือนว่าไฟล์พิมพ์มีค่าจริง
+    await loginAs(page, 'student2');
+    await goToMenu(page, 'job_application');
+    await expect(page.getByTestId('ca-print')).toHaveCount(0);
+    await expect(page.getByText('เลขบัตรประชาชน เชื้อชาติ และศาสนาเป็นค่าจริง')).toHaveCount(0);
+    await goToMenu(page, 'accommodation_plan');
+    await expect(page.getByTestId('acc-section')).toBeVisible();
+    await expect(page.getByTestId('acc-print')).toHaveCount(0);
+    await logout(page);
+
+    // ฝั่งอาจารย์ที่ปรึกษา: เปิดดูใบ สหกิจ 03 · 06 ในหน้ารายชื่อนักศึกษา
+    await loginAs(page, 'advisor1');
+    const before = await countViewedAudit();
+    await goToMenu(page, 'students');
+    await page.getByTestId(`advisor-student-row-${sid}`).click();
+    await page.getByTestId('advisor-student-view-forms').click();
+
+    const modal = page.getByTestId('coop-forms-view');
+    await expect(modal).toBeVisible();
+    // ⛔⛔ ผู้ตรวจต้องเห็นค่าจริง (ไม่ใช่มาสก์) — รูปแบบเลขบัตรจัดโดย `spaceNationalId`
+    await expect(modal.getByTestId('coop-view-03')).toContainText('1-2345-67890-12-3');
+    await expect(modal.getByTestId('coop-view-03')).toContainText('พุทธ');
+    await expect(modal).not.toContainText('x-xxxx-xxxxx');
+    // "อย่างน้อยหนึ่งแถว" ไม่ใช่ "หนึ่งแถวพอดี" — dev server ครอบด้วย React StrictMode ซึ่งรัน effect โหลดข้อมูลของโมดัลสองรอบ
+    // (ยิง `GET …/coop-application` สองครั้ง = สองแถว) · production รอบเดียว · การนับพอดีทำที่ระดับ API ใน F3 แล้ว
+    await expect.poll(countViewedAudit, { timeout: 10_000 }).toBeGreaterThan(before);
+
+    // แท็บ 06 — ยังไม่กรอกที่พัก ต้องบอกว่าว่าง ไม่ใช่ error
+    await modal.getByTestId('coop-view-tab-06').click();
+    await expect(modal.getByTestId('coop-view-06-empty')).toBeVisible();
+  });
+
+  test('F11: ค่าจริงของข้อมูลอ่อนไหวไม่เคยออกทาง endpoint ที่หน้าจอนักศึกษาใช้', async ({
+    request,
+  }) => {
+    await apiLoginAs(request, 'student2');
+    await fillSensitive(request);
+
+    // ⛔ ฉบับผู้ตรวจ (F4) ต้องไม่ทำให้ใครเผลอเปิดค่าจริงใน endpoint ที่หน้าจอนักศึกษาใช้
     const screen = await request.get(`${API_URL}/students/coop-application`);
     const body = await screen.text();
     expect(body).toContain('x-xxxx-xxxxx-xx-3');
     expect(body).not.toContain('1234567890123');
     expect(body).not.toContain('พุทธ');
 
-    // ค่าจริงยังอยู่ในฐานแบบเข้ารหัส — พิมพ์ได้แปลว่าถอดกลับได้ ไม่ใช่เก็บเป็น plaintext
+    // ค่าจริงยังอยู่ในฐานแบบเข้ารหัส — ผู้ตรวจเปิดดูได้แปลว่าถอดกลับได้ ไม่ใช่เก็บเป็น plaintext
     const cipher = await dbValue<string>(
       'SELECT national_id_ciphertext FROM students WHERE student_id = $1',
       [await studentId()]
@@ -431,24 +425,25 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
     expect((cipher ?? '').length).toBeGreaterThan(0);
   });
 
-  test('F12: กุญแจถอดรหัสใช้ไม่ได้ → ยังพิมพ์ใบออกมาได้ แค่ช่องนั้นว่าง', async ({ request }) => {
+  test('F12: กุญแจถอดรหัสใช้ไม่ได้ → ยังเปิดใบได้ แค่ช่องนั้นว่าง', async ({ request }) => {
+    const sid = await studentId();
     await apiLoginAs(request, 'student2');
     await fillSensitive(request);
 
     // ทำให้ ciphertext เสีย — จำลองกรณีกุญแจถูกหมุนโดยไม่ได้เข้ารหัสข้อมูลเดิมใหม่
-    // ⛔ ใบสมัครทั้งใบต้องไม่พิมพ์ไม่ออกเพราะช่องเดียวเสีย
+    // ⛔ ใบสมัครทั้งใบต้องไม่เปิดไม่ได้เพราะช่องเดียวเสีย
     await dbExec(
       "UPDATE students SET national_id_ciphertext = 'deadbeef' WHERE student_id = $1",
-      [await studentId()]
+      [sid]
     );
 
-    const res = await request.get(PRINT_03);
+    await apiLoginAs(request, 'staff1');
+    const res = await request.get(VIEW_03(sid));
     expect(res.status(), await res.text()).toBe(200);
-    const { text, pages } = await readPdf(await res.body());
-    expect(pages).toBe(3);
+    const body = await res.json();
     // ช่องเลขบัตรว่าง แต่ช่องอื่นที่ถอดได้ยังต้องมีค่าจริงอยู่
-    expect(text).not.toContain('1 2345 67890 12 3');
-    expect(text).toContain('พุทธ');
+    expect(body.national_id).toBeNull();
+    expect(body.religion).toBe('พุทธ');
 
     // บันทึกต้องบอกความจริงว่าช่องไหนถอดได้ ช่องไหนไม่ได้ (`writeAudit` ลงหลัง response)
     await expect
@@ -457,8 +452,9 @@ test.describe('ปุ่มพิมพ์ สหกิจ 03 / 06', () => {
           (
             await dbRow<{ detail: { decrypted: Record<string, boolean> } }>(
               `SELECT detail FROM audit_log
-                WHERE action = 'student.coop_application_printed'
-                ORDER BY audit_id DESC LIMIT 1`
+                WHERE action = $1
+                ORDER BY audit_id DESC LIMIT 1`,
+              [AUDIT_VIEWED]
             )
           )?.detail.decrypted,
         { timeout: 10_000 }

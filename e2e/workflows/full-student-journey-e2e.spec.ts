@@ -113,7 +113,8 @@ test.describe('วงจรสหกิจศึกษาฉบับสมบ�
       await expect(page.locator('[role="dialog"]')).toBeVisible();
       await page.locator('[role="dialog"] button:has-text("ลงนาม")').click();
 
-      await expect(page.locator('text=ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว')).toBeVisible();
+      // 2026-10-18: ลงนามเพียงฉบับเดียว (ติ๊กหนึ่งรายการ) ได้ข้อความของฉบับเดียว — ข้อความ "แบบกลุ่ม" ขึ้นเมื่อเลือกหลายฉบับ
+      await expect(page.locator('text=ลงนามเรียบร้อยแล้ว — นักศึกษาได้รับหนังสือและเห็นในระบบทันที')).toBeVisible();
       await logout(page);
 
       // ยืนยันว่าหนังสือได้รับการลงนามและมี acceptance_due_date แล้ว
@@ -133,7 +134,6 @@ test.describe('วงจรสหกิจศึกษาฉบับสมบ�
       await page.getByTestId('proof-open').click();
       await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
       await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
-      await page.getByTestId('proof-signed-date').fill(todayStr);
 
       const evidencePath = path.resolve(process.cwd(), 'e2e/fixtures/mock_evidence.png');
       await page.locator('input[type="file"]').setInputFiles(evidencePath);

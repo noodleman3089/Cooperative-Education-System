@@ -34,6 +34,22 @@ export function placementCard(page: Page) {
 }
 
 /**
+ * แถวของนักศึกษาบนบอร์ด "ตรวจสอบสถานะนักศึกษา" (หน้าแรกอาจารย์ที่ปรึกษา · หัวหน้าสาขา)
+ *
+ * บอร์ดแสดงเฉพาะกลุ่ม "ต้องรีบ" กับ "ติดขัด/รอ" ก่อน — นักศึกษาที่ใบเดินปกติ (`ontrack`) ซ่อนอยู่หลังช่องนับ
+ * ฟังก์ชันนี้เปิดช่องนั้นให้เมื่อแถวยังไม่ขึ้น เพื่อไม่ให้เทสต์ผูกกับกฎจัดกลุ่มของ `studentAttention.ts`
+ * ต้องล็อกอินและอยู่หน้าแรกของฝ่ายนั้นก่อนเรียก
+ */
+export async function statusBoardRow(page: Page, studentId: number) {
+  await expect(page.getByTestId('status-board')).toBeVisible();
+  const row = page.getByTestId(`status-board-row-${studentId}`);
+  if (!(await row.isVisible())) {
+    await page.getByTestId('status-board-tile-ontrack').click();
+  }
+  return row;
+}
+
+/**
  * เจ้าหน้าที่กดรับคำร้องผ่าน API (ต้องล็อกอินเป็นเจ้าหน้าที่ก่อนเรียก)
  *
  * `officer-approve` บังคับให้ส่ง `request_form_path` ของไฟล์ที่ "หน้าจอกำลังแสดง" แล้วเทียบกับค่าในแถว

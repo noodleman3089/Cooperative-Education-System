@@ -5,7 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { API_URL } from '../helpers/env';
 import { withDb, dbValue, ensureLegacyTemplate } from '../helpers/db';
-import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard } from '../helpers/intent';
+import { approveIntentThroughOfficer, submitRequestToDirectoryCompany, placementCard, statusBoardRow } from '../helpers/intent';
 import { loginAs, attemptLogin } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
 
@@ -91,9 +91,10 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     // อาจารย์ที่ปรึกษาเห็นใบความจำนงทันทีที่นักศึกษายื่น — แต่ไม่มีปุ่มอนุมัติแล้ว
     // (ตั้งแต่ 2026-08-26 ลายเซ็นอยู่บนกระดาษ) สิ่งที่เทสต์นี้คุมคือ "อีก session
     // เห็นของที่เพิ่งเกิดขึ้นจริงไหม" ซึ่งยังคุมได้ด้วยการปรากฏของแถว
-    // ตารางติดตามพับอยู่ใต้การ์ดตั้งแต่ F6 (spec-F ข้อ 3.3) — ต้องกดเปิดก่อน
-    await advisorPage.getByRole('button', { name: 'เปิดตารางติดตาม' }).click();
-    await expect(advisorPage.locator('main').getByText('640101001')).toBeVisible();
+    // 2026-10-18: การ์ด/ตารางติดตามคำร้องถูกแทนด้วยบอร์ด "ตรวจสอบสถานะนักศึกษา" บนหน้าแรก
+    const studentId = (await dbValue<number>("SELECT user_id FROM users WHERE email = 'student2@test.com'"))!;
+    const boardRow = await statusBoardRow(advisorPage, studentId);
+    await expect(boardRow).toContainText('640101001');
     await expect(advisorPage.locator('main button:has-text("อนุมัติ")')).toHaveCount(0);
 
     // 4. เจ้าหน้าที่รับคำร้องผ่านเส้นทางจริง แล้วหน้านักศึกษาต้องเห็นสถานะใหม่
@@ -286,12 +287,9 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
     await page.getByTestId('proof-open').click();
 
     // 4. Fill the placement reporting form (ไม่มีช่องพี่เลี้ยงและไม่มีช่องวันเริ่มงานแล้ว — วันเริ่มมาจากปฏิทินสหกิจ)
-    // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
+    // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · ไม่มีช่องวันที่ลงนามแล้ว ระบบส่งวันนี้ให้เอง (2026-10-18)
     await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
     await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
-    await page.getByTestId('proof-signed-date').fill(
-      new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
-    );
 
     // ไฟล์ปลอม: ข้อความล้วนที่ตั้งชื่อลงท้าย .pdf — คุมด่าน magic bytes ของ multer
     // ซึ่งเป็นด่านเดียวกับที่การอัปโหลดคำร้อง (เอกสาร 1) จะพึ่ง ไม่เกี่ยวกับใบยินยอม
@@ -598,12 +596,9 @@ test.describe('Cooperative Education System Advanced E2E Tests', () => {
       await page.getByTestId('proof-open').click();
 
       // Fill in details (ไม่มีช่องพี่เลี้ยงและไม่มีช่องวันเริ่มงานแล้ว — วันเริ่มมาจากปฏิทินสหกิจ)
-      // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · วันที่ต้องไม่เป็นอนาคต
+      // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกเอง (2026-09-21) · ไม่มีช่องวันที่ลงนามแล้ว ระบบส่งวันนี้ให้เอง (2026-10-18)
       await page.getByTestId('proof-signer-name').fill('คุณสมชาย ผู้จัดการฝ่ายบุคคล');
       await page.getByTestId('proof-signer-position').fill('ผู้จัดการฝ่ายบุคคล');
-      await page.getByTestId('proof-signed-date').fill(
-        new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Bangkok' })
-      );
 
       // Upload oversized file
       await page.locator('input[type="file"]').setInputFiles(bigFilePath);

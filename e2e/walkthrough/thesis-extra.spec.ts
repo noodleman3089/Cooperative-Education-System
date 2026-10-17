@@ -218,10 +218,10 @@ test.describe('walkthrough: ภาพบทที่ 4 ชุดเพิ่ม'
         await expect(page.getByPlaceholder('กรอกรหัสผ่านอีกครั้ง')).toBeVisible({ timeout: 15_000 });
       });
 
-      // PDF ที่ระบบพิมพ์ออก — เปิดจากปลายทางเดียวกับปุ่มพิมพ์ในแอป ด้วย Chrome จริง (ไม่เห็นหน้าจอแอป)
+      // ใบ สหกิจ 03 / 06 ฉบับผู้ตรวจ — ปุ่มพิมพ์ PDF ถูกถอด 2026-10-18 อาจารย์เปิดดูในระบบแทน (`CoopFormsViewModal`)
       // ⛔ สหกิจ 03 มีเลขบัตรประชาชน/เชื้อชาติ/ศาสนาจริง — ใช้ค่าทดสอบที่ดูออกว่าปลอม (เลขบัตร 1-2345-67890-12-3)
       let coop03Saved = false;
-      await shoot('x24a-pdf-coop03', 'เอกสาร PDF ที่ระบบพิมพ์', 'สหกิจ 03 (ใบสมัครงาน) ของ สมชาย สายดี — หน้าแรกของไฟล์ที่ระบบพิมพ์ (ข้อมูลอ่อนไหวเป็นค่าทดสอบ)', async () => {
+      await shoot('x24a-pdf-coop03', 'อาจารย์ที่ปรึกษา', 'สหกิจ 03 (ใบสมัครงาน) ของ สมชาย สายดี — อาจารย์ที่ปรึกษาเปิดดูในระบบ (ข้อมูลอ่อนไหวเป็นค่าทดสอบ · ระบบบันทึกทุกครั้งที่เปิด)', async () => {
         await open(page, 'job_application');
         await page.getByTestId('ca-first-en').fill('Somchai');
         await page.getByTestId('ca-last-en').fill('Saidee');
@@ -240,15 +240,22 @@ test.describe('walkthrough: ภาพบทที่ 4 ชุดเพิ่ม'
         await page.getByTestId('ca-submit').click();
         await expect(page.getByText(/บันทึก.*(สำเร็จ|เรียบร้อย)/).first()).toBeVisible({ timeout: 15_000 });
         coop03Saved = true;
-        await page.goto(`${APP_URL}/api/students/coop-application/print`);
-        await page.waitForTimeout(4_000);
+        await logout(page);
+        await loginAs(page, 'advisor1');
+        await open(page, 'students');
+        await page.getByTestId(`advisor-student-row-${student2}`).click();
+        await page.getByTestId('advisor-student-view-forms').click();
+        await expect(page.getByTestId('coop-view-03')).toBeVisible({ timeout: 15_000 });
       }, false);
       void coop03Saved;
-      await shoot('x24b-pdf-coop06', 'เอกสาร PDF ที่ระบบพิมพ์', 'สหกิจ 06 (แจ้งที่พัก) ของ สมชาย สายดี — หน้าแรกของไฟล์ที่ระบบพิมพ์ (ข้อมูลที่พักเป็นค่าทดสอบ)', async () => {
-        await page.goto(`${APP_URL}/api/students/${student2}/accommodation-plan/print`);
-        await page.waitForTimeout(4_000);
+      await shoot('x24b-pdf-coop06', 'อาจารย์ที่ปรึกษา', 'สหกิจ 06 (แจ้งที่พัก) ของ สมชาย สายดี — แท็บที่พักและแผนที่ในกล่องเดียวกัน (ข้อมูลที่พักเป็นค่าทดสอบ)', async () => {
+        await page.getByTestId('coop-view-tab-06').click();
+        await expect(page.getByTestId('coop-view-06')).toBeVisible({ timeout: 15_000 });
       }, false);
       await shoot('x24c-pdf-memo', 'เอกสาร PDF ที่ระบบพิมพ์', 'บันทึกข้อความถึงคณบดี ของ สมชาย สายดี — หน้าแรกของไฟล์ที่ระบบพิมพ์', async () => {
+        await page.getByTestId('coop-view-close').click();
+        await logout(page);
+        await loginAs(page, 'student2');
         await page.goto(`${APP_URL}/api/memos/${memoId}/pdf`);
         await page.waitForTimeout(4_000);
       }, false);

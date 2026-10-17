@@ -115,8 +115,13 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
     });
     expect(sensitiveFieldLabels).toEqual([]);
 
-    // และต้องบอกผู้ใช้ว่าจะถูกขอเมื่อไหร่ ไม่ใช่เงียบแล้วไปโผล่กลางทาง
-    await expect(page.getByText('ยังไม่ต้องกรอกตอนนี้', { exact: false })).toBeVisible();
+    // กล่อง "ยังไม่ต้องกรอกตอนนี้" ถูกลบ 2026-10-18 (เจ้าของสั่ง) — เส้นแบ่งยังอยู่ที่ช่องกรอกข้างบน
+    // ไม่ใช่ที่ข้อความอธิบาย · ช่องที่เพิ่มมาแทนคือ "ชั้นปีที่" (เอกสารหมายเลข 1 ต้องใช้) ค่าเริ่มต้น 4
+    await expect(page.getByText('ยังไม่ต้องกรอกตอนนี้', { exact: false })).toHaveCount(0);
+    await expect(page.getByTestId('onboarding-year-level')).toHaveValue('4');
+    expect(
+      await page.getByTestId('onboarding-year-level').locator('option').allTextContents()
+    ).toEqual(['ชั้นปีที่ 3', 'ชั้นปีที่ 4']);
   });
 
   test('O2: เกรดที่นักศึกษากรอกตอนตั้งค่าครั้งแรกลง cumulative_gpa ตรงๆ (SEC-05 แก้ 2026-10-04)', async ({ page }) => {
@@ -289,6 +294,28 @@ test.describe('กรอกข้อมูลครั้งแรกของ�
       expect(Number(row.cumulative_gpa)).toBe(3.25);
       expect(row.interested_job_types).toBeNull();
     });
+  });
+
+  test('O3b: ชั้นปีที่เลือกตอนตั้งค่าครั้งแรก (3) ขึ้นในกล่องยืนยันและลง students.year_level', async ({ page }) => {
+    await seedTestData();
+    const userId = await arriveAsFirstTimeStudent(page);
+    await page.goto('/onboarding/student');
+
+    await fillStepOne(page);
+    await page.getByTestId('onboarding-year-level').selectOption('3');
+    await page.getByTestId('onboarding-next').click();
+    await page.getByTestId('onboarding-password').fill('Passw0rd1');
+    await page.getByTestId('onboarding-confirm-password').fill('Passw0rd1');
+    await page.getByTestId('onboarding-submit').click();
+
+    // ⛔ ชั้นปีไปกับ `PUT /profile/student` ที่ยิงต่อจาก `POST /profile/setup` — ต้องเห็นในกล่องยืนยันก่อนส่ง
+    await expect(page.getByTestId('confirm-summary')).toContainText('ชั้นปีที่ 3');
+    await page.getByTestId('onboarding-confirm').click();
+    await page.waitForURL('**/dashboard', { timeout: 15_000 });
+
+    expect(
+      await withDb(async db => (await db.query('SELECT year_level FROM students WHERE student_id = $1', [userId])).rows[0]?.year_level)
+    ).toBe(3);
   });
 
   test('O4: ย้อนกลับจากขั้นที่ 2 แล้วค่าที่กรอกไว้ต้องยังอยู่ครบ', async ({ page }) => {

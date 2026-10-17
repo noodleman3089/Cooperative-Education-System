@@ -34,7 +34,7 @@ export type NavId =
   | 'supervision'
   | 'supervision_record'
   | 'final_evaluation'
-  | 'approval'
+  // ⛔ 'approval' (ติดตามคำร้องของหัวหน้าสาขา) ถูกถอดจาก sidebar 2026-10-18 — ใช้บอร์ดบนหน้าแรกแทน (`statusBoardRow`)
   | 'assignment'
   | 'final_progress'
   // นักศึกษาตอนนี้ (เจ้าหน้าที่) — ท่อสถานะ · ใครถือเรื่อง · ค้างนาน

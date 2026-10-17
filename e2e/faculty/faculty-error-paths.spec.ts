@@ -28,24 +28,32 @@ test.describe('G/H — หน้าจอฝ่ายคณะเมื่อโ
     await expect(page.getByText('ขาดลายมือชื่อ')).toHaveCount(0);
   });
 
-  test('GH3-5: หัวหน้าสาขา — ติดตามคำร้องโหลดพัง แถบ error ต้องอยู่ข้ามรอบ poll ไม่หายเอง', async ({ page }) => {
+  test('GH3-5: หัวหน้าสาขา — บอร์ดสถานะนักศึกษาโหลดพัง ขึ้นข้อความจริง ไม่ขึ้นว่า "ไม่มีนักศึกษา" และกดลองใหม่ได้', async ({ page }) => {
+    // 2026-10-18: ตารางติดตามคำร้อง (`/intents` + เมนู approval) ถูกแทนด้วยบอร์ด `GET /students/status-board`
+    // ⛔ โหลดพัง = ต้องบอกว่าพัง ไม่ใช่กลายเป็นบอร์ดว่าง ("ไม่มีนักศึกษาที่ต้องรีบ" จะทำให้หัวหน้าสาขาเข้าใจผิดว่าทุกอย่างเรียบร้อย)
     let calls = 0;
-    await page.route('**/api/intents', (route) => {
+    await page.route('**/api/students/status-board', (route) => {
       calls++;
-      return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'คำร้องล่มทดสอบ' }) });
+      return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'สถานะล่มทดสอบ' }) });
     });
     await loginAs(page, 'head1');
-    await goToMenu(page, 'approval');
 
-    const banner = page.getByText('คำร้องล่มทดสอบ');
+    const banner = page.getByText('สถานะล่มทดสอบ');
     await expect(banner).toBeVisible();
-    // สั่งรอบพื้นหลังเอง (useDashboardData ฟัง `intent-updated` เหมือนรอบ poll 10 วิ) — นับเฉพาะคำขอ
-    // ที่เกิด *หลัง* แถบขึ้นแล้ว แล้วรอให้ React เรนเดอร์ผลของรอบนั้นก่อนตรวจ
+    await expect(page.getByTestId('status-board')).toHaveCount(0);
+    await expect(page.getByTestId('status-board-empty')).toHaveCount(0);
+
+    // ลองใหม่ขณะ server ยังพัง → แถบต้องอยู่ (ไม่หายเอง ไม่เปลี่ยนเป็นบอร์ดว่าง)
     const before = calls;
-    await page.evaluate(() => window.dispatchEvent(new Event('intent-updated')));
+    await page.getByRole('button', { name: 'ลองใหม่' }).click();
     await expect.poll(() => calls).toBeGreaterThan(before);
-    await page.waitForTimeout(1_000);
     await expect(banner).toBeVisible();
+
+    // server กลับมา → ลองใหม่แล้วบอร์ดขึ้น แถบ error หาย
+    await page.unroute('**/api/students/status-board');
+    await page.getByRole('button', { name: 'ลองใหม่' }).click();
+    await expect(page.getByTestId('status-board')).toBeVisible();
+    await expect(banner).toHaveCount(0);
   });
 
   test('GH3-5: หัวหน้าสาขา — หน้าแรกได้ 403 ขึ้นหน้าไม่มีสิทธิ์พร้อมข้อความจาก server', async ({ page }) => {

@@ -4,7 +4,7 @@ import { seedTestData } from '../helpers/test-seeder';
 import { API_URL, APP_URL } from '../helpers/env';
 import { loginAs } from '../helpers/auth';
 import { goToMenu, logout } from '../helpers/nav';
-import { placementCard, coverLetterDocId } from '../helpers/intent';
+import { placementCard, coverLetterDocId, statusBoardRow } from '../helpers/intent';
 import { dbValue, dbExec } from '../helpers/db';
 import { createWalk } from '../helpers/walkthrough';
 
@@ -106,15 +106,14 @@ test.describe('walkthrough: เส้นทางขอที่ฝึกงา�
       // ───────── อาจารย์ที่ปรึกษา / หัวหน้าสาขา: ติดตามอย่างเดียว (ลงนามบนกระดาษ) ─────────
       await loginAs(page, 'advisor1');
       await walk.step(page, 'อาจารย์ที่ปรึกษา', 'ล็อกอินอาจารย์ที่ปรึกษา — หน้าแรก (ไม่มีปุ่มอนุมัติ ลงนามบนกระดาษ)');
-      await page.getByRole('button', { name: 'เปิดตารางติดตาม' }).click();
-      await expect(page.locator('main').getByText('640101001')).toBeVisible();
-      await walk.step(page, 'อาจารย์ที่ปรึกษา', 'เปิดตารางติดตามใบความจำนง — เห็นรายการของนักศึกษา');
+      const studentUserId = (await dbValue<number>("SELECT user_id FROM users WHERE email = 'student2@test.com'")) as number;
+      await expect(await statusBoardRow(page, studentUserId)).toContainText('640101001');
+      await walk.step(page, 'อาจารย์ที่ปรึกษา', 'บอร์ด "ตรวจสอบสถานะนักศึกษา" บนหน้าแรก — เห็นแถวของนักศึกษาและสถานะใบความจำนง');
       await logout(page);
 
       await loginAs(page, 'head1');
-      await goToMenu(page, 'approval');
-      await expect(page.getByText('640101001').first()).toBeVisible();
-      await walk.step(page, 'หัวหน้าสาขา', 'หัวหน้าสาขาเปิดเมนูติดตามใบความจำนง — ดูอย่างเดียว');
+      await expect(await statusBoardRow(page, studentUserId)).toContainText('640101001');
+      await walk.step(page, 'หัวหน้าสาขา', 'หัวหน้าสาขาเห็นบอร์ดสถานะนักศึกษาของสาขา — แถวมีปุ่ม "ดูคำร้อง" ดูอย่างเดียว');
       await logout(page);
 
       // ───────── เจ้าหน้าที่: รับคำร้อง + ยืนยันสถานประกอบการ ─────────
