@@ -41,6 +41,8 @@ const COOP03_REQUIRED = {
   emergency_contact_name: 'นางสมศรี ใจดี',
   emergency_relationship: 'มารดา',
   emergency_phone: '0898765432',
+  // 4 หมวดตารางประวัติบังคับแล้ว (2026-10-18) — ครบด้วยการติ๊ก "ไม่มีข้อมูล" (หรือมีแถว)
+  none_sections: ['education', 'training', 'activity', 'language'],
 };
 
 /** ใบที่เจ้าหน้าที่รับแบบตอบรับแล้ว — จุดที่หนังสือส่งตัวออกได้ถ้าเอกสารก่อนออกฝึกครบ */
@@ -354,11 +356,17 @@ test.describe('ขั้น 6 — ส่งสหกิจ 03 · 06 ก่อน
     await page.getByTestId('ca-nationality').fill(COOP03_REQUIRED.nationality);
     await page.getByTestId('ca-mobile').fill(COOP03_REQUIRED.mobile_phone);
     await page.getByTestId('ca-emg-name').fill(COOP03_REQUIRED.emergency_contact_name);
-    await page.getByTestId('ca-emg-relation').fill(COOP03_REQUIRED.emergency_relationship);
+    // ความสัมพันธ์เป็น dropdown แล้ว (2026-10-18) — ค่าต้องอยู่ในรายการ (มารดา อยู่)
+    await page.getByTestId('ca-emg-relation').selectOption(COOP03_REQUIRED.emergency_relationship);
     await page.getByTestId('ca-emg-phone').fill(COOP03_REQUIRED.emergency_phone);
     await page.getByTestId('ca-national-id').fill(COOP03_REQUIRED.national_id);
     await page.getByTestId('ca-id-district').fill(COOP03_REQUIRED.national_id_issued_district);
     await page.getByTestId('ca-id-expiry').fill(COOP03_REQUIRED.national_id_expiry_date);
+    // 4 หมวดตารางประวัติบังคับ (2026-10-18) — ยังไม่ติ๊ก = ยังขาด · ติ๊ก "ไม่มีข้อมูล" ครบแล้วจึงครบ
+    await expect(summary).toContainText('ประวัติการศึกษา');
+    for (const section of ['education', 'training', 'activity', 'language']) {
+      await page.getByTestId(`ca-${section}-none`).check();
+    }
     await page.getByTestId('ca-submit').click();
 
     await expect(summary).toHaveText('ช่องบังคับครบแล้ว');

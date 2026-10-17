@@ -14,6 +14,7 @@ import { Lock } from 'lucide-react';
 import { getErrorStatus } from '../utils/errors';
 import { formatThaiDate, formatThaiRange } from '../utils/thaiDate';
 import { CALENDAR_MENU_BY_ACTIVITY } from '../utils/calendarMenus';
+import { usePulseHighlight } from '../hooks/usePulseHighlight';
 import type { CoopCalendarResponse } from '../types/api';
 
 /**
@@ -108,8 +109,12 @@ const STAFF_MENU_IDS: readonly string[] = [
   'profile',
 ];
 
+/**
+ * ใบสมัครงาน (สหกิจ 03) กับแจ้งที่พัก (สหกิจ 06) **เปิดให้กรอกก่อนได้ที่ฝึก** (เจ้าของสั่ง 2026-10-18) — ไม่อยู่ในรายการล็อกตามขั้นด้านล่าง
+ * ล็อกเฉพาะตอนยังไม่มีประวัตินักศึกษา · สหกิจ 06 กรอกเป็นร่างในเบราว์เซอร์ได้แต่ "บันทึกส่ง" ได้หลังใบเป็น accepted
+ * (ที่พักขึ้นกับที่ตั้งสถานประกอบการ — หน้าจอนั้นเป็นคนกั้นปุ่มบันทึก) · สหกิจ 03 บันทึกได้ทันที (ไม่ได้ส่งใคร และห้ามเก็บร่างข้อมูลอ่อนไหว SEC-12 ไว้ในเบราว์เซอร์)
+ */
 const STAGE_GATED_STUDENT_MENUS = [
-  'accommodation_plan',
   'report_outline',
   'weekly_log',
   'final_report',
@@ -160,6 +165,7 @@ const ADVISOR_EXCLUSIVE_MENUS = ['memos', 'final_evaluation'];
 
 const Dashboard: React.FC = () => {
   const auth = useContext(AuthContext);
+  usePulseHighlight();
   
   /**
    * รองรับ ?role= ตามสเปก D ข้อ 14.5 และ F ข้อ 1.1 / 2.3
@@ -327,8 +333,17 @@ const Dashboard: React.FC = () => {
       //    โดยตั้งใจ การเช็ค start ด้วยจะทำให้เส้นตายไม่ล็อกอะไรเลยเงียบๆ
       if (!activity.end_date) continue;
 
-      // นักศึกษาที่มีสิทธิ์ผ่าน (เจ้าหน้าที่ปิดใบที่ฝึกเดิม) ได้รับยกเว้นการล็อกปฏิทินสำหรับ accommodation_plan
-      if (activity.activity_key === 'accommodation_plan' && stage?.replacementPass) {
+      // รอบพิเศษ: คณะเปิดให้นักศึกษาคนนี้ส่งกิจกรรมนี้ได้แม้พ้นช่วงปกติ — เซิร์ฟเวอร์ตัดสินมาให้ (`special_round_open`)
+      // ปลดทั้ง "พ้นช่วง" และ "ยังไม่ถึงช่วง" (ออกปฏิบัติงานก่อนกำหนด) เหมือนด่านฝั่งเซิร์ฟเวอร์
+      if (activity.special_round_open && (activity.status === 'closed' || activity.status === 'upcoming')) {
+        continue;
+      }
+
+      // นักศึกษาที่มีสิทธิ์ผ่าน (เจ้าหน้าที่ปิดใบที่ฝึกเดิม) ได้รับยกเว้นการล็อกปฏิทินสำหรับ accommodation_plan และ job_application
+      if (
+        (activity.activity_key === 'accommodation_plan' || activity.activity_key === 'job_application') &&
+        stage?.replacementPass
+      ) {
         continue;
       }
 
@@ -341,6 +356,9 @@ const Dashboard: React.FC = () => {
 
       // สถานะ upcoming เกิดได้เฉพาะเมื่อมีวันเริ่ม (ดู calendarStatus) — เช็คซ้ำให้ TS สบายใจ
       if (activity.status === 'upcoming' && activity.start_date) {
+        // สหกิจ 06 / 03 ยังไม่ถึงช่วง = เปิดให้กรอกร่างได้ (เจ้าของสั่ง 2026-10-18) — หน้าสหกิจ 06 กั้นปุ่มบันทึกเอง
+        // และเซิร์ฟเวอร์ปฏิเสธการบันทึกนอกช่วงอยู่แล้ว · "หมดช่วง" (closed) ยังล็อกเหมือนเดิม
+        if (menuId === 'accommodation_plan') continue;
         locks[menuId] = {
           heading: 'ยังไม่ถึงช่วงที่เปิดให้ทำรายการ',
           reason:
@@ -348,6 +366,10 @@ const Dashboard: React.FC = () => {
             `ระบบจะเปิดให้ทำรายการวันที่ ${formatThaiRange(activity.start_date, activity.end_date)} ` +
             `— ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด`,
         };
+        // สหกิจ 03 (ใบสมัครงาน) ล็อกและปลดพร้อมกับ สหกิจ 06 (แจ้งที่พัก)
+        if (menuId === 'accommodation_plan') {
+          locks['job_application'] = locks[menuId];
+        }
       } else if (activity.status === 'closed') {
         locks[menuId] = {
           heading: 'หมดช่วงที่เปิดให้ทำรายการแล้ว',
@@ -359,8 +381,13 @@ const Dashboard: React.FC = () => {
             `) ` +
             `ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ` +
             `ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล ` +
-            `อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`,
+            `อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะ — ถ้าคณะอนุมัติ เจ้าหน้าที่จะเปิด "รอบพิเศษ" ให้เป็นรายบุคคล ` +
+            `แล้วคุณส่งได้เองในรอบนั้นโดยระบบจะนับเป็นส่งช้า (นักศึกษายื่นเรื่องเองไม่ได้)`,
         };
+        // สหกิจ 03 (ใบสมัครงาน) ล็อกและปลดพร้อมกับ สหกิจ 06 (แจ้งที่พัก)
+        if (menuId === 'accommodation_plan') {
+          locks['job_application'] = locks[menuId];
+        }
       }
     }
     return locks;
@@ -382,6 +409,13 @@ const Dashboard: React.FC = () => {
       for (const id of STAGE_GATED_STUDENT_MENUS) {
         locks[id] = reason;
       }
+    }
+
+    // สหกิจ 03 / 06 — ไม่ผูกกับการตอบรับ แต่ต้องมีประวัตินักศึกษาก่อน (ชื่อ รหัส สาขา ใช้เติมลงใบ)
+    if (!stage.hasProfile) {
+      const needProfile = 'กรอกประวัตินักศึกษาให้ครบก่อน เมนูนี้จึงจะเปิดให้กรอกได้ — กรอกใบสมัครงานและร่างที่พักไว้ล่วงหน้าได้โดยไม่ต้องรอได้ที่ฝึก';
+      locks['job_application'] = needProfile;
+      locks['accommodation_plan'] = needProfile;
     }
 
     // กฎล็อกเมนู "พี่เลี้ยงของฉัน": ล็อกจนกว่าสถานประกอบการตอบรับ (ใบ accepted) ระบุได้ทันที
@@ -532,7 +566,7 @@ const Dashboard: React.FC = () => {
         
       case 'dean':
         if (activeMenu === 'signature') return <DeanSignature onNavigate={setActiveMenu} />;
-        if (activeMenu === 'memos') return <FacultyMemos showMajorFilter />;
+        if (activeMenu === 'memos') return <FacultyMemos showMajorFilter canDecide />;
         if (activeMenu === 'profile') return <PersonnelProfile onNavigate={setActiveMenu} onSwitchView={handleRoleChange} />;
         return <DeanSignQueue onNavigate={setActiveMenu} />;
         

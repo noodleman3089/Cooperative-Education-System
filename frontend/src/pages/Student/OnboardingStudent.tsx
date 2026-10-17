@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Check, ArrowRight, ArrowLeft, Lock } from 'lucide-react';
+import { Check, ArrowRight, ArrowLeft } from 'lucide-react';
 import { AuthContext } from '../../context/authContextValue';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -50,6 +50,7 @@ const OnboardingStudent: React.FC = () => {
   const [lastName, setLastName] = useState('');
   const [studentCode, setStudentCode] = useState('');
   const [enrollmentYear, setEnrollmentYear] = useState('');
+  const [yearLevel, setYearLevel] = useState<3 | 4>(4);
   // คณะไม่ถูกส่งไปเก็บ — คณะมาจากสาขาที่เดียว (`master_major.faculty_id`) ช่องนี้มีไว้กรองรายการสาขา
   const [selectedFacultyId, setSelectedFacultyId] = useState<number | ''>('');
   const [selectedMajorId, setSelectedMajorId] = useState<number | ''>('');
@@ -194,6 +195,18 @@ const OnboardingStudent: React.FC = () => {
         cumulative_gpa: Number(gpa),
         alt_email: altEmail.trim() || null,
         password,
+      });
+
+      // POST /profile/setup ยังไม่ได้บันทึก year_level ลงตาราง students — อัปเดตต่อทันทีเพื่อให้เอกสารหมายเลข 1 และหน้ายื่นคำร้องมีชั้นปีครบ
+      await api.put('/profile/student', {
+        major_id: Number(selectedMajorId),
+        cumulative_gpa: Number(gpa),
+        name_prefix: namePrefix,
+        first_name: firstName.trim(),
+        last_name: lastName.trim(),
+        year_level: yearLevel,
+        phone: phone.trim(),
+        alt_email: altEmail.trim() || null,
       });
 
       if (auth && auth.user) {
@@ -350,6 +363,18 @@ const OnboardingStudent: React.FC = () => {
                       />
                       {fieldError('enrollmentYear')}
                     </div>
+                    <div>
+                      {label('ชั้นปีที่ *')}
+                      <Select
+                        value={yearLevel}
+                        disabled={isSubmitting}
+                        onChange={e => setYearLevel(Number(e.target.value) === 3 ? 3 : 4)}
+                        data-testid="onboarding-year-level"
+                      >
+                        <option value={3}>ชั้นปีที่ 3</option>
+                        <option value={4}>ชั้นปีที่ 4</option>
+                      </Select>
+                    </div>
                     <div className="sm:col-span-2">
                       {label('คณะ *')}
                       <Select
@@ -432,19 +457,6 @@ const OnboardingStudent: React.FC = () => {
                       />
                       {fieldError('altEmail')}
                     </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/30">
-                  <Lock className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-400" />
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-bold text-amber-700 dark:text-amber-400">
-                      ยังไม่ต้องกรอกตอนนี้: เลขบัตรประชาชน เชื้อชาติ ศาสนา
-                    </span>
-                    <span className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
-                      สามอย่างนี้ใช้เฉพาะตอนพิมพ์ใบสมัครงานสหกิจ (สหกิจ 03) ระบบจะขอตอนคุณเริ่มยื่นเรื่องจริง
-                      เก็บแบบเข้ารหัส และลบทิ้งอัตโนมัติ 90 วันหลังประเมินผลครบ
-                    </span>
                   </div>
                 </div>
               </>
@@ -552,9 +564,10 @@ const OnboardingStudent: React.FC = () => {
                 value: majors.find(m => m.major_id === selectedMajorId)?.major_name_th ?? '—',
               },
               { label: 'ปีที่เข้าศึกษา', value: enrollmentYear },
+              { label: 'ชั้นปีที่', value: `ชั้นปีที่ ${yearLevel}` },
               { label: 'ชื่อ-นามสกุล', value: `${namePrefix}${firstName.trim()} ${lastName.trim()}`.trim() },
             ]}
-            lockNote="รหัสและปีที่เข้า แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่ · สาขาแก้ได้ที่หน้าโปรไฟล์"
+            lockNote="รหัสนักศึกษา สาขาวิชา และปีที่เข้าศึกษา แก้เองไม่ได้หลังยืนยัน ถ้าผิดต้องแจ้งเจ้าหน้าที่"
           />
         }
       />

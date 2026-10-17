@@ -86,7 +86,7 @@ export const COOP_ACTIVITIES: CoopActivity[] = [
   {
     key: 'intent_submission',
     label:
-      'นักศึกษาส่งแบบคำร้องขอหนังสือขอความอนุเคราะห์นักศึกษาสหกิจศึกษา (หนังสือทาบทาม) (เอกสารหมายเลข ๑) และรับหนังสือขอความอนุเคราะห์พร้อมแบบยืนยันแบบตอบรับ เพื่อนำส่งสถานประกอบการลงนาม',
+      'นักศึกษาส่งแบบคำร้องขอหนังสือขอความอนุเคราะห์นักศึกษาสหกิจศึกษา (หนังสือทาบทาม) (เอกสารหมายเลข 1) และรับหนังสือขอความอนุเคราะห์พร้อมแบบยืนยันแบบตอบรับ เพื่อนำส่งสถานประกอบการลงนาม',
     dateKind: 'range',
     locks: true,
     paperRow: 'แถว 1 — ขอหนังสือทาบทาม (เอกสารหมายเลข 1)',
@@ -104,12 +104,12 @@ export const COOP_ACTIVITIES: CoopActivity[] = [
   },
   {
     key: 'accommodation_plan',
-    label: 'ส่งข้อมูลที่พัก (สหกิจ 06)',
+    label: 'นักศึกษากรอกข้อมูลใบสมัครงาน (สหกิจ 03) และข้อมูลที่พักระหว่างปฏิบัติงาน (สหกิจ 06)',
     dateKind: 'range',
     locks: true,
-    paperRow: 'แถว 3 — ส่ง สหกิจ 03 · 06 · 13 · 15',
+    paperRow: 'แถว 3 — ส่ง สหกิจ 03, 06 (ปรับจากกระดาษเดิม)',
     allowLate: true,
-    hint: 'บนกระดาษ สหกิจ 03 ใช้ช่วงเดียวกับ 06 แต่ระบบยังไม่ได้ล็อก สหกิจ 03 ไว้ (เพราะใบนี้บันทึกร่างให้อัตโนมัติระหว่างกรอก)',
+    hint: 'ในระบบนี้นักศึกษากรอก สหกิจ 03 และ 06 ผ่านระบบออนไลน์ ส่วน สหกิจ 13 (บันทึกนิเทศ) ให้อาจารย์นิเทศบันทึก และ สหกิจ 15 (ประเมินผล) ให้พี่เลี้ยงประเมินผ่านระบบ',
   },
   {
     key: 'coop_start',
@@ -197,6 +197,15 @@ export function activityByKey(key: string): CoopActivity | null {
 
 export function isCoopActivityKey(value: unknown): value is CoopActivityKey {
   return typeof value === 'string' && ACTIVITY_BY_KEY.has(value);
+}
+
+/**
+ * กิจกรรมที่เปิด "รอบพิเศษ" ให้ได้ — ต้องล็อกจริง และไม่ใช่ช่วงที่คำนวณจากกิจกรรมอื่น (`weekly_log`)
+ * `coop_start`/`coop_end`/`coop_exam` ไม่ล็อกอยู่แล้ว จึงไม่มีอะไรให้เปิด · นิยามเดียว — ด่านปฏิทินกับตัวตรวจรอบใช้ร่วมกัน
+ */
+export function isRoundableActivity(key: string): boolean {
+  const activity = ACTIVITY_BY_KEY.get(key);
+  return !!activity && activity.locks && !activity.derivedFrom;
 }
 
 export type CalendarStatus = 'not_configured' | 'upcoming' | 'open' | 'late' | 'closed';

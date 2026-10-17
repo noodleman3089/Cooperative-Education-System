@@ -37,10 +37,11 @@ export class StaffHomeController {
       const today = await CoopCalendarModel.today();
       const semester = await CoopSemesterModel.findActiveSemester();
 
-      const [tiles, windows, missingCoverLetters] = await Promise.all([
+      const [tiles, windows, missingCoverLetters, memoClosures] = await Promise.all([
         loadTiles(today),
         loadCalendarWindows(semester?.semester_id ?? null, today),
         loadMissingCoverLetters(),
+        loadMemoClosures(),
       ]);
 
       /**
@@ -102,6 +103,8 @@ export class StaffHomeController {
         season_detail: seasonDetail(season, today, tiles, windows, extra),
         // ใบที่รับแล้วแต่ไม่มีหนังสือเข้าคิวคณบดี — ไม่มีใครเห็นถ้าไม่ขึ้นที่นี่ (แถวแดงบนสุดของหน้าแรก)
         missing_cover_letters: missingCoverLetters,
+        // คณบดีอนุมัติเปลี่ยนที่/ส่งตัวกลับแล้ว รอเจ้าหน้าที่ปิดใบที่ฝึก (หน้าติดตามเอกสารขึ้นป้ายรายคน)
+        memo_closures_pending: memoClosures,
         tiles,
         // "งานที่รอคุณ N เรื่อง" บนหัวหน้าแรก — เฉพาะ 4 กองที่เป็นงานของเจ้าหน้าที่ (ไม่รวมของที่ค้างที่คณบดี)
         work_total:
@@ -349,6 +352,21 @@ async function loadMissingCoverLetters(): Promise<
       ORDER BY i.form_id`
   );
   return res.rows;
+}
+
+/**
+ * จำนวนนักศึกษาที่คณบดีอนุมัติ "เปลี่ยนสถานประกอบการ / ส่งตัวกลับ" แล้วแต่ใบที่ฝึกยังเปิดอยู่ — รอเจ้าหน้าที่ปิดใบ
+ * ⛔ นิยามเดียวกับ LATERAL `am` ของ `coopProgress.controller` (ผูก form_id ของใบที่ยัง accepted) — ตัวเลขนี้ต้องตรงกับแถวที่หน้าติดตามเอกสารขึ้นป้าย
+ */
+async function loadMemoClosures(): Promise<number> {
+  const res = await query(
+    `SELECT COUNT(DISTINCT i.student_id)::int AS n
+       FROM intent_forms i
+       JOIN student_memos m ON m.intent_form_id = i.form_id
+      WHERE i.status = 'accepted' AND m.status = 'approved'
+        AND m.memo_type IN ('change_company', 'terminated')`
+  );
+  return res.rows[0]?.n ?? 0;
 }
 
 /* ── ช่วงเวลาจากปฏิทิน ─────────────────────────────────────────────── */

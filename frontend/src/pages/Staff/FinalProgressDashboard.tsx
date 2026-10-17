@@ -50,8 +50,25 @@ interface StudentProgress {
     status: 'accepted' | 'superseded';
     closed_kind: 'sent_back' | 'change_company' | null;
     can_reopen: boolean;
+    /** คณบดีอนุมัติเปลี่ยนที่/ส่งตัวกลับของใบนี้แล้ว — รอเจ้าหน้าที่ปิดใบ (เฉพาะใบที่ยัง accepted) */
+    approved_memo?: {
+      memo_id: number;
+      memo_type: 'change_company' | 'terminated';
+      reason: string;
+      decided_at: string | null;
+    } | null;
   } | null;
 }
+
+/** หัวข้อบันทึกถึงคณบดี → เหตุที่ปิดใบ (ตรงกับ `ClosedKind` ฝั่ง backend) */
+const MEMO_CLOSE_KIND: Record<'change_company' | 'terminated', 'sent_back' | 'change_company'> = {
+  change_company: 'change_company',
+  terminated: 'sent_back',
+};
+const MEMO_CLOSE_TEXT: Record<'change_company' | 'terminated', string> = {
+  change_company: 'เปลี่ยนสถานประกอบการ',
+  terminated: 'ถูกส่งตัวกลับ / ยุติการปฏิบัติงาน',
+};
 
 export const FinalProgressDashboard: React.FC = () => {
   const [students, setStudents] = useState<StudentProgress[]>([]);
@@ -358,6 +375,14 @@ export const FinalProgressDashboard: React.FC = () => {
 
       <AlertBanner variant="error" message={error} />
       <AlertBanner variant="success" message={success} />
+      {students.some((s) => s.placement?.status === 'accepted' && s.placement.approved_memo) && (
+        <AlertBanner
+          variant="info"
+          message={`คณบดีอนุมัติเปลี่ยนสถานประกอบการ/ส่งตัวกลับแล้ว ${
+            students.filter((s) => s.placement?.status === 'accepted' && s.placement.approved_memo).length
+          } คน — หาแถวที่มีป้ายเขียว แล้วกด "ปิดใบที่ฝึก" เพื่อให้นักศึกษายื่นที่ใหม่ได้`}
+        />
+      )}
 
       {/* 2. Filter Bar matching StudentDocProgress.dc.html */}
       <div className="flex items-center gap-2.5 flex-wrap">
@@ -685,19 +710,31 @@ export const FinalProgressDashboard: React.FC = () => {
                                 </Button>
                               )}
                               {std.placement?.status === 'accepted' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  data-testid={`close-accepted-${std.studentCode}`}
-                                  onClick={() => {
-                                    setCloseTarget(std);
-                                    setCloseKind('');
-                                    setCloseReason('');
-                                    setCloseError(null);
-                                  }}
-                                >
-                                  ปิดใบที่ฝึก
-                                </Button>
+                                <>
+                                  {std.placement.approved_memo && (
+                                    <span
+                                      data-testid={`approved-memo-${std.studentCode}`}
+                                      className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-300"
+                                    >
+                                      คณบดีอนุมัติ: {MEMO_CLOSE_TEXT[std.placement.approved_memo.memo_type]}
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant={std.placement.approved_memo ? 'primary' : 'ghost'}
+                                    size="sm"
+                                    data-testid={`close-accepted-${std.studentCode}`}
+                                    onClick={() => {
+                                      const memo = std.placement?.approved_memo ?? null;
+                                      setCloseTarget(std);
+                                      // มีคำอนุมัติของคณบดีรออยู่ → เติมเหตุและเหตุผลให้ (เจ้าหน้าที่แก้ได้ก่อนยืนยัน)
+                                      setCloseKind(memo ? MEMO_CLOSE_KIND[memo.memo_type] : '');
+                                      setCloseReason(memo ? memo.reason : '');
+                                      setCloseError(null);
+                                    }}
+                                  >
+                                    ปิดใบที่ฝึก
+                                  </Button>
+                                </>
                               )}
                             </div>
                           )}
@@ -833,6 +870,18 @@ export const FinalProgressDashboard: React.FC = () => {
           <>
             <ModalBody className="space-y-4">
               <AlertBanner variant="error" message={closeError} />
+
+              {closeTarget.placement?.approved_memo && (
+                <div
+                  data-testid="close-accepted-memo-note"
+                  className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-900 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200"
+                >
+                  <p className="font-bold">
+                    คณบดีอนุมัติบันทึกข้อความ “{MEMO_CLOSE_TEXT[closeTarget.placement.approved_memo.memo_type]}” แล้ว
+                  </p>
+                  <p className="mt-1">ระบบเติมเหตุที่ปิดและเหตุผลตามที่นักศึกษาเขียนให้ — แก้ได้ก่อนยืนยัน</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">

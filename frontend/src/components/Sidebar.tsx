@@ -207,7 +207,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       { id: 'dashboard', label: 'หน้าแรก', icon: icons.dashboard },
 
       { id: 'jobs', label: 'ยื่นคำร้องขอหนังสือ', icon: icons.jobs, group: 'ก่อนออกฝึก' },
-      { id: 'job_application', label: 'ใบสมัครงานสหกิจ', icon: icons.application, group: 'ก่อนออกฝึก' },
+      { id: 'job_application', label: 'ใบสมัครงานสหกิจ (สหกิจ 03)', icon: icons.application, group: 'ก่อนออกฝึก' },
       { id: 'accommodation_plan', label: 'แจ้งที่พัก (สหกิจ 06)', icon: icons.accommodation, group: 'ก่อนออกฝึก' },
 
       // ไอคอนกลุ่มคน ไม่ใช่กระดิ่ง (`mentor_followup`) — กระดิ่งซ้ำกับปุ่มแจ้งเตือนบนแถบบนในจอเดียวกัน
@@ -254,8 +254,9 @@ const Sidebar: React.FC<SidebarProps> = ({
     ],
     dean: [
       { id: 'dashboard', label: 'หนังสือรอลงนาม', icon: icons.dashboard },
-      { id: 'signature', label: 'ลายมือชื่อสำหรับหนังสือราชการ', icon: icons.signature },
       { id: 'memos', label: 'บันทึกข้อความนักศึกษา', icon: icons.report_outline },
+      // ตั้งค่าครั้งเดียว ไม่ใช่งานประจำวัน — อยู่ท้ายสุดเหนือ "บัญชีของฉัน"
+      { id: 'signature', label: 'ลายมือชื่อสำหรับหนังสือราชการ', icon: icons.signature },
       { id: 'profile', label: 'การตั้งค่าโปรไฟล์', icon: icons.profile, group: 'บัญชีของฉัน' }
     ],
     staff: [

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import api, { API_BASE_URL } from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
@@ -6,9 +6,9 @@ import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal from '../../components/ui/Modal';
-import { Input, Textarea } from '../../components/ui/Input';
+import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../../utils/errors';
-import { formatThaiDateTime } from '../../utils/thaiDate';
+import { formatThaiDateTime, toThaiDigits } from '../../utils/thaiDate';
 import type { RequestFormRow } from './RequestQueue';
 
 /**
@@ -67,6 +67,24 @@ const REJECT_PRESET_CHIPS = [
 
 const POLL_MS = 2000;
 
+const MOCKUP_PREFIXES = [
+  'อว 0651.208(1)/',
+  'อว 0651.208(2)/',
+] as const;
+
+const parseInitialDocumentNo = (raw?: string | null) => {
+  if (!raw || !raw.trim()) {
+    return { initialPrefix: MOCKUP_PREFIXES[0] as string, initialSuffix: '' };
+  }
+  const trimmed = raw.trim();
+  for (const p of MOCKUP_PREFIXES) {
+    if (trimmed.startsWith(p)) {
+      return { initialPrefix: p as string, initialSuffix: trimmed.slice(p.length) };
+    }
+  }
+  return { initialPrefix: MOCKUP_PREFIXES[0] as string, initialSuffix: trimmed };
+};
+
 const LABEL = 'text-[13px] font-bold text-gray-600 dark:text-gray-400';
 const PILL = 'rounded-full border px-3 py-1 text-[13px] font-bold';
 
@@ -92,8 +110,19 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
   /** รับคำร้องสำเร็จแต่หนังสือไม่ออก — แผงค้างไว้ให้กดสร้างอีกครั้ง */
   const [letterFailed, setLetterFailed] = useState<{ documentNo: string; reason: string } | null>(null);
 
-  // ใบที่หนังสือถูกถอนกลับยังคงเลขเดิม (มักใช้เลขเดิมรับใหม่) — เติมให้ แก้ได้ · ใบที่ยังไม่เคยรับ = ว่าง
-  const [documentNo, setDocumentNo] = useState(row.officer_document_no ?? '');
+  // เลือกชุดหมวดนำหน้า และให้เจ้าหน้าที่กรอกเฉพาะเลขทะเบียนท้ายหนังสือ
+  const [initialDoc] = useState(() => parseInitialDocumentNo(row.officer_document_no));
+  const [prefix, setPrefix] = useState<string>(initialDoc.initialPrefix);
+  const [suffix, setSuffix] = useState<string>(initialDoc.initialSuffix);
+
+  const documentNo = useMemo(() => {
+    const trimmed = suffix.trim();
+    if (!trimmed) return '';
+    // ถ้าผู้ใช้หรือ e2e พิมพ์เลขเต็มที่มี / อยู่แล้ว ไม่ต้องต่อ prefix ซ้ำ
+    if (trimmed.includes('/')) return trimmed;
+    return `${prefix}${trimmed}`;
+  }, [prefix, suffix]);
+
   const [rejecting, setRejecting] = useState(false);
   const [rejectError, setRejectError] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -584,23 +613,51 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
                   </div>
                 ) : (
                   <>
-                    <div className="flex flex-col gap-1.5 border-t border-gray-200 pt-4 dark:border-gray-800">
-                      <label htmlFor="officer-document-no" className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                        เลขที่หนังสือออก
-                      </label>
-                      <Input
-                        id="officer-document-no"
-                        value={documentNo}
-                        data-testid="officer-document-no"
-                        placeholder="เช่น อว 0651.11/ว 218"
-                        disabled={withdrawn}
-                        maxLength={100}
-                        onChange={(e) => setDocumentNo(e.target.value)}
-                        className="h-[46px] text-[15px]"
-                      />
-                      <span className="text-[13px] text-gray-600 dark:text-gray-400">
-                        แก้เลขได้จนกว่าคณบดีจะลงนาม
-                      </span>
+                    <div className="flex flex-col gap-2 border-t border-gray-200 pt-4 dark:border-gray-800">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="officer-document-no" className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                          เลขที่หนังสือออก
+                        </label>
+                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                          เลือกชุดจำลองหรือแก้ไขเลขท้ายได้
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-2">
+                        <div>
+                          <Select
+                            id="officer-document-prefix"
+                            data-testid="officer-document-prefix"
+                            value={prefix}
+                            disabled={withdrawn}
+                            onChange={(e) => setPrefix(e.target.value)}
+                            className="h-[46px] text-sm font-semibold"
+                          >
+                            <option value="อว 0651.208(1)/">อว 0651.208(1)/</option>
+                            <option value="อว 0651.208(2)/">อว 0651.208(2)/</option>
+                          </Select>
+                        </div>
+                        <div>
+                          <Input
+                            id="officer-document-no"
+                            value={suffix}
+                            data-testid="officer-document-no"
+                            placeholder="เช่น 1967.1013"
+                            disabled={withdrawn}
+                            maxLength={50}
+                            onChange={(e) => setSuffix(e.target.value)}
+                            className="h-[46px] text-[15px]"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-1 text-[13px] text-gray-600 dark:text-gray-400">
+                        <span>
+                          เลขที่จะออกบนหนังสือจริง (เลขไทย):{' '}
+                          <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                            {documentNo ? toThaiDigits(documentNo) : `${toThaiDigits(prefix)}...`}
+                          </strong>
+                        </span>
+                        <span>แก้เลขได้จนกว่าคณบดีจะลงนาม</span>
+                      </div>
                     </div>
 
                     <div className="mt-1 flex flex-wrap justify-between gap-2.5">

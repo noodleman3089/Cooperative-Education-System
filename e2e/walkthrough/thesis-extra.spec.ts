@@ -229,7 +229,7 @@ test.describe('walkthrough: ภาพบทที่ 4 ชุดเพิ่ม'
         await page.getByTestId('ca-nationality').fill('ไทย');
         await page.getByTestId('ca-mobile').fill('0812345678');
         await page.getByTestId('ca-emg-name').fill('นางสมศรี สายดี');
-        await page.getByTestId('ca-emg-relation').fill('มารดา');
+        await page.getByTestId('ca-emg-relation').selectOption('มารดา');
         await page.getByTestId('ca-emg-phone').fill('0898765432');
         await page.getByTestId('ca-national-id').fill('1234567890123');
         await page.getByTestId('ca-id-district').fill('เมืองนครราชสีมา');

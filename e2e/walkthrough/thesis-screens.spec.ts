@@ -240,9 +240,9 @@ test.describe('walkthrough: ภาพหน้าจอบทที่ 4', () =>
 
       await shoot('4.31', 'นักศึกษา', 'บันทึกถึงคณบดี — ฟอร์มยื่นบันทึก มีรายการที่ยื่นแล้ว 1 ใบ', async () => {
         await open(page, 'memos');
-        await page.locator('#memo-type').selectOption('change_company');
+        await page.getByTestId('memo-type-option-change_company').click();
         await page.locator('#memo-reason').fill('บริษัทเดิมยกเลิกการรับนักศึกษาเข้าปฏิบัติงานกะทันหัน จึงขอเปลี่ยนสถานประกอบการ');
-        await page.getByRole('button', { name: 'บันทึกและเตรียมพิมพ์' }).click();
+        await page.getByTestId('memo-submit').click();
         await page.getByTestId('memo-confirm').click();
         await expect(page.getByTestId('memo-row')).toHaveCount(1);
       });

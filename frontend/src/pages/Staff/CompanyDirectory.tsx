@@ -329,77 +329,50 @@ const CompanyDirectory: React.FC = () => {
     {
       key: 'name',
       header: 'สถานประกอบการ',
-      cell: company => (
-        <>
-          <p className="font-bold text-sm text-gray-900 dark:text-white">{company.name_th}</p>
-          <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-            {company.district ? `${company.district}, ` : ''}{company.province}
-          </p>
-        </>
-      ),
-    },
-    {
-      key: 'contact',
-      header: 'ผู้ประสานงาน',
-      cell: company => (
-        <div>
-          {company.contact_person ? (
-            <p className="text-gray-900 dark:text-gray-100 font-medium">{company.contact_person}</p>
-          ) : (
-            <span className="text-gray-500 italic">ไม่ระบุชื่อ</span>
-          )}
-          {company.email ? (
-            <p className="text-xs text-gray-600 dark:text-gray-400">{company.email}</p>
-          ) : (
-            <span className="text-xs text-red-600 dark:text-red-400 font-bold block mt-0.5">ยังไม่มีอีเมล</span>
-          )}
-          {company.phone && (
-            <p className="text-xs text-gray-500 dark:text-gray-400">{company.phone}</p>
-          )}
-        </div>
-      ),
-    },
-    {
-      key: 'source',
-      header: 'ที่มาของแถว',
       cell: company => {
+        const isFromGoogle = Boolean(company.google_place_id);
         const usage = companyUsage[company.company_id];
-        // ที่มาดูจากผู้สร้างแถว — เดิมดูว่า "มีคนใช้หรือไม่" แถวที่เจ้าหน้าที่เพิ่มเองจึงเปลี่ยนป้ายทันทีที่มีนักศึกษาเลือก
-        const isStudentCreated = company.created_by_student === true;
         return (
-          <div className="text-xs">
-            <span className="font-medium text-gray-800 dark:text-gray-200">
-              {isStudentCreated ? 'นักศึกษาสร้างตอนยื่นคำร้อง' : 'เจ้าหน้าที่เพิ่มเอง'}
-            </span>
-            {usage?.studentName && (
-              <p className="text-gray-500 dark:text-gray-400 mt-0.5">
-                ใช้โดย {usage.studentName}
-              </p>
-            )}
+          <div className="space-y-1">
+            <p className="font-bold text-sm text-gray-900 dark:text-white">{company.name_th}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              {isFromGoogle ? (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-blue-50 text-brand-blue dark:bg-blue-950/40 dark:text-blue-300">
+                  Google Maps
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300">
+                  กรอกเอง
+                </span>
+              )}
+              {usage?.studentName && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  โดย {usage.studentName}
+                </span>
+              )}
+            </div>
           </div>
         );
       },
     },
     {
       key: 'usage',
-      header: 'การใช้งาน',
+      header: 'จำนวนเด็กที่ยื่น',
       cell: company => {
         const usage = companyUsage[company.company_id];
-        if (usage?.pendingCount && usage.pendingCount > 0) {
-          return (
-            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">
-              คำร้องรอตรวจ {usage.pendingCount} ใบ
-            </span>
-          );
-        }
         if (usage?.count && usage.count > 0) {
           return (
-            <span className="text-xs text-gray-700 dark:text-gray-300">
-              นักศึกษา {usage.count} คน
+            <span className="text-xs font-semibold text-gray-800 dark:text-gray-200">
+              {usage.count} คน
+              {usage.pendingCount > 0 && (
+                <span className="ml-1 text-amber-700 dark:text-amber-400 font-normal">
+                  (รอตรวจ {usage.pendingCount})
+                </span>
+              )}
             </span>
           );
         }
-        return <span className="text-xs text-gray-500 dark:text-gray-400">ยังไม่เคยใช้</span>;
+        return <span className="text-xs text-gray-500 dark:text-gray-400">ยังไม่มีผู้ยื่น</span>;
       },
     },
     {
@@ -408,7 +381,6 @@ const CompanyDirectory: React.FC = () => {
       align: 'center',
       cell: company =>
         company.is_verified ? (
-          // รูปทรงเดียวกับ ui/StatusBadge (py-0.5 · whitespace-nowrap) — เดิมป้ายตัดสองบรรทัดจนแถวสูง 52px
           <span className="inline-flex items-center whitespace-nowrap px-2.5 py-0.5 rounded-full text-xs font-bold border bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-900/40">
             รับรองแล้ว
           </span>
@@ -427,27 +399,6 @@ const CompanyDirectory: React.FC = () => {
         const isBlocked = !!(usage?.count && usage.count > 0);
         return (
           <div className="flex items-center justify-end gap-1.5 flex-wrap">
-            {!company.email && (
-              <Button
-                variant="primary"
-                size="sm"
-                data-testid="company-edit-email"
-                onClick={() => openEdit(company)}
-              >
-                เติมอีเมล
-              </Button>
-            )}
-            {!company.is_verified && usage?.pendingCount && usage.formId ? (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  window.location.href = `/dashboard?queue=request&form=${usage.formId}`;
-                }}
-              >
-                ไปที่คำร้อง
-              </Button>
-            ) : null}
             <Button
               variant={company.is_verified ? 'secondary' : 'success'}
               size="sm"
@@ -472,8 +423,6 @@ const CompanyDirectory: React.FC = () => {
             >
               <Pencil className="w-3.5 h-3.5" />
             </Button>
-            {/* ปุ่มลบเป็นขอบแดงพื้นขาวเหมือนตารางสาขา — เดิมแดงทึบ เด่นที่สุดในแถวทั้งที่อันตรายที่สุด
-                `!` เพราะสีของ variant secondary อยู่ในคลาสเดียวกันและชนะคลาสธรรมดา */}
             <Button
               variant="secondary"
               size="sm"
@@ -499,8 +448,8 @@ const CompanyDirectory: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 page-enter">
-      {/* 4 Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* 3 Stat Cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
         <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-sm flex items-center gap-3.5">
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-brand-blue dark:text-blue-400 rounded-xl">
             <Building2 className="w-5 h-5" />
@@ -528,18 +477,7 @@ const CompanyDirectory: React.FC = () => {
           <div>
             <span className="text-xs text-amber-800 dark:text-amber-400 font-semibold">ยังไม่รับรอง</span>
             <h3 className="text-2xl font-black text-amber-700 dark:text-amber-400">{shown(unverifiedCount)}</h3>
-            <span className="text-xs text-amber-800/80 dark:text-amber-400/80">นักศึกษาเพิ่มเอง {shown(unverifiedCount)}</span>
-          </div>
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 p-5 rounded-2xl border border-red-200 dark:border-red-900/40 shadow-sm flex items-center gap-3.5">
-          <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-xl">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div>
-            <span className="text-xs text-red-700 dark:text-red-400 font-semibold">ไม่มีอีเมลผู้ประสานงาน</span>
-            <h3 className="text-2xl font-black text-red-700 dark:text-red-400">{shown(noEmailCount)}</h3>
-            <span className="text-xs text-red-600 dark:text-red-400">นักศึกษาต้องกรอกเองตอนส่งหนังสือ</span>
+            <span className="text-xs text-amber-800/80 dark:text-amber-400/80">นักศึกษากรอกเอง {shown(unverifiedCount)}</span>
           </div>
         </div>
       </div>
@@ -623,7 +561,7 @@ const CompanyDirectory: React.FC = () => {
               type="button"
               data-testid="company-filter-noemail"
               onClick={() => setStatusFilter('noemail')}
-              className={`pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
+              className={`hidden pointer-coarse:min-h-11 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                 statusFilter === 'noemail'
                   ? 'bg-red-50 text-red-700 border-red-300 dark:bg-red-900/30 dark:text-red-300 font-bold'
                   : 'bg-white text-red-700 border-red-200 hover:bg-red-50 dark:bg-gray-800 dark:border-red-900/40 dark:text-red-400'
@@ -692,12 +630,12 @@ const CompanyDirectory: React.FC = () => {
       <div className="p-4 rounded-xl border border-amber-200 bg-amber-50/70 dark:border-amber-900/40 dark:bg-amber-950/20 flex flex-col gap-2 text-xs text-amber-900 dark:text-amber-300">
         <div className="flex items-center gap-2 font-bold text-sm text-amber-800 dark:text-amber-400">
           <AlertTriangle className="w-4 h-4 shrink-0" />
-          การรับรองไม่ใช่ปุ่มที่ต้องกดก่อนออกหนังสือ
+          การรับรองสถานประกอบการ
         </div>
         <p className="leading-relaxed">
-          แถวที่นักศึกษาสร้างเองจะถูก <strong>รับรองอัตโนมัติในทรานแซกชันเดียวกับตอนคุณกด “รับคำร้อง”</strong> ที่หน้าคิว — ไม่ต้องมาไล่กดที่นี่ก่อน
+          สถานประกอบการที่นักศึกษาค้นหาและเลือกผ่าน <strong>Google Maps</strong> จะได้รับการรับรองอัตโนมัติทันที
           <br />
-          ปุ่ม “รับรอง / ถอนการรับรอง” ที่นี่มีไว้สำหรับกรณีนอกเส้นทางคำร้อง เช่น บริษัทที่คุณเพิ่มเองให้นักศึกษาเลือก หรือถอนรับรองบริษัทที่เลิกกิจการ
+          สำหรับสถานประกอบการที่นักศึกษากรอกข้อมูลเองด้วยตนเอง เจ้าหน้าที่สามารถตรวจสอบความถูกต้องและกดปุ่ม “รับรอง” ได้จากตารางนี้
         </p>
       </div>
 

@@ -16,7 +16,7 @@ import { sendPersonnelAssignmentEmail } from '../utils/email';
 import { sendUnexpectedError } from '../utils/httpError';
 import { formatAccommodationAddress, isValidCoordinate } from '../utils/accommodationAddress';
 import { decryptSensitive, encryptSensitive, maskNationalId } from '../utils/encryption';
-import { COOP03_REQUIRED_COLUMNS, coop03MissingKeys } from '../utils/coop03Required';
+import { COOP03_REQUIRED_COLUMNS, COOP03_TABLE_SECTIONS, coop03MissingKeys } from '../utils/coop03Required';
 import {
   ACTIVITY_KEYS,
   EDUCATION_KEYS,
@@ -29,14 +29,7 @@ import {
   sanitizeFamilyInfo,
   sanitizeRows,
 } from '../utils/coopApplicationHistory';
-import {
-  buildCoopApplicationPdf,
-  fetchCoopApplicationPdfData,
-} from '../utils/coopApplicationPdf';
-import {
-  buildAccommodationFormPdf,
-  fetchAccommodationFormData,
-} from '../utils/accommodationFormPdf';
+import { fetchCoopApplicationView } from '../utils/coopApplicationView';
 
 export class StudentController {
   /**
@@ -321,7 +314,9 @@ export class StudentController {
         activeIntent,
         closedIntent,
         replacement_pass: replacementPass,
-        documents: docQuery.rows
+        // ยื่นใบใหม่แล้ว = หนังสือของใบที่ปิดไปถูกแทนที่ ไม่ต้องโชว์ให้นักศึกษาเห็นซ้อน (แถวยังอยู่ในฐาน ให้เจ้าหน้าที่/ตรวจย้อนหลัง)
+        // ยังไม่มีใบใหม่ (activeIntent = null) = ยังโชว์ฉบับเก่าพร้อมป้ายเหมือนเดิม
+        documents: activeIntent ? docQuery.rows.filter((d) => !d.of_closed_request) : docQuery.rows
       });
 
     } catch (error) {
@@ -395,7 +390,7 @@ export class StudentController {
                 national_id_ciphertext, national_id_iv, national_id_tag,
                 ethnicity_ciphertext, religion_ciphertext, sensitive_data_consented_at,
                 career_objective, family_info, education_history,
-                training_history, activity_history, language_proficiency
+                training_history, activity_history, language_proficiency, coop03_none_sections
            FROM students WHERE student_id = $1`,
         [req.user.userId]
       );
@@ -456,6 +451,7 @@ export class StudentController {
         training_history: row.training_history ?? null,
         activity_history: row.activity_history ?? null,
         language_proficiency: row.language_proficiency ?? null,
+        none_sections: row.coop03_none_sections ?? [],
       });
     } catch (error) {
       sendUnexpectedError(
@@ -523,6 +519,22 @@ export class StudentController {
         return;
       }
 
+      // หมวดที่ติ๊ก "ไม่มีข้อมูล" — เก็บเฉพาะค่าที่รู้จัก · หมวดที่ส่งแถวมาด้วยในคำขอเดียวกันถือว่ามีข้อมูล ตัดออกจากรายการ
+      // (ไม่ส่งฟิลด์นี้มา = ไม่แก้) · ⛔ ตัดสินจากแถวในคำขอเท่านั้น ถ้าหมวดนั้นไม่ได้ส่งแถวมา ใช้ตามที่ส่งมา
+      const rowsSentByKey: Record<string, unknown> = {
+        education: body.education_history,
+        training: body.training_history,
+        activity: body.activity_history,
+        language: body.language_proficiency,
+      };
+      const noneSections: string[] | null = Array.isArray(body.none_sections)
+        ? COOP03_TABLE_SECTIONS.filter((section) => {
+            if (!(body.none_sections as unknown[]).includes(section)) return false;
+            const sent = rowsSentByKey[section];
+            return !(Array.isArray(sent) && sent.length > 0);
+          })
+        : null;
+
       const updated = await StudentModel.updateCoopApplicationIdentity(
         studentId,
         {
@@ -552,6 +564,7 @@ export class StudentController {
             LANGUAGE_KEYS,
             MAX_LANGUAGE_ROWS
           ),
+          noneSections,
         },
         {
           // ไม่ได้ส่งมา = ไม่ได้แก้ (หน้าจอเห็นแต่มาสก์) — โมเดลใช้ COALESCE รับไม้ต่อ
@@ -593,41 +606,40 @@ export class StudentController {
   }
 
   /**
-   * สหกิจ 03 — พิมพ์ใบสมัครงานของตัวเองเป็น PDF
-   * Route: GET /api/students/coop-application/print
-   * Access: student (ของตัวเองเสมอ — ไม่รับ `:id` จากผู้เรียก)
+   * สหกิจ 03 — ผู้ตรวจ (เจ้าหน้าที่ · อาจารย์ · หัวหน้าสาขา) เปิดดูใบสมัครงานของนักศึกษา
+   * Route: GET /api/students/:id/coop-application
+   * Access: staff · dept_head · advisor — ผ่าน `assertCanReviewStudentWork` เสมอ (SEC-06 fail closed)
    *
-   * ⛔⛔ **นี่คือ endpoint เดียวที่ทำให้ค่าจริงของเลขบัตร/เชื้อชาติ/ศาสนาออกจากฐาน**
-   * (`utils/coopApplicationPdf.ts` ถอดรหัสตอนวาด) จึงมีกติกาสามข้อที่ห้ามแก้:
-   *   1. **ห้ามรับ id จากผู้เรียก** — ใช้ `req.user.userId` เท่านั้น
-   *   2. **ห้ามเปิดให้ role อื่น** ไม่ว่าบริษัท เจ้าหน้าที่ หรืออาจารย์
-   *      (บริษัทอ่านใบสมัครได้ทาง `…/company-view` ซึ่งตัดชั้น C ออกหมดแล้ว)
+   * ⛔⛔ **นี่คือ endpoint เดียวที่ทำให้ค่าจริงของเลขบัตร/เชื้อชาติ/ศาสนาออกจากฐาน** (SEC-12)
+   * (เจ้าของสั่ง 2026-10-18 — แทน `/coop-application/print` ที่ถูกลบ) กติกาที่ห้ามแก้:
+   *   1. **ต้องผ่าน `assertCanReviewStudentWork` ก่อนถอดรหัส** — อาจารย์เห็นเฉพาะนักศึกษาตัวเอง
+   *   2. **ห้ามเปิดให้ role อื่น** — บริษัทอ่านทาง `…/company-view` ที่ตัดชั้น C ออกหมดแล้ว
    *   3. **ต้องลง `audit_log` ทุกครั้ง** — SEC-07 · การเปิดค่าจริงต้องตามย้อนได้
-   *
-   * ปุ่มนี้เป็น **ทางออกสำรอง** สำหรับบริษัทที่ยังไม่มีบัญชีในระบบเท่านั้น
-   * ไม่ใช่ขั้นตอนบังคับ — ไม่มีใครกดเลย ระบบก็ยังเดินได้ครบเหมือนเดิม
    */
-  static async printCoopApplication(req: Request, res: Response): Promise<void> {
+  static async getCoopApplicationForReview(req: Request, res: Response): Promise<void> {
     try {
       if (!req.user) {
         res.status(401).json({ message: 'Unauthorized. Please log in.' });
         return;
       }
-
-      const studentId = req.user.userId;
-      const data = await fetchCoopApplicationPdfData(studentId);
-      if (!data) {
-        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา กรุณาตั้งค่าโปรไฟล์ก่อน' });
+      const studentId = parseInt(req.params.id, 10);
+      if (isNaN(studentId)) {
+        res.status(400).json({ message: 'Invalid student ID format.' });
         return;
       }
 
-      const pdf = await buildCoopApplicationPdf(data);
+      await assertCanReviewStudentWork(req.user.userId, req.user.roles, studentId);
 
-      // เขียนหลังวาดสำเร็จ — การวาดล้มเหลวแล้วยังมีบรรทัดว่า "เปิดค่าจริงแล้ว"
-      // จะทำให้บันทึกโกหก · `writeAudit` เป็น fire-and-forget ตามบรรทัดฐานของระบบ
+      const data = await fetchCoopApplicationView(studentId);
+      if (!data) {
+        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา' });
+        return;
+      }
+
+      // `writeAudit` เป็น fire-and-forget ตามบรรทัดฐานของระบบ
       writeAudit(
         {
-          action: AuditAction.COOP_APPLICATION_PRINTED,
+          action: AuditAction.COOP_APPLICATION_VIEWED,
           entityType: 'student',
           entityId: studentId,
           subjectId: studentId,
@@ -642,74 +654,14 @@ export class StudentController {
         req
       ).catch(() => undefined);
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename="coop03-application-${studentId}.pdf"`
-      );
-      res.status(200).send(pdf);
-    } catch (error) {
-      sendUnexpectedError(
-        res,
-        error,
-        'Print Coop Application Error',
-        'เกิดข้อผิดพลาดขณะสร้างใบสมัครงานสหกิจศึกษา'
-      );
-    }
-  }
-
-  /**
-   * สหกิจ 06 — พิมพ์แบบแจ้งรายละเอียดที่พักเป็น PDF
-   * Route: GET /api/students/:id/accommodation-plan/print
-   * Access: เหมือน GET ของหน้าเดียวกันเป๊ะ (นักศึกษาเจ้าของ + บุคลากรที่ดูแลจริง)
-   *
-   * ใบนี้**ไม่มีข้อมูลชั้น C** จึงไม่ต้องล็อกแน่นเท่า สหกิจ 03 · เปิดให้บุคลากรพิมพ์ได้
-   * เพราะหัวหน้าสหกิจศึกษาฯ คือผู้รับใบนี้ตามหัวเรื่อง ("เรียน หัวหน้าสหกิจศึกษาฯ")
-   * ⛔ แต่ยังต้องผ่าน `assertCanReviewStudentWork` เหมือนเดิม — ที่พักและผู้ติดต่อ
-   *    ฉุกเฉินไม่ใช่ของที่อาจารย์คนไหนในมหาวิทยาลัยก็เปิดดูได้ (SEC-06)
-   */
-  static async printAccommodationForm(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized.' });
-        return;
-      }
-      const studentId = parseInt(req.params.id, 10);
-      if (isNaN(studentId)) {
-        res.status(400).json({ message: 'Invalid student ID format.' });
-        return;
-      }
-
-      const isPersonnel = req.user.roles.some((r: string) =>
-        ['staff', 'dean', 'advisor', 'dept_head'].includes(r)
-      );
-      if (isPersonnel) {
-        await assertCanReviewStudentWork(req.user.userId, req.user.roles, studentId);
-      } else if (req.user.userId !== studentId) {
-        res.status(403).json({ message: 'Forbidden.' });
-        return;
-      }
-
-      const data = await fetchAccommodationFormData(studentId);
-      if (!data) {
-        res.status(404).json({ message: 'ไม่พบประวัตินักศึกษา' });
-        return;
-      }
-
-      const pdf = await buildAccommodationFormPdf(data);
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader(
-        'Content-Disposition',
-        `inline; filename="coop06-accommodation-${studentId}.pdf"`
-      );
-      res.status(200).send(pdf);
+      res.status(200).json(data);
     } catch (error) {
       if (sendAccessError(res, error)) return;
       sendUnexpectedError(
         res,
         error,
-        'Print Accommodation Form Error',
-        'เกิดข้อผิดพลาดขณะสร้างแบบแจ้งที่พัก'
+        'Get Coop Application For Review Error',
+        'เกิดข้อผิดพลาดขณะดึงใบสมัครงานสหกิจศึกษา'
       );
     }
   }

@@ -35,6 +35,9 @@ DROP TABLE IF EXISTS auto_job_log CASCADE;
 DROP TABLE IF EXISTS intent_forms CASCADE;
 DROP TABLE IF EXISTS announcements CASCADE;
 DROP TABLE IF EXISTS student_memos CASCADE;
+DROP TABLE IF EXISTS coop_special_round_students CASCADE;
+DROP TABLE IF EXISTS coop_special_round_activities CASCADE;
+DROP TABLE IF EXISTS coop_special_rounds CASCADE;
 DROP TABLE IF EXISTS coop_calendar_events CASCADE;
 DROP TABLE IF EXISTS job_posts CASCADE;
 DROP TABLE IF EXISTS report_outline_versions CASCADE;
@@ -213,6 +216,8 @@ CREATE TABLE IF NOT EXISTS students (
     enrollment_year INT,
     skills_and_activities TEXT,
     language_proficiency JSONB,
+    -- สหกิจ 03: หมวดที่ยืนยันว่า "ไม่มีข้อมูล" (migration 060) — education · training · activity · language
+    coop03_none_sections TEXT[] NOT NULL DEFAULT '{}',
     preferred_work_region VARCHAR(255),
     interested_job_types JSONB,
     -- สหกิจ 03 · ช่องตัวตน/ติดต่อ (migration 013)
@@ -435,6 +440,36 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_coop_calendar_activity_once
 -- and those have no place in a date ordering. The gate already rides the
 -- unique index above.
 CREATE INDEX IF NOT EXISTS idx_coop_calendar_semester_order ON coop_calendar_events (semester_id, sort_order);
+
+-- รอบพิเศษ (migration 057) — เจ้าหน้าที่เปิดให้นักศึกษาที่เลือกรายคนส่งกิจกรรมที่ติ๊กไว้ได้แม้ช่วงปกติปิดแล้ว
+-- แยกจาก coop_calendar_events เพราะตารางนั้น unique ต่อ (ภาค, activity_key) = หนึ่งกิจกรรม หนึ่งช่วง
+-- ไม่มี CHECK ชุด activity_key (เหตุผลเดียวกับ coop_calendar_events) — controller ตรวจกับ COOP_ACTIVITIES
+CREATE TABLE IF NOT EXISTS coop_special_rounds (
+    round_id SERIAL PRIMARY KEY,
+    semester_id INT NOT NULL REFERENCES coop_semesters(semester_id) ON DELETE CASCADE,
+    title VARCHAR(255) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    note TEXT,
+    created_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT coop_special_rounds_dates CHECK (end_date >= start_date)
+);
+CREATE INDEX IF NOT EXISTS idx_coop_special_rounds_semester ON coop_special_rounds (semester_id, start_date);
+
+CREATE TABLE IF NOT EXISTS coop_special_round_activities (
+    round_id INT NOT NULL REFERENCES coop_special_rounds(round_id) ON DELETE CASCADE,
+    activity_key VARCHAR(50) NOT NULL,
+    PRIMARY KEY (round_id, activity_key)
+);
+
+CREATE TABLE IF NOT EXISTS coop_special_round_students (
+    round_id INT NOT NULL REFERENCES coop_special_rounds(round_id) ON DELETE CASCADE,
+    student_id INT NOT NULL REFERENCES students(student_id) ON DELETE CASCADE,
+    PRIMARY KEY (round_id, student_id)
+);
+-- ด่านถามจากฝั่งนักศึกษา: "ฉันอยู่ในรอบไหนบ้าง"
+CREATE INDEX IF NOT EXISTS idx_coop_special_round_students_student ON coop_special_round_students (student_id);
 
 -- 7. Intent Forms Table
 CREATE TABLE IF NOT EXISTS intent_forms (
@@ -715,13 +750,31 @@ CREATE TABLE IF NOT EXISTS student_memos (
 
     created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT student_memos_reason_required CHECK (btrim(reason) <> '')
+    -- คำตัดสินของคณบดี (migration 058 · เจ้าของสั่ง 2026-10-18) — ลายเซ็นบนกระดาษคือหลักฐานทางการ
+    -- คำตัดสินในระบบคือสิ่งที่ปลดล็อกรอบพิเศษ · บันทึกเดิมเริ่มที่ 'pending' ไม่เดาว่าเคยอนุมัติ
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    decided_by INT REFERENCES users(user_id) ON DELETE SET NULL,
+    decided_at TIMESTAMPTZ,
+    decision_note TEXT,
+
+    -- รายละเอียดเฉพาะหัวข้อ (migration 059) — คีย์ที่ยอมรับอยู่ที่ backend/src/config/memoTypes.ts
+    details JSONB NOT NULL DEFAULT '{}'::jsonb,
+
+    CONSTRAINT student_memos_reason_required CHECK (btrim(reason) <> ''),
+    CONSTRAINT student_memos_status_valid CHECK (status IN ('pending', 'approved', 'rejected')),
+    CONSTRAINT student_memos_decision_consistent CHECK (
+        (status = 'pending' AND decided_at IS NULL)
+        OR (status <> 'pending' AND decided_at IS NOT NULL)
+    )
 );
 
 -- ผู้เรียกจริงมีสองแบบ: "บันทึกของนักศึกษาคนนี้" และ "บันทึกของภาคนี้ทั้งหมด"
 -- ทั้งคู่เรียงตามใหม่สุดก่อน จึงพอด้วย index เดียว
 CREATE INDEX IF NOT EXISTS idx_student_memos_student ON student_memos (student_id, memo_id DESC);
 CREATE INDEX IF NOT EXISTS idx_student_memos_semester ON student_memos (semester_id, memo_id DESC);
+-- ปุ่ม "นำเข้าจากบันทึกข้อความ" ของเจ้าหน้าที่ถามเฉพาะที่อนุมัติแล้วในภาคหนึ่ง
+CREATE INDEX IF NOT EXISTS idx_student_memos_approved
+    ON student_memos (semester_id, memo_id DESC) WHERE status = 'approved';
 
 -- 12. Accommodations Table
 -- สหกิจ 06 — แบบแจ้งรายละเอียดที่พัก · **ผู้กรอกคือนักศึกษา** เรียนหัวหน้าสหกิจศึกษาฯ

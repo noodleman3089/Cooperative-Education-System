@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CoopCalendarModel, CoopCalendarEventRow } from '../models/coopCalendar';
 import { CoopSemesterModel } from '../models/semester';
+import { CoopSpecialRoundModel } from '../models/coopSpecialRound';
 import {
   COOP_ACTIVITIES,
   CalendarDateKind,
@@ -310,12 +311,57 @@ export class CoopCalendarController {
       if (!semester) {
         // ไม่มีภาคการศึกษา = ยังไม่มีกฎ ไม่ใช่ข้อผิดพลาด — ตอบ 200 พร้อมของว่าง
         // ให้หน้าจออธิบายเอง (แบนเนอร์นักศึกษาจะเงียบ ส่วนเจ้าหน้าที่เห็นคำอธิบาย)
-        res.status(200).json({ semester: null, today, activities: [], custom_events: [] });
+        res
+          .status(200)
+          .json({ semester: null, today, activities: [], custom_events: [], special_rounds: [] });
         return;
       }
 
       const rows = await CoopCalendarModel.listBySemester(semester.semester_id);
-      res.status(200).json({ semester, today, ...buildCalendar(rows, today) });
+      const calendar = buildCalendar(rows, today);
+
+      // รอบพิเศษ: เจ้าหน้าที่เห็นทุกรอบพร้อมรายชื่อ · นักศึกษาเห็นเฉพาะรอบที่ตัวเองอยู่ในรายชื่อ
+      // และไม่มีรายชื่อคนอื่น/หมายเหตุภายใน (หลักการ SEC-10) · role อื่นไม่เห็นเลย
+      const isStaff = !!req.user?.roles.includes('staff');
+      const isStudent = !isStaff && !!req.user?.roles.includes('student');
+      let specialRounds: unknown[] = [];
+      const openKeys = new Set<string>();
+      if (isStaff) {
+        const rounds = await CoopSpecialRoundModel.listBySemester(semester.semester_id);
+        specialRounds = await Promise.all(
+          rounds.map(async (r) => ({
+            ...r,
+            status: calendarStatus(today, r.start_date, r.end_date),
+            students: await CoopSpecialRoundModel.listStudents(r.round_id),
+          }))
+        );
+      } else if (isStudent && req.user) {
+        const rounds = await CoopSpecialRoundModel.listForStudent(semester.semester_id, req.user.userId);
+        specialRounds = rounds.map((r) => {
+          const status = calendarStatus(today, r.start_date, r.end_date);
+          if (status === 'open') r.activity_keys.forEach((k) => openKeys.add(k));
+          return {
+            round_id: r.round_id,
+            title: r.title,
+            start_date: r.start_date,
+            end_date: r.end_date,
+            activity_keys: r.activity_keys,
+            status,
+          };
+        });
+      }
+
+      res.status(200).json({
+        semester,
+        today,
+        ...calendar,
+        // `special_round_open` = นักศึกษาคนนี้ผ่านด่านของกิจกรรมนี้ได้ด้วยรอบพิเศษ ณ วันนี้ — หน้าจอใช้ตัดสินล็อก ไม่คำนวณเอง
+        activities: calendar.activities.map((a) => ({
+          ...a,
+          special_round_open: openKeys.has(a.activity_key),
+        })),
+        special_rounds: specialRounds,
+      });
     } catch (err) {
       sendUnexpectedError(
         res,
@@ -480,6 +526,56 @@ export class CoopCalendarController {
       res.status(200).json({ message: 'แก้ไขกำหนดการเรียบร้อยแล้ว', event: updated });
     } catch (err) {
       sendUnexpectedError(res, err, 'updateCalendarEvent error', 'เกิดข้อผิดพลาดขณะแก้ไขกำหนดการ');
+    }
+  }
+
+  /**
+   * ล้างช่วงเวลาของกิจกรรมตามปฏิทินทั้งภาคในครั้งเดียว — ทุกขั้นกลับเป็น "ยังไม่ได้ตั้ง" (fail-open ตามเดิม)
+   * Route: DELETE /api/calendar/activities?semester_id=
+   * Access: staff
+   *
+   * ต้องระบุ semester_id ชัดเจน (ไม่ตกไปที่ภาคที่เปิดอยู่เงียบ ๆ) — คำสั่งนี้ปลดล็อกนักศึกษาทั้งรุ่น
+   * รายการอิสระของคณะและรอบพิเศษไม่ถูกแตะ
+   */
+  static async clearActivityWindows(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+
+      const semesterId = parseInt(String(req.query.semester_id ?? ''), 10);
+      if (isNaN(semesterId)) {
+        res.status(400).json({ message: 'กรุณาระบุภาคการศึกษาที่จะล้างช่วงเวลา' });
+        return;
+      }
+
+      const removed = await CoopCalendarModel.deleteActivityWindowsBySemester(semesterId);
+
+      await writeAudit(
+        {
+          action: AuditAction.CALENDAR_ACTIVITIES_CLEARED,
+          entityType: 'coop_semester',
+          entityId: semesterId,
+          detail: {
+            semester_id: semesterId,
+            cleared: removed.map((e) => ({
+              activity_key: e.activity_key,
+              start_date: e.start_date,
+              end_date: e.end_date,
+              late_end_date: e.late_end_date,
+            })),
+          },
+        },
+        req
+      );
+
+      res.status(200).json({
+        message: `ล้างช่วงเวลาของกิจกรรมทั้งหมดแล้ว (${removed.length} รายการ)`,
+        cleared: removed.length,
+      });
+    } catch (err) {
+      sendUnexpectedError(res, err, 'clearCalendarActivities error', 'เกิดข้อผิดพลาดขณะล้างช่วงเวลา');
     }
   }
 

@@ -179,7 +179,9 @@ export async function completeDispatchPrep(studentEmail = 'student2@test.com'): 
             national_id_ciphertext = 'e2e-placeholder', national_id_iv = 'e2e', national_id_tag = 'e2e',
             national_id_issued_district = 'เมืองชลบุรี', national_id_expiry_date = '2031-01-01',
             emergency_contact_name = 'ผู้ปกครอง ทดสอบ', emergency_relationship = 'มารดา',
-            emergency_phone = '0822222222'
+            emergency_phone = '0822222222',
+            -- 4 หมวดตารางประวัติบังคับตั้งแต่ 2026-10-18 (migration 060) — ติ๊ก "ไม่มีข้อมูล" ทั้งสี่หมวด
+            coop03_none_sections = ARRAY['education','training','activity','language']
       WHERE student_id = (SELECT user_id FROM users WHERE email = $1)`,
     [studentEmail]
   );

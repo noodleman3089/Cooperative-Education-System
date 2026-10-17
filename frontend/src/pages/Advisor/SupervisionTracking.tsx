@@ -8,6 +8,7 @@ import { MapPin, Calendar, Send, Printer } from 'lucide-react';
 import SupervisionLogForm from './SupervisionLogForm';
 import AlertBanner from '../../components/ui/AlertBanner';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
+import CoopFormsViewModal from '../../components/CoopFormsViewModal';
 import { getErrorMessage } from '../../utils/errors';
 
 /** นักศึกษาในความดูแล พร้อมข้อมูลที่พักและแผนงาน สำหรับวางแผนนิเทศ */
@@ -121,6 +122,8 @@ const SupervisionTracking: React.FC = () => {
   /** Which appointment the "accept the mentor's new date" confirmation is about. */
   const [acceptingRescheduleId, setAcceptingRescheduleId] = useState<number | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
+  /** นักศึกษาที่กำลังเปิดดู สหกิจ 03 · 06 */
+  const [viewingForms, setViewingForms] = useState<SupervisedStudent | null>(null);
 
   // Create draft form state
   const [draftStudentId, setDraftStudentId] = useState<number | null>(null);
@@ -519,6 +522,16 @@ const SupervisionTracking: React.FC = () => {
                       ) : (
                         <span className="text-gray-500 dark:text-gray-400">ยังไม่มีผู้ติดต่อฉุกเฉิน</span>
                       )}
+                    </div>
+                    <div>
+                      <button
+                        type="button"
+                        data-testid={`supervision-view-forms-${student.student_id}`}
+                        onClick={() => setViewingForms(student)}
+                        className="min-h-11 rounded-lg border border-gray-300 bg-white px-3 text-xs font-bold text-gray-800 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+                      >
+                        ดูสหกิจ 03 · 06
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1138,6 +1151,15 @@ const SupervisionTracking: React.FC = () => {
               onConfirm={handleDeleteDraft}
               onCancel={() => setDeletingAppointment(null)}
             />
+
+            {viewingForms && (
+              <CoopFormsViewModal
+                studentId={viewingForms.student_id}
+                studentName={[viewingForms.first_name, viewingForms.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+                studentCode={viewingForms.student_code}
+                onClose={() => setViewingForms(null)}
+              />
+            )}
           </>
         );
       })()}

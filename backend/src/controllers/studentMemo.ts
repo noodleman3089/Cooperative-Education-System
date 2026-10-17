@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
 import { StudentMemoModel } from '../models/studentMemo';
-import { MEMO_TYPES, isMemoType } from '../config/memoTypes';
+import { MEMO_TYPES, isMemoType, parseMemoDetails } from '../config/memoTypes';
 import { buildStudentMemoPdf, missingMemoFields, StudentMemoData } from '../utils/memoPdf';
 import { CoopSemesterModel } from '../models/semester';
 import { query } from '../config/database';
 import { assertCanAccessStudent, resolveMajorScope, sendAccessError } from '../utils/access';
 import { sendUnexpectedError } from '../utils/httpError';
+import { AuditAction, writeAudit } from '../utils/audit';
 
 /**
  * บันทึกข้อความของนักศึกษา (กรณียกเว้น 4 หัวข้อ)
@@ -20,6 +21,8 @@ import { sendUnexpectedError } from '../utils/httpError';
 
 /** ต้องยาวพอที่คณบดีอ่านแล้วเข้าใจเหตุผล — กติกาหน้าจอ ไม่ใช่ข้อบังคับของฐาน */
 const REASON_MIN_LENGTH = 20;
+/** เหตุผลที่คณบดีไม่อนุมัติ — สั้นกว่าเหตุผลของนักศึกษา แต่ต้องไม่ใช่คำเดียว */
+const DECISION_NOTE_MIN_LENGTH = 10;
 
 export class StudentMemoController {
   /**
@@ -54,6 +57,12 @@ export class StudentMemoController {
         res.status(400).json({
           message: `กรุณาเขียนเหตุผลอย่างน้อย ${REASON_MIN_LENGTH} ตัวอักษร ข้อความนี้จะถูกพิมพ์ลงบันทึกที่เสนอถึงคณบดี`,
         });
+        return;
+      }
+
+      const parsedDetails = parseMemoDetails(body.memo_type, body.details);
+      if (!parsedDetails.ok) {
+        res.status(400).json({ message: parsedDetails.message });
         return;
       }
 
@@ -110,14 +119,76 @@ export class StudentMemoController {
         memo_type: body.memo_type,
         intent_form_id: intentFormId,
         reason,
+        details: parsedDetails.details,
       });
 
       res.status(201).json({
-        message: 'บันทึกข้อความเรียบร้อยแล้ว — กดพิมพ์แล้วนำไปลงลายมือชื่อเพื่อเสนอตามขั้นตอน',
+        message: 'ยื่นบันทึกข้อความถึงคณบดีเรียบร้อยแล้ว — คณบดีจะพิจารณาในระบบ และแจ้งเตือนเมื่อมีผล',
         memo,
       });
     } catch (error) {
       sendUnexpectedError(res, error, 'Create memo error', 'เกิดข้อผิดพลาดขณะบันทึกข้อความ');
+    }
+  }
+
+  /**
+   * คณบดีตัดสินบันทึก — อนุมัติ / ไม่อนุมัติ (ครั้งเดียว แก้ไม่ได้)
+   * Route: PATCH /api/memos/:id/decision  body: { decision: 'approved' | 'rejected', note? }
+   * Access: dean เท่านั้น (route จำกัดไว้แล้ว)
+   *
+   * อนุมัติแล้วไม่เปิดรอบพิเศษเอง — เจ้าหน้าที่ต้องนำเข้าและกำหนดวัน/กิจกรรมเอง
+   * ไม่อนุมัติ **ต้องมีเหตุผล** (นักศึกษาอ่านที่หน้าบันทึกของตัวเอง)
+   */
+  static async decide(req: Request, res: Response): Promise<void> {
+    try {
+      if (!req.user) {
+        res.status(401).json({ message: 'Unauthorized.' });
+        return;
+      }
+      const memoId = parseInt(req.params.id, 10);
+      if (isNaN(memoId)) {
+        res.status(400).json({ message: 'รหัสบันทึกข้อความไม่ถูกต้อง' });
+        return;
+      }
+      const body = req.body as Record<string, unknown>;
+      const decision = body.decision;
+      if (decision !== 'approved' && decision !== 'rejected') {
+        res.status(400).json({ message: 'กรุณาเลือกผลการตัดสิน: อนุมัติ หรือ ไม่อนุมัติ' });
+        return;
+      }
+      const note = typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null;
+      if (decision === 'rejected' && (!note || note.length < DECISION_NOTE_MIN_LENGTH)) {
+        res.status(400).json({
+          message: `กรุณาระบุเหตุผลที่ไม่อนุมัติอย่างน้อย ${DECISION_NOTE_MIN_LENGTH} ตัวอักษร นักศึกษาจะอ่านเหตุผลนี้ที่หน้าบันทึกของตน`,
+        });
+        return;
+      }
+
+      const memo = await StudentMemoModel.findById(memoId);
+      if (!memo) {
+        res.status(404).json({ message: 'ไม่พบบันทึกข้อความที่ต้องการ' });
+        return;
+      }
+      if (!(await StudentMemoModel.decide(memoId, req.user.userId, decision, note))) {
+        res.status(409).json({ message: 'บันทึกนี้ถูกตัดสินไปแล้ว — แก้ผลไม่ได้' });
+        return;
+      }
+
+      await writeAudit(
+        {
+          action: AuditAction.MEMO_DECIDED,
+          entityType: 'student_memo',
+          entityId: memoId,
+          detail: { decision, memo_type: memo.memo_type, student_id: memo.student_id },
+        },
+        req
+      );
+
+      res.status(200).json({
+        message: decision === 'approved' ? 'อนุมัติบันทึกข้อความแล้ว — เจ้าหน้าที่จะเห็นรายการนี้' : 'บันทึกการไม่อนุมัติแล้ว',
+      });
+    } catch (error) {
+      sendUnexpectedError(res, error, 'Decide memo error', 'เกิดข้อผิดพลาดขณะบันทึกผลการตัดสิน');
     }
   }
 

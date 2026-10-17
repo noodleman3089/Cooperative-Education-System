@@ -63,6 +63,30 @@ export interface CoopCalendarActivity {
   detail_text: string | null;
   note: string | null;
   status: CalendarStatus;
+  /** นักศึกษาผู้เรียกผ่านด่านของกิจกรรมนี้ได้ด้วย "รอบพิเศษ" ณ วันนี้ — หน้าจอใช้ปลดล็อก ไม่คำนวณเอง (บุคลากรเป็น false เสมอ) */
+  special_round_open?: boolean;
+}
+
+export interface CoopSpecialRoundStudent {
+  student_id: number;
+  student_code: string;
+  first_name: string;
+  last_name: string;
+}
+
+/**
+ * รอบพิเศษ — เจ้าหน้าที่เปิดให้นักศึกษาที่เลือกรายคนส่งกิจกรรมที่ติ๊กไว้ได้หลังพ้นช่วงปกติ
+ * `students`/`note` มีเฉพาะที่เจ้าหน้าที่เห็น · นักศึกษาเห็นเฉพาะรอบของตัวเอง ไม่มีรายชื่อคนอื่น
+ */
+export interface CoopSpecialRound {
+  round_id: number;
+  title: string;
+  start_date: string;
+  end_date: string;
+  activity_keys: string[];
+  status: CalendarStatus;
+  note?: string | null;
+  students?: CoopSpecialRoundStudent[];
 }
 
 /** รายการที่เจ้าหน้าที่พิมพ์เอง — แสดงในปฏิทินอย่างเดียว ไม่ล็อกอะไร */
@@ -93,6 +117,7 @@ export interface CoopCalendarResponse {
   today: string;
   activities: CoopCalendarActivity[];
   custom_events: CoopCalendarCustomEvent[];
+  special_rounds: CoopSpecialRound[];
 }
 
 /** แถวในหน้าจัดการบัญชีผู้ใช้ */
@@ -218,6 +243,38 @@ export interface StudentMemoItem {
   faculty_name_th?: string | null;
   academic_year?: number | null;
   semester?: string | null;
+  /** คำตัดสินของคณบดี (migration 058) — ใบเก่าทุกใบเริ่มที่ pending */
+  status: MemoDecisionStatus;
+  decided_at?: string | null;
+  decision_note?: string | null;
+  /** รายละเอียดเฉพาะหัวข้อ (migration 059) */
+  details?: MemoDetails;
+  /** ใบความจำนงที่บันทึกอ้างถึง — ให้คณบดีเห็นว่านักศึกษาอยู่ที่ไหน */
+  intent_company_name_th?: string | null;
+  intent_status?: string | null;
+}
+
+export type MemoDecisionStatus = 'pending' | 'approved' | 'rejected';
+
+/** ช่องเฉพาะหัวข้อของบันทึกข้อความ — คีย์ตรงกับ `parseMemoDetails` ฝั่ง backend */
+export interface MemoDetails {
+  start_date?: string;
+  activities?: string[];
+  expected_date?: string;
+  new_company?: string;
+  end_date?: string;
+}
+
+/** บันทึกที่คณบดีอนุมัติแล้ว ให้เจ้าหน้าที่นำเข้ารอบพิเศษ (`GET /calendar/special-rounds/memos`) */
+export interface ApprovedMemoForRound {
+  memo_id: number;
+  memo_type: string;
+  student_id: number;
+  student_code: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  major_name_th: string | null;
+  decided_at: string | null;
 }
 
 /** สรุปผลการนำเข้าไฟล์รายชื่อ — ใช้ทั้งฝั่งนักศึกษาและบุคลากร */
@@ -315,6 +372,10 @@ export interface MemoType {
   subject: string;
   intent: string;
   hint: string;
+  /** "ถ้าอนุมัติ จะเกิดอะไรต่อ" */
+  outcome: string;
+  /** ตัวอย่างในช่องเหตุผล ต่างกันตามหัวข้อ */
+  placeholder: string;
 }
 
 export interface StudentMemo {
@@ -328,6 +389,10 @@ export interface StudentMemo {
   first_name?: string | null;
   last_name?: string | null;
   major_name_th?: string | null;
+  status?: MemoDecisionStatus;
+  decided_at?: string | null;
+  decision_note?: string | null;
+  details?: MemoDetails;
 }
 
 export interface IntentForm {

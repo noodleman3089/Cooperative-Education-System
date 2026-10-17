@@ -1068,21 +1068,22 @@ export class IntentFormModel {
     }
   }
 
-  /** สร้างแถวสถานประกอบการที่นักศึกษากรอกเอง (ยังไม่รับรอง) — ใช้ทั้งตอนยื่นและตอนแก้ */
+  /** สร้างแถวสถานประกอบการที่นักศึกษากรอกเอง — ถ้ามาจาก Google Maps ให้รับรองทันที (is_verified = TRUE) ถ้ากรอกเองให้รอเจ้าหน้าที่ตรวจ (FALSE) */
   private static async insertDraftCompany(
     client: PoolClient,
     studentId: number,
     c: TypedCompanyInput
   ): Promise<number> {
+    const isVerified = Boolean(c.google_place_id);
     const res = await client.query(
       `INSERT INTO companies (
          is_verified, created_by,
          name_th, address, province, district, postal_code, phone,
          contact_person, contact_position, email, google_place_id, contact_phone, contact_fax
        )
-       VALUES (FALSE, $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING company_id`,
-      [studentId, ...draftCompanyValues(c)]
+      [isVerified, studentId, ...draftCompanyValues(c)]
     );
     return res.rows[0].company_id as number;
   }

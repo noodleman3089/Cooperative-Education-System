@@ -1,11 +1,14 @@
-import React, { useEffect, useState } from 'react';
-import { ShieldCheck, Lock, Printer } from 'lucide-react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
+import { AuthContext } from '../../context/authContextValue';
+import { clearCoop03Draft, loadCoop03Draft, saveCoop03Draft } from '../../utils/coop03Draft';
+import { ShieldCheck, Lock } from 'lucide-react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
 import { Input, Select, Textarea } from '../../components/ui/Input';
-import api, { API_BASE_URL } from '../../services/api';
+import api from '../../services/api';
 import { getErrorMessage } from '../../utils/errors';
+import type { StudentProfile } from '../../types/api';
 
 /**
  * ใบสมัครงานสหกิจศึกษา (สหกิจ 03) — **ส่วนตัวตน · ติดต่อ · ฉุกเฉิน**
@@ -51,6 +54,8 @@ interface CoopApplication {
   training_history: Row[] | null;
   activity_history: Row[] | null;
   language_proficiency: Row[] | null;
+  /** หมวดตารางที่ยืนยัน "ไม่มีข้อมูล" (education · training · activity · language) */
+  none_sections?: string[];
   missing_required?: string[];
 }
 
@@ -66,6 +71,10 @@ const COOP03_FIELD_LABELS: Record<string, string> = {
   emergency_contact_name: 'ชื่อผู้ติดต่อฉุกเฉิน',
   emergency_relationship: 'ความสัมพันธ์ผู้ติดต่อฉุกเฉิน',
   emergency_phone: 'เบอร์โทรผู้ติดต่อฉุกเฉิน',
+  education: 'ประวัติการศึกษา (กรอกหรือติ๊กไม่มี)',
+  training: 'ประวัติการฝึกอบรม/ปฏิบัติงาน (กรอกหรือติ๊กไม่มี)',
+  activity: 'กิจกรรมที่เคยเข้าร่วม (กรอกหรือติ๊กไม่มี)',
+  language: 'ความสามารถทางภาษา (กรอกหรือติ๊กไม่มี)',
 };
 
 /** แถวหนึ่งของตารางประวัติ — คีย์ที่เซิร์ฟเวอร์ยอมรับต่างกันไปตามตาราง */
@@ -117,6 +126,22 @@ const LANGUAGE_COLS: { key: string; label: string }[] = [
   { key: 'writing', label: 'เขียน' },
 ];
 
+/** ความสัมพันธ์ของผู้ติดต่อฉุกเฉินที่พบบ่อย — ค่าที่เก็บคือข้อความนี้ตรง ๆ (ไม่มีรหัสแยก) */
+const RELATION_OPTIONS = [
+  'บิดา',
+  'มารดา',
+  'ผู้ปกครอง',
+  'พี่ชาย',
+  'พี่สาว',
+  'น้องชาย',
+  'น้องสาว',
+  'ปู่/ตา',
+  'ย่า/ยาย',
+  'ลุง/ป้า/น้า/อา',
+  'คู่สมรส',
+];
+const RELATION_OTHER = '__other';
+
 const BLANK = {
   first_name_en: '',
   last_name_en: '',
@@ -148,23 +173,58 @@ const RowTable: React.FC<{
   columns: { key: string; label: string }[];
   rows: Row[];
   onChange: (rows: Row[]) => void;
-}> = ({ testid, label, columns, rows, onChange }) => (
+  /**
+   * หมวดบังคับ (เจ้าของสั่ง 2026-10-18): ต้องมีอย่างน้อย 1 แถว หรือติ๊ก "ไม่มีข้อมูล" — ไม่ส่ง `onNoneChange` = หมวดไม่บังคับ
+   * ⛔ ห้ามบังคับแบบไม่มีทางออก คนที่ไม่เคยฝึกอบรมจริง ๆ จะตัน
+   */
+  none?: boolean;
+  onNoneChange?: (none: boolean) => void;
+}> = ({ testid, label, columns, rows, onChange, none = false, onNoneChange }) => {
+  const required = !!onNoneChange;
+  // มีแถวที่กรอกอะไรบางอย่างแล้ว → ติ๊ก "ไม่มี" ไม่ได้ (ขัดกัน)
+  const hasContent = rows.some((r) => Object.values(r).some((v) => (v ?? '').trim() !== ''));
+  const showNone = none && !hasContent;
+  return (
   <div>
     <div className="mb-2 flex items-center justify-between">
-      <p className="text-xs font-bold text-gray-700 dark:text-gray-300">{label}</p>
+      <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
+        {label}
+        {required && <span className="ml-1 text-red-600 dark:text-red-400">*</span>}
+      </p>
       <button
         type="button"
         data-testid={`ca-${testid}-add`}
-        onClick={() => onChange([...rows, {}])}
+        onClick={() => {
+          if (none) onNoneChange?.(false);
+          onChange([...rows, {}]);
+        }}
         className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-brand-blue transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
       >
         + เพิ่มแถว
       </button>
     </div>
 
+    {required && (
+      <label className="mb-2 flex w-fit cursor-pointer items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+        <input
+          type="checkbox"
+          data-testid={`ca-${testid}-none`}
+          checked={showNone}
+          disabled={hasContent}
+          onChange={(e) => onNoneChange?.(e.target.checked)}
+          className="h-4 w-4 accent-brand-blue disabled:cursor-not-allowed"
+        />
+        ไม่มีข้อมูลในหมวดนี้
+      </label>
+    )}
+
     {rows.length === 0 ? (
       <p className="rounded-xl border border-dashed border-gray-300 py-4 text-center text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
-        ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่บังคับ)
+        {!required
+          ? 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่บังคับ)'
+          : showNone
+            ? 'ยืนยันแล้วว่าไม่มีข้อมูลในหมวดนี้'
+            : 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อกรอก หรือติ๊ก "ไม่มีข้อมูลในหมวดนี้" (บังคับอย่างใดอย่างหนึ่ง)'}
       </p>
     ) : (
       <div className="space-y-2">
@@ -206,7 +266,8 @@ const RowTable: React.FC<{
       </div>
     )}
   </div>
-);
+  );
+};
 
 const CoopJobApplication: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -215,6 +276,7 @@ const CoopJobApplication: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
 
   const [server, setServer] = useState<CoopApplication | null>(null);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile | null>(null);
   const [form, setForm] = useState({ ...BLANK });
   const [consent, setConsent] = useState(false);
 
@@ -223,6 +285,32 @@ const CoopJobApplication: React.FC = () => {
   const [training, setTraining] = useState<Row[]>([]);
   const [activities, setActivities] = useState<Row[]>([]);
   const [languages, setLanguages] = useState<Row[]>([]);
+  /** กด "อื่น ๆ" แล้ว — ให้ช่องระบุเองค้างอยู่แม้ยังไม่ได้พิมพ์อะไร */
+  const [relationOther, setRelationOther] = useState(false);
+  /** หมวดตารางที่ติ๊ก "ไม่มีข้อมูล" — education · training · activity · language (บังคับอย่างใดอย่างหนึ่งกับการกรอกแถว) */
+  const [noneSections, setNoneSections] = useState<string[]>([]);
+  const setNone = (section: string, value: boolean) =>
+    setNoneSections((prev) => (value ? [...new Set([...prev, section])] : prev.filter((s) => s !== section)));
+
+  // ร่างที่กรอกค้าง (utils/coop03Draft.ts — ข้อมูลอ่อนไหวไม่ลงที่เก็บของเบราว์เซอร์)
+  const auth = useContext(AuthContext);
+  const userId = auth?.user?.userId ?? null;
+  const serverSnapshot = useRef('');
+  const [restoredDraft, setRestoredDraft] = useState(false);
+
+  // เก็บร่างทุกครั้งที่ฟอร์มเปลี่ยนหลังโหลดเสร็จ · เท่ากับค่าในเซิร์ฟเวอร์ = ไม่มีร่างค้าง ล้างทิ้ง
+  useEffect(() => {
+    if (loading || !userId) return;
+    const current = { form, family, education, training, activities, languages, noneSections };
+    if (JSON.stringify(current) === serverSnapshot.current) clearCoop03Draft(userId);
+    else saveCoop03Draft(userId, current);
+  }, [loading, userId, form, family, education, training, activities, languages, noneSections]);
+
+  const discardDraft = () => {
+    if (userId) clearCoop03Draft(userId);
+    setRestoredDraft(false);
+    void load();
+  };
 
   const consented = Boolean(server?.sensitive_data_consented_at);
 
@@ -235,15 +323,29 @@ const CoopJobApplication: React.FC = () => {
    */
   const load = async () => {
     try {
-      const data: CoopApplication = await api.get('/students/coop-application');
+      const [appResult, profileResult] = await Promise.allSettled([
+        api.get('/students/coop-application'),
+        api.get('/profile/me'),
+      ]);
+
+      if (profileResult.status === 'fulfilled' && profileResult.value?.profile) {
+        setStudentProfile(profileResult.value.profile);
+      }
+
+      if (appResult.status === 'rejected') {
+        throw appResult.reason;
+      }
+
+      const data: CoopApplication = appResult.value;
       setServer(data);
-      setForm({
+      const serverForm = {
         ...BLANK,
         first_name_en: data.first_name_en || '',
         last_name_en: data.last_name_en || '',
         gender: data.gender || '',
         nationality: data.nationality || '',
-        mobile_phone: data.mobile_phone || '',
+        // ยังไม่เคยกรอกมือถือ → เติมจากเบอร์ในโปรไฟล์ให้ (นักศึกษาส่วนใหญ่มีเบอร์เดียว)
+        mobile_phone: data.mobile_phone || data.phone || '',
         fax: data.fax || '',
         emergency_contact_name: data.emergency_contact_name || '',
         emergency_relationship: data.emergency_relationship || '',
@@ -254,12 +356,36 @@ const CoopJobApplication: React.FC = () => {
           ? String(data.national_id_expiry_date).split('T')[0]
           : '',
         career_objective: data.career_objective || '',
+      };
+      const serverFamily = data.family_info || {};
+      const serverEducation = data.education_history || [];
+      const serverTraining = data.training_history || [];
+      const serverActivities = data.activity_history || [];
+      const serverLanguages = data.language_proficiency || [];
+      const serverNone = data.none_sections || [];
+      // เทียบร่างกับค่าจากเซิร์ฟเวอร์ — ต่างกัน = มีของที่กรอกค้างไว้ → กู้คืนทับ (เจ้าของแจ้งว่าสลับเมนูแล้วหาย)
+      serverSnapshot.current = JSON.stringify({
+        form: serverForm,
+        family: serverFamily,
+        education: serverEducation,
+        training: serverTraining,
+        activities: serverActivities,
+        languages: serverLanguages,
+        noneSections: serverNone,
       });
-      setFamily(data.family_info || {});
-      setEducation(data.education_history || []);
-      setTraining(data.training_history || []);
-      setActivities(data.activity_history || []);
-      setLanguages(data.language_proficiency || []);
+      const draft = userId ? loadCoop03Draft(userId) : null;
+      const draftApplies =
+        !!draft &&
+        JSON.stringify({ ...draft, noneSections: draft.noneSections ?? [], form: { ...serverForm, ...draft.form } }) !==
+          serverSnapshot.current;
+      setForm(draftApplies && draft ? { ...serverForm, ...draft.form } : serverForm);
+      setFamily(draftApplies && draft ? (draft.family as FamilyInfo) : serverFamily);
+      setEducation(draftApplies && draft ? (draft.education as Row[]) : serverEducation);
+      setTraining(draftApplies && draft ? (draft.training as Row[]) : serverTraining);
+      setActivities(draftApplies && draft ? (draft.activities as Row[]) : serverActivities);
+      setLanguages(draftApplies && draft ? (draft.languages as Row[]) : serverLanguages);
+      setNoneSections(draftApplies && draft ? (draft.noneSections ?? []) : serverNone);
+      setRestoredDraft(draftApplies);
       setError(null);
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถดึงข้อมูลใบสมัครงานได้'));
@@ -273,12 +399,22 @@ const CoopJobApplication: React.FC = () => {
     // ทุกหน้าจอในโปรเจคนี้ · ปิดกฎตรงจุดพร้อมเหตุผล **แทนการปล่อยให้เป็นหนี้ lint
     // ใบที่ 34** — ตัวเลข 33 คือค่าที่ใช้จับว่ามีของใหม่หลุดเข้ามาไหม ถ้าปล่อยให้ขยับ
     // ทุกครั้งที่เพิ่มหน้าจอ มันก็เลิกเป็นสัญญาณเตือน
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
+    // โหลดครั้งเดียวตอน mount — `load` เปลี่ยนตัวทุก render (อ่าน userId) การใส่ใน deps จะโหลดซ้ำไม่จบ
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const set = (key: keyof typeof BLANK, value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
+
+  // ความสัมพันธ์ผู้ติดต่อฉุกเฉิน: อยู่ในรายการ → เลือกตรง ๆ · ไม่อยู่ (พิมพ์เองจากเวอร์ชันก่อน หรือกด "อื่น ๆ") → ช่องระบุเอง
+  const relationSelectValue = relationOther
+    ? RELATION_OTHER
+    : !form.emergency_relationship
+      ? ''
+      : RELATION_OPTIONS.includes(form.emergency_relationship)
+        ? form.emergency_relationship
+        : RELATION_OTHER;
 
   const wantsSensitive = Boolean(form.ethnicity.trim() || form.religion.trim());
   const blockedBySensitiveConsent = wantsSensitive && !consented && !consent;
@@ -296,9 +432,12 @@ const CoopJobApplication: React.FC = () => {
         training_history: training,
         activity_history: activities,
         language_proficiency: languages,
+        none_sections: noneSections,
       });
       setSuccess(res.message || 'บันทึกเรียบร้อยแล้ว');
       setConsent(false);
+      // บันทึกสำเร็จ = ร่างหมดหน้าที่ — ล้างก่อนโหลดซ้ำ ไม่งั้น load() จะหยิบร่างเก่ามาทับค่าที่เพิ่งบันทึก
+      if (userId) clearCoop03Draft(userId);
       await load();
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลได้'));
@@ -331,6 +470,28 @@ const CoopJobApplication: React.FC = () => {
           ต้องกรอกช่องบังคับให้ครบและส่งแบบแจ้งที่พัก (สหกิจ 06) ก่อน คณะจึงจะออกหนังสือส่งตัวให้
         </p>
       </div>
+
+      {restoredDraft && (
+        <AlertBanner
+          variant="info"
+          message={
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <span>
+                กู้คืนข้อมูลที่กรอกค้างไว้แล้ว (ยังไม่ได้บันทึกเข้าระบบ) · เลขบัตร เชื้อชาติ ศาสนา
+                เก็บไว้ชั่วคราวเฉพาะระหว่างที่แท็บนี้เปิดอยู่ ถ้ารีเฟรชหน้าต้องกรอกสามช่องนี้ใหม่
+              </span>
+              <button
+                type="button"
+                data-testid="ca-discard-draft"
+                onClick={discardDraft}
+                className="shrink-0 cursor-pointer text-xs font-bold underline hover:no-underline"
+              >
+                ทิ้งฉบับร่าง แล้วโหลดข้อมูลเดิม
+              </button>
+            </div>
+          }
+        />
+      )}
 
       {/* กล่องสรุปช่องบังคับ */}
       {server && (
@@ -370,12 +531,22 @@ const CoopJobApplication: React.FC = () => {
         </h3>
 
         <div className="mb-4 rounded-xl bg-gray-50 p-4 text-xs text-gray-600 dark:bg-gray-800/40 dark:text-gray-300">
-          <span className="font-bold text-gray-800 dark:text-gray-200">
-            {[server?.first_name, server?.last_name].filter(Boolean).join(' ') || '-'}
-          </span>
-          {' · '}รหัส {server?.student_code || '-'}
-          <span className="mt-1 block text-gray-500 dark:text-gray-400">
-            แก้ชื่อไทยและรหัสนักศึกษาได้ที่หน้า “ข้อมูลส่วนตัว &amp; เรซูเม่”
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-bold text-gray-800 dark:text-gray-200">
+              {[server?.first_name, server?.last_name].filter(Boolean).join(' ') || '-'}
+            </span>
+            <span>·</span>
+            <span>รหัส {server?.student_code || '-'}</span>
+            <span>·</span>
+            <span className="inline-flex items-center gap-1 font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/40 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/50">
+              ห้องเรียน: {studentProfile?.section || 'ยังไม่ได้ระบุ'}
+            </span>
+          </div>
+          <span className="mt-1.5 block text-gray-500 dark:text-gray-400">
+            แก้ชื่อไทย รหัสนักศึกษา และห้องเรียนได้ที่หน้า{' '}
+            <a href="/dashboard?menu=profile" className="text-brand-blue hover:underline font-medium">
+              “ข้อมูลส่วนตัว &amp; เรซูเม่”
+            </a>
           </span>
         </div>
 
@@ -443,15 +614,12 @@ const CoopJobApplication: React.FC = () => {
           ข้อมูลติดต่อ
         </h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              โทรศัพท์ (จากโปรไฟล์)
-            </label>
-            <Input value={server?.phone || ''} readOnly disabled />
-          </div>
+          {/* เบอร์ที่ติดต่อได้ช่องเดียว — เดิมมี "โทรศัพท์ (จากโปรไฟล์)" อ่านอย่างเดียวคู่กับ "โทรศัพท์มือถือ" ซึ่งนักศึกษาส่วนใหญ่มีเบอร์เดียว
+              เลยเห็นเบอร์เดียวกันสองช่อง · ฐานข้อมูลและ PDF ยังมีสองช่องตามกระดาษ (เซิร์ฟเวอร์นับ "มือถือหรือเบอร์ในโปรไฟล์อย่างใดอย่างหนึ่ง") */}
           <div>
             <label htmlFor="ca-mobile" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              โทรศัพท์มือถือ <span className="text-red-600 dark:text-red-400">*</span>
+              เบอร์โทรศัพท์ที่ติดต่อได้ (มือถือ){' '}
+              {!server?.phone?.trim() && <span className="text-red-600 dark:text-red-400">*</span>}
             </label>
             <Input
               id="ca-mobile"
@@ -460,10 +628,15 @@ const CoopJobApplication: React.FC = () => {
               onChange={(e) => set('mobile_phone', e.target.value)}
               placeholder="089-123-4567"
             />
+            <p className="mt-1 text-[11px] text-gray-600 dark:text-gray-400">
+              {server?.phone?.trim()
+                ? `เติมจากเบอร์ในโปรไฟล์ให้แล้ว (${server.phone}) แก้ได้ — ถ้าเป็นเบอร์เดียวกัน ใบพิมพ์จะแสดงเบอร์นี้ครั้งเดียว`
+                : 'ต้องมีอย่างน้อย 1 เบอร์ที่ติดต่อได้'}
+            </p>
           </div>
           <div>
             <label htmlFor="ca-fax" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              โทรสาร
+              โทรสาร <span className="font-normal text-gray-600 dark:text-gray-400">(ถ้ามี)</span>
             </label>
             <Input
               id="ca-fax"
@@ -506,13 +679,43 @@ const CoopJobApplication: React.FC = () => {
             <label htmlFor="ca-emg-relation" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
               ความสัมพันธ์ <span className="text-red-600 dark:text-red-400">*</span>
             </label>
-            <Input
+            {/* เลือกจากรายการ — ค่าที่เก็บคือข้อความไทยตรง ๆ (เหมือนที่เคยพิมพ์) เซิร์ฟเวอร์และ PDF ไม่ต้องแก้
+                ค่าเดิมที่พิมพ์เองไม่อยู่ในรายการ → โชว์เป็น "อื่น ๆ" พร้อมข้อความเดิม ไม่หาย */}
+            <Select
               id="ca-emg-relation"
               data-testid="ca-emg-relation"
-              value={form.emergency_relationship}
-              onChange={(e) => set('emergency_relationship', e.target.value)}
-              placeholder="บิดา · มารดา · พี่ชาย"
-            />
+              value={relationSelectValue}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === RELATION_OTHER) {
+                  setRelationOther(true);
+                  if (RELATION_OPTIONS.includes(form.emergency_relationship)) set('emergency_relationship', '');
+                } else {
+                  setRelationOther(false);
+                  set('emergency_relationship', v);
+                }
+              }}
+            >
+              <option value="">-- เลือก --</option>
+              {RELATION_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+              <option value={RELATION_OTHER}>อื่น ๆ (ระบุเอง)</option>
+            </Select>
+            {relationSelectValue === RELATION_OTHER && (
+              <Input
+                id="ca-emg-relation-other"
+                data-testid="ca-emg-relation-other"
+                aria-label="ระบุความสัมพันธ์"
+                className="mt-2"
+                value={form.emergency_relationship}
+                maxLength={50}
+                onChange={(e) => set('emergency_relationship', e.target.value)}
+                placeholder="เช่น ลูกพี่ลูกน้อง · เพื่อนสนิท"
+              />
+            )}
           </div>
           <div>
             <label htmlFor="ca-emg-phone" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
@@ -748,6 +951,8 @@ const CoopJobApplication: React.FC = () => {
             columns={EDUCATION_COLS}
             rows={education}
             onChange={setEducation}
+            none={noneSections.includes('education')}
+            onNoneChange={(v) => setNone('education', v)}
           />
           <RowTable
             testid="training"
@@ -755,6 +960,8 @@ const CoopJobApplication: React.FC = () => {
             columns={TRAINING_COLS}
             rows={training}
             onChange={setTraining}
+            none={noneSections.includes('training')}
+            onNoneChange={(v) => setNone('training', v)}
           />
           <RowTable
             testid="activity"
@@ -762,6 +969,8 @@ const CoopJobApplication: React.FC = () => {
             columns={ACTIVITY_COLS}
             rows={activities}
             onChange={setActivities}
+            none={noneSections.includes('activity')}
+            onNoneChange={(v) => setNone('activity', v)}
           />
           <RowTable
             testid="language"
@@ -769,6 +978,8 @@ const CoopJobApplication: React.FC = () => {
             columns={LANGUAGE_COLS}
             rows={languages}
             onChange={setLanguages}
+            none={noneSections.includes('language')}
+            onNoneChange={(v) => setNone('language', v)}
           />
 
           <div>
@@ -785,33 +996,6 @@ const CoopJobApplication: React.FC = () => {
             />
           </div>
         </div>
-      </section>
-
-      {/* ── พิมพ์ใบสมัคร ────────────────────────────────────────────────── */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 dark:border-gray-800 dark:bg-gray-900">
-        <h3 className="mb-1 flex items-center gap-2 text-lg font-bold text-gray-800 dark:text-white">
-          <Printer className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-          พิมพ์ใบสมัครงาน (สหกิจ 03)
-        </h3>
-        <p className="mb-4 text-xs text-gray-600 dark:text-gray-400">
-          ใบสมัครงานชุดนี้ต้อง<strong>ส่งคณะ</strong>เพื่อประกอบการออกหนังสือส่งตัว —
-          ต้องกรอกช่องบังคับให้ครบและส่งแบบแจ้งที่พัก (สหกิจ 06) ก่อน คณะจึงจะออกหนังสือส่งตัวให้
-          · พิมพ์แล้ว<strong>เซ็นชื่อด้วยมือ</strong>ก่อนนำส่งคณะ
-        </p>
-        <p className="mb-4 rounded-xl bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
-          ไฟล์ที่ได้จะมี<strong>เลขบัตรประชาชน เชื้อชาติ และศาสนาเป็นค่าจริง</strong>
-          (เป็นครั้งเดียวที่ระบบเปิดค่าเหล่านี้ออกมา และมีการบันทึกไว้ทุกครั้ง) — โปรดเก็บไฟล์ให้ดี
-        </p>
-        <a
-          href={`${API_BASE_URL}/students/coop-application/print`}
-          target="_blank"
-          rel="noopener noreferrer"
-          data-testid="ca-print"
-          className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-bold text-gray-700 transition-colors hover:border-brand-blue hover:text-brand-blue dark:border-gray-700 dark:text-gray-200 dark:hover:text-blue-400"
-        >
-          <Printer className="h-4 w-4" />
-          เปิดใบสมัครเพื่อสั่งพิมพ์
-        </a>
       </section>
 
       <div className="flex justify-end gap-3 pb-6">

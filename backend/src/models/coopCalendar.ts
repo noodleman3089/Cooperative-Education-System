@@ -139,6 +139,21 @@ export class CoopCalendarModel {
     return res.rows as CoopCalendarEventRow[];
   }
 
+  /**
+   * ล้างช่วงเวลาของ "กิจกรรมตามปฏิทิน" ทุกตัวของภาคหนึ่งในคำสั่งเดียว (ปุ่ม "ล้างช่วงเวลาทั้งหมด")
+   * ⛔ ลบเฉพาะแถวที่มี `activity_key` — รายการอิสระของคณะ (`activity_key IS NULL` = กำหนดการแจ้งนักศึกษา) ไม่แตะ
+   *    รอบพิเศษอยู่คนละตารางจึงไม่ถูกแตะด้วย · คืนแถวที่ลบไปเพื่อลง audit
+   */
+  static async deleteActivityWindowsBySemester(semesterId: number): Promise<CoopCalendarEventRow[]> {
+    const res = await query(
+      `DELETE FROM coop_calendar_events
+        WHERE semester_id = $1 AND activity_key IS NOT NULL
+        RETURNING ${EVENT_COLUMNS}`,
+      [semesterId]
+    );
+    return res.rows as CoopCalendarEventRow[];
+  }
+
   static async findById(eventId: number): Promise<CoopCalendarEventRow | null> {
     const res = await query(
       `SELECT ${EVENT_COLUMNS} FROM coop_calendar_events WHERE event_id = $1`,

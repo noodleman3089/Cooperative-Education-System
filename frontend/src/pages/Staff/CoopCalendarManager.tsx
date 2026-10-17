@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, Trash2, Save, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Save, ChevronDown, Sparkles, ChevronUp, RotateCcw } from 'lucide-react';
 import api from '../../services/api';
 import AlertBanner from '../../components/ui/AlertBanner';
 import Button from '../../components/ui/Button';
@@ -8,6 +8,7 @@ import PageSkeleton from '../../components/ui/Skeleton';
 import { getErrorMessage } from '../../utils/errors';
 import { formatThaiDate, formatThaiRange } from '../../utils/thaiDate';
 import { semesterLabel } from '../../utils/semesterLabel';
+import SpecialRoundsCard from './SpecialRoundsCard';
 import type {
   CalendarDateKind,
   CalendarStatus,
@@ -34,6 +35,15 @@ const STATUS_TEXT: Record<CalendarStatus, string> = {
   //    ถูกปั๊มว่าส่งช้า (ของเดิมก่อนรีเมคเขียนไว้ครบ และ E2E late-submission L8 คุมคำนี้)
   late: 'ผ่อนผัน (รับแต่นับเป็นส่งช้า)',
   closed: 'ปิดแล้ว',
+};
+
+/** ชื่อสั้นในกล่องเตือน "ช่วงที่ปิดไปแล้ว" — ชื่อเต็มของกิจกรรมยาวเกินจะอ่านเป็นรายการ */
+const PAST_LABEL: Record<string, string> = {
+  intent_submission: 'ส่งคำร้องขอหนังสือ (เอกสาร 1)',
+  acceptance_form: 'ส่งแบบตอบรับ (เอกสาร 2)',
+  accommodation_plan: 'กรอกใบสมัคร (สหกิจ 03) และที่พัก (สหกิจ 06)',
+  report_outline: 'ส่งโครงร่าง (สหกิจ 11)',
+  final_report: 'ส่งรายงานฉบับสมบูรณ์',
 };
 
 const KIND_LABEL: Record<string, string> = {
@@ -69,6 +79,21 @@ const draftOf = (a: CoopCalendarActivity): DraftRow => ({
   note: a.note ?? '',
 });
 
+/**
+ * บวก/ลบ วันจาก ISO Date string (YYYY-MM-DD) โดยใช้ UTC เพื่อป้องกัน timezone drift
+ */
+function addDays(isoDate: string, days: number): string {
+  if (!isoDate) return '';
+  const parts = isoDate.split('-');
+  if (parts.length !== 3) return '';
+  const y = Number(parts[0]);
+  const m = Number(parts[1]);
+  const d = Number(parts[2]);
+  if (Number.isNaN(y) || Number.isNaN(m) || Number.isNaN(d)) return '';
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return date.toISOString().slice(0, 10);
+}
+
 const CoopCalendarManager: React.FC = () => {
   const [semesters, setSemesters] = useState<CoopCalendarSemester[]>([]);
   const [semesterId, setSemesterId] = useState<number | null>(null);
@@ -82,10 +107,20 @@ const CoopCalendarManager: React.FC = () => {
   /** ร่างของแต่ละกิจกรรม เก็บแยกตาม activity_key */
   const [drafts, setDrafts] = useState<Record<string, DraftRow>>({});
 
+  /** สำหรับ Smart Schedule Wizard */
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStartDate, setWizardStartDate] = useState('');
+  const [wizardEndDate, setWizardEndDate] = useState('');
+
   /** ฟอร์มเพิ่มรายการอิสระ */
   const [customTitle, setCustomTitle] = useState('');
   const [customDraft, setCustomDraft] = useState<DraftRow>(emptyDraft());
   const [addingCustom, setAddingCustom] = useState(false);
+
+  /** ช่วงที่ปิดไปแล้วที่รอยืนยันก่อนบันทึก — `run` คือการบันทึกที่ค้างอยู่ */
+  const [pastConfirm, setPastConfirm] = useState<{ labels: string[]; run: () => Promise<void> } | null>(null);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+  const [clearingAll, setClearingAll] = useState(false);
 
   const [pendingDelete, setPendingDelete] = useState<
     { event_id: number; label: string; isCustom: boolean } | null
@@ -122,6 +157,10 @@ const CoopCalendarManager: React.FC = () => {
       )) as CoopCalendarResponse;
       setData(res);
       setDrafts(Object.fromEntries(res.activities.map((a) => [a.activity_key, draftOf(a)])));
+      const startAct = res.activities.find((a) => a.activity_key === 'coop_start');
+      const endAct = res.activities.find((a) => a.activity_key === 'coop_end');
+      if (startAct?.start_date) setWizardStartDate(startAct.start_date);
+      if (endAct?.end_date) setWizardEndDate(endAct.end_date);
       setError('');
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถโหลดปฏิทินสหกิจศึกษาได้'));
@@ -145,10 +184,45 @@ const CoopCalendarManager: React.FC = () => {
     [data]
   );
 
+  /** กิจกรรมที่ตั้งช่วงเวลาไว้จริงในฐาน (มีแถวแล้ว) — ที่ล้างทั้งภาคจะลบ */
+  const configuredCount = (data?.activities ?? []).filter((a) => !a.derived && a.event_id).length;
+
   const setDraft = (key: string, patch: Partial<DraftRow>) =>
     setDrafts((prev) => ({ ...prev, [key]: { ...(prev[key] ?? emptyDraft()), ...patch } }));
 
-  const handleSaveActivity = async (activity: CoopCalendarActivity) => {
+  /**
+   * ด่านกันตั้งช่วงที่ปิดไปแล้ว — ขั้นที่ล็อกจริง ปิดก่อนวันนี้ และค่าที่จะบันทึกต่างจากที่ตั้งไว้ → ถามก่อน
+   * (ตัวช่วยคำนวณนับย้อนหลังจากวันเริ่มฝึก วันเริ่มใกล้/ผ่านแล้วจะได้ช่วงอดีตทั้งชุด · บันทึกแล้วนักศึกษายื่นไม่ได้ทันที)
+   * ⛔ ฝั่งหน้าจอเท่านั้น — เซิร์ฟเวอร์ยังรับช่วงอดีตได้ เพราะการปิดขั้นก่อนกำหนดโดยตั้งใจและเทสต์ปฏิทินต้องตั้งช่วงที่ปิดแล้ว
+   * "วันนี้" มาจากฐานข้อมูล (`data.today`) ไม่ใช่นาฬิกาเบราว์เซอร์
+   */
+  const closesBeforeToday = (activity: CoopCalendarActivity): boolean => {
+    const today = data?.today;
+    if (!today || !activity.locks || activity.derived) return false;
+    const draft = drafts[activity.activity_key];
+    if (!draft) return false;
+    const closesOn = draft.late_end_date || draft.end_date;
+    if (!closesOn || closesOn >= today) return false;
+    const unchanged =
+      draft.start_date === (activity.start_date ?? '') &&
+      draft.end_date === (activity.end_date ?? '') &&
+      draft.late_end_date === (activity.late_end_date ?? '');
+    return !unchanged;
+  };
+
+  const guardPast = (activities: CoopCalendarActivity[], run: () => Promise<void>) => {
+    const past = activities.filter(closesBeforeToday);
+    if (past.length === 0) {
+      void run();
+      return;
+    }
+    setPastConfirm({ labels: past.map((a) => PAST_LABEL[a.activity_key] ?? a.label), run });
+  };
+
+  const handleSaveActivity = (activity: CoopCalendarActivity) =>
+    guardPast([activity], () => doSaveActivity(activity));
+
+  const doSaveActivity = async (activity: CoopCalendarActivity) => {
     const draft = drafts[activity.activity_key] ?? emptyDraft();
     setSavingKey(activity.activity_key);
     setError('');
@@ -177,7 +251,18 @@ const CoopCalendarManager: React.FC = () => {
     }
   };
 
-  const handleSaveAll = async () => {
+  const handleSaveAll = () => {
+    if (!data?.activities) return;
+    guardPast(
+      data.activities.filter((a) => {
+        const d = drafts[a.activity_key];
+        return !a.derived && !!d && !!(d.start_date || d.end_date || d.note);
+      }),
+      doSaveAll
+    );
+  };
+
+  const doSaveAll = async () => {
     if (!data?.activities) return;
     setSavingAll(true);
     setError('');
@@ -213,6 +298,164 @@ const CoopCalendarManager: React.FC = () => {
       setError(getErrorMessage(err, 'เกิดข้อผิดพลาดในการบันทึกข้อมูลบางรายการ'));
     } finally {
       setSavingAll(false);
+    }
+  };
+
+  /** คำนวณวันสิ้นสุดการฝึกงาน 16 สัปดาห์ (109 วัน ตามปฏิทินจริง 2569) */
+  const handleCalculateEndDate = () => {
+    if (!wizardStartDate) return;
+    setWizardEndDate(addDays(wizardStartDate, 109));
+  };
+
+  /** คำนวณและนำวันที่ของทุกกิจกรรมไปใส่ใน draft ของตาราง */
+  const handleApplySmartSchedule = () => {
+    if (!wizardStartDate) {
+      setError('กรุณาระบุวันเริ่มปฏิบัติงานก่อนคำนวณกำหนดการ');
+      return;
+    }
+    const calculatedEnd = wizardEndDate || addDays(wizardStartDate, 109);
+    if (!wizardEndDate) {
+      setWizardEndDate(calculatedEnd);
+    }
+
+    // คำนวณนอก updater ของ setDrafts เพื่อเอาค่าที่ได้ไปตรวจช่วงที่ปิดไปแล้วต่อด้านล่าง
+    const computed = (() => {
+      const next = { ...drafts };
+
+      // 1. intent_submission (ขอหนังสือทาบทาม - ช่วง)
+      // อิงปฏิทินจริง 1/2569: 9 มี.ค. - 29 พ.ค. 69 เทียบกับวันเริ่ม 6 ก.ค. 69 (-119 วัน ถึง -38 วัน)
+      next.intent_submission = {
+        ...(next.intent_submission ?? emptyDraft()),
+        start_date: addDays(wizardStartDate, -119),
+        end_date: addDays(wizardStartDate, -38),
+        late_end_date: addDays(wizardStartDate, -24), // ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา
+      };
+
+      // 2. acceptance_form (ส่งแบบตอบรับ - เส้นตาย)
+      // อิงปฏิทินจริง 1/2569: ภายใน 5 มิ.ย. 69 เทียบกับ 6 ก.ค. 69 (-31 วัน)
+      // เส้นตาย: start_date ต้องว่าง
+      next.acceptance_form = {
+        ...(next.acceptance_form ?? emptyDraft()),
+        start_date: '',
+        end_date: addDays(wizardStartDate, -31),
+        late_end_date: addDays(wizardStartDate, -17), // ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา
+      };
+
+      // 3. accommodation_plan (ส่งข้อมูลที่พัก สหกิจ 06 - ช่วง)
+      // อิงปฏิทินจริง 1/2569: 8 - 19 มิ.ย. 69 เทียบกับ 6 ก.ค. 69 (-28 วัน ถึง -17 วัน)
+      next.accommodation_plan = {
+        ...(next.accommodation_plan ?? emptyDraft()),
+        start_date: addDays(wizardStartDate, -28),
+        end_date: addDays(wizardStartDate, -17),
+        late_end_date: addDays(wizardStartDate, -7), // ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา
+      };
+
+      // 4. coop_start (วันเริ่มปฏิบัติงาน - วันเดียว)
+      next.coop_start = {
+        ...(next.coop_start ?? emptyDraft()),
+        start_date: wizardStartDate,
+        end_date: wizardStartDate,
+        late_end_date: '',
+      };
+
+      // 5. weekly_log: derived (คำนวณอัตโนมัติจาก coop_start ถึง coop_end ไม่ต้องกรอก)
+
+      // 6. report_outline (ส่งโครงร่าง สหกิจ 11 - ช่วง)
+      // สาขากำหนดเอง: ประมาณสัปดาห์ที่ 3 ถึง 5 ของการฝึกงาน (ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา)
+      next.report_outline = {
+        ...(next.report_outline ?? emptyDraft()),
+        start_date: addDays(wizardStartDate, 21),
+        end_date: addDays(wizardStartDate, 35),
+        late_end_date: addDays(wizardStartDate, 42),
+      };
+
+      // 7. coop_end (วันสิ้นสุดการปฏิบัติงาน - วันเดียว)
+      next.coop_end = {
+        ...(next.coop_end ?? emptyDraft()),
+        start_date: calculatedEnd,
+        end_date: calculatedEnd,
+        late_end_date: addDays(calculatedEnd, 7), // ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา
+      };
+
+      // 8. final_report (ส่งรายงานฉบับสมบูรณ์ - ช่วง)
+      // สาขากำหนดเอง: 1 สัปดาห์ก่อนสิ้นสุด ถึง 1 สัปดาห์หลังสิ้นสุด (ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา)
+      next.final_report = {
+        ...(next.final_report ?? emptyDraft()),
+        start_date: addDays(calculatedEnd, -7),
+        end_date: addDays(calculatedEnd, 7),
+        late_end_date: addDays(calculatedEnd, 14),
+      };
+
+      // 9. coop_exam (วันสอบสหกิจศึกษา - วันเดียว)
+      // สาขากำหนดเอง: หลังสิ้นสุดการฝึกงาน 2 สัปดาห์ (ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา)
+      next.coop_exam = {
+        ...(next.coop_exam ?? emptyDraft()),
+        start_date: addDays(calculatedEnd, 14),
+        end_date: addDays(calculatedEnd, 14),
+        late_end_date: '',
+      };
+
+      return next;
+    })();
+    setDrafts(computed);
+
+    // ตัวช่วยนับย้อนหลังจากวันเริ่ม (ช่วงยื่นคำร้องปิด -38 วัน · ผ่อนผัน -24) — วันเริ่มที่ใกล้/ผ่านมาแล้ว
+    // ทำให้ช่วงยื่นคำร้องปิดไปก่อนวันนี้ และนักศึกษาทั้งรุ่นยื่นไม่ได้ทันทีที่บันทึก · เตือนก่อนบันทึก ไม่ห้าม
+    // (วันนี้มาจากฐานข้อมูลผ่าน `data.today` ไม่ใช่นาฬิกาเบราว์เซอร์)
+    const today = data?.today ?? '';
+    const windows: Array<[string, string]> = [
+      ['intent_submission', 'ส่งคำร้องขอหนังสือ (เอกสาร 1)'],
+      ['acceptance_form', 'ส่งแบบตอบรับ (เอกสาร 2)'],
+      ['accommodation_plan', 'กรอกใบสมัคร (สหกิจ 03) และที่พัก (สหกิจ 06)'],
+      ['report_outline', 'ส่งโครงร่าง (สหกิจ 11)'],
+      ['final_report', 'ส่งรายงานฉบับสมบูรณ์'],
+    ];
+    const alreadyClosed = windows
+      .filter(([key]) => {
+        const row = computed[key];
+        const closesOn = row?.late_end_date || row?.end_date;
+        return !!today && !!closesOn && closesOn < today;
+      })
+      .map(([, label]) => label);
+
+    if (alreadyClosed.length > 0) {
+      setSuccess('');
+      setError(
+        `คำนวณลงร่างแล้ว แต่ช่วงต่อไปนี้ปิดไปก่อนวันนี้แล้ว: ${alreadyClosed.join(' · ')} — ` +
+          'ถ้าบันทึก นักศึกษาจะยื่น/ส่งรายการเหล่านี้ไม่ได้ทันที · ตรวจวันเริ่มปฏิบัติงานอีกครั้ง หรือแก้วันที่ในตารางเองก่อนกด "บันทึกทั้งหน้า" · ' +
+          'ถ้าตั้งใจให้ปิดจริงและต้องการเปิดให้เฉพาะบางคน ใช้การ์ด "รอบพิเศษ" ด้านล่างของหน้านี้'
+      );
+    } else {
+      setSuccess('คำนวณและกรอกวันที่ลงร่างในตารางเรียบร้อยแล้ว — กรุณาตรวจสอบวันที่และกด "บันทึกทั้งหน้า"');
+      setError('');
+    }
+  };
+
+  /** คืนค่าร่างในตารางกลับเป็นค่าปัจจุบันของระบบ */
+  const handleResetDrafts = () => {
+    if (!data?.activities) return;
+    setDrafts(Object.fromEntries(data.activities.map((a) => [a.activity_key, draftOf(a)])));
+    setSuccess('คืนค่าร่างในตารางกลับเป็นค่าปัจจุบันของระบบแล้ว');
+    setError('');
+  };
+
+  const handleClearAll = async () => {
+    if (!semesterId) return;
+    setClearingAll(true);
+    setError('');
+    setSuccess('');
+    try {
+      const res = (await api.delete(`/calendar/activities?semester_id=${semesterId}`)) as { message?: string };
+      setSuccess(res?.message ?? 'ล้างช่วงเวลาทั้งหมดแล้ว');
+      // ช่องของตัวช่วยคำนวณจำค่าเดิมไว้ (loadCalendar เติมเฉพาะเมื่อมีวัน ไม่เคลียร์) — ไม่ล้างตามจะคำนวณจากวันเริ่มเก่าที่ล้างไปแล้ว
+      setWizardStartDate('');
+      setWizardEndDate('');
+      await loadCalendar(semesterId, true);
+    } catch (err) {
+      setError(getErrorMessage(err, 'ไม่สามารถล้างช่วงเวลาทั้งหมดได้'));
+    } finally {
+      setClearingAll(false);
+      setClearAllOpen(false);
     }
   };
 
@@ -284,13 +527,19 @@ const CoopCalendarManager: React.FC = () => {
               aria-label="เลือกภาคการศึกษา"
               value={semesterId ?? ''}
               onChange={(e) => setSemesterId(e.target.value ? Number(e.target.value) : null)}
-              className="appearance-none max-w-full bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue"
+              className="appearance-none max-w-full bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-300 dark:border-gray-600 rounded-xl px-3.5 py-2.5 pr-8 text-sm font-bold shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-brand-blue"
             >
               {semesters.length === 0 && (
-                <option value="">{semestersFailed ? '— โหลดรายชื่อภาคไม่สำเร็จ —' : '— ยังไม่มีภาคการศึกษา —'}</option>
+                <option value="" className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+                  {semestersFailed ? '— โหลดรายชื่อภาคไม่สำเร็จ —' : '— ยังไม่มีภาคการศึกษา —'}
+                </option>
               )}
               {semesters.map((s) => (
-                <option key={s.semester_id} value={s.semester_id}>
+                <option
+                  key={s.semester_id}
+                  value={s.semester_id}
+                  className="bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
                   {semesterLabel(s.semester, s.academic_year)} {s.is_active ? '(กำลังใช้งาน)' : ''}
                 </option>
               ))}
@@ -322,18 +571,18 @@ const CoopCalendarManager: React.FC = () => {
         />
       )}
 
-      {/* 2. Fail-Open Warning Card matching CoopCalendar.dc.html */}
-      <div className="border border-amber-300 dark:border-amber-800 bg-[#FFFBEB] dark:bg-amber-950/30 rounded-2xl p-4 sm:p-5 text-amber-900 dark:text-amber-200 shadow-sm space-y-2">
-        <div className="text-sm font-bold text-amber-900 dark:text-amber-300">
-          ช่องที่เว้นว่าง = ระบบยังไม่ล็อกขั้นตอนนั้น
-        </div>
-        <div className="text-xs leading-relaxed text-amber-900/90 dark:text-amber-300/90">
-          ขั้นที่ยังไม่ได้ตั้งวัน นักศึกษาทำรายการได้ตลอด — ระบบไม่ปิดเอง เพื่อไม่ให้นักศึกษาทั้งรุ่นถูกกันออกเพราะปฏิทินยังกรอกไม่ครบ หน้านี้และหน้าแรกจึงบอกเสมอว่าอันไหนยังว่าง<br />
-          “วันนี้” ที่ใช้ตัดสินเป็นเวลาไทยของระบบ ไม่ใช่นาฬิกาของเครื่องคุณ
-        </div>
+      {/* 2. Fail-Open Warning Card matching CoopCalendar.dc.html (แสดงเฉพาะเมื่อยังมีกิจกรรมที่ยังไม่ได้ตั้งค่า) */}
+      {unconfigured.length > 0 && (
+        <div className="border border-amber-300 dark:border-amber-800 bg-[#FFFBEB] dark:bg-amber-950/30 rounded-2xl p-4 sm:p-5 text-amber-900 dark:text-amber-200 shadow-sm space-y-2">
+          <div className="text-sm font-bold text-amber-900 dark:text-amber-300">
+            ช่องที่เว้นว่าง = ระบบยังไม่ล็อกขั้นตอนนั้น
+          </div>
+          <div className="text-xs leading-relaxed text-amber-900/90 dark:text-amber-300/90">
+            ขั้นที่ยังไม่ได้ตั้งวัน นักศึกษาทำรายการได้ตลอด — ระบบไม่ปิดเอง เพื่อไม่ให้นักศึกษาทั้งรุ่นถูกกันออกเพราะปฏิทินยังกรอกไม่ครบ หน้านี้และหน้าแรกจึงบอกเสมอว่าอันไหนยังว่าง<br />
+            “วันนี้” ที่ใช้ตัดสินเป็นเวลาไทยของระบบ ไม่ใช่นาฬิกาของเครื่องคุณ
+          </div>
 
-        {/* Text required by e2e test coop-calendar.spec.ts */}
-        {unconfigured.length > 0 && (
+          {/* Text required by e2e test coop-calendar.spec.ts */}
           <div className="pt-2 border-t border-amber-200/80 dark:border-amber-800/80 text-xs font-semibold text-amber-900 dark:text-amber-200">
             {/* แยกสองกลุ่ม: หน้าแรกนับเฉพาะขั้นที่ล็อกจริง จึงขึ้นเลขน้อยกว่าบรรทัดนี้ — เดิมผู้ใช้ตามปุ่มมาแล้วเจอจำนวนไม่ตรง */}
             ⚠️ ยังไม่ได้ตั้งช่วงเวลา {unconfigured.length} กิจกรรม (ขั้นที่ล็อกจริง{' '}
@@ -342,11 +591,158 @@ const CoopCalendarManager: React.FC = () => {
             <br />
             ระหว่างที่ยังไม่ตั้ง ระบบเปิดให้นักศึกษาทำรายการได้ตามปกติ (ไม่ล็อก)
           </div>
+        </div>
+      )}
+
+      {/* 2.5 Smart Schedule Wizard (ตัวช่วยคำนวณอัตโนมัติจากวันเปิด-ปิดภาคเรียน) */}
+      <div className="border border-blue-200 dark:border-blue-800/80 bg-blue-50/50 dark:bg-blue-950/20 rounded-2xl p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-100 dark:bg-blue-900/60 rounded-xl text-blue-600 dark:text-blue-400">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                ตัวช่วยคำนวณกำหนดการอัตโนมัติ (Smart Schedule Wizard)
+                <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300">
+                  ทางลัดตั้งค่าด่วน
+                </span>
+              </h2>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                ระบุเพียงวันเริ่มและวันสิ้นสุดการฝึกงาน (16 สัปดาห์) ระบบจะช่วยคำนวณช่วงเวลาส่งเอกสารและกิจกรรมทั้งหมดลงในตารางให้ทันที
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWizardOpen(!wizardOpen)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-100/60 dark:hover:bg-blue-900/40 rounded-lg transition-colors shrink-0 self-start sm:self-center"
+          >
+            {wizardOpen ? (
+              <>
+                <span>ซ่อนตัวช่วย</span>
+                <ChevronUp className="w-4 h-4" />
+              </>
+            ) : (
+              <>
+                <span>เปิดตัวช่วยคำนวณ</span>
+                <ChevronDown className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </div>
+
+        {wizardOpen && (
+          <div className="pt-3 border-t border-blue-200/60 dark:border-blue-800/50 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* วันเริ่มปฏิบัติงาน */}
+              <div className="space-y-1.5 bg-white dark:bg-gray-800 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
+                <label
+                  htmlFor="wizard-start-date"
+                  className="block text-xs font-bold text-gray-900 dark:text-gray-100"
+                >
+                  วันเริ่มปฏิบัติงานสหกิจศึกษา (coop_start)
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    id="wizard-start-date"
+                    value={wizardStartDate}
+                    onChange={(e) => setWizardStartDate(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  ปกติเป็นวันจันทร์สัปดาห์แรกของการฝึกงาน
+                </p>
+              </div>
+
+              {/* วันสิ้นสุดการปฏิบัติงาน */}
+              <div className="space-y-1.5 bg-white dark:bg-gray-800 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <label
+                    htmlFor="wizard-end-date"
+                    className="block text-xs font-bold text-gray-900 dark:text-gray-100"
+                  >
+                    วันสิ้นสุดการปฏิบัติงาน (coop_end)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleCalculateEndDate}
+                    disabled={!wizardStartDate}
+                    className="text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50 cursor-pointer"
+                  >
+                    +16 สัปดาห์ (109 วัน)
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    id="wizard-end-date"
+                    value={wizardEndDate}
+                    onChange={(e) => setWizardEndDate(e.target.value)}
+                    className="w-full text-xs px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                </div>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                  ปกติเป็นวันศุกร์สัปดาห์ที่ 16 (ห่างจากวันเริ่ม 109 วัน)
+                </p>
+              </div>
+            </div>
+
+            {/* ปุ่ม Actions และหมายเหตุ */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div className="text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+                <div>
+                  💡 ค่าที่คำนวณได้จะใส่เป็น <span className="font-semibold text-gray-900 dark:text-gray-200">ร่างในตาราง</span> ให้ตรวจสอบก่อนกด &quot;บันทึกทั้งหน้า&quot;
+                </div>
+                <div className="text-gray-500 dark:text-gray-500">
+                  (สำหรับกิจกรรมที่สาขาวิชากำหนดเอง เช่น โครงร่างและรายงานฉบับสมบูรณ์ เป็นการประมาณการเบื้องต้น: ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา)
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleResetDrafts}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl transition-colors shadow-xs cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  คืนค่าเดิม
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplySmartSchedule}
+                  disabled={!wizardStartDate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-xs hover:shadow active:scale-95 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  คำนวณและกรอกลงตาราง
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
       {/* 3. Main Activities Table Card matching CoopCalendar.dc.html */}
       <div className="card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl shadow-sm overflow-hidden">
+        {/* ล้างทั้งภาคทีเดียว — ตั้งค่าผิดทั้งชุด (เช่นจากตัวช่วยคำนวณ) ไม่ต้องกดล้างทีละแถว */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+          <p className="text-xs text-gray-600 dark:text-gray-400">
+            ตั้งช่วงเวลาไว้แล้ว <span className="font-bold text-gray-900 dark:text-gray-100">{configuredCount}</span> กิจกรรม
+          </p>
+          <button
+            type="button"
+            data-testid="calendar-clear-all"
+            disabled={configuredCount === 0 || clearingAll || !semesterId}
+            onClick={() => setClearAllOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-red-300 bg-white px-3 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-800 dark:bg-gray-800 dark:text-red-300 dark:hover:bg-red-950/30"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            ล้างช่วงเวลาทั้งหมด
+          </button>
+        </div>
         {/* Table Header */}
         <div className="hidden lg:grid lg:grid-cols-12 gap-3 px-5 py-3.5 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-bold text-gray-600 dark:text-gray-300">
           {/* กิจกรรม 4 · ผ่อนผัน 2 (เดิม 5 · 1): ช่องวันผ่อนผันเคยกว้าง 77px อ่านวันที่ที่กรอกไม่ออก */}
@@ -564,17 +960,20 @@ const CoopCalendarManager: React.FC = () => {
         <div className="card bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl p-5 shadow-sm space-y-4">
           <div>
             <h3 className="text-base font-bold text-gray-900 dark:text-white">
-              รายการอิสระของคณะ
+              กำหนดการแจ้งนักศึกษา (รายการอิสระของคณะ)
             </h3>
-            <p className="hint text-[12px] text-gray-500 dark:text-gray-400 mt-0.5">
-              แถวบนกระดาษที่ระบบไม่ได้อ้างอิง — โผล่ในปฏิทินให้นักศึกษาเห็น แต่ไม่ล็อกอะไร
+            <p className="hint text-[12px] text-gray-600 dark:text-gray-400 mt-0.5 leading-relaxed">
+              ใช้ <strong className="font-bold">แจ้งวันสำคัญให้นักศึกษาเห็นในปฏิทิน</strong> เช่น ปฐมนิเทศ ลงทะเบียน ประกาศผล —
+              เป็นแถวบนกระดาษที่ระบบไม่ได้อ้างอิง{' '}
+              <strong className="font-bold">แสดงอย่างเดียว ไม่ล็อกและไม่ปลดล็อกการทำรายการใด</strong>
+              {' '}· ถ้าต้องการให้นักศึกษาบางคนส่งงานนอกช่วงได้ ใช้การ์ด &ldquo;รอบพิเศษ&rdquo; ด้านล่าง
             </p>
           </div>
 
           <div className="space-y-2">
             {(data?.custom_events ?? []).length === 0 ? (
               <div className="text-xs text-gray-600 dark:text-gray-400 py-3 text-center border border-dashed border-gray-200 dark:border-gray-700 rounded-xl">
-                ยังไม่มีรายการอิสระของคณะในภาคการศึกษานี้
+                ยังไม่มีกำหนดการแจ้งนักศึกษาในภาคการศึกษานี้
               </div>
             ) : (
               data?.custom_events.map((evt) => (
@@ -616,7 +1015,7 @@ const CoopCalendarManager: React.FC = () => {
           {/* Form to add custom event */}
           <div className="border border-gray-200 dark:border-gray-700 rounded-xl p-4 bg-gray-50/40 dark:bg-gray-800/20 space-y-3">
             <div className="text-xs font-bold text-gray-700 dark:text-gray-300">
-              เพิ่มรายการอิสระใหม่
+              เพิ่มกำหนดการแจ้งนักศึกษา
             </div>
             <div className="space-y-2">
               <input
@@ -675,7 +1074,7 @@ const CoopCalendarManager: React.FC = () => {
           </h3>
           <div className="text-[13px] leading-relaxed text-gray-600 dark:text-gray-300 space-y-3">
             <p>
-              <strong className="font-bold text-gray-900 dark:text-white">รายการที่เพิ่มเองเป็นหมุดบอกเวลาเท่านั้น</strong> — นักศึกษาเห็นในปฏิทิน แต่ไม่ล็อกขั้นตอนใด ขั้นที่ล็อกจริงมีเฉพาะแถวที่ติดป้าย “ล็อกจริง” ในตารางด้านบน
+              <strong className="font-bold text-gray-900 dark:text-white">กำหนดการแจ้งนักศึกษาที่เพิ่มเองเป็นหมุดบอกเวลาเท่านั้น</strong> — นักศึกษาเห็นในปฏิทิน แต่ไม่ล็อกขั้นตอนใด ขั้นที่ล็อกจริงมีเฉพาะแถวที่ติดป้าย “ล็อกจริง” ในตารางด้านบน · อยากให้นักศึกษาบางคนส่งงานนอกช่วงได้ ให้ใช้การ์ด “รอบพิเศษ” ไม่ใช่การ์ดนี้
             </p>
             <p>
               <strong className="font-bold text-gray-900 dark:text-white">แถวชนิด “เส้นตาย” กรอกเฉพาะวันสิ้นสุด</strong> — “ภายในวันที่ 10” ไม่เท่ากับ “เฉพาะวันที่ 10” หน้าจอจึงปิดช่องวันเริ่มของแถวชนิดนี้ไว้
@@ -683,6 +1082,67 @@ const CoopCalendarManager: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {data?.semester && (
+        <SpecialRoundsCard
+          semesterId={semesterId}
+          activities={data.activities}
+          rounds={data.special_rounds ?? []}
+          onChanged={() => loadCalendar(semesterId, true)}
+          onError={setError}
+          onSuccess={setSuccess}
+        />
+      )}
+
+      <ConfirmDialog
+        open={!!pastConfirm}
+        title="ช่วงเหล่านี้ปิดไปก่อนวันนี้แล้ว"
+        message={
+          <>
+            <ul className="list-disc space-y-0.5 pl-5">
+              {pastConfirm?.labels.map((l) => (
+                <li key={l}>{l}</li>
+              ))}
+            </ul>
+            <p className="mt-2">
+              ถ้าบันทึก <strong>นักศึกษาจะยื่น/ส่งรายการเหล่านี้ไม่ได้ทันที</strong> — ตรวจวันที่อีกครั้ง
+              หรือถ้าตั้งใจปิดจริงแล้วต้องการเปิดเฉพาะบางคน ใช้การ์ด &ldquo;รอบพิเศษ&rdquo; ด้านล่างของหน้านี้
+            </p>
+          </>
+        }
+        confirmLabel="บันทึกทั้งที่ปิดแล้ว"
+        cancelLabel="กลับไปแก้วันที่"
+        confirmTestId="calendar-past-confirm"
+        destructive
+        onConfirm={() => {
+          const run = pastConfirm?.run;
+          setPastConfirm(null);
+          if (run) void run();
+        }}
+        onCancel={() => setPastConfirm(null)}
+      />
+
+      <ConfirmDialog
+        open={clearAllOpen}
+        title="ยืนยันการล้างช่วงเวลาทั้งหมด"
+        message={
+          <>
+            <p>
+              ล้างช่วงเวลาของ <strong>{configuredCount} กิจกรรม</strong> ในภาคนี้ทั้งหมด — ทุกขั้นกลับเป็น &ldquo;ยังไม่ได้ตั้ง&rdquo;
+              นักศึกษาทำรายการได้ทุกขั้นทันทีจนกว่าจะตั้งช่วงเวลาใหม่
+            </p>
+            <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+              ไม่แตะ: รอบพิเศษ และกำหนดการแจ้งนักศึกษา (รายการอิสระของคณะ) · ค่าที่ล้างไปถูกบันทึกไว้ในประวัติการใช้งานระบบ
+            </p>
+          </>
+        }
+        confirmLabel="ล้างช่วงเวลาทั้งหมด"
+        confirmTestId="calendar-clear-all-confirm"
+        destructive
+        busy={clearingAll}
+        onConfirm={() => void handleClearAll()}
+        onCancel={() => setClearAllOpen(false)}
+      />
 
       <ConfirmDialog
         open={!!pendingDelete}

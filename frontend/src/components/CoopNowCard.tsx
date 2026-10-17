@@ -34,6 +34,15 @@ const CoopNowCard: React.FC<CoopNowCardProps> = ({ phases, deadline }) => {
   // ทุกขั้นเสร็จหมดแล้ว — ไม่ต้องเสกงานขึ้นมาให้ทำ
   if (!current) return null;
 
+  // บางช่วงมีงานที่กรอกได้พร้อมกันหลายอย่าง (เฟส 2: แบบแจ้งที่พัก สหกิจ 06 + ใบสมัครงาน สหกิจ 03 — ไม่ต้องรอกัน)
+  // การ์ดเดิมหยิบแค่ขั้นแรก นักศึกษาเลยไม่รู้ว่ามีอีกใบค้างอยู่ · ยังเป็นการอ่านจาก `phases` ชุดเดียวกัน ไม่ตัดสินเอง
+  // เอาเฉพาะขั้นที่ active ในเฟสเดียวกับขั้นแรก และมีปุ่มให้กดจริง (ขั้นที่รอคนอื่นไม่เข้ามาปน)
+  const currentPhase = phases.find((p) => p.subSteps.some((s) => s.id === current.id));
+  const parallelTasks = (currentPhase?.subSteps ?? []).filter(
+    (s) => s.status === 'active' && s.actionLabel && s.onAction
+  );
+  const isMulti = parallelTasks.length >= 2;
+
   return (
     <section
       className="page-enter flex overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900"
@@ -48,22 +57,52 @@ const CoopNowCard: React.FC<CoopNowCardProps> = ({ phases, deadline }) => {
             {activePhase ? ` · ${stripNumber(activePhase.title)}` : ''}
           </span>
 
-          <h2 className="text-2xl font-extrabold leading-snug text-gray-900 dark:text-white">
-            {stripNumber(current.title)}
-          </h2>
+          {isMulti ? (
+            <>
+              <h2 className="text-2xl font-extrabold leading-snug text-gray-900 dark:text-white">
+                {parallelTasks.map((t) => stripNumber(t.title)).join(' และ ')}
+              </h2>
+              <p className="max-w-2xl text-sm text-gray-600 dark:text-gray-400">
+                กรอกได้พร้อมกัน ไม่ต้องรอกัน — ทำให้ครบทั้ง {parallelTasks.length} รายการ
+              </p>
+              <ul className="flex max-w-2xl flex-col gap-3">
+                {parallelTasks.map((t) => (
+                  <li
+                    key={t.id}
+                    data-testid={`now-card-task-${t.id}`}
+                    className="flex flex-col gap-2 rounded-xl border border-gray-200 p-3 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <span className="min-w-0 text-sm leading-relaxed text-gray-700 dark:text-gray-300">
+                      <span className="block font-bold text-gray-900 dark:text-white">{stripNumber(t.title)}</span>
+                      {t.description}
+                    </span>
+                    <Button onClick={t.onAction} data-testid={`now-card-action-${t.id}`} className="shrink-0">
+                      {t.actionLabel}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-extrabold leading-snug text-gray-900 dark:text-white">
+                {stripNumber(current.title)}
+              </h2>
 
-          <p className="max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-gray-400">
-            {current.description}
-          </p>
+              <p className="max-w-2xl text-sm leading-relaxed text-gray-600 dark:text-gray-400">
+                {current.description}
+              </p>
 
-          {/* ปุ่มมาจาก subStep เดียวกัน — ขั้นที่ระบบทำอะไรให้ไม่ได้ (รอเจ้าหน้าที่ รอคณบดี
-              ลงนาม) จะไม่มี actionLabel มาด้วย และการ์ดก็ไม่ควรมีปุ่มให้กดเล่น */}
-          {current.actionLabel && current.onAction && (
-            <div className="mt-1 flex flex-wrap items-center gap-3">
-              <Button onClick={current.onAction} data-testid="now-card-action">
-                {current.actionLabel}
-              </Button>
-            </div>
+              {/* ปุ่มมาจาก subStep เดียวกัน — ขั้นที่ระบบทำอะไรให้ไม่ได้ (รอเจ้าหน้าที่ รอคณบดี
+                  ลงนาม) จะไม่มี actionLabel มาด้วย และการ์ดก็ไม่ควรมีปุ่มให้กดเล่น */}
+              {current.actionLabel && current.onAction && (
+                <div className="mt-1 flex flex-wrap items-center gap-3">
+                  <Button onClick={current.onAction} data-testid="now-card-action">
+                    {current.actionLabel}
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
 

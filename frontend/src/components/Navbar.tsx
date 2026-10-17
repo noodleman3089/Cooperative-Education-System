@@ -1,37 +1,21 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/authContextValue';
 import api, { API_BASE_URL } from '../services/api';
-import { Bell, FileText, LogOut } from 'lucide-react';
+import { Bell, CalendarDays, FileText, LogOut, CheckCheck, History } from 'lucide-react';
 import IntentReviewModal from './IntentReviewModal';
-
-/**
- * กระดิ่งแจ้งเตือนใช้ร่วมกันทุกบทบาท แต่แหล่งข้อมูลต่างกัน:
- * นักศึกษาได้รายการที่ประกอบขึ้นเองในไฟล์นี้ · อีก 4 บทบาทได้แถวดิบจาก
- * `/intents` หรือ `/documents` ตรงๆ · ฟิลด์จึงเป็น optional เกือบทั้งหมด
- * ตามความจริงของข้อมูล ไม่ใช่เพราะไม่รู้ว่ามีอะไร
- */
-interface NotificationItem {
-  // แบบที่ประกอบขึ้นสำหรับนักศึกษา
-  id?: string;
-  title?: string;
-  description?: string;
-  isWarning?: boolean;
-  isSuccess?: boolean;
-  isRead?: boolean;
-  // แถวดิบของใบความจำนง (อาจารย์ / หัวหน้าสาขา / เจ้าหน้าที่)
-  form_id?: number;
-  first_name?: string | null;
-  last_name?: string | null;
-  company_name_th?: string | null;
-  // แถวดิบของเอกสารราชการ (คณบดี)
-  doc_id?: number;
-  type?: string;
-  student_code?: string | null;
-  status?: string;
-  // สำหรับฝ่ายอาจารย์ (advisor / supervisor) จาก SB-F1 / F8
-  url?: string;
-}
+import CoopCalendarModal from './CoopCalendarModal';
+import NotificationHistoryModal from './NotificationHistoryModal';
+import type { CoopCalendarResponse } from '../types/api';
+import {
+  type AppNotification,
+  syncNotifications,
+  markAsRead,
+  markAllAsRead,
+  deleteNotification,
+  deleteAllNotifications,
+  getStoredNotifications,
+} from '../utils/notificationStore';
 
 /** ส่วนของ `/profile/me` ที่แถบบนใช้ — ฟิลด์นักศึกษาเป็น optional เพราะบุคลากรไม่มี */
 interface MyProfile {
@@ -50,6 +34,8 @@ interface NavbarProps {
   isSidebarOpen?: boolean;
 }
 
+const NOTIFICATION_POLL_MS = 10_000;
+
 const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSidebar, isSidebarOpen }) => {
   // index.html has already put the class on <html>; read it rather than
   // re-deriving it from localStorage and reapplying it after mount.
@@ -60,8 +46,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const navigate = useNavigate();
 
   // Notification and Modal states
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [facultyCount, setFacultyCount] = useState<number | null>(null);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   /**
@@ -76,6 +62,38 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
   const displayName =
     [profile?.first_name, profile?.last_name].filter(Boolean).join(' ').trim() || null;
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
+  const [calendarData, setCalendarData] = useState<CoopCalendarResponse | null>(null);
+  const [showCalendarModal, setShowCalendarModal] = useState(false);
+
+  useEffect(() => {
+    if (!auth?.user) return;
+    let cancelled = false;
+    // ดึงข้อมูลปฏิทินล่วงหน้า เพื่อให้กดเปิดจากแถบด้านบนได้ทันทีโดยไม่ต้องรอ
+    api.get('/calendar')
+      .then((res) => {
+        if (!cancelled && res) {
+          setCalendarData(res as CoopCalendarResponse);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to preload calendar in navbar:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth?.user]);
+
+  const handleOpenCalendar = async () => {
+    setShowCalendarModal(true);
+    if (!calendarData) {
+      try {
+        const res = await api.get('/calendar');
+        if (res) setCalendarData(res as CoopCalendarResponse);
+      } catch (err) {
+        console.error('Failed to load calendar in navbar:', err);
+      }
+    }
+  };
 
   const toggleDarkMode = () => {
     const nextDark = !darkMode;
@@ -119,213 +137,335 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
     return labels[role] || role;
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchNotifications = async () => {
-      if (!auth?.user) return;
-    try {
-      if (currentRole === 'advisor' || currentRole === 'supervisor') {
-        // ยิงซ้ำกับ AdvisorHome.tsx โดยตั้งใจ — กระดิ่งอยู่ทุกหน้า ไม่ใช่แค่หน้าแรกอาจารย์
-        // จึงต้องมีข้อมูลของตัวเองเสมอ แม้ผู้ใช้ไม่ได้เปิดหน้าแรกอยู่ · การแชร์ผลจะต้องมี
-        // context/store ใหม่ ซึ่งเกินขอบเขตแก้จุดนี้ (ดู PROMPT-sonnet-R5 ข้อ ง)
-        const res = await api.get(`/faculty/home/advisor?view=${currentRole}`);
-        if (cancelled) return;
-        if (res && res.tiles) {
-          const items: NotificationItem[] = [];
-          if (currentRole === 'advisor') {
-            const reportCount = res.tiles.report?.count ?? 0;
-            const confirmationCount = res.tiles.confirmation?.count ?? 0;
-            setFacultyCount(reportCount + confirmationCount);
+  const userRoles = useMemo(() => auth?.user?.roles ?? [], [auth?.user?.roles]);
+  // 'supervisor' เป็น view ไม่ใช่ role — ต้องเทียบกับ views (ถ้าไม่มีค่อยใช้ roles)
+  const userViews = auth?.user?.views?.length ? auth.user.views : userRoles;
+  const effectiveRole = userViews.includes(currentRole)
+    ? currentRole
+    : (userViews[0] ?? currentRole);
 
+  const handleMarkAsRead = (id: string) => {
+    if (!auth?.user?.userId) return;
+    const updated = markAsRead(auth.user.userId, effectiveRole, id);
+    setNotifications(updated);
+  };
+
+  const handleMarkAllAsRead = () => {
+    if (!auth?.user?.userId) return;
+    const updated = markAllAsRead(auth.user.userId, effectiveRole);
+    setNotifications(updated);
+  };
+
+  const handleDelete = (id: string) => {
+    if (!auth?.user?.userId) return;
+    const updated = deleteNotification(auth.user.userId, effectiveRole, id);
+    setNotifications(updated);
+  };
+
+  const handleDeleteAll = () => {
+    if (!auth?.user?.userId) return;
+    const updated = deleteAllNotifications(auth.user.userId, effectiveRole);
+    setNotifications(updated);
+  };
+
+  const handleNavigateToTarget = (targetUrl?: string, highlightId?: string) => {
+    if (!targetUrl) return;
+    let finalUrl = targetUrl;
+    if (highlightId) {
+      const hasQuery = finalUrl.includes('?');
+      if (!finalUrl.includes('highlight=')) {
+        finalUrl += (hasQuery ? '&' : '?') + `highlight=${encodeURIComponent(highlightId)}`;
+      }
+    }
+    navigate(finalUrl);
+  };
+
+  useEffect(() => {
+    if (!auth?.user?.userId) return;
+    let cancelled = false;
+
+    // ดึงข้อมูลแคชจาก localStorage ผ่าน microtask เพื่อไม่ให้เกิด cascading render
+    Promise.resolve().then(() => {
+      if (!cancelled && auth?.user?.userId) {
+        const cached = getStoredNotifications(auth.user.userId, effectiveRole);
+        setNotifications(cached);
+      }
+    });
+
+    const fetchNotifications = async () => {
+      if (!auth?.user?.userId) return;
+      try {
+        let liveItems: Array<{
+          id: string;
+          title: string;
+          description: string;
+          type?: 'info' | 'success' | 'warning';
+          targetUrl?: string;
+          highlightTargetId?: string;
+        }> = [];
+
+        if (effectiveRole === 'advisor') {
+          const res = await api.get('/faculty/home/advisor?view=advisor');
+          if (cancelled) return;
+          if (res?.tiles) {
             (res.tiles.report?.items || []).forEach(
               (it: { student_id: number; full_name: string; student_code?: string }) => {
-                items.push({
+                liveItems.push({
                   id: `report_${it.student_id}`,
                   title: it.full_name,
-                  description: `เล่มรายงานรอตรวจรับ (${it.student_code})`,
-                  url: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                  description: `เล่มรายงานรอตรวจรับ (${it.student_code || ''})`,
+                  type: 'info',
+                  targetUrl: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                  highlightTargetId: `student-row-${it.student_id}`,
                 });
               }
             );
             (res.tiles.confirmation?.items || []).forEach(
               (it: { student_id: number; full_name: string; student_code?: string }) => {
-                items.push({
+                liveItems.push({
                   id: `conf_${it.student_id}`,
                   title: it.full_name,
-                  description: `สหกิจ 14 รอลงนามรับรอง (${it.student_code})`,
-                  url: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                  description: `สหกิจ 14 รอลงนามรับรอง (${it.student_code || ''})`,
+                  type: 'info',
+                  targetUrl: `/dashboard?menu=final_evaluation&student=${it.student_id}`,
+                  highlightTargetId: `student-row-${it.student_id}`,
                 });
               }
             );
-          } else {
-            const outlineCount = res.tiles.outline?.count ?? 0;
-            const rescheduleCount = res.tiles.reschedule?.count ?? 0;
-            const unrecordedCount = res.tiles.unrecorded_visit?.count ?? 0;
-            setFacultyCount(outlineCount + rescheduleCount + unrecordedCount);
-
+          }
+        } else if (effectiveRole === 'supervisor') {
+          const res = await api.get('/faculty/home/advisor?view=supervisor');
+          if (cancelled) return;
+          if (res?.tiles) {
             (res.tiles.outline?.items || []).forEach(
               (it: { ref_id: number; full_name: string; detail?: string; student_code?: string }) => {
-                items.push({
+                liveItems.push({
                   id: `outline_${it.ref_id}`,
                   title: it.full_name,
-                  description: `โครงร่างรอเห็นชอบ: ${it.detail || 'สหกิจ 11'} (${it.student_code})`,
-                  url: `/dashboard?role=supervisor&menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`,
+                  description: `โครงร่างรอเห็นชอบ: ${it.detail || 'สหกิจ 11'} (${it.student_code || ''})`,
+                  type: 'info',
+                  targetUrl: `/dashboard?role=supervisor&menu=report_outlines&tab=pending_advisor&outline=${it.ref_id}`,
+                  highlightTargetId: `outline-item-${it.ref_id}`,
                 });
               }
             );
             (res.tiles.reschedule?.items || []).forEach(
               (it: { ref_id: number; student_id: number; full_name: string; visit_number?: number }) => {
-                items.push({
+                liveItems.push({
                   id: `reschedule_${it.ref_id}`,
                   title: it.full_name,
                   description: `พี่เลี้ยงขอเลื่อนนัดนิเทศ (ครั้งที่ ${it.visit_number || 1})`,
-                  url: `/dashboard?role=supervisor&menu=supervision&student=${it.student_id}`,
+                  type: 'warning',
+                  targetUrl: `/dashboard?role=supervisor&menu=supervision&student=${it.student_id}`,
+                  highlightTargetId: `visit-item-${it.student_id}`,
                 });
               }
             );
             (res.tiles.unrecorded_visit?.items || []).forEach(
               (it: { ref_id: number; student_id: number; full_name: string; visit_number?: number }) => {
-                items.push({
+                liveItems.push({
                   id: `unrecorded_${it.ref_id}`,
                   title: it.full_name,
                   description: `ไปนิเทศแล้วยังไม่บันทึก (ครั้งที่ ${it.visit_number || 1})`,
-                  url: `/dashboard?role=supervisor&menu=supervision_record&student=${it.student_id}&visit=${it.visit_number || 1}`,
+                  type: 'warning',
+                  targetUrl: `/dashboard?role=supervisor&menu=supervision_record&student=${it.student_id}&visit=${it.visit_number || 1}`,
+                  highlightTargetId: `record-item-${it.student_id}`,
                 });
               }
             );
           }
-          setNotifications(items);
-        }
-      } else if (currentRole === 'dept_head') {
-        const res = await api.get('/faculty/home/dept-head');
-        if (res && res.unassigned) {
-          const count = res.unassigned.students_affected ?? 0;
-          setFacultyCount(count);
-          const items: NotificationItem[] = (res.unassigned.items || []).map(
-            (it: { student_id: number; full_name: string; student_code?: string; missing?: string[] }) => {
-              const missingText =
-                it.missing?.map((m: string) => (m === 'advisor' ? 'ที่ปรึกษา' : 'ผู้นิเทศ')).join(' และ ') || 'อาจารย์';
-              return {
-                id: `unassigned_${it.student_id}`,
-                title: it.full_name,
-                description: `ยังไม่มีอาจารย์${missingText} (${it.student_code || ''})`,
-                url: `/dashboard?menu=assignment&filter=incomplete`,
-              };
-            }
-          );
-          setNotifications(items);
-        } else {
-          setFacultyCount(0);
-          setNotifications([]);
-        }
-      } else if (currentRole === 'staff') {
-        // นับจากชุดเดียวกับหน้าแรก (`GET /staff/home` สามกองงาน) — เดิมนับเฉพาะคำร้องรอตรวจรับ
-        // กระดิ่งจึงบอก 0 ทั้งที่หน้าแรกบอกว่ามีแบบตอบรับ/หนังสือส่งตัวรออยู่ · แต่ละรายการพาไปกองของตัวเอง
-        const res = await api.get('/staff/home');
-        const staffQueues: { key: 'request' | 'acceptance' | 'dispatch'; title: string }[] = [
-          { key: 'request', title: 'คำร้องรอคุณตรวจรับ' },
-          { key: 'acceptance', title: 'แบบตอบรับรอคุณตรวจ' },
-          { key: 'dispatch', title: 'หนังสือส่งตัวรอออก' },
-        ];
-        const items: NotificationItem[] = [];
-        let total = 0;
-        for (const q of staffQueues) {
-          const count: number = res?.tiles?.[q.key]?.count ?? 0;
-          if (count > 0) {
-            total += count;
-            items.push({
-              id: `queue_${q.key}`,
-              title: q.title,
-              description: `${count} รายการ`,
-              url: `/dashboard?queue=${q.key}`,
-            });
+        } else if (effectiveRole === 'dept_head') {
+          const res = await api.get('/faculty/home/dept-head');
+          if (cancelled) return;
+          if (res?.unassigned?.items) {
+            (res.unassigned.items || []).forEach(
+              (it: { student_id: number; full_name: string; student_code?: string; missing?: string[] }) => {
+                const missingText =
+                  it.missing?.map((m: string) => (m === 'advisor' ? 'ที่ปรึกษา' : 'ผู้นิเทศ')).join(' และ ') || 'อาจารย์';
+                liveItems.push({
+                  id: `unassigned_${it.student_id}`,
+                  title: it.full_name,
+                  description: `ยังไม่มีอาจารย์${missingText} (${it.student_code || ''})`,
+                  type: 'warning',
+                  targetUrl: `/dashboard?menu=assignment&filter=incomplete`,
+                  highlightTargetId: `student-row-${it.student_id}`,
+                });
+              }
+            );
           }
-        }
-        setFacultyCount(total);
-        setNotifications(items);
-      } else if (currentRole === 'dean') {
-        const res = await api.get('/documents');
-        const pendingDocs = ((res || []) as NotificationItem[]).filter((d) => d.status === 'pending_sign');
-        setNotifications(pendingDocs);
-      } else if (currentRole === 'student') {
-        const dashboardData = await api.get('/students/dashboard');
-        const studentNotifs: NotificationItem[] = [];
-        if (dashboardData) {
-          const { activeIntent, documents } = dashboardData;
-          if (activeIntent) {
-            // 1. Intent submitted
-            studentNotifs.push({
-              id: 'intent_submitted',
-              title: 'ยื่นใบความจำนงสำเร็จ',
-              description: `คุณได้ยื่นสมัครฝึกงานที่ ${activeIntent.company_name_th || 'สถานประกอบการ'} สำเร็จแล้ว`,
-              status: activeIntent.status,
-              isRead: false
-            });
-
-            // 2. Status message based on current status
-            let desc = '';
-            let isWarning = false;
-            let isSuccess = false;
-
-            if (activeIntent.status === 'pending_advisor') {
-              desc = 'พิมพ์แบบคำร้องไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนาม แล้วอัปโหลดกลับ';
-            } else if (activeIntent.status === 'pending_officer_request') {
-              desc = 'ส่งคำร้องที่ลงนามแล้ว รอเจ้าหน้าที่ตรวจรับ';
-            } else if (activeIntent.status === 'approved_by_dept_head') {
-              desc = 'เจ้าหน้าที่รับคำร้องและออกเลขที่หนังสือแล้ว รอคณบดีลงนาม';
-              isSuccess = true;
-            } else if (activeIntent.status === 'rejected') {
-              desc = 'ใบคำร้องของคุณถูกตีกลับ กรุณาตรวจสอบเหตุผลที่หน้าแรกแล้วดำเนินการใหม่';
-              isWarning = true;
-              // สาขา 'rejected_by_dept_head' ถูกลบ 2026-08-27 — ไม่มีใบไหนไปถึงอีกแล้ว
-            } else if (activeIntent.status === 'company_rejected') {
-              desc = 'สถานประกอบการปฏิเสธการรับเข้าทำงาน ระบบปลดล็อกสิทธิ์ให้ยื่นสมัครที่ใหม่แล้ว';
-              isWarning = true;
-            } else if (activeIntent.status === 'accepted') {
-              desc = 'สถานประกอบการตอบรับคุณเข้าปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว!';
-              isSuccess = true;
-            }
-
-            if (desc) {
-              studentNotifs.push({
-                id: 'intent_status',
-                title: 'อัปเดตสถานะการพิจารณา',
-                description: desc,
-                status: activeIntent.status,
-                isWarning,
-                isSuccess,
-                isRead: false
+        } else if (effectiveRole === 'staff') {
+          const res = await api.get('/staff/home');
+          if (cancelled) return;
+          const staffQueues: { key: 'request' | 'acceptance' | 'dispatch'; title: string }[] = [
+            { key: 'request', title: 'คำร้องรอคุณตรวจรับ' },
+            { key: 'acceptance', title: 'แบบตอบรับรอคุณตรวจ' },
+            { key: 'dispatch', title: 'หนังสือส่งตัวรอออก' },
+          ];
+          for (const q of staffQueues) {
+            const count: number = res?.tiles?.[q.key]?.count ?? 0;
+            if (count > 0) {
+              liveItems.push({
+                id: `queue_${q.key}_${count}`,
+                title: q.title,
+                description: `${count} รายการ`,
+                type: 'info',
+                targetUrl: `/dashboard?queue=${q.key}`,
+                highlightTargetId: `staff-queue-${q.key}`,
               });
             }
-
           }
-
-          // 4. Documents
-          if (documents && documents.length > 0) {
-            // หนังสือของคำร้องที่ปิดไปแล้วไม่ใช่ "ความคืบหน้า" ของใบปัจจุบัน — "เอกสารของฉัน" ยังแสดงพร้อมป้ายกำกับ
-            const currentDocs = documents.filter((doc: { of_closed_request?: boolean }) => !doc.of_closed_request);
-            currentDocs.forEach((doc: { doc_id: number; type: string; status: string }) => {
-              const docTypeLabel = doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
-              const docStatusLabel = doc.status === 'signed' ? 'ลงนามเสร็จสิ้นแล้ว' : 'รอลงนาม';
-              studentNotifs.push({
-                id: `doc_${doc.doc_id}`,
-                title: `${docTypeLabel} (${docStatusLabel})`,
-                description: doc.status === 'signed'
-                  ? `คณบดีลงนามใน${docTypeLabel}แล้ว สามารถเปิดอ่านหรือนำส่งให้สถานประกอบการได้`
-                  : `${docTypeLabel} อยู่ในขั้นตอนเสนอคณบดีลงนาม`,
-                isSuccess: doc.status === 'signed',
-                isRead: false
-              });
+          // คณบดีอนุมัติเปลี่ยนที่/ส่งตัวกลับแล้ว รอเจ้าหน้าที่ปิดใบที่ฝึก
+          const closures: number = res?.memo_closures_pending ?? 0;
+          if (closures > 0) {
+            liveItems.push({
+              id: `memo_closures_${closures}`,
+              title: 'คณบดีอนุมัติให้ปิดใบที่ฝึก',
+              description: `${closures} คน — ไปที่ติดตามเอกสารนักศึกษาแล้วกด "ปิดใบที่ฝึก"`,
+              type: 'info',
+              targetUrl: '/dashboard?menu=final_progress',
             });
           }
+        } else if (effectiveRole === 'dean') {
+          const res = await api.get('/documents');
+          if (cancelled) return;
+          const pendingDocs = ((res || []) as Array<{
+            doc_id: number;
+            first_name?: string | null;
+            last_name?: string | null;
+            type?: string;
+            student_code?: string | null;
+            status?: string;
+          }>).filter((d) => d.status === 'pending_sign');
+
+          liveItems = pendingDocs.map((doc) => {
+            const name = [doc.first_name, doc.last_name].filter(Boolean).join(' ').trim();
+            const typeLabel = doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัว';
+            return {
+              id: `doc_dean_${doc.doc_id}`,
+              title: name || `คำร้องรอลงนาม #${doc.doc_id}`,
+              description: `ลงนาม: ${typeLabel} (${doc.student_code || ''})`,
+              type: 'info' as const,
+              targetUrl: '/dashboard',
+              highlightTargetId: `dean-doc-row-${doc.doc_id}`,
+            };
+          });
+
+          // บันทึกข้อความที่รอคณบดีตัดสิน — id ผูกกับจำนวน เพื่อให้เรื่องใหม่เข้ามาแล้วแจ้งซ้ำ
+          const memoList = (await api.get('/memos')) as Array<{ status?: string }> | null;
+          if (cancelled) return;
+          const pendingMemoCount = (memoList ?? []).filter((m) => m.status === 'pending').length;
+          if (pendingMemoCount > 0) {
+            liveItems.push({
+              id: `memos_pending_${pendingMemoCount}`,
+              title: 'บันทึกข้อความรอพิจารณา',
+              description: `${pendingMemoCount} เรื่อง รอคณบดีอนุมัติหรือไม่อนุมัติ`,
+              type: 'info',
+              targetUrl: '/dashboard?menu=memos',
+            });
+          }
+        } else if (effectiveRole === 'student' && userRoles.includes('student')) {
+          const dashboardData = await api.get('/students/dashboard');
+          if (cancelled) return;
+          if (dashboardData) {
+            const { activeIntent, documents } = dashboardData;
+            if (activeIntent) {
+              liveItems.push({
+                id: 'intent_submitted',
+                title: 'ยื่นใบความจำนงสำเร็จ',
+                description: `คุณได้ยื่นสมัครฝึกงานที่ ${activeIntent.company_name_th || 'สถานประกอบการ'} สำเร็จแล้ว`,
+                type: 'info',
+                targetUrl: '/dashboard',
+                highlightTargetId: 'student-status-card',
+              });
+
+              let desc = '';
+              let isWarning = false;
+              let isSuccess = false;
+
+              if (activeIntent.status === 'pending_advisor') {
+                desc = 'พิมพ์แบบคำร้องไปให้อาจารย์ที่ปรึกษาและหัวหน้าสาขาลงนาม แล้วอัปโหลดกลับ';
+              } else if (activeIntent.status === 'pending_officer_request') {
+                desc = 'ส่งคำร้องที่ลงนามแล้ว รอเจ้าหน้าที่ตรวจรับ';
+              } else if (activeIntent.status === 'approved_by_dept_head') {
+                desc = 'เจ้าหน้าที่รับคำร้องและออกเลขที่หนังสือแล้ว รอคณบดีลงนาม';
+                isSuccess = true;
+              } else if (activeIntent.status === 'rejected') {
+                desc = 'ใบคำร้องของคุณถูกตีกลับ กรุณาตรวจสอบเหตุผลที่หน้าแรกแล้วดำเนินการใหม่';
+                isWarning = true;
+              } else if (activeIntent.status === 'company_rejected') {
+                desc = 'สถานประกอบการปฏิเสธการรับเข้าทำงาน ระบบปลดล็อกสิทธิ์ให้ยื่นสมัครที่ใหม่แล้ว';
+                isWarning = true;
+              } else if (activeIntent.status === 'accepted') {
+                desc = 'สถานประกอบการตอบรับคุณเข้าปฏิบัติงานสหกิจศึกษาเรียบร้อยแล้ว!';
+                isSuccess = true;
+              }
+
+              if (desc) {
+                liveItems.push({
+                  id: `intent_status_${activeIntent.status}`,
+                  title: 'อัปเดตสถานะการพิจารณา',
+                  description: desc,
+                  type: isWarning ? 'warning' : isSuccess ? 'success' : 'info',
+                  targetUrl: '/dashboard',
+                  highlightTargetId: 'student-status-card',
+                });
+              }
+            }
+
+            if (documents && documents.length > 0) {
+              const currentDocs = documents.filter((doc: { of_closed_request?: boolean }) => !doc.of_closed_request);
+              currentDocs.forEach((doc: { doc_id: number; type: string; status: string }) => {
+                const docTypeLabel = doc.type === 'cover_letter' ? 'หนังสือขอความอนุเคราะห์' : 'หนังสือส่งตัวนักศึกษา';
+                const docStatusLabel = doc.status === 'signed' ? 'ลงนามเสร็จสิ้นแล้ว' : 'รอลงนาม';
+                liveItems.push({
+                  id: `doc_${doc.doc_id}_${doc.status}`,
+                  title: `${docTypeLabel} (${docStatusLabel})`,
+                  description: doc.status === 'signed'
+                    ? `คณบดีลงนามใน${docTypeLabel}แล้ว สามารถเปิดอ่านหรือนำส่งให้สถานประกอบการได้`
+                    : `${docTypeLabel} อยู่ในขั้นตอนเสนอคณบดีลงนาม`,
+                  type: doc.status === 'signed' ? 'success' : 'info',
+                  targetUrl: '/dashboard',
+                  highlightTargetId: `student-doc-${doc.doc_id}`,
+                });
+              });
+            }
+          }
+
+          // คำตัดสินของคณบดีต่อบันทึกข้อความ — id ผูกกับผล (แจ้งครั้งเดียวต่อผล)
+          const myMemos = (await api.get('/memos/me')) as Array<{
+            memo_id: number;
+            status?: string;
+            decision_note?: string | null;
+          }> | null;
+          if (cancelled) return;
+          for (const m of myMemos ?? []) {
+            if (m.status === 'approved') {
+              liveItems.push({
+                id: `memo_${m.memo_id}_approved`,
+                title: 'คณบดีอนุมัติบันทึกข้อความของคุณแล้ว',
+                description: 'ดูขั้นตอนต่อไปได้ที่เมนู บันทึกถึงคณบดี',
+                type: 'success',
+                targetUrl: '/dashboard?menu=memos',
+              });
+            } else if (m.status === 'rejected') {
+              liveItems.push({
+                id: `memo_${m.memo_id}_rejected`,
+                title: 'คณบดีไม่อนุมัติบันทึกข้อความของคุณ',
+                description: m.decision_note ? `เหตุผล: ${m.decision_note}` : 'ดูเหตุผลได้ที่เมนู บันทึกถึงคณบดี',
+                type: 'warning',
+                targetUrl: '/dashboard?menu=memos',
+              });
+            }
+          }
         }
-        setNotifications(studentNotifs);
-      } else {
-        setNotifications([]);
+
+        const merged = syncNotifications(auth.user.userId, effectiveRole, liveItems);
+        if (!cancelled) {
+          setNotifications(merged);
+        }
+      } catch (err) {
+        console.error('Failed to fetch notifications:', err);
       }
-    } catch (err) {
-      console.error('Failed to fetch notifications:', err);
-    }
     };
 
     void fetchNotifications();
@@ -341,14 +481,21 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
       }
     };
 
+    // event `intent-updated` ยิงได้เฉพาะในแท็บเดียวกัน — คณบดีลงนามจากเครื่อง/บัญชีอื่น นักศึกษาจะไม่ได้รับ
+    // จึงต้องถามซ้ำเป็นรอบ (ช่วงเดียวกับ useDashboardData) และข้ามตอนแท็บถูกซ่อน
+    const poll = setInterval(() => {
+      if (!document.hidden) void fetchNotifications();
+    }, NOTIFICATION_POLL_MS);
+
     window.addEventListener('intent-updated', handleUpdate);
     window.addEventListener('open-intent-review', handleOpenReview);
     return () => {
       cancelled = true;
+      clearInterval(poll);
       window.removeEventListener('intent-updated', handleUpdate);
       window.removeEventListener('open-intent-review', handleOpenReview);
     };
-  }, [currentRole, auth?.user]);
+  }, [effectiveRole, auth?.user?.userId, userRoles]);
 
   // เมนูบนแถบบน (แจ้งเตือน · บัญชี) ปิดด้วย Esc ได้ — เดิมปิดได้ด้วยการกดนอกเมนูอย่างเดียว
   useEffect(() => {
@@ -495,23 +642,37 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
             );
           })()}
 
+          {/* Co-op Calendar Button — เปิดดูปฏิทินสหกิจศึกษา */}
+          {auth?.user && (
+            <button
+              type="button"
+              data-testid="navbar-calendar-btn"
+              onClick={handleOpenCalendar}
+              className="p-3 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
+              title="ปฏิทินสหกิจศึกษา"
+              aria-label="ปฏิทินสหกิจศึกษา"
+            >
+              <CalendarDays className="h-5 w-5" />
+            </button>
+          )}
+
           {/* Notification Bell */}
-          {auth?.user && ['advisor', 'supervisor', 'dept_head', 'staff', 'dean', 'student'].includes(currentRole) && (() => {
-            const isFaculty = currentRole === 'advisor' || currentRole === 'supervisor';
-            const isDeptHead = currentRole === 'dept_head';
-            // เจ้าหน้าที่: รายการในกระดิ่งเป็นกองงาน (ไม่ใช่ใบรายใบ) ตัวเลขจึงมาจากผลรวมของกอง เหมือนฝ่ายอาจารย์
-            const isStaff = currentRole === 'staff';
-            const notifCount = (isFaculty || isDeptHead || isStaff) ? (facultyCount ?? 0) : notifications.length;
+          {auth?.user && ['advisor', 'supervisor', 'dept_head', 'staff', 'dean', 'student'].includes(effectiveRole) && (() => {
+            const isFaculty = effectiveRole === 'advisor' || effectiveRole === 'supervisor';
+            const isDeptHead = effectiveRole === 'dept_head';
+            const unreadNotifications = notifications.filter((n) => !n.isDeleted && !n.readAt);
+            const unreadCount = unreadNotifications.length;
 
             return (
               // จอเล็ก: ไม่ยึดแผงกับปุ่มกระดิ่ง (แผง 320px จะล้นขอบซ้ายจอ) ให้ยึดกับแถบ <nav> แทน
               <div className="sm:relative">
                 <button
                   type="button"
+                  data-testid="navbar-bell-btn"
                   onClick={() => setShowNotifDropdown(!showNotifDropdown)}
                   className="p-3 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200 transition-colors relative cursor-pointer"
                   title={
-                    currentRole === 'student'
+                    effectiveRole === 'student'
                       ? 'ความคืบหน้าคำร้อง'
                       : isFaculty
                         ? 'งานที่รอมือคุณ'
@@ -520,7 +681,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                           : 'รายการรออนุมัติ'
                   }
                   aria-label={
-                    currentRole === 'student'
+                    effectiveRole === 'student'
                       ? 'ความคืบหน้าคำร้อง'
                       : isFaculty
                         ? 'งานที่รอมือคุณ'
@@ -531,9 +692,12 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                   aria-expanded={showNotifDropdown}
                 >
                   <Bell className="h-5 w-5" />
-                  {notifCount > 0 && (
-                    <span className="absolute top-2 right-2 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900">
-                      {notifCount}
+                  {unreadCount > 0 && (
+                    <span
+                      data-testid="navbar-unread-badge"
+                      className="absolute top-2 right-2 h-4 w-4 bg-red-600 text-white rounded-full flex items-center justify-center text-xs font-bold ring-2 ring-white dark:ring-gray-900"
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
                     </span>
                   )}
                 </button>
@@ -543,127 +707,92 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
                     <div
                       className="fixed inset-0 z-30"
                       onClick={() => setShowNotifDropdown(false)}
-                    ></div>
-                    <div className="absolute inset-x-2 top-full mt-2 sm:inset-x-auto sm:right-0 sm:w-80 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-96 overflow-y-auto">
-                      <div className="px-4 py-2 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
+                    />
+                    <div className="absolute inset-x-2 top-full mt-2 sm:inset-x-auto sm:right-0 sm:w-84 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700 py-2 z-40 max-h-[28rem] flex flex-col">
+                      {/* Header ของ Dropdown */}
+                      <div className="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center bg-gray-50/50 dark:bg-gray-800/50">
                         <span className="text-xs font-bold text-gray-700 dark:text-gray-300">
-                          {currentRole === 'student'
+                          {effectiveRole === 'student'
                             ? 'ความคืบหน้าสหกิจศึกษา'
                             : isFaculty
                               ? 'งานที่รอมือคุณ'
                               : isDeptHead
                                 ? 'นักศึกษาที่ยังไม่ได้จัดสรรอาจารย์'
-                                : 'รายการค้างตรวจสอบ'} ({notifCount})
+                                : 'รายการค้างตรวจสอบ'} ({unreadCount})
                         </span>
+                        {unreadCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleMarkAllAsRead}
+                            className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                            title="ทำเครื่องหมายว่าอ่านทั้งหมด"
+                          >
+                            <CheckCheck className="w-3 h-3" />
+                            อ่านทั้งหมด
+                          </button>
+                        )}
                       </div>
-                      {notifications.length > 0 ? (
-                        <div className="divide-y divide-gray-100 dark:divide-gray-700">
-                          {notifications.map((item, index) => {
-                            if (currentRole === 'student') {
-                              return (
-                                <button
-                                  key={index}
-                                  onClick={() => {
-                                    setShowNotifDropdown(false);
-                                    navigate('/dashboard');
-                                  }}
-                                  className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
-                                >
-                                  <div className={`p-1.5 rounded-lg mt-0.5 ${item.isWarning
-                                    ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-400'
-                                    : item.isSuccess
-                                      ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-400'
-                                      : 'bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400'
-                                    }`}>
-                                    <FileText className="h-4 w-4" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                      {item.title}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-normal mt-0.5 leading-normal">
-                                      {item.description}
-                                    </p>
-                                  </div>
-                                </button>
-                              );
-                            }
 
-                            if (isFaculty || isDeptHead || isStaff) {
-                              return (
-                                <button
-                                  key={index}
-                                  onClick={() => {
-                                    setShowNotifDropdown(false);
-                                    if (item.url) navigate(item.url);
-                                  }}
-                                  className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors border-none bg-transparent cursor-pointer"
-                                >
-                                  <div className="p-1.5 rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 mt-0.5">
-                                    <FileText className="h-4 w-4" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                      {item.title}
-                                    </p>
-                                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                                      {item.description}
-                                    </p>
-                                  </div>
-                                  <span className="h-2 w-2 rounded-full bg-blue-500 mt-2 shrink-0"></span>
-                                </button>
-                              );
-                            }
-
-                            const isDoc = currentRole === 'dean';
-                            const itemId = isDoc ? item.doc_id : item.form_id;
-                            return (
-                              <button
-                                key={index}
-                                onClick={() => {
-                                  setShowNotifDropdown(false);
-                                  if (isDoc) {
-                                    navigate('/dashboard');
-                                  } else {
-                                    if (itemId === undefined) return;
-                                    setSelectedIntentId(itemId);
-                                  }
-                                }}
-                                className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      {/* รายการที่ยังไม่ได้อ่าน (แสดงสูงสุด 5 รายการในป๊อปอัปกระดิ่ง) */}
+                      <div className="overflow-y-auto flex-1 divide-y divide-gray-100 dark:divide-gray-700">
+                        {unreadNotifications.length > 0 ? (
+                          unreadNotifications.slice(0, 5).map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => {
+                                handleMarkAsRead(item.id);
+                                setShowNotifDropdown(false);
+                                handleNavigateToTarget(item.targetUrl, item.highlightTargetId);
+                              }}
+                              className="w-full text-left flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/60 transition-colors border-none bg-transparent cursor-pointer"
+                            >
+                              <div
+                                className={`p-1.5 rounded-lg mt-0.5 shrink-0 ${
+                                  item.type === 'warning'
+                                    ? 'bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400'
+                                    : item.type === 'success'
+                                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400'
+                                      : 'bg-blue-50 text-brand-blue dark:bg-blue-950/40 dark:text-blue-400'
+                                }`}
                               >
-                                <div className="p-1.5 rounded-lg bg-blue-50 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 mt-0.5">
-                                  <FileText className="h-4 w-4" />
-                                </div>
-                                <div className="flex-1 min-w-0">
+                                <FileText className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-1">
                                   <p className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                                    {isDoc
-                                      ? `${item.first_name || ''} ${item.last_name || ''}`
-                                      : `${item.first_name || ''} ${item.last_name || ''}`
-                                    }
+                                    {item.title}
                                   </p>
-                                  <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                                    {isDoc
-                                      ? `ลงนาม: ${item.type === 'cover_letter' ? 'หนังสือขออนุเคราะห์' : 'หนังสือส่งตัว'}`
-                                      : `ฝึกงาน: ${item.company_name_th}`
-                                    }
-                                  </p>
+                                  <span className="h-2 w-2 rounded-full bg-blue-600 dark:bg-blue-400 shrink-0" />
                                 </div>
-                                <span className="h-2 w-2 rounded-full bg-blue-500 mt-2 shrink-0"></span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center py-8 text-xs text-gray-600 dark:text-gray-400">
-                          {currentRole === 'student'
-                            ? 'ยังไม่มีความคืบหน้าคำร้องในขณะนี้'
-                            : isFaculty
-                              ? 'ไม่มีงานรอคุณในขณะนี้'
-                              : isDeptHead
-                                ? 'นักศึกษาทุกคนมีอาจารย์ครบแล้ว'
-                                : 'ไม่มีงานรอตรวจสอบในขณะนี้'}
-                        </div>
-                      )}
+                                <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-normal mt-0.5 leading-normal">
+                                  {item.description}
+                                </p>
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="text-center py-8 px-4 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                            <p className="font-semibold text-gray-700 dark:text-gray-300">ไม่มีการแจ้งเตือนใหม่</p>
+                            <p>รายการที่อ่านแล้วจะย้ายไปเก็บที่ประวัติการแจ้งเตือน</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Footer: ปุ่มเปิดดูประวัติทั้งหมด */}
+                      <div className="border-t border-gray-100 dark:border-gray-700 p-2 bg-gray-50/50 dark:bg-gray-800/50">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNotifDropdown(false);
+                            setShowHistoryModal(true);
+                          }}
+                          className="w-full py-2 px-3 text-xs font-bold text-center text-gray-700 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-white dark:hover:bg-gray-700 rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-gray-200/60 dark:border-gray-700/60"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          ดูประวัติการแจ้งเตือนทั้งหมด
+                        </button>
+                      </div>
                     </div>
                   </>
                 )}
@@ -780,7 +909,25 @@ const Navbar: React.FC<NavbarProps> = ({ currentRole, onRoleChange, onToggleSide
         onClose={() => setSelectedIntentId(null)}
       />
 
+      {/* ปฏิทินสหกิจศึกษา — เปิดได้จากทุกหน้าผ่านแถบด้านบน */}
+      {showCalendarModal && calendarData && (
+        <CoopCalendarModal
+          data={calendarData}
+          onClose={() => setShowCalendarModal(false)}
+        />
+      )}
 
+      {/* ประวัติการแจ้งเตือนทั้งหมด */}
+      <NotificationHistoryModal
+        open={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        notifications={notifications}
+        onMarkAsRead={handleMarkAsRead}
+        onMarkAllAsRead={handleMarkAllAsRead}
+        onDelete={handleDelete}
+        onDeleteAll={handleDeleteAll}
+        onNavigateToTarget={handleNavigateToTarget}
+      />
     </>
   );
 };

@@ -430,20 +430,20 @@ const StudentStatusCard: React.FC<StudentStatusCardProps> = ({
               data-testid="proof-open"
               aria-expanded={proofOpen}
               onClick={onOpenProof}
-              className="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-left transition-colors hover:bg-gray-100 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
+              className="flex flex-col gap-0.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-3 text-left transition-colors hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/40 dark:hover:bg-emerald-950/70"
             >
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">บริษัทคืนเอกสารตอบรับมาที่ฉัน</span>
-              <span className="text-xs text-gray-600 dark:text-gray-400">แนบเอกสาร 2 แทนบริษัท</span>
+              <span className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">บริษัทคืนเอกสารตอบรับมาที่ฉัน</span>
+              <span className="text-xs text-emerald-800 dark:text-emerald-300">แนบเอกสาร 2 แทนบริษัท</span>
             </button>
             <button
               type="button"
               data-testid="fail-open"
               disabled={failBusy}
               onClick={onFail}
-              className="flex flex-col gap-0.5 rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-3 text-left transition-colors hover:bg-gray-100 disabled:opacity-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700"
+              className="flex flex-col gap-0.5 rounded-xl border border-red-300 bg-red-50 px-3.5 py-3 text-left transition-colors hover:bg-red-100 disabled:opacity-50 dark:border-red-800 dark:bg-red-950/40 dark:hover:bg-red-950/70"
             >
-              <span className="text-sm font-semibold text-gray-900 dark:text-white">สัมภาษณ์ไม่ผ่าน / บริษัทไม่รับ</span>
-              <span className="text-xs text-gray-600 dark:text-gray-400">ปลดล็อกเพื่อเลือกบริษัทใหม่</span>
+              <span className="text-sm font-semibold text-red-900 dark:text-red-200">สัมภาษณ์ไม่ผ่าน / บริษัทไม่รับ</span>
+              <span className="text-xs text-red-800 dark:text-red-300">ปลดล็อกเพื่อเลือกบริษัทใหม่</span>
             </button>
           </div>
           {proofOpen && proofForm}

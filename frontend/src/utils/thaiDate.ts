@@ -47,3 +47,9 @@ export function formatThaiRange(start: string, end: string): string {
   if (start === end) return formatThaiDate(start);
   return `${formatThaiDate(start)} – ${formatThaiDate(end)}`;
 }
+
+/** เลขอารบิก → เลขไทย (๐–๙) ตัวอื่นคงเดิม — หนังสือราชการใช้เลขไทยทั้งฉบับ */
+export function toThaiDigits(text: string): string {
+  return text.replace(/[0-9]/g, (d) => String.fromCharCode(0x0e50 + Number(d)));
+}
+

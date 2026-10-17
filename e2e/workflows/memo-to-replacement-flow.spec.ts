@@ -18,6 +18,7 @@ const STUDENT2 = "(SELECT user_id FROM users WHERE email = 'student2@test.com')"
 const ACTIVE_SEMESTER = '(SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1)';
 const FIRST_COMPANY = '(SELECT company_id FROM companies ORDER BY company_id LIMIT 1)';
 const MEMO_REASON = 'สถานประกอบการแจ้งปิดสายการผลิตกะทันหัน ขอยื่นคำร้องขอเปลี่ยนสถานที่ปฏิบัติงานสหกิจศึกษา';
+const NEW_COMPANY = 'บริษัท ตัวอย่าง เทคโนโลยี จำกัด';
 const CLOSE_REASON = 'สาขาแจ้งตามบันทึกข้อความ: สถานประกอบการปิดสายการผลิต';
 
 const todayTh = async () =>
@@ -82,29 +83,32 @@ test.describe('การจัดการกรณีหลุดเส้น�
     await goToMenu(page, 'memos');
     await expect(page.getByRole('heading', { name: 'บันทึกข้อความถึงคณบดี' })).toBeVisible();
 
-    // เลือกประเภทบันทึกข้อความ: เปลี่ยนสถานประกอบการ
-    await page.locator('#memo-type').selectOption('change_company');
+    // เลือกหัวข้อบันทึกข้อความ: เปลี่ยนสถานประกอบการ (radio · ดีไซน์ B)
+    await page.getByTestId('memo-type-option-change_company').click();
     await expect(page.getByText(/ได้รับการตอบรับจากที่หนึ่งแล้ว/)).toBeVisible();
 
-    // กรอกเหตุผลและยื่นบันทึกข้อความ
+    // สถานที่ที่จะย้ายไปไม่บังคับ แต่กรอกไว้ให้คณบดีเห็น · แล้วกรอกเหตุผลและยื่นถึงคณบดี
+    await page.locator('#memo-new-company').fill(NEW_COMPANY);
     await page.locator('#memo-reason').fill(MEMO_REASON);
-    await page.getByRole('button', { name: 'บันทึกและเตรียมพิมพ์' }).click();
+    await page.getByTestId('memo-submit').click();
 
-    // กล่องยืนยันการบันทึกข้อความ
+    // กล่องยืนยันการยื่น
     await expect(page.getByTestId('confirm-summary')).toContainText('สถานประกอบการแจ้งปิดสายการผลิต');
     await page.getByTestId('memo-confirm').click();
 
-    // ยืนยันว่าบันทึกสำเร็จและมีปุ่มพิมพ์
-    await expect(page.getByText(/บันทึกข้อความเรียบร้อยแล้ว/)).toBeVisible();
+    // ยืนยันว่ายื่นสำเร็จ — ไม่มีขั้นพิมพ์บังคับ (ปุ่มพิมพ์เป็นแค่ทางเลือกที่หัวแถว) และรอคณบดีพิจารณา
+    await expect(page.getByText(/ยื่นบันทึกข้อความถึงคณบดีเรียบร้อยแล้ว/)).toBeVisible();
     await expect(page.getByTestId('memo-row')).toHaveCount(1);
     await expect(page.getByTestId('memo-print')).toBeVisible();
+    await expect(page.getByTestId('memo-decision')).toHaveAttribute('data-status', 'pending');
 
     // ตรวจสอบฐานข้อมูลว่า memo ถูกบันทึกจริง
-    const memoRow = await dbRow<{ memo_type: string; reason: string }>(
-      `SELECT memo_type, reason FROM student_memos WHERE student_id = ${STUDENT2} ORDER BY memo_id DESC LIMIT 1`
+    const memoRow = await dbRow<{ memo_type: string; reason: string; details: { new_company?: string } }>(
+      `SELECT memo_type, reason, details FROM student_memos WHERE student_id = ${STUDENT2} ORDER BY memo_id DESC LIMIT 1`
     );
     expect(memoRow?.memo_type).toBe('change_company');
     expect(memoRow?.reason).toBe(MEMO_REASON);
+    expect(memoRow?.details).toEqual({ new_company: NEW_COMPANY });
 
     await logout(page);
 

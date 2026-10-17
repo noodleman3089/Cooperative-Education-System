@@ -1,11 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
 import { CoopCalendarModel } from '../models/coopCalendar';
 import { CoopSemesterModel } from '../models/semester';
+import { CoopSpecialRoundModel } from '../models/coopSpecialRound';
 import {
   CoopActivityKey,
   activityByKey,
   activityLabel,
   calendarStatus,
+  isRoundableActivity,
 } from '../utils/coopCalendar';
 import { formatThaiDate } from '../utils/thaiDate';
 import { sendUnexpectedError } from '../utils/httpError';
@@ -94,6 +96,24 @@ async function passesAsReplacement(
 }
 
 /**
+ * รอบพิเศษ — เจ้าหน้าที่เปิดให้นักศึกษาที่เลือกรายคนส่งกิจกรรมที่ติ๊กไว้ได้หลังพ้นช่วง
+ * (แทนขั้นตอนกระดาษ: อาจารย์ที่ปรึกษา → หัวหน้าสาขา → คณะ) · สิทธิ์ = `CoopSpecialRoundModel.isOpenForStudent` (นิยามเดียว)
+ *
+ * ผ่านทั้ง `closed` (พ้นช่วง · นับเป็นส่งช้า) และ `upcoming` (ยังไม่ถึงช่วง = ออกปฏิบัติงานก่อนกำหนด · ไม่นับส่งช้า)
+ * สถานะ `late` ผ่านอยู่แล้วโดยช่วงผ่อนผัน
+ * ⛔ เฉพาะกิจกรรมที่ล็อกจริงและไม่ใช่ช่วงที่คำนวณจากกิจกรรมอื่น (`weekly_log`) — ตรงกับที่หน้าจอเจ้าหน้าที่ให้ติ๊ก
+ * ⛔ ค้นรอบพัง = โยน error (500) ไม่ใช่ผ่าน · คนละทิศกับ fail-open ของปฏิทิน เพราะนี่คือการให้สิทธิ์พิเศษ
+ */
+async function passesBySpecialRound(
+  activityKey: CoopActivityKey,
+  semesterId: number | null,
+  studentId: number | null | undefined
+): Promise<boolean> {
+  if (!studentId || !isRoundableActivity(activityKey)) return false;
+  return CoopSpecialRoundModel.isOpenForStudent(activityKey, semesterId, studentId);
+}
+
+/**
  * พ้นช่วงของกิจกรรมในภาคนั้นแล้วหรือยัง (พ้นช่วงผ่อนผันด้วย) — สำหรับจุดที่ไม่ได้เป็น middleware
  * (ด่านลิงก์ตอบรับของบริษัท · นักศึกษากดส่งหนังสือ · งานปิดใบอัตโนมัติ)
  *
@@ -109,7 +129,11 @@ export async function isCalendarClosed(
   if (!window) return false;
   const closed =
     calendarStatus(window.today, window.start_date, window.end_date, window.late_end_date) === 'closed';
-  return closed && !(await passesAsReplacement(activityKey, semesterId, studentId));
+  return (
+    closed &&
+    !(await passesAsReplacement(activityKey, semesterId, studentId)) &&
+    !(await passesBySpecialRound(activityKey, semesterId, studentId))
+  );
 }
 
 export const requireCalendarWindow =
@@ -155,6 +179,21 @@ export const requireCalendarWindow =
         return;
       }
 
+      // รอบพิเศษ: เจ้าหน้าที่เปิดรอบให้นักศึกษาคนนี้ — ผ่านด่านได้ทั้งสองทิศ (เจ้าของเคาะ 2026-10-18)
+      //   closed   พ้นช่วงปกติแล้ว → ผ่าน และ **นับเป็นส่งช้า** (ปั๊ม calendarLate → controller บังคับเหตุผลเหมือนช่วงผ่อนผัน)
+      //   upcoming ยังไม่ถึงช่วง (ออกปฏิบัติงานก่อนกำหนด) → ผ่าน และ **ไม่นับเป็นส่งช้า** (ส่งก่อนไม่ใช่ส่งช้า)
+      if (status === 'closed' || status === 'upcoming') {
+        const studentId =
+          scope === 'link'
+            ? (res.locals.acceptanceLink?.student_id as number | undefined)
+            : req.user?.userId;
+        if (await passesBySpecialRound(activityKey, semesterId, studentId)) {
+          if (status === 'closed') res.locals.calendarLate = true;
+          next();
+          return;
+        }
+      }
+
       const label = activityLabel(activityKey) ?? activityKey;
       // ชนิด deadline ("ภายในวันที่ …") ไม่มีวันเริ่ม จึงห้ามพูดว่า "เปิดถึงวันที่"
       // เหมือนช่วงปกติ — คนอ่านจะนึกว่ามีวันเริ่มที่ตัวเองพลาดไป
@@ -170,12 +209,12 @@ export const requireCalendarWindow =
               window.start_date as string
             )} ถึง ${formatThaiDate(
               window.end_date as string
-            )} — ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด`
+            )} — ระหว่างนี้รอเจ้าหน้าที่งานสหกิจศึกษาเปิดช่วงตามกำหนด · ถ้าจำเป็นต้องออกปฏิบัติงานก่อนกำหนด ให้ยื่น "บันทึกข้อความถึงคณบดี" หัวข้อขอออกปฏิบัติงานก่อนกำหนด ถ้าคณบดีอนุมัติ เจ้าหน้าที่จะเปิด "รอบพิเศษ" ให้`
           : `หมดช่วง "${label}" แล้ว (${
               window.late_end_date
                 ? `${closedOn} และผ่อนผันถึงวันที่ ${formatThaiDate(window.late_end_date)}`
                 : closedOn
-            }) ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะให้ (นักศึกษายื่นเรื่องเองไม่ได้)`;
+            }) ระบบจึงไม่รับรายการใหม่ — หากจำเป็นต้องส่งย้อนหลัง ให้ติดต่ออาจารย์ที่ปรึกษาพร้อมบันทึกข้อความชี้แจงเหตุผล อาจารย์จะเสนอหัวหน้าสาขาวิชาและส่งเรื่องต่อไปที่คณะ — ถ้าคณะอนุมัติ เจ้าหน้าที่จะเปิด "รอบพิเศษ" ให้เป็นรายบุคคล แล้วคุณส่งได้เองในรอบนั้นโดยระบบจะนับเป็นส่งช้า (นักศึกษายื่นเรื่องเองไม่ได้)`;
 
       res.status(403).json({ message });
     } catch (error) {

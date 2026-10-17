@@ -30,14 +30,6 @@ router.put(
   authorizeRoles('student'),
   StudentController.updateCoopApplication
 );
-// ⛔⛔ **เส้นทางเดียวที่ทำให้ค่าจริงของเลขบัตร/เชื้อชาติ/ศาสนาออกจากฐาน** (SEC-12)
-//    ห้ามเติม `:id` · ห้ามเพิ่ม role · ห้ามให้ role อื่นเรียกแทนนักศึกษา
-//    เหตุผลเต็มอยู่ที่ `StudentController.printCoopApplication`
-router.get(
-  '/coop-application/print',
-  authorizeRoles('student'),
-  StudentController.printCoopApplication
-);
 
 // Route: GET /api/students (Staff, Dept Head, Advisor only)
 router.get(
@@ -85,12 +77,13 @@ router.get(
   StudentController.getAccommodationAndPlan
 );
 
-// Route: GET /api/students/:id/accommodation-plan/print (สหกิจ 06 — ปุ่มพิมพ์สำรอง)
-// สิทธิ์เท่ากับ GET ของหน้าเดียวกัน · ด่านจริงอยู่ใน controller (SEC-06)
+// Route: GET /api/students/:id/coop-application (สหกิจ 03 — ผู้ตรวจเปิดดู · ถอดรหัสค่าอ่อนไหว + ลง audit)
+// ⛔⛔ **เส้นทางเดียวที่ทำให้ค่าจริงของเลขบัตร/เชื้อชาติ/ศาสนาออกจากฐาน** (SEC-12)
+//    ห้ามเพิ่ม role (นักศึกษา/บริษัท/พี่เลี้ยงไม่เข้า) · ด่านจริงอยู่ใน controller (SEC-06)
 router.get(
-  '/:id/accommodation-plan/print',
-  authorizeRoles('student', 'advisor', 'dept_head', 'staff'),
-  StudentController.printAccommodationForm
+  '/:id/coop-application',
+  authorizeRoles('advisor', 'dept_head', 'staff'),
+  StudentController.getCoopApplicationForReview
 );
 
 // Route: POST /api/students/:id/accommodation-plan (Student only)

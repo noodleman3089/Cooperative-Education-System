@@ -40,6 +40,13 @@ const docStudentName = (doc: OfficialDocument): string =>
   || doc.student_name
   || doc.student_code;
 
+/** ลำดับรหัสหนังสือตามที่เห็นบนตาราง "รอลงนาม" — จัดกลุ่มตามประเภท (ขอความอนุเคราะห์ → ส่งตัว → อื่น ๆ) */
+const tableOrder = (docs: OfficialDocument[]): number[] => [
+  ...docs.filter((d) => d.type === 'cover_letter'),
+  ...docs.filter((d) => d.type === 'send_letter'),
+  ...docs.filter((d) => d.type !== 'cover_letter' && d.type !== 'send_letter'),
+].map((d) => d.doc_id);
+
 const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const docView = (searchParams.get('view') === 'signed' ? 'signed' : 'pending') as 'pending' | 'signed';
@@ -62,7 +69,8 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
 
   // Selection state
   const [selectedDocIds, setSelectedDocIds] = useState<number[]>([]);
-  const [confirmSignOpen, setConfirmSignOpen] = useState(false);
+  /** รหัสหนังสือที่รอยืนยันลงนาม — null = กล่องปิด · ชุดที่เลือกไว้ (แบบกลุ่ม) หรือฉบับเดียวจากแผงด้านข้าง */
+  const [signIds, setSignIds] = useState<number[] | null>(null);
   // ตีกลับหนังสือให้เจ้าหน้าที่ — เก็บทั้งแถวไว้ให้กล่องบอกได้ว่ากำลังตีกลับของใคร
   const [returningDoc, setReturningDoc] = useState<OfficialDocument | null>(null);
 
@@ -165,9 +173,18 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
     }
   };
 
-  const handleBatchSign = async () => {
-    if (selectedDocIds.length === 0) return;
-    setConfirmSignOpen(false);
+  /** หนังสือที่รอลงนามฉบับถัดไปจากฉบับที่ระบุ ตามลำดับที่เห็นบนตาราง (ไว้ลงนามทีละคนต่อเนื่อง) */
+  const nextPendingAfter = (docId: number): number | null => {
+    const ordered = tableOrder(pendingDocs);
+    const idx = ordered.indexOf(docId);
+    if (idx === -1) return null;
+    return ordered[idx + 1] ?? null;
+  };
+
+  const handleSign = async () => {
+    const ids = signIds ?? [];
+    if (ids.length === 0) return;
+    setSignIds(null);
 
     if (!hasSignature || !hasName) {
       setError('ไม่สามารถลงนามได้ กรุณาตั้งค่าลายมือชื่อและชื่อ-นามสกุลในโปรไฟล์ให้ครบถ้วนก่อน');
@@ -179,13 +196,22 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
     setSuccess(null);
 
     try {
-      const res = await api.post('/documents/batch-sign', { doc_ids: selectedDocIds });
+      const res = await api.post('/documents/batch-sign', { doc_ids: ids });
 
       const signedCount = res?.signed_count ?? 0;
       const failed = res?.failed_documents ?? [];
 
       if (signedCount > 0) {
-        setSuccess(`ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`);
+        setSuccess(
+          ids.length === 1
+            ? 'ลงนามเรียบร้อยแล้ว — นักศึกษาได้รับหนังสือและเห็นในระบบทันที'
+            : `ลงนามแบบกลุ่มสำเร็จเรียบร้อยแล้ว จำนวน ${signedCount} รายการ`
+        );
+        // ลงนามทีละฉบับจากแผงข้างตาราง → เปิดฉบับถัดไปให้ต่อเลย (ไม่มีฉบับถัดไป = ค้างที่ฉบับที่ลงนามแล้ว)
+        if (ids.length === 1 && previewDocIdParam === String(ids[0]) && failed.length === 0) {
+          const nextId = nextPendingAfter(ids[0]);
+          if (nextId !== null) handleSetPreviewDoc(nextId);
+        }
       }
 
       if (failed.length > 0) {
@@ -195,7 +221,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
         );
       }
 
-      setSelectedDocIds([]);
+      setSelectedDocIds((prev) => prev.filter((id) => !ids.includes(id)));
       window.dispatchEvent(new CustomEvent('intent-updated'));
       await loadDashboardData(true);
     } catch (err) {
@@ -253,10 +279,10 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
     return groups;
   }, [pendingDocs]);
 
-  // Selected docs for ConfirmDialog details
+  // Docs ที่กำลังรอยืนยันลงนามในกล่อง
   const selectedDocsForSigning = useMemo(() => {
-    return pendingDocs.filter((d) => selectedDocIds.includes(d.doc_id));
-  }, [pendingDocs, selectedDocIds]);
+    return pendingDocs.filter((d) => (signIds ?? []).includes(d.doc_id));
+  }, [pendingDocs, signIds]);
 
   if (loading) {
     return <PageSkeleton variant={skeletonFor('dean', 'dashboard')} />;
@@ -433,7 +459,7 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
                   size="sm"
                   data-testid="dean-sign-selected"
                   icon={<CheckCircle2 className="h-4 w-4" />}
-                  onClick={() => setConfirmSignOpen(true)}
+                  onClick={() => setSignIds(selectedDocIds)}
                   disabled={selectedDocIds.length === 0 || !isReadyToSign}
                   loading={signingInProgress}
                   loadingLabel="กำลังลงนาม..."
@@ -503,16 +529,20 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
                         return (
                           <tr
                             key={doc.doc_id}
+                            id={`dean-doc-row-${doc.doc_id}`}
                             data-testid={`dean-doc-row-${doc.doc_id}`}
-                            className={`border-b border-gray-100 dark:border-gray-800 transition-colors ${
+                            // กดที่แถวเพื่อเปิดรายละเอียด + ตัวอย่างหนังสือด้านข้าง (ช่องติ๊กเลือกไม่นับ)
+                            onClick={() => handleSetPreviewDoc(doc.doc_id)}
+                            aria-current={isPreviewing ? 'true' : undefined}
+                            className={`cursor-pointer border-b border-gray-100 transition-colors dark:border-gray-800 ${
                               isPreviewing
-                                ? 'bg-blue-50/60 dark:bg-blue-950/30'
+                                ? 'bg-blue-50 shadow-[inset_4px_0_0_0_#2563EB] dark:bg-blue-950/30'
                                 : isChecked
                                   ? 'bg-blue-50/30 dark:bg-blue-950/10'
                                   : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'
                             }`}
                           >
-                            <td className="p-4 text-center align-top">
+                            <td className="p-4 text-center align-top" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 aria-label={`เลือกเอกสารของ ${docStudentName(doc)}`}
@@ -593,7 +623,13 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
                     <tr
                       key={doc.doc_id}
                       data-testid={`dean-doc-row-${doc.doc_id}`}
-                      className="hover:bg-gray-50/50 dark:hover:bg-gray-800/20 transition-colors"
+                      onClick={() => handleSetPreviewDoc(doc.doc_id)}
+                      aria-current={previewDoc?.doc_id === doc.doc_id ? 'true' : undefined}
+                      className={`cursor-pointer transition-colors ${
+                        previewDoc?.doc_id === doc.doc_id
+                          ? 'bg-blue-50 shadow-[inset_4px_0_0_0_#2563EB] dark:bg-blue-950/30'
+                          : 'hover:bg-gray-50/50 dark:hover:bg-gray-800/20'
+                      }`}
                     >
                       <td className="p-4 font-bold text-gray-900 dark:text-white align-top">
                         {doc.document_number || `#DOC-${doc.doc_id}`}
@@ -638,13 +674,21 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
 
         {/* ══ แผงตัวอย่างหนังสือ (?doc=) ══ */}
         {previewDoc && (
-          <div className="w-full xl:w-[460px] shrink-0 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 shadow-sm flex flex-col gap-3">
+          <div
+            data-testid="dean-doc-panel"
+            className="w-full xl:w-[560px] shrink-0 xl:sticky xl:top-4 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4 shadow-sm flex flex-col gap-3"
+          >
             <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-gray-800">
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
                 <span className="font-bold text-sm text-gray-900 dark:text-white">
                   {previewDoc.document_number || `#DOC-${previewDoc.doc_id}`}
                 </span>
+                {previewDoc.status === 'signed' && (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300">
+                    ลงนามแล้ว
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <a
@@ -668,30 +712,73 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              <span>นักศึกษา: {docStudentName(previewDoc)}</span>
-              <span className="mx-1.5">·</span>
-              <span>{getDocTypeLabel(previewDoc.type)}</span>
-            </div>
+            {/* รายละเอียดของหนังสือฉบับนี้ */}
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-xs">
+              <dt className="text-gray-600 dark:text-gray-400">นักศึกษา</dt>
+              <dd className="font-semibold text-gray-900 dark:text-gray-100">
+                {docStudentName(previewDoc)}
+                <span className="ml-1.5 font-mono font-normal text-gray-600 dark:text-gray-400">{previewDoc.student_code}</span>
+              </dd>
+              <dt className="text-gray-600 dark:text-gray-400">ประเภท</dt>
+              <dd className="text-gray-900 dark:text-gray-100">{getDocTypeLabel(previewDoc.type)}</dd>
+              <dt className="text-gray-600 dark:text-gray-400">ถึงสถานประกอบการ</dt>
+              <dd className="text-gray-900 dark:text-gray-100">{previewDoc.company_name_th}</dd>
+              {previewDoc.status === 'pending_sign' && previewDoc.created_at && (
+                <>
+                  <dt className="text-gray-600 dark:text-gray-400">ส่งมาเมื่อ</dt>
+                  <dd className="text-gray-900 dark:text-gray-100">
+                    {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium' }).format(new Date(previewDoc.created_at))}
+                    {previewDoc.days_pending ? ` · ค้าง ${previewDoc.days_pending} วัน` : ' · วันนี้'}
+                  </dd>
+                </>
+              )}
+              {previewDoc.status === 'signed' && previewDoc.dean_signature_date && (
+                <>
+                  <dt className="text-gray-600 dark:text-gray-400">ลงนามเมื่อ</dt>
+                  <dd className="text-gray-900 dark:text-gray-100">
+                    {new Intl.DateTimeFormat('th-TH', { dateStyle: 'medium' }).format(new Date(previewDoc.dean_signature_date))}
+                  </dd>
+                </>
+              )}
+            </dl>
 
-            {/* ตีกลับหนังสือที่ยังไม่ลงนามให้เจ้าหน้าที่ */}
-            {(previewDoc.type === 'cover_letter' || previewDoc.type === 'send_letter') && previewDoc.status === 'pending_sign' && (
-              <div>
+            {/* ลงนามฉบับนี้ / ตีกลับ — เฉพาะหนังสือที่ยังไม่ลงนาม */}
+            {previewDoc.status === 'pending_sign' && (
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
-                  variant="secondary"
                   size="sm"
-                  data-testid="dean-return-open"
-                  onClick={() => setReturningDoc(previewDoc)}
+                  data-testid="dean-sign-one"
+                  icon={<CheckCircle2 className="h-4 w-4" />}
+                  onClick={() => setSignIds([previewDoc.doc_id])}
+                  disabled={!isReadyToSign || signingInProgress}
+                  loading={signingInProgress}
+                  loadingLabel="กำลังลงนาม..."
                 >
-                  ตีกลับให้เจ้าหน้าที่
+                  ลงนามฉบับนี้
                 </Button>
+                {(previewDoc.type === 'cover_letter' || previewDoc.type === 'send_letter') && (
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    data-testid="dean-return-open"
+                    onClick={() => setReturningDoc(previewDoc)}
+                  >
+                    ตีกลับให้เจ้าหน้าที่
+                  </Button>
+                )}
+                {!isReadyToSign && (
+                  <span className="text-xs font-medium text-red-700 dark:text-red-400">
+                    ลงนามไม่ได้: {!profileLoaded ? 'โหลดโปรไฟล์ไม่ได้' : !hasSignature ? 'ขาดลายมือชื่อ' : 'ขาดชื่อในโปรไฟล์'}
+                  </span>
+                )}
               </div>
             )}
 
-            {/* Embedded PDF iframe per spec H ข้อ 2 */}
-            <div className="h-[520px] rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 relative">
+            {/* Embedded PDF — ซ่อน toolbar ด้วย #toolbar=0&navpanes=0&view=FitH · key/v ตามสถานะ กันเบราว์เซอร์โชว์ไฟล์ก่อนลงนามจากแคช */}
+            <div className="h-[68vh] min-h-[480px] rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-950 relative">
               <iframe
-                src={`${API_BASE_URL}/files/documents/${previewDoc.doc_id}`}
+                key={`${previewDoc.doc_id}-${previewDoc.status}`}
+                src={`${API_BASE_URL}/files/documents/${previewDoc.doc_id}?v=${previewDoc.status}#toolbar=0&navpanes=0&view=FitH`}
                 title={`ตัวอย่างเอกสาร ${previewDoc.document_number || previewDoc.doc_id}`}
                 className="w-full h-full border-0"
               />
@@ -703,11 +790,12 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
       {/* ══ ConfirmDialog สำหรับการลงนามแบบกลุ่ม ══ */}
       <ConfirmDialog
         level={3}
-        open={confirmSignOpen}
+        open={signIds !== null}
         title="ยืนยันการลงนามเอกสารราชการ"
+        confirmTestId="dean-sign-confirm"
         message={
           <ConfirmSummary
-            lead={`กำลังจะลงนามเอกสารราชการจำนวน ${selectedDocIds.length} ฉบับด้วยลายมือชื่อดิจิทัลของท่าน`}
+            lead={`กำลังจะลงนามเอกสารราชการจำนวน ${signIds?.length ?? 0} ฉบับด้วยลายมือชื่อดิจิทัลของท่าน`}
             rows={[
               ...selectedDocsForSigning.slice(0, 10).map((d) => ({
                 label: d.document_number || `#DOC-${d.doc_id}`,
@@ -728,10 +816,10 @@ const DeanSignQueue: React.FC<DeanSignQueueProps> = ({ onNavigate }) => {
             lockNote="การลงนามนี้ยกเลิกจากหน้านี้ไม่ได้ · ชื่อและตำแหน่งผู้ลงนามข้างต้นถูกพิมพ์ใต้ลายมือชื่อ"
           />
         }
-        confirmLabel={`ลงนาม ${selectedDocIds.length} ฉบับ`}
+        confirmLabel={`ลงนาม ${signIds?.length ?? 0} ฉบับ`}
         busy={signingInProgress}
-        onConfirm={handleBatchSign}
-        onCancel={() => setConfirmSignOpen(false)}
+        onConfirm={handleSign}
+        onCancel={() => setSignIds(null)}
       />
 
       {/* ══ ตีกลับหนังสือให้เจ้าหน้าที่ — เหตุผลบังคับ ══ */}

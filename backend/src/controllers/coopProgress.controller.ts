@@ -102,7 +102,9 @@ export class CoopProgressController {
           (SELECT COUNT(*)::int FROM monthly_logs ml WHERE ml.student_id = s.student_id AND ml.status <> 'draft') AS monthly_logs_sent,
           -- ใบที่เจ้าหน้าที่ปิดได้ (accepted) หรือยกเลิกการปิดได้ (superseded) — ส่งออกให้ staff เท่านั้น (ตัดข้างล่าง)
           pf.form_id AS placement_form_id, pf.status AS placement_status,
-          pf.closed_kind AS placement_closed_kind, pf.can_reopen AS placement_can_reopen
+          pf.closed_kind AS placement_closed_kind, pf.can_reopen AS placement_can_reopen,
+          am.memo_id AS approved_memo_id, am.memo_type AS approved_memo_type,
+          am.reason AS approved_memo_reason, am.decided_at AS approved_memo_decided_at
         FROM students s
         JOIN master_major m ON s.major_id = m.major_id
         LEFT JOIN personnel p_adv ON s.advisor_id = p_adv.personnel_id
@@ -133,6 +135,16 @@ export class CoopProgressController {
            ORDER BY (i.status = 'accepted') DESC, i.form_id DESC
            LIMIT 1
         ) pf ON TRUE
+        -- บันทึกถึงคณบดีที่อนุมัติแล้ว (เปลี่ยนสถานประกอบการ · ส่งตัวกลับ) ของใบที่ยัง accepted อยู่ — ให้เจ้าหน้าที่เห็นว่าควรปิดใบ
+        -- ผูกกับ form_id ของใบนั้น จึงไม่ไปโผล่ที่ใบใหม่หลังปิดแล้ว · นิยามเดียวกับ loadMemoClosures ของ staffHome
+        LEFT JOIN LATERAL (
+          SELECT m.memo_id, m.memo_type, m.reason, m.decided_at
+            FROM student_memos m
+           WHERE pf.status = 'accepted' AND m.intent_form_id = pf.form_id
+             AND m.status = 'approved' AND m.memo_type IN ('change_company', 'terminated')
+           ORDER BY m.memo_id DESC
+           LIMIT 1
+        ) am ON TRUE
         WHERE 1=1
       `;
 
@@ -251,6 +263,14 @@ export class CoopProgressController {
                       status: row.placement_status,
                       closed_kind: row.placement_closed_kind,
                       can_reopen: row.placement_can_reopen === true,
+                      approved_memo: row.approved_memo_id
+                        ? {
+                            memo_id: row.approved_memo_id,
+                            memo_type: row.approved_memo_type,
+                            reason: row.approved_memo_reason,
+                            decided_at: row.approved_memo_decided_at,
+                          }
+                        : null,
                     }
                   : null,
               }

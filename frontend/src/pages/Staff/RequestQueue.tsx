@@ -6,11 +6,12 @@ import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
-import { Input, Textarea } from '../../components/ui/Input';
+import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorMessage } from '../../utils/errors';
-import { formatThaiDate, formatThaiDateTime } from '../../utils/thaiDate';
+import { formatThaiDate, formatThaiDateTime, toThaiDigits } from '../../utils/thaiDate';
 import { Search, ExternalLink } from 'lucide-react';
 import RequestReviewPanel from './RequestReviewPanel';
+import CoopFormsViewModal from '../../components/CoopFormsViewModal';
 
 export interface RequestFormRow {
   form_id: number;
@@ -73,6 +74,7 @@ export interface AcceptanceRow {
 
 export interface DispatchRow {
   form_id: number;
+  student_id?: number;
   student_code?: string;
   first_name?: string | null;
   last_name?: string | null;
@@ -96,6 +98,24 @@ export interface DispatchRow {
 }
 
 const COOP_DEFAULT_DAYS = 111;
+
+const DISPATCH_PREFIXES = [
+  'อว 0651.208(1)/',
+  'อว 0651.208(2)/',
+] as const;
+
+const parseInitialDispatchNo = (raw?: string | null) => {
+  if (!raw || !raw.trim()) {
+    return { initialPrefix: DISPATCH_PREFIXES[0] as string, initialSuffix: '' };
+  }
+  const trimmed = raw.trim();
+  for (const p of DISPATCH_PREFIXES) {
+    if (trimmed.startsWith(p)) {
+      return { initialPrefix: p as string, initialSuffix: trimmed.slice(p.length) };
+    }
+  }
+  return { initialPrefix: DISPATCH_PREFIXES[0] as string, initialSuffix: trimmed };
+};
 
 const isDispatchPrepIncomplete = (row: DispatchRow | null): boolean => {
   if (!row) return false;
@@ -215,7 +235,21 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
   // Modal Review States - Dispatch
   const [reviewingDispatch, setReviewingDispatch] = useState<DispatchRow | null>(null);
-  const [dispatchForm, setDispatchForm] = useState({ document_no: '', start_date: '', end_date: '' });
+  /** แถวที่เปิดดู สหกิจ 03 · 06 ก่อนออกหนังสือส่งตัว */
+  const [viewingForms, setViewingForms] = useState<DispatchRow | null>(null);
+  const [dispatchPrefix, setDispatchPrefix] = useState<string>(DISPATCH_PREFIXES[0]);
+  const [dispatchSuffix, setDispatchSuffix] = useState<string>('');
+  const [dispatchForm, setDispatchForm] = useState({ start_date: '', end_date: '' });
+
+  const dispatchDocumentNo = useMemo(() => {
+    const trimmed = dispatchSuffix.trim();
+    if (!trimmed) return '';
+    const clean = trimmed.startsWith('/') ? trimmed.slice(1) : trimmed;
+    // ถ้าผู้ใช้หรือ e2e พิมพ์เลขเต็มที่มี / อยู่แล้ว ไม่ต้องต่อ prefix ซ้ำ
+    if (clean.includes('/')) return clean;
+    return `${dispatchPrefix}${clean}`;
+  }, [dispatchPrefix, dispatchSuffix]);
+
   // วันที่เป็นสตริง YYYY-MM-DD เทียบกันตรง ๆ ได้ — เซิร์ฟเวอร์ปฏิเสธช่วงกลับด้านอยู่แล้ว หน้าจอทักก่อนถึงกล่องยืนยัน
   const dispatchDatesReversed =
     !!dispatchForm.start_date && !!dispatchForm.end_date && dispatchForm.end_date < dispatchForm.start_date;
@@ -267,8 +301,10 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
           if (matched) {
             setReviewingDispatch(matched);
             const initialStart = matched.start_date || '';
+            const initialDoc = parseInitialDispatchNo(matched.dispatch_document_no);
+            setDispatchPrefix(initialDoc.initialPrefix);
+            setDispatchSuffix(initialDoc.initialSuffix);
             setDispatchForm({
-              document_no: '',
               start_date: initialStart,
               end_date: matched.end_date || (initialStart ? addDays(initialStart, COOP_DEFAULT_DAYS) : ''),
             });
@@ -373,8 +409,10 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
   const openDispatchReview = (row: DispatchRow) => {
     setReviewingDispatch(row);
     const initialStart = row.start_date || '';
+    const initialDoc = parseInitialDispatchNo(row.dispatch_document_no);
+    setDispatchPrefix(initialDoc.initialPrefix);
+    setDispatchSuffix(initialDoc.initialSuffix);
     setDispatchForm({
-      document_no: '',
       start_date: initialStart,
       end_date: row.end_date || (initialStart ? addDays(initialStart, COOP_DEFAULT_DAYS) : ''),
     });
@@ -394,6 +432,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
   const closeDispatchReview = () => {
     setReviewingDispatch(null);
+    setDispatchSuffix('');
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev);
@@ -409,9 +448,13 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
     setDispatchBusy(true);
     setError(null);
     try {
-      await api.post(`/intents/${reviewingDispatch.form_id}/dispatch-letter`, dispatchForm);
+      await api.post(`/intents/${reviewingDispatch.form_id}/dispatch-letter`, {
+        document_no: dispatchDocumentNo.trim(),
+        start_date: dispatchForm.start_date,
+        end_date: dispatchForm.end_date,
+      });
       setSuccess(
-        `ออกหนังสือส่งตัวของ ${reviewingDispatch.student_code || ''} แล้ว เลขที่ ${dispatchForm.document_no} · รอคณบดีลงนาม`
+        `ออกหนังสือส่งตัวของ ${reviewingDispatch.student_code || ''} แล้ว เลขที่ ${dispatchDocumentNo.trim()} · รอคณบดีลงนาม`
       );
       setConfirmingDispatch(false);
       closeDispatchReview();
@@ -470,6 +513,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
         ⛔ "รอกี่วัน" และ "เลยกำหนด" มาจากเซิร์ฟเวอร์ (`request_wait_days` · `request_overdue`) หน้าจอไม่นับเอง
       */}
       <section
+        id={`staff-queue-${queue}`}
         data-testid={`staff-queue-${queue}`}
         className="flex flex-col gap-2.5 rounded-2xl border border-gray-200 bg-white p-[18px] shadow-sm dark:border-gray-800 dark:bg-gray-900"
       >
@@ -598,6 +642,16 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               <span className="text-[13px] text-gray-600 dark:text-gray-400 break-words max-w-full">
                 {row.start_date ? `เริ่มงาน ${formatThaiDate(row.start_date)}` : 'ยังไม่มีวันเริ่มงาน'}
               </span>
+              {row.student_id !== undefined && (
+                <Button
+                  variant="secondary"
+                  className="min-h-11 shrink-0"
+                  data-testid={`view-forms-${row.form_id}`}
+                  onClick={() => setViewingForms(row)}
+                >
+                  ดูสหกิจ 03 · 06
+                </Button>
+              )}
               <Button
                 className="min-h-11 shrink-0"
                 data-testid={`issue-dispatch-${row.form_id}`}
@@ -608,6 +662,15 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
             </div>
           ))}
       </section>
+
+      {viewingForms && viewingForms.student_id !== undefined && (
+        <CoopFormsViewModal
+          studentId={viewingForms.student_id}
+          studentName={[viewingForms.first_name, viewingForms.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+          studentCode={viewingForms.student_code}
+          onClose={() => setViewingForms(null)}
+        />
+      )}
 
       {/* ══ แผงรับคำร้อง (เอกสารหมายเลข 1) — แถวล่าสุดของคิวถ้ายังอยู่ ไม่งั้นใช้แถวตอนกดเปิด ══ */}
       {reviewingRequest && (
@@ -899,16 +962,50 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label htmlFor="dispatch-document-no" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
-                    เลขที่หนังสือส่งตัว <span className="text-red-600 dark:text-red-400">*</span>
-                  </label>
-                  <Input
-                    id="dispatch-document-no"
-                    data-testid="dispatch-document-no"
-                    value={dispatchForm.document_no}
-                    onChange={(e) => setDispatchForm((f) => ({ ...f, document_no: e.target.value }))}
-                    placeholder="เช่น อว 0656.10/123"
-                  />
+                  <div className="mb-1 flex items-center justify-between">
+                    <label htmlFor="dispatch-document-no" className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                      เลขที่หนังสือส่งตัว <span className="text-red-600 dark:text-red-400">*</span>
+                    </label>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      เลือกชุดจำลองหรือแก้ไขเลขท้ายได้
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-2">
+                    <div>
+                      <Select
+                        id="dispatch-document-prefix"
+                        data-testid="dispatch-document-prefix"
+                        value={dispatchPrefix}
+                        disabled={dispatchBusy}
+                        onChange={(e) => setDispatchPrefix(e.target.value)}
+                        className="h-10 sm:h-11 text-sm font-semibold"
+                      >
+                        <option value="อว 0651.208(1)/">อว 0651.208(1)/</option>
+                        <option value="อว 0651.208(2)/">อว 0651.208(2)/</option>
+                      </Select>
+                    </div>
+                    <div>
+                      <Input
+                        id="dispatch-document-no"
+                        data-testid="dispatch-document-no"
+                        value={dispatchSuffix}
+                        placeholder="เช่น 1967.1013"
+                        disabled={dispatchBusy}
+                        maxLength={50}
+                        onChange={(e) => setDispatchSuffix(e.target.value)}
+                        className="h-10 sm:h-11 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center justify-between gap-1 text-[13px] text-gray-600 dark:text-gray-400">
+                    <span>
+                      เลขที่จะออกบนหนังสือจริง (เลขไทย):{' '}
+                      <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                        {dispatchDocumentNo ? toThaiDigits(dispatchDocumentNo) : `${toThaiDigits(dispatchPrefix)}...`}
+                      </strong>
+                    </span>
+                    <span>แก้เลขได้จนกว่าคณบดีจะลงนาม</span>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="dispatch-start-date" className="mb-1 block text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -958,7 +1055,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               loading={dispatchBusy}
               disabled={
                 isDispatchPrepIncomplete(reviewingDispatch) ||
-                !dispatchForm.document_no.trim() ||
+                !dispatchDocumentNo.trim() ||
                 !dispatchForm.start_date ||
                 !dispatchForm.end_date ||
                 dispatchDatesReversed
@@ -991,7 +1088,7 @@ export const RequestQueue: React.FC<RequestQueueProps> = ({ queue, onDataChanged
               },
               {
                 label: 'เลขที่หนังสือ',
-                value: dispatchForm.document_no.trim(),
+                value: dispatchDocumentNo.trim(),
               },
               {
                 label: 'วันเริ่ม ถึง วันสิ้นสุด',

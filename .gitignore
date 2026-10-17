@@ -68,3 +68,4 @@ e2e/.workers/
 
 # แม่แบบ deploy (nginx · .env production) — เก็บในเครื่อง ไม่เอาเข้า repo สาธารณะ
 deploy/
+start_demo.bat

@@ -1,12 +1,10 @@
 import React, { useState, useEffect, useContext, useRef } from 'react';
 import PageSkeleton from '../../components/ui/Skeleton';
 import { AuthContext } from '../../context/authContextValue';
-import api, { API_BASE_URL } from '../../services/api';
-import {
-  ExternalLink,
-  Printer,
-} from 'lucide-react';
+import api from '../../services/api';
+import { ExternalLink } from 'lucide-react';
 import AlertBanner from '../../components/ui/AlertBanner';
+import { useCalendarGate } from '../../components/ui/useCalendarGate';
 import { getErrorMessage } from '../../utils/errors';
 import { loadThaiAddressData, type ProvinceItem } from '../../data/thaiAddress';
 import type { AddressComponent } from '../../types/googleMaps';
@@ -84,6 +82,24 @@ const AccommodationWorkPlan: React.FC = () => {
   const [loadState, setLoadState] = useState<'pending' | 'ok' | 'failed'>('pending');
   // ป้าย "บันทึกแล้ว" อ่านจากสิ่งที่เซิร์ฟเวอร์มีจริง ไม่ใช่จากช่องที่กำลังพิมพ์หรือร่างในเครื่อง
   const [savedOnServer, setSavedOnServer] = useState(false);
+  // มีใบที่ accepted แล้วหรือยัง (เซิร์ฟเวอร์ส่ง `intent` มาเฉพาะกรณีนั้น) — ยังไม่มี = กรอกร่างได้ แต่บันทึกส่งยังไม่ได้
+  // เพราะที่พักขึ้นกับที่ตั้งสถานประกอบการ (เจ้าของสั่ง 2026-10-18 · เซิร์ฟเวอร์ยังรับบันทึกอยู่ ด่านนี้อยู่ที่หน้าจอ)
+  // เริ่มที่ true กันปุ่มกะพริบเป็นปิดตอนโหลด — โหลดพังแล้วฟอร์มไม่ขึ้นอยู่ดี (loadState 'failed')
+  const [placementConfirmed, setPlacementConfirmed] = useState(true);
+  // ช่วงบันทึกที่พักตามปฏิทิน — ยังไม่ถึงช่วง = กรอกร่างได้ แต่บันทึกไม่ได้ (เซิร์ฟเวอร์ปฏิเสธอยู่แล้วโดย calendarGate)
+  const gate = useCalendarGate('accommodation_plan');
+  const saveBlock: { banner: string; label: string } | null = !placementConfirmed
+    ? {
+        banner:
+          'ยังไม่มีที่ฝึกที่เจ้าหน้าที่ยืนยัน — กรอกร่างไว้ล่วงหน้าได้ ระบบเก็บให้ในเบราว์เซอร์นี้ แต่ปุ่ม “บันทึกข้อมูลที่พัก” จะเปิดเมื่อเจ้าหน้าที่ยืนยันที่ฝึกแล้ว เพราะที่พักขึ้นกับสถานที่ที่คุณไปฝึก',
+        label: 'บันทึกได้หลังยืนยันที่ฝึก',
+      }
+    : gate.isUpcoming
+      ? {
+          banner: `ยังไม่ถึงช่วงบันทึกที่พักตามปฏิทิน (${gate.formattedRange}) — กรอกร่างไว้ล่วงหน้าได้ ระบบเก็บให้ในเบราว์เซอร์นี้ ปุ่มบันทึกจะเปิดเมื่อถึงช่วง`,
+          label: 'บันทึกได้เมื่อถึงช่วง',
+        }
+      : null;
 
   const [accommodation, setAccommodation] = useState<Accommodation>(BLANK_ACCOMMODATION);
   const [thaiAddress, setThaiAddress] = useState<ProvinceItem[]>([]);
@@ -95,6 +111,7 @@ const AccommodationWorkPlan: React.FC = () => {
     address: '',
   });
 
+  const [profilePhone, setProfilePhone] = useState<string>('');
   const [restoredDraft, setRestoredDraft] = useState(false);
   const DRAFT_KEY = `accommodation_plan_draft_${auth?.user?.userId ?? 'anon'}`;
   const savedSnapshot = useRef<string>('');
@@ -106,9 +123,29 @@ const AccommodationWorkPlan: React.FC = () => {
     let loadedAcc: Accommodation = BLANK_ACCOMMODATION;
 
     try {
-      const res = await api.get(`/students/${auth?.user?.userId}/accommodation-plan`);
+      const [accResult, profileResult, coopAppResult] = await Promise.allSettled([
+        api.get(`/students/${auth?.user?.userId}/accommodation-plan`),
+        api.get('/profile/me'),
+        api.get('/students/coop-application'),
+      ]);
+
+      if (accResult.status === 'rejected') {
+        throw accResult.reason;
+      }
+
+      const res = accResult.value;
+      let studentPhone = '';
+      if (profileResult.status === 'fulfilled' && profileResult.value?.profile?.phone) {
+        studentPhone = String(profileResult.value.profile.phone).trim();
+      }
+      if (!studentPhone && coopAppResult.status === 'fulfilled') {
+        studentPhone = String(coopAppResult.value?.mobile_phone || coopAppResult.value?.phone || '').trim();
+      }
+      setProfilePhone(studentPhone);
+
       const loadedSection: string = res.section || '';
       setLoadState('ok');
+      setPlacementConfirmed(Boolean(res.intent));
       setSavedOnServer(Boolean(res.accommodation?.house_no && res.accommodation?.province));
 
       if (res.accommodation) {
@@ -125,7 +162,7 @@ const AccommodationWorkPlan: React.FC = () => {
           province: a.province || '',
           postal_code: a.postal_code || '',
           phone: a.phone || '',
-          mobile_phone: a.mobile_phone || '',
+          mobile_phone: a.mobile_phone || studentPhone || '',
           fax: a.fax || '',
           email: a.email || '',
           latitude: a.latitude !== null && a.latitude !== undefined ? String(a.latitude) : '',
@@ -135,7 +172,7 @@ const AccommodationWorkPlan: React.FC = () => {
           emergency_phone: a.emergency_phone || '',
         };
       } else {
-        loadedAcc = { ...BLANK_ACCOMMODATION, section: loadedSection };
+        loadedAcc = { ...BLANK_ACCOMMODATION, section: loadedSection, mobile_phone: studentPhone };
       }
 
       if (res.emergency_contact) {
@@ -161,7 +198,13 @@ const AccommodationWorkPlan: React.FC = () => {
         const raw = localStorage.getItem(DRAFT_KEY);
         if (raw && raw !== savedSnapshot.current) {
           const draft = JSON.parse(raw);
-          if (draft.accommodation) setAccommodation(draft.accommodation);
+          if (draft.accommodation) {
+            setAccommodation({
+              ...draft.accommodation,
+              section: loadedAcc.section || draft.accommodation.section || '',
+              mobile_phone: draft.accommodation.mobile_phone || loadedAcc.mobile_phone || '',
+            });
+          }
           setRestoredDraft(true);
         }
       } catch {
@@ -266,6 +309,10 @@ const AccommodationWorkPlan: React.FC = () => {
   };
 
   const handleSubmit = async () => {
+    if (saveBlock) {
+      setError(`ยังบันทึกไม่ได้ — ${saveBlock.banner}`);
+      return;
+    }
     const missing = [
       ['บ้านเลขที่', accommodation.house_no],
       ['ตำบล/แขวง', accommodation.subdistrict],
@@ -359,6 +406,8 @@ const AccommodationWorkPlan: React.FC = () => {
       <AlertBanner variant="error" message={error} scrollOnShow />
       <AlertBanner variant="success" message={successMsg} scrollOnShow />
 
+      {saveBlock && <AlertBanner variant="info" message={saveBlock.banner} />}
+
       {restoredDraft && (
         <AlertBanner
           variant="info"
@@ -395,16 +444,27 @@ const AccommodationWorkPlan: React.FC = () => {
               ห้องเรียน (ตามหัวใบ สหกิจ 06)
             </label>
             <p className="text-xs text-blue-800/80 dark:text-blue-400/80 mt-0.5">
-              เช่น IT4/1 — แก้ไขได้ที่หน้าข้อมูลส่วนตัว
+              ดึงข้อมูลมาจากหน้าข้อมูลส่วนตัวและเรซูเม่ (เช่น 1, 2)
             </p>
           </div>
-          <input
-            id="acc-section"
-            data-testid="acc-section"
-            readOnly
-            value={accommodation.section || ''}
-            className="w-full sm:w-44 px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 font-bold"
-          />
+          <div className="flex flex-col sm:items-end gap-1">
+            <input
+              id="acc-section"
+              data-testid="acc-section"
+              readOnly
+              value={accommodation.section || ''}
+              placeholder="ยังไม่ได้ระบุห้อง"
+              className="w-full sm:w-48 px-3 py-2 text-xs rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder:text-gray-400 dark:placeholder:text-gray-500 font-bold"
+            />
+            {!accommodation.section && (
+              <a
+                href="/dashboard?menu=profile"
+                className="text-[11px] text-brand-blue hover:underline font-medium"
+              >
+                ไปตั้งค่าที่หน้าข้อมูลส่วนตัวและเรซูเม่ &rarr;
+              </a>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -566,10 +626,22 @@ const AccommodationWorkPlan: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              โทรศัพท์มือถือของคุณ
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label htmlFor="acc-mobile" className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                โทรศัพท์มือถือของคุณ
+              </label>
+              {profilePhone && accommodation.mobile_phone !== profilePhone && (
+                <button
+                  type="button"
+                  onClick={() => setAccommodation((prev) => ({ ...prev, mobile_phone: profilePhone }))}
+                  className="text-[11px] text-brand-blue hover:underline font-medium"
+                >
+                  ใช้เบอร์เดิม ({profilePhone})
+                </button>
+              )}
+            </div>
             <input
+              id="acc-mobile"
               type="tel"
               data-testid="acc-mobile"
               value={accommodation.mobile_phone}
@@ -577,6 +649,9 @@ const AccommodationWorkPlan: React.FC = () => {
               className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder:text-gray-500 dark:placeholder:text-gray-400 focus:outline-none focus:border-brand-blue"
               placeholder="08X-XXX-XXXX"
             />
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+              ดึงข้อมูลมาจากหน้าข้อมูลส่วนตัว (แก้ไขได้)
+            </p>
           </div>
         </div>
       </div>
@@ -688,28 +763,18 @@ const AccommodationWorkPlan: React.FC = () => {
         </div>
       </div>
 
-      {/* บันทึก + พิมพ์ สหกิจ 06 — หน้านี้เหลือกระดาษใบเดียว (ตัดแผนปฏิบัติงาน สหกิจ 07 หน้า 3 ออกจากนักศึกษา 2026-10-05) */}
+      {/* บันทึก สหกิจ 06 */}
       <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
-          <a
-            href={`${API_BASE_URL}/students/${auth?.user?.userId}/accommodation-plan/print`}
-            target="_blank"
-            rel="noopener noreferrer"
-            data-testid="acc-print"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Printer className="w-4 h-4 text-gray-500" />
-            พิมพ์เอกสาร สหกิจ 06 (PDF)
-          </a>
-
+        <div className="flex items-center justify-end">
           <button
             type="button"
             data-testid="acc-save"
-            disabled={isSubmitting}
+            disabled={isSubmitting || !!saveBlock}
+            title={saveBlock ? saveBlock.label : undefined}
             onClick={handleSubmit}
-            className="px-5 py-2.5 rounded-xl bg-brand-blue hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:opacity-50"
+            className="px-5 py-2.5 rounded-xl bg-brand-blue hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? 'กำลังบันทึก...' : 'บันทึกข้อมูลที่พัก'}
+            {isSubmitting ? 'กำลังบันทึก...' : saveBlock ? saveBlock.label : 'บันทึกข้อมูลที่พัก'}
           </button>
         </div>
       </div>

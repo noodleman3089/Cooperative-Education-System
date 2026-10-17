@@ -20,6 +20,9 @@ router.get(
 
 router.post('/', authorizeRoles('student'), StudentMemoController.create);
 
+// คำตัดสินของคณบดี — คณบดีคนเดียว (ไม่ใช่หัวหน้าสาขา/อาจารย์/เจ้าหน้าที่) · ตัดสินครั้งเดียว แก้ไม่ได้
+router.patch('/:id/decision', authorizeRoles('dean'), StudentMemoController.decide);
+
 // ไม่ระบุ role ที่นี่โดยตั้งใจ — นักศึกษาเปิดของตัวเอง ส่วนบุคลากรใช้กติกาของ
 // `assertCanAccessStudent` ซึ่งตรวจถึงระดับ "นักศึกษาคนนี้อยู่ในความดูแลไหม"
 // (แนวเดียวกับ GET /intents/:id/request-form)

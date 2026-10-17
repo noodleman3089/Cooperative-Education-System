@@ -125,7 +125,17 @@ export function useCalendarGate(activityKey: string): CalendarGateState {
     }
 
     const activity = calendarData.activities.find((a) => a.activity_key === activityKey) ?? null;
-    const status = activity?.status ?? 'not_configured';
+    // รอบพิเศษ: เซิร์ฟเวอร์ตัดสินมาให้ (`special_round_open`) — ผ่านด่านได้ทั้งสองทิศ
+    //   พ้นช่วง (closed)  → ถือเป็น 'late'  (ผ่านแต่นับส่งช้า ตรงกับที่ด่านฝั่งเซิร์ฟเวอร์ปั๊ม — หน้าจอที่ขอเหตุผลตอน late จะถามตามปกติ)
+    //   ยังไม่ถึง (upcoming) → ถือเป็น 'open' (ออกก่อนกำหนด ไม่นับส่งช้า)
+    const rawStatus = activity?.status ?? 'not_configured';
+    const status: CalendarStatus = activity?.special_round_open
+      ? rawStatus === 'closed'
+        ? 'late'
+        : rawStatus === 'upcoming'
+          ? 'open'
+          : rawStatus
+      : rawStatus;
     const today = calendarData.today;
 
     const startDate = activity?.start_date ?? null;

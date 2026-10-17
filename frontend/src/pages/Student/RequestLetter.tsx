@@ -66,6 +66,32 @@ const EMPTY_FORM = {
 const CLOSED_INTENT_STATUSES = ['rejected', 'company_rejected', 'superseded'];
 const LATE_REASON_MIN = 20;
 
+interface RequestLetterDraft {
+  form: typeof EMPTY_FORM;
+  search: string;
+  existingCompanyId: number | null;
+  selectedPlaceId: string | null;
+  lateReason: string;
+}
+
+function readDraft(key: string | null): RequestLetterDraft | null {
+  if (!key) return null;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<RequestLetterDraft>;
+    return {
+      form: { ...EMPTY_FORM, ...(parsed.form ?? {}) },
+      search: typeof parsed.search === 'string' ? parsed.search : '',
+      existingCompanyId: typeof parsed.existingCompanyId === 'number' ? parsed.existingCompanyId : null,
+      selectedPlaceId: typeof parsed.selectedPlaceId === 'string' ? parsed.selectedPlaceId : null,
+      lateReason: typeof parsed.lateReason === 'string' ? parsed.lateReason : '',
+    };
+  } catch {
+    return null;
+  }
+}
+
 const labelClass = 'mb-1 block text-xs font-semibold text-gray-700 dark:text-gray-300';
 const required = <span className="text-red-600 dark:text-red-400">*</span>;
 
@@ -73,6 +99,8 @@ const goTo = (menu: string) => window.dispatchEvent(new CustomEvent('navigate', 
 
 const RequestLetter: React.FC = () => {
   const auth = useContext(AuthContext);
+  const draftKey = auth?.user?.userId ? `request_letter_draft_${auth.user.userId}` : null;
+  const initialDraft = readDraft(draftKey);
 
   const [loading, setLoading] = useState(true);
   // โหลดไม่ขึ้นตั้งแต่ครั้งแรก = ไม่รู้ว่ามีคำร้องเดินอยู่หรือไม่ — ห้ามเปิดฟอร์มยื่นใหม่เหมือนยังไม่เคยยื่น
@@ -88,12 +116,16 @@ const RequestLetter: React.FC = () => {
   const [provinceList, setProvinceList] = useState<Province[]>([]);
   const [calendar, setCalendar] = useState<CoopCalendarResponse | null>(null);
 
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [search, setSearch] = useState('');
+  const [form, setForm] = useState<typeof EMPTY_FORM>(() => initialDraft?.form ?? EMPTY_FORM);
+  const [search, setSearch] = useState<string>(() => initialDraft?.search ?? '');
   /** บริษัทที่มีในระบบอยู่แล้ว — ยื่นด้วย company_id ข้อมูลในฟอร์มเป็นของทำเนียบ แก้ที่นี่ไม่ได้ */
-  const [existingCompanyId, setExistingCompanyId] = useState<number | null>(null);
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
-  const [lateReason, setLateReason] = useState('');
+  const [existingCompanyId, setExistingCompanyId] = useState<number | null>(
+    () => initialDraft?.existingCompanyId ?? null
+  );
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(
+    () => initialDraft?.selectedPlaceId ?? null
+  );
+  const [lateReason, setLateReason] = useState<string>(() => initialDraft?.lateReason ?? '');
   const [confirmOpen, setConfirmOpen] = useState(false);
   /**
    * กำลังแก้คำร้องที่ยื่นไว้แล้ว (form_id) — ทำได้เฉพาะก่อนอัปโหลดกระดาษที่ลงนาม (`pending_advisor`)
@@ -123,7 +155,18 @@ const RequestLetter: React.FC = () => {
 
   const activity = (key: string) => calendar?.activities.find((a) => a.activity_key === key);
   const submission = activity('intent_submission');
-  const isLate = !replacementPass && submission?.status === 'late';
+  // รอบพิเศษ: คณะเปิดให้ยื่นนอกช่วงปกติ (เซิร์ฟเวอร์ตัดสินมาใน `special_round_open`) — นับเป็นส่งช้า ต้องกรอกเหตุผล
+  // ตรงกับด่าน `requireCalendarWindow` ที่ปั๊ม calendarLate เมื่อผ่านด้วยรอบพิเศษ
+  const specialRound = calendar?.special_rounds?.find(
+    (r) => r.status === 'open' && r.activity_keys.includes('intent_submission')
+  );
+  // พ้นช่วง (`closed`) = ส่งช้า ต้องกรอกเหตุผล · ยังไม่ถึงช่วง (`upcoming`) = ออกก่อนกำหนด ไม่นับส่งช้า ไม่ถามเหตุผล
+  const inSpecialRound =
+    !replacementPass &&
+    !!submission?.special_round_open &&
+    (submission.status === 'closed' || submission.status === 'upcoming');
+  const specialRoundLate = inSpecialRound && submission?.status === 'closed';
+  const isLate = !replacementPass && (submission?.status === 'late' || specialRoundLate);
   const coopStart = activity('coop_start')?.start_date ?? null;
   const coopEnd = activity('coop_end')?.end_date ?? null;
 
@@ -161,7 +204,7 @@ const RequestLetter: React.FC = () => {
 
       if (me.ok) {
         setHasProfile(true);
-        setCurrentIntent(me.d?.activeIntent ?? null);
+        setCurrentIntent((me.d?.activeIntent as ActiveIntent | null) ?? null);
         setReplacementPass(me.d?.replacement_pass === true);
       } else if (getErrorStatus(me.e) === 404) {
         setHasProfile(false);
@@ -170,7 +213,31 @@ const RequestLetter: React.FC = () => {
       } else {
         throw me.e;
       }
-      setProfile(profileRes.ok ? ((profileRes.d?.profile as StudentProfile) ?? null) : null);
+
+      let loadedProfile = profileRes.ok ? ((profileRes.d?.profile as StudentProfile) ?? null) : null;
+      // นักศึกษาที่ตั้งค่าบัญชีครั้งแรกผ่าน POST /profile/setup เดิมจะมี year_level เป็น NULL ในฐานข้อมูล
+      // — บันทึกค่าเริ่มต้นชั้นปีที่ 4 (ตรงกับหน้าข้อมูลส่วนตัว) ลงฐานข้อมูลก่อนสร้างตัวอย่าง PDF เพื่อให้ทั้งบนหน้าจอและในเอกสาร PDF มีชั้นปีตรงกัน
+      if (loadedProfile && !loadedProfile.year_level) {
+        loadedProfile = { ...loadedProfile, year_level: 4 };
+        await api.put('/profile/student', {
+          province_id: loadedProfile.province_id,
+          major_id: loadedProfile.major_id,
+          cumulative_gpa: loadedProfile.cumulative_gpa,
+          name_prefix: loadedProfile.name_prefix,
+          first_name: loadedProfile.first_name,
+          last_name: loadedProfile.last_name,
+          nickname: loadedProfile.nickname,
+          year_level: 4,
+          section: loadedProfile.section,
+          birth_date: loadedProfile.birth_date ? String(loadedProfile.birth_date).split('T')[0] : null,
+          alt_email: loadedProfile.alt_email,
+          phone: loadedProfile.phone,
+          current_address: loadedProfile.current_address,
+          parent_name: loadedProfile.parent_name,
+          parent_phone: loadedProfile.parent_phone,
+        });
+      }
+      setProfile(loadedProfile);
       setLoadState('ok');
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถโหลดข้อมูลสำหรับยื่นคำร้องได้ กรุณาลองใหม่อีกครั้ง'));
@@ -187,6 +254,38 @@ const RequestLetter: React.FC = () => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
+
+  // เก็บร่างที่กำลังกรอกค้างไว้ใน localStorage (เฉพาะตอนยื่นใบใหม่ ไม่ใช่ตอนเปิดแก้ไขใบเดิม)
+  // เพื่อไม่ให้ข้อมูลหายเมื่อผู้ใช้สลับเมนูไปดูหน้าอื่นแล้วกลับมา
+  useEffect(() => {
+    if (!draftKey || editingFormId !== null) return;
+    if (blockingIntent !== null) {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        /* โหมดส่วนตัว */
+      }
+      return;
+    }
+    const hasAnyValue =
+      Object.values(form).some((v) => v.trim() !== '') ||
+      search.trim() !== '' ||
+      existingCompanyId !== null ||
+      selectedPlaceId !== null ||
+      lateReason.trim() !== '';
+    try {
+      if (hasAnyValue) {
+        localStorage.setItem(
+          draftKey,
+          JSON.stringify({ form, search, existingCompanyId, selectedPlaceId, lateReason })
+        );
+      } else {
+        localStorage.removeItem(draftKey);
+      }
+    } catch {
+      /* localStorage เต็มหรือโหมดส่วนตัว — ฟอร์มบนหน้าจอยังทำงานต่อได้ */
+    }
+  }, [draftKey, editingFormId, blockingIntent, form, search, existingCompanyId, selectedPlaceId, lateReason]);
 
   useEffect(() => {
     if (googleMapsApiKey) {
@@ -223,6 +322,13 @@ const RequestLetter: React.FC = () => {
     setSelectedPlaceId(null);
     setSearch('');
     setForm(EMPTY_FORM);
+    if (draftKey && editingFormId === null) {
+      try {
+        localStorage.removeItem(draftKey);
+      } catch {
+        /* โหมดส่วนตัว */
+      }
+    }
   };
 
   /** เปิดฟอร์มแก้คำร้องที่ยื่นไว้ — เติมค่าปัจจุบันของใบนั้นให้ก่อน */
@@ -339,7 +445,7 @@ const RequestLetter: React.FC = () => {
           contact_position: form.contact_position,
           contact_mobile: form.contact_mobile,
           contact_fax: form.contact_fax,
-          contact_email: form.contact_email,
+          contact_email: form.contact_email.trim() || '-',
         };
   const previewKey = JSON.stringify(previewPayload);
   const previewStale = preview !== null && preview.key !== previewKey;
@@ -401,6 +507,7 @@ const RequestLetter: React.FC = () => {
     )
       .filter(([key]) => !form[key].trim())
       .map(([, label]) => label);
+    const trimmedContactEmail = form.contact_email.trim();
     let problem: string | null = null;
     if (missingCompany.length > 0) {
       problem = `กรุณากรอกข้อมูลสถานประกอบการให้ครบ ยังขาด: ${missingCompany.join(' · ')}`;
@@ -409,8 +516,13 @@ const RequestLetter: React.FC = () => {
     } else if (!locked && (!form.contact_person.trim() || !form.contact_position.trim())) {
       // ชื่อนี้ถูกพิมพ์ลงแบบคำร้องและหนังสือขอความอนุเคราะห์ — ว่างแล้วหนังสือไม่มีผู้รับ
       problem = 'กรุณากรอกชื่อและตำแหน่งของผู้รับหนังสือที่สถานประกอบการ';
-    } else if (!locked && form.contact_email.trim() && !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(form.contact_email.trim())) {
-      problem = 'E-mail ของผู้รับหนังสือไม่ถูกต้อง กรุณากรอกอีเมลเดียวในรูปแบบ name@example.com';
+    } else if (
+      !locked &&
+      trimmedContactEmail &&
+      trimmedContactEmail !== '-' &&
+      !/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(trimmedContactEmail)
+    ) {
+      problem = 'E-mail ของผู้รับหนังสือไม่ถูกต้อง กรุณากรอกอีเมลเดียวในรูปแบบ name@example.com หรือใส่ - หากไม่มี';
     } else if (askLateReason && lateReason.trim().length < LATE_REASON_MIN) {
       problem = `กรุณาเขียนเหตุผลที่ยื่นล่าช้าอย่างน้อย ${LATE_REASON_MIN} ตัวอักษร`;
     }
@@ -437,6 +549,7 @@ const RequestLetter: React.FC = () => {
   const submit = async () => {
     setIsSubmitting(true);
     try {
+      const cleanContactEmail = form.contact_email.trim();
       // ชุดเดียวกันทั้งตอนยื่นและตอนแก้ — เลือกจากทำเนียบส่งแค่ company_id
       const company =
         existingCompanyId !== null
@@ -452,7 +565,7 @@ const RequestLetter: React.FC = () => {
               contact_position: form.contact_position.trim(),
               contact_mobile: form.contact_mobile.trim() || undefined,
               contact_fax: form.contact_fax.trim() || undefined,
-              contact_email: form.contact_email.trim() || undefined,
+              contact_email: cleanContactEmail && cleanContactEmail !== '-' ? cleanContactEmail : undefined,
               google_place_id: selectedPlaceId ?? undefined,
             };
 
@@ -476,6 +589,13 @@ const RequestLetter: React.FC = () => {
       }
       clearCompany();
       setLateReason('');
+      if (draftKey) {
+        try {
+          localStorage.removeItem(draftKey);
+        } catch {
+          /* โหมดส่วนตัว */
+        }
+      }
       await loadData();
     } catch (err) {
       setError(getErrorMessage(err, editing ? 'แก้ไขคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง' : 'ยื่นคำร้องไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'));
@@ -543,6 +663,17 @@ const RequestLetter: React.FC = () => {
           <AlertBanner
             variant="info"
             message="คุณได้รับสิทธิ์ยื่นนอกช่วงปฏิทิน เพราะเจ้าหน้าที่ปิดใบที่ฝึกงานเดิม"
+          />
+        )}
+        {inSpecialRound && specialRound && (
+          <AlertBanner
+            variant="info"
+            message={
+              `คณะเปิดรอบพิเศษให้คุณ: "${specialRound.title}" ถึงวันที่ ${formatThaiDate(specialRound.end_date)} — ` +
+              (specialRoundLate
+                ? 'ยื่นคำร้องได้แม้พ้นช่วงปกติ ระบบนับเป็นส่งช้า'
+                : 'ยื่นคำร้องได้ก่อนช่วงปกติเปิด (ออกปฏิบัติงานก่อนกำหนด) ไม่นับเป็นส่งช้า')
+            }
           />
         )}
         <AlertBanner variant="error" message={error} />
@@ -683,7 +814,7 @@ const RequestLetter: React.FC = () => {
                   ['ชื่อ-นามสกุล', studentName],
                   ['รหัสนักศึกษา', profile?.student_code],
                   ['คณะ', profile?.faculty_name_th],
-                  ['สาขาวิชา · ชั้นปี', [majorName, profile?.year_level ? `ปี ${profile.year_level}` : ''].filter(Boolean).join(' · ')],
+                  ['สาขาวิชา · ชั้นปี', [majorName, profile ? `ปี ${profile.year_level ?? 4}` : ''].filter(Boolean).join(' · ')],
                   ['โทรศัพท์มือถือ', profile?.phone],
                   ['E-mail', email],
                   ['ช่วงปฏิบัติงาน (จากปฏิทินสหกิจ)', period ?? 'เจ้าหน้าที่ยังไม่ได้ตั้งในปฏิทิน'],
@@ -811,8 +942,14 @@ const RequestLetter: React.FC = () => {
                   <Input id="request-contact-fax" data-testid="request-contact-fax" inputMode="tel" maxLength={50} {...field('contact_fax')} />
                 </div>
                 <div className="col-span-2">
-                  <label htmlFor="request-contact-email" className={labelClass}>E-mail ของผู้รับหนังสือ</label>
-                  <Input id="request-contact-email" data-testid="request-contact-email" type="email" maxLength={254} {...field('contact_email')} />
+                  <label htmlFor="request-contact-email" className={labelClass}>E-mail ของผู้รับหนังสือ (ไม่บังคับ · ใส่ - ได้)</label>
+                  <Input
+                    id="request-contact-email"
+                    data-testid="request-contact-email"
+                    maxLength={254}
+                    placeholder="เช่น hr@example.com หรือ - หากไม่มี"
+                    {...field('contact_email')}
+                  />
                 </div>
               </div>
             </section>
@@ -823,7 +960,11 @@ const RequestLetter: React.FC = () => {
                   การยื่นครั้งนี้เลยกำหนดปกติแล้ว จึงนับเป็นการส่งช้า
                 </p>
                 <p className="text-xs text-amber-800 dark:text-amber-200">
-                  {submission?.late_end_date ? `ระบบยังรับได้ถึงวันที่ ${formatThaiDate(submission.late_end_date)} ` : 'ระบบยังรับได้ '}
+                  {specialRoundLate && specialRound
+                    ? `คุณอยู่ใน "${specialRound.title}" ระบบรับได้ถึงวันที่ ${formatThaiDate(specialRound.end_date)} `
+                    : submission?.late_end_date
+                      ? `ระบบยังรับได้ถึงวันที่ ${formatThaiDate(submission.late_end_date)} `
+                      : 'ระบบยังรับได้ '}
 · เจ้าหน้าที่จะเห็นเหตุผลนี้ตอนตรวจคำร้อง · หลังยื่นแล้วต้องทำบันทึกข้อความชี้แจงเองที่เมนู "บันทึกถึงคณบดี"
                   เพื่อเสนออาจารย์ที่ปรึกษาและหัวหน้าสาขาวิชาตามขั้นตอน
                 </p>
@@ -960,8 +1101,9 @@ const RequestLetter: React.FC = () => {
               {
                 label: 'มือถือ · โทรสาร · E-mail',
                 value:
-                  [form.contact_mobile.trim(), form.contact_fax.trim(), form.contact_email.trim()].filter(Boolean).join(' · ') ||
-                  'ไม่ได้กรอก (กระดาษจะขีด "-")',
+                  [form.contact_mobile.trim(), form.contact_fax.trim(), form.contact_email.trim()]
+                    .filter((v) => v && v !== '-')
+                    .join(' · ') || 'ไม่ได้กรอก (กระดาษจะขีด "-")',
               },
               ...(askLateReason ? [{ label: 'เหตุผลที่ยื่นช้า', value: lateReason.trim() }] : []),
             ]}

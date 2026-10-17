@@ -95,6 +95,14 @@ export const AuditAction = {
   CALENDAR_EVENT_CREATED: 'coop_calendar.created',
   CALENDAR_EVENT_UPDATED: 'coop_calendar.updated',
   CALENDAR_EVENT_DELETED: 'coop_calendar.deleted',
+  // ล้างช่วงเวลาของกิจกรรมทั้งภาคทีเดียว — detail เก็บค่าที่ถูกล้าง (กู้ค่าเดิมได้จากตรงนี้)
+  CALENDAR_ACTIVITIES_CLEARED: 'coop_calendar.activities_cleared',
+  // รอบพิเศษ: ให้นักศึกษาที่เลือกรายคนส่งกิจกรรมได้หลังพ้นช่วงปกติ — detail เก็บกิจกรรม/จำนวนคน/ชื่อรอบ
+  SPECIAL_ROUND_CREATED: 'coop_special_round.created',
+  SPECIAL_ROUND_UPDATED: 'coop_special_round.updated',
+  SPECIAL_ROUND_DELETED: 'coop_special_round.deleted',
+  // คณบดีตัดสินบันทึกข้อความ — detail เก็บผล + หัวข้อ (เหตุผลของนักศึกษาไม่ลง audit)
+  MEMO_DECIDED: 'student_memo.decided',
   // วงจรภาคเรียน: เปลี่ยนภาคที่เปิดอยู่ = เปลี่ยนหน้าต่างปฏิทินที่ล็อกนักศึกษาทั้งรุ่น
   // detail.open_forms_in_previous เก็บจำนวนใบที่ยังค้างในภาคก่อนตอนกดไว้ — ปิดภาคไม่แตะสถานะใบ
   SEMESTER_CREATED: 'semester.created',
@@ -127,9 +135,10 @@ export const AuditAction = {
   OUTLINE_REOPENED: 'outline.reopened',
   // สหกิจ 11: อาจารย์นิเทศเห็นชอบแทนขณะพี่เลี้ยงยังไม่ตรวจ — ข้ามขั้นพี่เลี้ยงด้วยดุลยพินิจ จึงต้องตามย้อนได้ว่าใคร เมื่อไหร่ เพราะอะไร
   OUTLINE_APPROVED_WITHOUT_MENTOR: 'outline.approved_without_mentor',
-  // สหกิจ 03: การพิมพ์ใบสมัครเป็นครั้งเดียวที่ระบบถอดรหัสเลขบัตร/เชื้อชาติ/ศาสนา
-  // ออกมาเป็นค่าจริง (SEC-12) — ต้องรู้เสมอว่าค่าจริงถูกเปิดออกมาเมื่อไหร่ จากเครื่องไหน
-  COOP_APPLICATION_PRINTED: 'student.coop_application_printed',
+  // สหกิจ 03: ผู้ตรวจเปิดดูใบสมัครเป็นครั้งเดียวที่ระบบถอดรหัสเลขบัตร/เชื้อชาติ/ศาสนา
+  // ออกมาเป็นค่าจริง (SEC-12) — ต้องรู้เสมอว่าใครเปิด นักศึกษาคนไหน เมื่อไหร่
+  // (แถว `student.coop_application_printed` เก่าของปุ่มพิมพ์ที่ถอดแล้วยังอยู่เป็นประวัติ — SEC-07 ห้ามลบ)
+  COOP_APPLICATION_VIEWED: 'student.coop_application_viewed',
 } as const;
 
 export type AuditActionValue = (typeof AuditAction)[keyof typeof AuditAction];

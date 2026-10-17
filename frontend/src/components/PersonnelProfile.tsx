@@ -138,7 +138,7 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
 
     // วันเกิดตั้งได้ครั้งเดียว พิมพ์ผิดแล้วแก้เองไม่ได้ — ให้ยืนยันค่าที่จะบันทึกก่อน
     // (บันทึกชื่อ/ตำแหน่งอย่างเดียวแก้ซ้ำได้ จึงไม่มีกล่องยืนยัน)
-    if (!profile?.birth_date && birthDate) {
+    if (!isDean && !profile?.birth_date && birthDate) {
       setConfirmBirth(true);
       return;
     }
@@ -298,24 +298,26 @@ const PersonnelProfile: React.FC<PersonnelProfileProps> = ({ onNavigate, onSwitc
                       onChange={(e) => setLastName(e.target.value)}
                     />
                   </div>
-                  <div>
-                    <label htmlFor="personnel-birth-date" className={labelClass}>วันเกิด</label>
-                    {/* ตั้งเองได้ครั้งเดียว — ระบบใช้ปิดบัญชีอัตโนมัติตอนอายุ 60 · หลังจากนั้นเจ้าหน้าที่แก้ */}
-                    <Input
-                      id="personnel-birth-date"
-                      data-testid="personnel-birth-date"
-                      type="date"
-                      value={birthDate}
-                      disabled={isSubmitting || birthDateLocked}
-                      onChange={(e) => setBirthDate(e.target.value)}
-                      className={birthDateLocked ? '' : 'cursor-pointer'}
-                    />
-                    <p data-testid="personnel-birth-date-hint" className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-snug">
-                      {birthDateLocked
-                        ? 'ตั้งแล้ว — ถ้าไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษาแก้ให้'
-                        : 'ตั้งได้ครั้งเดียว ตรวจให้ถูกก่อนบันทึก'}
-                    </p>
-                  </div>
+                  {!isDean && (
+                    <div>
+                      <label htmlFor="personnel-birth-date" className={labelClass}>วันเกิด</label>
+                      {/* ตั้งเองได้ครั้งเดียว — ระบบใช้ปิดบัญชีอัตโนมัติตอนอายุ 60 · หลังจากนั้นเจ้าหน้าที่แก้ */}
+                      <Input
+                        id="personnel-birth-date"
+                        data-testid="personnel-birth-date"
+                        type="date"
+                        value={birthDate}
+                        disabled={isSubmitting || birthDateLocked}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        className={birthDateLocked ? '' : 'cursor-pointer'}
+                      />
+                      <p data-testid="personnel-birth-date-hint" className="text-[11px] text-gray-600 dark:text-gray-400 mt-1 leading-snug">
+                        {birthDateLocked
+                          ? 'ตั้งแล้ว — ถ้าไม่ถูกต้องให้แจ้งเจ้าหน้าที่สหกิจศึกษาแก้ให้'
+                          : 'ตั้งได้ครั้งเดียว ตรวจให้ถูกก่อนบันทึก'}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex justify-end pt-3 border-t border-gray-100 dark:border-gray-800">

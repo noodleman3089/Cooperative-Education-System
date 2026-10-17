@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { PDFDocument } from 'pdf-lib';
 import {
   IntentFormModel,
   IntentConflictError,
@@ -1647,14 +1648,15 @@ export class IntentFormController {
                 s.first_name, s.last_name,
                 mj.major_name_th, f.faculty_name_th,
                 c.name_th AS company_name,
-                doc.status AS cover_letter_status
+                doc.status AS cover_letter_status,
+                doc.generated_file_path AS cover_letter_path
            FROM intent_forms i
            JOIN students s        ON i.student_id = s.student_id
            JOIN master_major mj   ON s.major_id = mj.major_id
            JOIN master_faculty f  ON mj.faculty_id = f.faculty_id
            JOIN companies c       ON i.company_id = c.company_id
            LEFT JOIN LATERAL (
-             SELECT d.status
+             SELECT d.status, d.generated_file_path
                FROM official_documents d
               WHERE d.student_id = i.student_id
                 AND d.company_id = i.company_id
@@ -1692,7 +1694,7 @@ export class IntentFormController {
         return;
       }
 
-      const pdf = await buildAcceptanceFormPdf({
+      const acceptancePdf = await buildAcceptanceFormPdf({
         faculty_name_th: row.faculty_name_th,
         company_name: row.company_name,
         first_name: row.first_name,
@@ -1701,6 +1703,24 @@ export class IntentFormController {
         // ว่างจนกว่าจะออกหนังสือส่งตัว — ตอนนักศึกษาพิมพ์ไปให้บริษัทยังไม่มีเลขนี้
         dispatch_document_no: row.dispatch_document_no,
       });
+
+      // รวมหนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้วไว้หน้าแรก — นักศึกษาพิมพ์ไฟล์เดียวได้ครบทั้งสองฉบับ
+      // หาไฟล์หนังสือไม่เจอ/เปิดไม่ได้ = ส่งแบบตอบรับอย่างเดียวเหมือนเดิม ไม่ปิดทางพิมพ์
+      let pdf: Buffer = acceptancePdf;
+      try {
+        const coverPath = row.cover_letter_path ? path.join(process.cwd(), row.cover_letter_path) : '';
+        if (coverPath && fs.existsSync(coverPath)) {
+          const merged = await PDFDocument.create();
+          for (const bytes of [fs.readFileSync(coverPath), acceptancePdf]) {
+            const src = await PDFDocument.load(bytes);
+            const pages = await merged.copyPages(src, src.getPageIndices());
+            pages.forEach((p) => merged.addPage(p));
+          }
+          pdf = Buffer.from(await merged.save());
+        }
+      } catch (mergeError) {
+        console.error('Merge cover letter into acceptance form failed:', mergeError);
+      }
 
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(

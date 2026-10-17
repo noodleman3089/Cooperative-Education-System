@@ -3,17 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/authContextValue';
 import PageSkeleton from './ui/Skeleton';
 import api, { API_BASE_URL } from '../services/api';
-import type { StudentProfile as StudentType, LanguageProficiency } from '../types/api';
-import ResumePdfModal from './ResumePdfModal';
+import type { StudentProfile as StudentType } from '../types/api';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { NAME_PREFIXES } from '../utils/namePrefix';
-import {
-  JOB_TYPE_OPTIONS,
-  WORK_REGION_OPTIONS,
-  getRecommendedJobTypes,
-} from '../config/studentInterests';
-import { FileText, Upload, Eye, Download } from 'lucide-react';
 
 interface Major {
   major_id: number;
@@ -48,24 +41,10 @@ const StudentProfile: React.FC = () => {
   const [enrollmentYear, setEnrollmentYear] = useState<number | ''>('');
   const [cumulativeGpa, setCumulativeGpa] = useState<string>('');
 
-  // Career & Work Preferences
-  const [skillsAndActivities, setSkillsAndActivities] = useState('');
-  const [preferredRegion, setPreferredRegion] = useState('');
-  const [jobTypes, setJobTypes] = useState<string[]>([]);
-  const [showAllJobTypes, setShowAllJobTypes] = useState(false);
-
-  // Language proficiency (English)
-  const [engReading, setEngReading] = useState('ดี');
-  const [engSpeaking, setEngSpeaking] = useState('พอใช้');
-  const [engWriting, setEngWriting] = useState('ดี');
-
-  // Profile Avatar & Resume File States
+  // Profile Avatar States
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [storedAvatar, setStoredAvatar] = useState<string | null>(null);
   const [avatarUploading, setAvatarUploading] = useState(false);
-  const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [fileError, setFileError] = useState<string | null>(null);
-  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState(false);
 
   // Status & Submit States
   const [loading, setLoading] = useState(true);
@@ -78,27 +57,9 @@ const StudentProfile: React.FC = () => {
 
   const alertRef = useRef<HTMLDivElement>(null);
 
-  const regionOptions = WORK_REGION_OPTIONS;
-  const jobTypeOptions = JOB_TYPE_OPTIONS;
-
   const currentMajor = majors.find((m) => m.major_id === selectedMajorId);
-  // คณะไม่มีคอลัมน์ของตัวเอง — มาจากสาขาที่เลือก (`master_major.faculty_id`) ที่เดียว
-  const selectedFacultyId = currentMajor?.faculty_id ?? '';
-  const faculties = majors.filter(
-    (m, i) => majors.findIndex((x) => x.faculty_id === m.faculty_id) === i
-  );
-  const majorIdentifier =
-    currentMajor?.major_code ||
-    profile?.major_code ||
-    currentMajor?.major_name_th ||
-    profile?.major_name_th ||
-    '';
-  const recommendedTypes = getRecommendedJobTypes(majorIdentifier);
-
-  const visibleJobTypes =
-    recommendedTypes.length > 0 && !showAllJobTypes
-      ? Array.from(new Set([...recommendedTypes, ...jobTypes]))
-      : jobTypeOptions;
+  const displayFaculty = currentMajor?.faculty_name_th || profile?.faculty_name_th || '—';
+  const displayMajor = currentMajor?.major_name_th || profile?.major_name_th || '—';
 
   const loadProfile = async () => {
     try {
@@ -165,22 +126,6 @@ const StudentProfile: React.FC = () => {
             ? Number(prof.cumulative_gpa).toFixed(2)
             : ''
         );
-
-        setSkillsAndActivities(prof.skills_and_activities || '');
-        setPreferredRegion(prof.preferred_work_region || '');
-        setJobTypes(Array.isArray(prof.interested_job_types) ? prof.interested_job_types : []);
-
-        // Load language proficiency
-        if (Array.isArray(prof.language_proficiency)) {
-          const eng = (prof.language_proficiency as LanguageProficiency[]).find(
-            (l) => l.language === 'ภาษาอังกฤษ' || l.language === 'English'
-          );
-          if (eng) {
-            if (eng.reading) setEngReading(eng.reading);
-            if (eng.speaking) setEngSpeaking(eng.speaking);
-            if (eng.writing) setEngWriting(eng.writing);
-          }
-        }
       }
     } catch (err) {
       console.error('Failed to load student profile:', err);
@@ -238,37 +183,6 @@ const StudentProfile: React.FC = () => {
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileError(null);
-    const selected = e.target.files?.[0] || null;
-    if (!selected) {
-      setResumeFile(null);
-      return;
-    }
-
-    if (!selected.name.toLowerCase().endsWith('.pdf')) {
-      setFileError('ไฟล์ที่เลือกต้องเป็นนามสกุล PDF เท่านั้น');
-      setResumeFile(null);
-      return;
-    }
-
-    if (selected.size > 5 * 1024 * 1024) {
-      setFileError('ขนาดไฟล์ต้องไม่เกิน 5 MB');
-      setResumeFile(null);
-      return;
-    }
-
-    setResumeFile(selected);
-  };
-
-  const handleJobTypeToggle = (type: string) => {
-    if (jobTypes.includes(type)) {
-      setJobTypes(jobTypes.filter((t) => t !== type));
-    } else {
-      setJobTypes([...jobTypes, type]);
-    }
-  };
-
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -314,48 +228,12 @@ const StudentProfile: React.FC = () => {
       formData.append('parent_name', parentName.trim());
       formData.append('parent_phone', parentPhone.trim());
 
-      if (resumeFile) {
-        formData.append('resume', resumeFile);
-      }
-
-      // Preserve existing language proficiency items
-      const existingLanguages: LanguageProficiency[] = Array.isArray(profile?.language_proficiency)
-        ? [...profile.language_proficiency]
-        : [];
-      const engIdx = existingLanguages.findIndex(
-        (l: LanguageProficiency) => l.language === 'ภาษาอังกฤษ' || l.language === 'English'
-      );
-      const engObj = engIdx >= 0 ? existingLanguages[engIdx] : { language: 'ภาษาอังกฤษ' };
-      const mergedEnglish: LanguageProficiency = {
-        ...engObj,
-        language: 'ภาษาอังกฤษ',
-        reading: engReading,
-        speaking: engSpeaking,
-        writing: engWriting,
-      };
-
-      if (engIdx >= 0) {
-        existingLanguages[engIdx] = mergedEnglish;
-      } else {
-        existingLanguages.push(mergedEnglish);
-      }
-
-      await Promise.all([
-        api.put('/profile/student', formData),
-        api.put('/profile/student/optional', {
-          skills_and_activities: skillsAndActivities,
-          preferred_work_region: preferredRegion || null,
-          interested_job_types: jobTypes.length > 0 ? jobTypes : null,
-          language_proficiency: existingLanguages,
-        }),
-      ]);
+      await api.put('/profile/student', formData);
 
       setSuccess('บันทึกข้อมูลส่วนตัวและเรซูเม่เรียบร้อยแล้ว');
-      setResumeFile(null);
       await loadProfile();
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
-      // สาขาที่ขอเปลี่ยนอาจถูกปฏิเสธ (409) — ให้ช่องกลับไปตรงกับของจริงในระบบ
       setSelectedMajorId(profile?.major_id || '');
     } finally {
       alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -377,10 +255,6 @@ const StudentProfile: React.FC = () => {
   }
 
   const initialLetters = (firstName?.[0] || 'ส') + (lastName?.[0] || 'ห');
-  const resumeFileName = profile?.resume_file ? profile.resume_file.split('/').pop() || 'resume.pdf' : '';
-  const resumeDownloadUrl = profile?.resume_file
-    ? `${API_BASE_URL}/files/download/resumes/${resumeFileName}`
-    : '';
 
   const avatarUrl =
     avatarPreviewUrl || (storedAvatar ? `${API_BASE_URL}/files/${storedAvatar}` : null);
@@ -431,45 +305,28 @@ const StudentProfile: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                คณะ *
+                คณะ
               </label>
-              <select
+              <input
+                type="text"
+                readOnly
                 data-testid="profile-faculty"
-                value={selectedFacultyId}
-                onChange={(e) => {
-                  // เปลี่ยนคณะ = เลือกสาขาแรกของคณะนั้นให้ทันที ช่องสาขาจึงไม่มีสภาพ "ว่าง" ที่บันทึกไม่ได้
-                  const first = majors.find((m) => m.faculty_id === Number(e.target.value));
-                  if (first) setSelectedMajorId(first.major_id);
-                }}
-                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
-              >
-                {faculties.map((f) => (
-                  <option key={f.faculty_id} value={f.faculty_id}>
-                    {f.faculty_name_th}
-                  </option>
-                ))}
-              </select>
+                value={displayFaculty}
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                สาขาวิชา *
+                สาขาวิชา
               </label>
-              <select
+              <input
+                type="text"
+                readOnly
                 data-testid="profile-major"
-                value={selectedMajorId}
-                onChange={(e) => setSelectedMajorId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
-              >
-                {majors.filter((m) => m.faculty_id === selectedFacultyId).map((m) => (
-                  <option key={m.major_id} value={m.major_id}>
-                    {m.major_name_th}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-                เลือกผิดแก้ได้ตอนยังไม่มีใบแจ้งความจำนงที่ดำเนินการอยู่ · เปลี่ยนแล้วที่ปรึกษาจะถูกล้างให้หัวหน้าสาขาใหม่ตั้งใหม่
-              </p>
+                value={displayMajor}
+                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 text-gray-900 dark:text-white cursor-default focus:outline-none"
+              />
             </div>
 
             <div>
@@ -516,7 +373,7 @@ const StudentProfile: React.FC = () => {
           </div>
 
           <p className="text-[11px] text-gray-500 dark:text-gray-400 leading-relaxed">
-            รหัสนักศึกษาและปีที่เข้าศึกษาแก้เองไม่ได้ — ถ้าไม่ตรงให้แจ้งเจ้าหน้าที่งานสหกิจศึกษา
+            รหัสนักศึกษา คณะ สาขาวิชา และปีที่เข้าศึกษาแก้เองไม่ได้ — ถ้าไม่ตรงให้แจ้งเจ้าหน้าที่งานสหกิจศึกษา
           </p>
         </div>
 
@@ -645,17 +502,28 @@ const StudentProfile: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  ห้องเรียน (Section)
+                <label htmlFor="profile-section" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  ห้องเรียน
                 </label>
                 <input
+                  id="profile-section"
                   type="text"
                   data-testid="profile-section"
+                  list="classroom-suggestions"
                   value={section}
                   onChange={(e) => setSection(e.target.value)}
                   className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue font-semibold"
-                  placeholder="เช่น IT4/1"
+                  placeholder="เช่น 1, 2"
                 />
+                <datalist id="classroom-suggestions">
+                  <option value="1" />
+                  <option value="2" />
+                  <option value="3" />
+                  <option value="4" />
+                </datalist>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1">
+                  กรอกเลขห้อง เช่น 1 หรือ 2 (สำหรับระบุในเอกสาร สหกิจ 06)
+                </p>
               </div>
 
               <div>
@@ -752,207 +620,6 @@ const StudentProfile: React.FC = () => {
               เพราะเป็นช่องที่มีเฉพาะบนใบนั้น — ไม่ทำซ้ำสองที่เพื่อไม่ให้ค่าขัดกัน
             </span>
           </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* CARD 3: เรซูเม่ ทักษะ และงานที่สนใจ                                           */}
-        {/* ========================================================================= */}
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xs space-y-5">
-          <div className="border-b border-gray-100 dark:border-gray-800 pb-3">
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">
-              เรซูเม่ ทักษะ และงานที่สนใจ
-            </h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-              ข้อมูลชุดนี้ถูกพิมพ์ลงใบสมัครงานสหกิจศึกษา (สหกิจ 03) ที่ส่งให้สถานประกอบการ
-            </p>
-          </div>
-
-          {/* Resume Upload and Preview Box */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/60 flex items-center justify-center text-red-600 dark:text-red-400 shrink-0">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xs font-bold text-gray-900 dark:text-white">
-                  {resumeFile ? resumeFile.name : (profile?.resume_file ? resumeFileName : 'ยังไม่ได้อัปโหลดเรซูเม่')}
-                </div>
-                <div className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
-                  {profile?.resume_file ? 'ไฟล์เรซูเม่ออนไลน์ปัจจุบัน (PDF)' : 'อัปโหลดไฟล์เรซูเม่เป็น .PDF ขนาดไม่เกิน 5 MB'}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {profile?.resume_file && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setIsPdfPreviewOpen(true)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    เปิดดู
-                  </button>
-                  <a
-                    href={resumeDownloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 text-xs font-bold hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    ดาวน์โหลด
-                  </a>
-                </>
-              )}
-              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-blue hover:bg-blue-700 text-white text-xs font-bold transition-colors cursor-pointer">
-                <Upload className="w-3.5 h-3.5" />
-                {profile?.resume_file ? 'อัปโหลดใหม่' : 'เลือกไฟล์ PDF'}
-                <input
-                  type="file"
-                  accept=".pdf"
-                  data-testid="profile-resume-input"
-                  disabled={isSubmitting}
-                  onChange={handleFileChange}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          </div>
-          {fileError && <p className="text-xs text-red-600 font-semibold">{fileError}</p>}
-
-          {/* Skills and Activities */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              ทักษะและกิจกรรมที่เคยทำ
-            </label>
-            <textarea
-              rows={3}
-              data-testid="profile-skills"
-              value={skillsAndActivities}
-              onChange={(e) => setSkillsAndActivities(e.target.value)}
-              className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue resize-vertical"
-              placeholder="พัฒนาเว็บด้วย React และ Node.js · เขียน SQL ระดับใช้งานจริง · เคยเป็นกรรมการชมรมคอมพิวเตอร์ดูแลงานอบรมให้รุ่นน้อง"
-            />
-          </div>
-
-          {/* Job Types and Region */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  ประเภทงานที่สนใจ
-                </label>
-                {recommendedTypes.length > 0 && !showAllJobTypes && (
-                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/50 px-2 py-0.5 rounded-full">
-                    ✨ แนะนำตามสาขาของคุณ
-                  </span>
-                )}
-              </div>
-              <div
-                data-testid="profile-interests"
-                className="flex flex-wrap gap-1.5 p-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 min-h-[42px]"
-              >
-                {visibleJobTypes.map((type) => {
-                  const isChecked = jobTypes.includes(type);
-                  return (
-                    <button
-                      key={type}
-                      type="button"
-                      onClick={() => handleJobTypeToggle(type)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-bold transition-colors cursor-pointer ${
-                        isChecked
-                          ? 'bg-blue-50 text-brand-blue border border-blue-200 dark:bg-blue-950/60 dark:text-blue-400 dark:border-blue-800'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-300 border border-transparent'
-                      }`}
-                    >
-                      {type} {isChecked ? '✓' : '+'}
-                    </button>
-                  );
-                })}
-              </div>
-              {recommendedTypes.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllJobTypes((prev) => !prev)}
-                  className="-mt-1.5 -mb-3 py-3 text-xs text-brand-blue dark:text-blue-400 font-semibold hover:underline cursor-pointer inline-flex items-center gap-1"
-                >
-                  {showAllJobTypes
-                    ? '▲ ยุบแสดงเฉพาะสายงานแนะนำ'
-                    : `+ ดูสายงานอื่นทั้งหมด (อีก ${jobTypeOptions.length - visibleJobTypes.length} สายงาน)`}
-                </button>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1.5">
-                ภูมิภาคที่สะดวกไปฝึกงาน
-              </label>
-              <select
-                data-testid="profile-region"
-                value={preferredRegion}
-                onChange={(e) => setPreferredRegion(e.target.value)}
-                className="w-full px-4 py-2 text-sm rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:border-brand-blue"
-              >
-                <option value="">-- เลือกภูมิภาคที่สะดวก --</option>
-                {regionOptions.map((reg) => (
-                  <option key={reg} value={reg}>
-                    {reg}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Language Proficiency */}
-          <div className="space-y-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300">
-              ความสามารถทางภาษา
-            </label>
-            <div className="grid grid-cols-4 gap-2 items-center text-xs">
-              <span className="font-bold text-gray-500 dark:text-gray-400">ภาษา</span>
-              <span className="font-bold text-gray-500 dark:text-gray-400">อ่าน</span>
-              <span className="font-bold text-gray-500 dark:text-gray-400">พูด</span>
-              <span className="font-bold text-gray-500 dark:text-gray-400">เขียน</span>
-
-              <div className="px-3 py-2 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 font-bold text-gray-800 dark:text-gray-200">
-                ภาษาอังกฤษ
-              </div>
-              <select
-                value={engReading}
-                onChange={(e) => setEngReading(e.target.value)}
-                className="px-2.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none"
-              >
-                <option value="ดีมาก">ดีมาก</option>
-                <option value="ดี">ดี</option>
-                <option value="พอใช้">พอใช้</option>
-                <option value="น้อย">น้อย</option>
-              </select>
-              <select
-                value={engSpeaking}
-                onChange={(e) => setEngSpeaking(e.target.value)}
-                className="px-2.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none"
-              >
-                <option value="ดีมาก">ดีมาก</option>
-                <option value="ดี">ดี</option>
-                <option value="พอใช้">พอใช้</option>
-                <option value="น้อย">น้อย</option>
-              </select>
-              <select
-                value={engWriting}
-                onChange={(e) => setEngWriting(e.target.value)}
-                className="px-2.5 py-2 rounded-xl border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none"
-              >
-                <option value="ดีมาก">ดีมาก</option>
-                <option value="ดี">ดี</option>
-                <option value="พอใช้">พอใช้</option>
-                <option value="น้อย">น้อย</option>
-              </select>
-            </div>
-            <span className="text-[11px] text-gray-500 dark:text-gray-400 block leading-relaxed">
-              ช่องชุดนี้เป็นชุดเดียวกับในใบสมัคร สหกิจ 03 — แก้ที่ใดที่หนึ่งแล้วอีกใบเปลี่ยนตาม
-            </span>
-          </div>
 
           {/* Bottom Save Bar */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -967,14 +634,6 @@ const StudentProfile: React.FC = () => {
           </div>
         </div>
       </form>
-
-      {/* PDF Modal */}
-      <ResumePdfModal
-        isOpen={isPdfPreviewOpen}
-        onClose={() => setIsPdfPreviewOpen(false)}
-        pdfUrl={resumeDownloadUrl}
-        fileName={resumeFileName}
-      />
     </div>
   );
 };

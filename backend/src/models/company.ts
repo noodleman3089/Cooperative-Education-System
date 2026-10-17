@@ -43,9 +43,10 @@ export class CompanyModel {
     google_place_id: string | null;
     created_by: number;
   }): Promise<Company> {
+    const isVerified = Boolean(companyData.google_place_id);
     const res = await query(
       `INSERT INTO companies (name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, FALSE, $8)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
       [
         companyData.name_th,
@@ -55,6 +56,7 @@ export class CompanyModel {
         companyData.postal_code,
         companyData.phone,
         companyData.google_place_id,
+        isVerified,
         companyData.created_by,
       ]
     );

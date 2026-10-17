@@ -11,6 +11,7 @@ import AlertBanner from '../../components/ui/AlertBanner';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { intentDisplayStatus } from '../../utils/intentStatus';
 import IntentReviewModal from '../../components/IntentReviewModal';
+import CoopFormsViewModal from '../../components/CoopFormsViewModal';
 import { getErrorMessage } from '../../utils/errors';
 
 interface WeeklyLogItem {
@@ -102,6 +103,7 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
 
   // Intent Modal
   const [selectedIntentId, setSelectedIntentId] = useState<number | null>(null);
+  const [viewingForms, setViewingForms] = useState(false);
 
   // Panel data state for selected student
   const studentIdParam = searchParams.get('student');
@@ -535,6 +537,14 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
                   )}
                   <button
                     type="button"
+                    data-testid="advisor-student-view-forms"
+                    onClick={() => setViewingForms(true)}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
+                  >
+                    สหกิจ 03 · 06
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleClosePanel}
                     className="px-2.5 py-1 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer"
                   >
@@ -781,6 +791,17 @@ const AdvisorStudents: React.FC<AdvisorStudentsProps> = ({ currentRole: propRole
           </div>
         )}
       </div>
+
+      {viewingForms && selectedStudent && (
+        <CoopFormsViewModal
+          // key: เปลี่ยนนักศึกษาแล้วต้องเริ่มโหลดใหม่ ไม่ใช่โชว์ข้อมูลของคนก่อนหน้า
+          key={selectedStudent.student_id}
+          studentId={selectedStudent.student_id}
+          studentName={[selectedStudent.first_name, selectedStudent.last_name].filter(Boolean).join(' ') || 'ไม่ระบุชื่อ'}
+          studentCode={selectedStudent.student_code}
+          onClose={() => setViewingForms(false)}
+        />
+      )}
 
       {/* Intent Review Modal */}
       <IntentReviewModal

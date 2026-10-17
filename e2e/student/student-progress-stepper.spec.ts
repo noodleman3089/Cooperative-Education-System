@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 import { API_URL } from '../helpers/env';
 import { apiLoginAs, loginAs } from '../helpers/auth';
 import { seedTestData } from '../helpers/test-seeder';
-import { dbExec, withDb } from '../helpers/db';
+import { dbExec, dbValue, withDb } from '../helpers/db';
 import { completeDispatchPrep } from '../helpers/intent';
 
 /**
@@ -234,6 +234,13 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     await expect(active).toContainText('เลือกสถานประกอบการ');
     await expect(steps.filter({ hasText: 'รอหนังสือตอบรับ' })).toHaveAttribute('data-state', 'pending');
 
+    // 1b) "เอกสารของฉัน": ยังไม่มีใบที่เดินอยู่ = หนังสือของใบที่ปิดแล้วยังโชว์ พร้อมป้าย (นักศึกษาต้องตอบได้ว่าฉบับก่อนอยู่ไหน)
+    const oldLetter = page.getByTestId('student-doc-cover_letter');
+    await expect(oldLetter).toHaveCount(1);
+    await expect(oldLetter).toHaveAttribute('data-closed', 'true');
+    await expect(oldLetter).toContainText('ของคำร้องที่ปิดแล้ว · ใช้ยื่นไม่ได้');
+    await expect(oldLetter).toContainText('ถึง บริษัท');
+
     // 2) ยื่นใบใหม่ถึงที่อื่น ยังไม่ถึงมือเจ้าหน้าที่ — หนังสือเก่าต้องไม่ทำให้ขั้นหลังได้ ✓ หรือ "ตอนนี้" ล่วงหน้า
     await withDb(async (db) => {
       const other = (
@@ -255,43 +262,40 @@ test.describe('ไทม์ไลน์นักศึกษา เฟส 2–4 
     await expect(active).toContainText('ขอหนังสือขอความอนุเคราะห์');
     await expect(steps.filter({ hasText: 'รอหนังสือตอบรับ' })).toHaveAttribute('data-state', 'pending');
 
-    // 3) "เอกสารของฉัน": หนังสือของคำร้องที่ปิดแล้วยังอยู่ (ไม่ซ่อน) แต่ติดป้ายชัดและบอกว่าเป็นของบริษัทไหน
-    const oldLetter = page.getByTestId('student-doc-cover_letter');
-    await expect(oldLetter).toHaveCount(1);
-    await expect(oldLetter).toHaveAttribute('data-closed', 'true');
-    await expect(oldLetter).toContainText('ของคำร้องที่ปิดแล้ว · ใช้ยื่นไม่ได้');
-    await expect(oldLetter).toContainText('ถึง บริษัท');
+    // 3) "เอกสารของฉัน": ยื่นใบใหม่แล้ว = หนังสือของใบที่ปิดไปถูกแทนที่ → API ไม่ส่งมา หน้าจอไม่โชว์ซ้อน
+    //    (แถวยังอยู่ในฐานให้เจ้าหน้าที่ตรวจย้อนหลัง — เทสต์ข้างล่างนับแถวในฐานด้วย)
+    const dashboard = async () => (await page.request.get(`${API_URL}/students/dashboard`)).json();
+    let dash = await dashboard();
+    expect(dash.activeIntent).not.toBeNull();
+    expect(dash.documents).toEqual([]);
+    await expect(page.getByTestId('student-doc-cover_letter')).toHaveCount(0);
+    expect(await dbValue<string>(`SELECT COUNT(*) FROM official_documents WHERE document_number = 'ST/OLD'`)).toBe('1');
 
     // 4) ช่องที่เคยเหลือ: เจ้าหน้าที่รับใบใหม่แล้ว (มีเลขที่) แต่หนังสือฉบับใหม่ยังไม่มีแถว
-    //    — เซิร์ฟเวอร์ต้องไม่หยิบหนังสือเก่ามาตอบแทน · พอมีฉบับใหม่ ฉบับใหม่ต้องไม่ถูกติดป้ายว่าเป็นของเก่า
-    const dashboard = async () => (await page.request.get(`${API_URL}/students/dashboard`)).json();
+    //    — เซิร์ฟเวอร์ต้องไม่หยิบหนังสือเก่ามาตอบแทน และก็ไม่ส่งหนังสือเก่าให้หน้าจอด้วย
     await dbExec(
       `UPDATE intent_forms SET status = 'approved_by_dept_head', officer_document_no = 'ST/NEW' WHERE status = 'pending_advisor'`
     );
-    let dash = await dashboard();
+    dash = await dashboard();
     expect(dash.activeIntent.cover_letter_status).toBeNull();
-    expect(dash.documents.map((d: { of_closed_request: boolean }) => d.of_closed_request)).toEqual([true]);
+    expect(dash.documents).toEqual([]);
 
+    // พอมีฉบับใหม่ — เห็นฉบับใหม่ฉบับเดียว ไม่ถูกติดป้ายว่าเป็นของเก่า
     await dbExec(
       `INSERT INTO official_documents (document_number, type, student_id, company_id, status)
        SELECT 'ST/NEW', 'cover_letter', student_id, company_id, 'pending_sign' FROM intent_forms WHERE officer_document_no = 'ST/NEW'`
     );
     dash = await dashboard();
     expect(dash.activeIntent.cover_letter_status).toBe('pending_sign');
-    // ฉบับที่ยังใช้ได้มาก่อน · ของคำร้องที่ปิดแล้วอยู่ล่าง
     expect(
       dash.documents.map((d: { status: string; of_closed_request: boolean }) => [d.status, d.of_closed_request])
-    ).toEqual([
-      ['pending_sign', false],
-      ['signed', true],
-    ]);
+    ).toEqual([['pending_sign', false]]);
     await page.reload();
     const letters = page.getByTestId('student-doc-cover_letter');
-    await expect(letters).toHaveCount(2);
-    await expect(letters.nth(0)).toHaveAttribute('data-closed', 'false');
-    await expect(letters.nth(0)).toContainText('บริษัท ที่ใหม่ จำกัด');
-    await expect(letters.nth(0)).not.toContainText('ของคำร้องที่ปิดแล้ว');
-    await expect(letters.nth(1)).toHaveAttribute('data-closed', 'true');
+    await expect(letters).toHaveCount(1);
+    await expect(letters.first()).toHaveAttribute('data-closed', 'false');
+    await expect(letters.first()).toContainText('บริษัท ที่ใหม่ จำกัด');
+    await expect(letters.first()).not.toContainText('ของคำร้องที่ปิดแล้ว');
   });
 
   test('หนังสือที่จับคู่กับใบไม่ได้ (เลขที่ว่าง / ไม่ตรงใบไหน) ไม่ถูกติดป้ายว่าเป็นของคำร้องที่ปิดแล้ว — ไม่รู้ = ไม่แต่งเรื่อง', async ({

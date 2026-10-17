@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useContext, useEffect, useState } from 'react';
 import StudentWelcomeGuide from './StudentWelcomeGuide';
 import PageSkeleton from './ui/Skeleton';
 import { useDashboardData } from '../hooks/useDashboardData';
+import { AuthContext } from '../context/authContextValue';
 import api, { API_BASE_URL } from '../services/api';
 import type { StudentProfile, IntentForm, OfficialDocument } from '../types/api';
 import { type PhaseGroup } from './CoopStepperBar';
@@ -15,7 +16,8 @@ import ConfirmSummary from './ui/ConfirmSummary';
 import StatusBadge from './ui/StatusBadge';
 import { intentDisplayStatus } from '../utils/intentStatus';
 import Button from './ui/Button';
-import { Building2, CalendarDays, Pin, Upload, UserPen } from 'lucide-react';
+import FileViewButton from './FileViewButton';
+import { Building2, CalendarDays, Pin, Upload, UserPen, X } from 'lucide-react';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { Input } from './ui/Input';
 import CoopCalendarModal from './CoopCalendarModal';
@@ -68,6 +70,10 @@ function deriveStatusState(intent: StatusIntent): StatusCardState | null {
 }
 
 const StudentDashboard: React.FC = () => {
+  const auth = useContext(AuthContext);
+  const userKey = auth?.user?.userId ?? auth?.user?.email ?? 'student';
+  const bannerKey = `coop_calendar_banner_seen_${userKey}`;
+
   const [data, setData] = useState<{
     student: StudentProfile & { advisor?: { email: string; name?: string }; supervisor?: { email: string; name?: string } };
     activeIntent: IntentForm | null;
@@ -100,7 +106,6 @@ const StudentDashboard: React.FC = () => {
   // ผู้ลงนามบนแบบตอบรับ — นักศึกษากรอกตามกระดาษ (เจ้าหน้าที่ไม่ต้องคีย์ซ้ำ)
   const [signerName, setSignerName] = useState('');
   const [signerPosition, setSignerPosition] = useState('');
-  const [signedDate, setSignedDate] = useState('');
   const [proofError, setProofError] = useState<string | null>(null);
   // ส่งแล้วแก้เองไม่ได้จนกว่าเจ้าหน้าที่ตีกลับ — ตรวจก่อนส่ง
   const [confirmingProof, setConfirmingProof] = useState(false);
@@ -151,6 +156,37 @@ const StudentDashboard: React.FC = () => {
   // ปฏิทินสหกิจ — คนละระบบกับประกาศประชาสัมพันธ์ด้านบน อยู่คู่กันบนหน้าเดียว
   const [calendar, setCalendar] = useState<CoopCalendarResponse | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  // ให้แบนเนอร์ปฏิทินแสดงแค่ครั้งแรกครั้งเดียวเท่านั้น เมื่อปิดหรือพ้นเวลาแล้วจะไม่แสดงอีก
+  const [showCalendarBanner, setShowCalendarBanner] = useState(() => {
+    try {
+      return !localStorage.getItem(bannerKey);
+    } catch {
+      return false;
+    }
+  });
+
+  const dismissCalendarBanner = () => {
+    setShowCalendarBanner(false);
+    try {
+      localStorage.setItem(bannerKey, 'true');
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    if (!calendar || !showCalendarBanner) return;
+    // บันทึกว่าเคยแสดงแล้วตั้งแต่รอบแรกทันที เพื่อให้แสดงแค่ครั้งแรกครั้งเดียวเท่านั้น
+    try {
+      localStorage.setItem(bannerKey, 'true');
+    } catch {
+      // ignore
+    }
+    const timer = setTimeout(() => {
+      setShowCalendarBanner(false);
+    }, 8000); // 8 วินาที (ตัวเลขนี้ตั้งเอง ยังไม่มีที่มา)
+    return () => clearTimeout(timer);
+  }, [calendar, showCalendarBanner, bannerKey]);
 
   const loadDashboardData = async (isBackground = false) => {
     try {
@@ -212,7 +248,9 @@ const StudentDashboard: React.FC = () => {
   const submissionWindow = calendar?.activities.find((a) => a.activity_key === 'intent_submission');
   const uploadNeedsLateReason =
     !data?.replacement_pass &&
-    submissionWindow?.status === 'late' &&
+    // รอบพิเศษ (พ้นช่วงปกติแต่คณะเปิดให้) นับเป็นส่งช้าเหมือนช่วงผ่อนผัน — เซิร์ฟเวอร์ปั๊มธงให้แล้ว จึงต้องถามเหตุผลที่นี่ด้วย
+    (submissionWindow?.status === 'late' ||
+      (submissionWindow?.status === 'closed' && !!submissionWindow.special_round_open)) &&
     !!data?.activeIntent &&
     !data.activeIntent.submitted_late &&
     !data.activeIntent.request_form_path &&
@@ -282,8 +320,8 @@ const StudentDashboard: React.FC = () => {
     e.preventDefault();
     if (!activeIntent || !evidenceFile) return;
 
-    if (!signerName.trim() || !signerPosition.trim() || !signedDate) {
-      setProofError('กรุณากรอกชื่อ ตำแหน่ง และวันที่ของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับ');
+    if (!signerName.trim() || !signerPosition.trim()) {
+      setProofError('กรุณากรอกชื่อและตำแหน่งของผู้ลงนาม ตามที่ปรากฏบนแบบตอบรับ');
       return;
     }
     setProofError(null);
@@ -293,10 +331,11 @@ const StudentDashboard: React.FC = () => {
   const submitProof = async () => {
     if (!activeIntent || !evidenceFile) return;
 
+    const todayStr = calendar?.today || new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
     const formData = new FormData();
     formData.append('signer_name', signerName.trim());
     formData.append('signer_position', signerPosition.trim());
-    formData.append('signed_date', signedDate);
+    formData.append('signed_date', todayStr);
     formData.append('evidence', evidenceFile);
 
     setSubmittingProof(true);
@@ -309,7 +348,6 @@ const StudentDashboard: React.FC = () => {
       // Reset states
       setSignerName('');
       setSignerPosition('');
-      setSignedDate('');
       setEvidenceFile(null);
       await loadDashboardData();
     } catch (err) {
@@ -441,7 +479,7 @@ const StudentDashboard: React.FC = () => {
    * ไม่ใช่ขึ้นแถบบอกว่า "ไม่มีข้อมูล" ซึ่งเป็นเสียงรบกวนล้วนๆ
    */
   const calendarBanner = (() => {
-    if (!calendar) return null;
+    if (!calendar || !showCalendarBanner) return null;
 
     // ยุบสองแหล่ง (กิจกรรมตายตัว + รายการอิสระ) ให้เป็นรูปเดียวก่อน
     // แถบนี้ไม่สนว่าอันไหนล็อกอะไร สนแค่ชื่อกับวัน
@@ -478,7 +516,10 @@ const StudentDashboard: React.FC = () => {
       .sort((a, b) => a.start_date.localeCompare(b.start_date));
 
     return (
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800/50 dark:bg-emerald-950/30">
+      <div
+        data-testid="calendar-banner"
+        className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 transition-all duration-300 dark:border-emerald-800/50 dark:bg-emerald-950/30"
+      >
         <div className="min-w-0 space-y-1">
           <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
             ปฏิทินสหกิจศึกษา
@@ -501,15 +542,26 @@ const StudentDashboard: React.FC = () => {
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setCalendarOpen(true)}
-          aria-label="ดูปฏิทินสหกิจศึกษาทั้งหมด"
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-gray-800"
-        >
-          <CalendarDays className="h-4 w-4" />
-          ดูปฏิทินทั้งหมด
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setCalendarOpen(true)}
+            aria-label="ดูปฏิทินสหกิจศึกษาทั้งหมด"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-emerald-300 bg-white px-4 py-2 text-xs font-bold text-emerald-800 transition-colors hover:bg-emerald-100 dark:border-emerald-800/50 dark:bg-gray-900 dark:text-emerald-300 dark:hover:bg-gray-800 cursor-pointer"
+          >
+            <CalendarDays className="h-4 w-4" />
+            ดูปฏิทินทั้งหมด
+          </button>
+          <button
+            type="button"
+            onClick={dismissCalendarBanner}
+            aria-label="ปิดการแจ้งเตือนปฏิทิน"
+            title="ปิด"
+            className="p-2 rounded-xl text-emerald-700 hover:bg-emerald-200/60 dark:text-emerald-400 dark:hover:bg-emerald-900/40 transition-colors cursor-pointer"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     );
   })();
@@ -761,7 +813,10 @@ const StudentDashboard: React.FC = () => {
           id: '2.1',
           title: '2.1 แบบแจ้งรายละเอียดที่พัก (สหกิจ 06)',
           description:
-            'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · ส่งคู่กับสหกิจ 03 เพื่อให้คณะออกหนังสือส่งตัวและจัดอาจารย์นิเทศ',
+            'กรอกที่พักระหว่างฝึก ปักหมุดแผนที่ และตรวจผู้ติดต่อฉุกเฉิน · ส่งคู่กับสหกิจ 03 เพื่อให้คณะออกหนังสือส่งตัวและจัดอาจารย์นิเทศ' +
+            (activeIntent?.status === 'accepted'
+              ? ''
+              : ' · ตอนนี้กรอกร่างไว้ได้ แต่บันทึกส่งได้เมื่อเจ้าหน้าที่ยืนยันที่ฝึกแล้ว'),
           status: step2_1Done ? 'completed' : phase2Open ? 'active' : 'pending',
           actionLabel: phase2Open && !step2_1Done ? 'กรอกรายละเอียดที่พัก' : undefined,
           onAction: () => window.dispatchEvent(new CustomEvent('navigate', { detail: 'accommodation_plan' }))
@@ -910,14 +965,11 @@ const StudentDashboard: React.FC = () => {
                         <span data-testid="request-form-uploaded">
                           ส่งแบบคำร้องที่ลงนามแล้ว · รอเจ้าหน้าที่ตรวจสอบ
                         </span>
-                        <a
-                          href={`${API_BASE_URL}/files/${intent.request_form_path}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-bold text-brand-blue underline dark:text-blue-400"
-                        >
-                          เปิดไฟล์ที่ส่งไป
-                        </a>
+                        <FileViewButton
+                          src={`${API_BASE_URL}/files/${intent.request_form_path}`}
+                          title="ไฟล์แบบคำร้องที่ส่งไป"
+                          data-testid="view-request-form"
+                        />
                         {/* ส่งผิดไฟล์/ไฟล์เบลอ — เปลี่ยนได้จนกว่าเจ้าหน้าที่จะรับ (ผ่านกล่องยืนยันเดิม · ชื่อผู้ลงนามคงเดิม) */}
                         <label className={uploadingRequestForm ? '' : 'cursor-pointer'}>
                           <input
@@ -1201,12 +1253,12 @@ const StudentDashboard: React.FC = () => {
   // การ์ดเรียกเฉพาะสถานะที่คณบดีลงนามแล้ว และพับไว้หลังปุ่ม `proof-open` · ช่องกรอกอยู่ใน state ของหน้านี้
   // ปิดฟอร์มแล้วค่าที่กรอกไว้ไม่หาย
   const proofFormEl = (
-    <div data-testid="proof-form" className="space-y-4 rounded-xl border border-gray-200 p-4 dark:border-gray-700">
-      <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 dark:border-blue-900/50 dark:bg-blue-950/10">
-        <span className="mb-1 block text-xs font-bold text-brand-blue dark:text-blue-400">
+    <div data-testid="proof-form" className="space-y-4 rounded-xl border border-emerald-200 p-4 dark:border-emerald-800/60">
+      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/30">
+        <span className="mb-1 block text-xs font-bold text-emerald-800 dark:text-emerald-300">
           การรายงานผลการตอบรับเข้าปฏิบัติสหกิจศึกษา (Placement Reporting)
         </span>
-        <p className="text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+        <p className="text-xs leading-relaxed text-emerald-900 dark:text-emerald-200">
           หากสถานประกอบการคืนเอกสารตอบรับกระดาษมาให้คุณ (นอกระบบ) กรุณาระบุวันเริ่มงาน
           และอัปโหลดไฟล์หลักฐานเพื่อขึ้นทะเบียนแทนบริษัท · พี่เลี้ยงระบุทีหลังได้เมื่อเริ่มฝึกแล้ว
         </p>
@@ -1218,7 +1270,7 @@ const StudentDashboard: React.FC = () => {
                       <p className="text-xs font-bold text-gray-700 dark:text-gray-300">
                         ผู้ลงนามบนแบบตอบรับ (กรอกตามที่ปรากฏบนกระดาษ)
                       </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">ชื่อผู้อนุมัติ *</label>
                           <Input
@@ -1237,17 +1289,6 @@ const StudentDashboard: React.FC = () => {
                             value={signerPosition}
                             onChange={(e) => setSignerPosition(e.target.value)}
                             placeholder="เช่น ผู้จัดการฝ่ายบุคคล" size="sm"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">วันที่บนแบบตอบรับ *</label>
-                          <Input
-                            type="date"
-                            data-testid="proof-signed-date"
-                            disabled={submittingProof || reportingFail}
-                            value={signedDate}
-                            onChange={(e) => setSignedDate(e.target.value)}
-                            size="sm"
                           />
                         </div>
                       </div>
@@ -1326,11 +1367,12 @@ const StudentDashboard: React.FC = () => {
         </div>
       )}
       {statusIntent && statusState && (
-        <StudentStatusCard
-          state={statusState}
-          intent={statusIntent}
-          dueNote={dueNote}
-          overdue={!!acceptanceDue?.overdue}
+        <div id="student-status-card">
+          <StudentStatusCard
+            state={statusState}
+            intent={statusIntent}
+            dueNote={dueNote}
+            overdue={!!acceptanceDue?.overdue}
           evidenceHref={
             activeIntent?.acceptance_evidence_path
               ? `${API_BASE_URL}/files/${activeIntent.acceptance_evidence_path}`
@@ -1355,6 +1397,7 @@ const StudentDashboard: React.FC = () => {
           failBusy={reportingFail}
           onFindPlacement={() => window.dispatchEvent(new CustomEvent('navigate', { detail: 'jobs' }))}
         />
+        </div>
       )}
 
       {/* ⛔ การ์ด "ทำอะไรตอนนี้" มีได้ใบเดียวเสมอ — ช่วงขอที่ฝึกงานเป็นของ StudentStatusCard · ตั้งแต่ได้ที่ฝึกงานแล้ว
@@ -1563,6 +1606,7 @@ const StudentDashboard: React.FC = () => {
               {data.documents.map((doc) => (
                 <div
                   key={doc.doc_id}
+                  id={`student-doc-${doc.doc_id}`}
                   data-testid={`student-doc-${doc.type}`}
                   data-closed={doc.of_closed_request ? 'true' : 'false'}
                   className={`flex justify-between items-center gap-3 p-3 rounded-lg border text-xs ${
@@ -1633,7 +1677,8 @@ const StudentDashboard: React.FC = () => {
                 แบบยืนยันแบบตอบรับ (เอกสารหมายเลข 2)
               </span>
               <p className="mt-0.5 text-gray-600 dark:text-gray-400">
-                พิมพ์ไปพร้อมหนังสือขอความอนุเคราะห์ ให้สถานประกอบการกรอก ลงนามและประทับตรา
+                ไฟล์นี้รวมหนังสือขอความอนุเคราะห์ที่คณบดีลงนามแล้วไว้ด้วย พิมพ์ครั้งเดียวได้ครบทั้งสองฉบับ
+                ให้สถานประกอบการกรอก ลงนามและประทับตราในแบบตอบรับ
                 <span className="font-semibold"> ภายใน 15 วันทำการ</span> — ทางสำรองกรณีบริษัทรับกระดาษ
               </p>
               <a
@@ -1643,7 +1688,7 @@ const StudentDashboard: React.FC = () => {
                 data-testid="open-acceptance-form"
                 className="mt-2 inline-block rounded border border-gray-300 px-2 py-1 font-bold transition-all hover:border-brand-blue hover:text-brand-blue dark:border-gray-700 dark:hover:text-blue-400"
               >
-                เปิดแบบตอบรับเพื่อสั่งพิมพ์
+                เปิดหนังสือ + แบบตอบรับเพื่อสั่งพิมพ์
               </a>
             </div>
           )}
@@ -1670,7 +1715,6 @@ const StudentDashboard: React.FC = () => {
                   rows: [
                     { label: 'ชื่อ', value: signerName.trim() },
                     { label: 'ตำแหน่ง', value: signerPosition.trim() },
-                    { label: 'วันที่', value: signedDate ? formatThaiDate(signedDate) : '' },
                     { label: 'ไฟล์', value: evidenceFile?.name ?? '' },
                   ],
                 },
