@@ -7,6 +7,8 @@ import type { StudentProfile as StudentType } from '../types/api';
 import AlertBanner from './ui/AlertBanner';
 import { getErrorMessage, getErrorStatus } from '../utils/errors';
 import { NAME_PREFIXES } from '../utils/namePrefix';
+import { Download, FileText, Upload } from 'lucide-react';
+import FileViewButton from './FileViewButton';
 
 interface Major {
   major_id: number;
@@ -54,6 +56,9 @@ const StudentProfile: React.FC = () => {
   const [loadFailed, setLoadFailed] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // เรซูเม่: บังคับมีก่อนยื่นคำร้องขอหนังสือ (เจ้าของสั่ง 2026-10-18) — บริษัท อาจารย์ที่ปรึกษา และอาจารย์นิเทศเปิดดูได้
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
 
   const alertRef = useRef<HTMLDivElement>(null);
 
@@ -227,10 +232,14 @@ const StudentProfile: React.FC = () => {
       formData.append('current_address', currentAddress.trim());
       formData.append('parent_name', parentName.trim());
       formData.append('parent_phone', parentPhone.trim());
+      if (resumeFile) {
+        formData.append('resume', resumeFile);
+      }
 
       await api.put('/profile/student', formData);
 
       setSuccess('บันทึกข้อมูลส่วนตัวและเรซูเม่เรียบร้อยแล้ว');
+      setResumeFile(null);
       await loadProfile();
     } catch (err) {
       setError(getErrorMessage(err, 'ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้ กรุณาลองใหม่อีกครั้ง'));
@@ -239,6 +248,26 @@ const StudentProfile: React.FC = () => {
       alertRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setIsSubmitting(false);
     }
+  };
+
+  const handleResumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError(null);
+    const selected = e.target.files?.[0] || null;
+    if (!selected) {
+      setResumeFile(null);
+      return;
+    }
+    if (!selected.name.toLowerCase().endsWith('.pdf')) {
+      setFileError('ไฟล์ที่เลือกต้องเป็นนามสกุล PDF เท่านั้น');
+      setResumeFile(null);
+      return;
+    }
+    if (selected.size > 5 * 1024 * 1024) {
+      setFileError('ขนาดไฟล์ต้องไม่เกิน 5 MB');
+      setResumeFile(null);
+      return;
+    }
+    setResumeFile(selected);
   };
 
   if (loading) {
@@ -255,6 +284,11 @@ const StudentProfile: React.FC = () => {
   }
 
   const initialLetters = (firstName?.[0] || 'ส') + (lastName?.[0] || 'ห');
+
+  const resumeFileName = profile?.resume_file ? profile.resume_file.split('/').pop() || 'resume.pdf' : '';
+  const resumeDownloadUrl = profile?.resume_file
+    ? `${API_BASE_URL}/files/download/resumes/${resumeFileName}`
+    : '';
 
   const avatarUrl =
     avatarPreviewUrl || (storedAvatar ? `${API_BASE_URL}/files/${storedAvatar}` : null);
@@ -609,6 +643,63 @@ const StudentProfile: React.FC = () => {
                 />
               </div>
             </div>
+          </div>
+
+          {/* เรซูเม่ — บังคับมีก่อนยื่นคำร้องขอหนังสือ · สถานประกอบการ อาจารย์ที่ปรึกษา และอาจารย์นิเทศเปิดดูได้ */}
+          <div
+            data-testid="profile-resume-box"
+            className="flex flex-col gap-3 rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-800 dark:bg-gray-900"
+          >
+            <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-200 bg-red-50 text-red-600 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400">
+                  <FileText className="h-5 w-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-gray-900 dark:text-white">
+                    {resumeFile ? resumeFile.name : profile?.resume_file ? resumeFileName : 'ยังไม่ได้อัปโหลดเรซูเม่'}
+                  </div>
+                  <div className="mt-0.5 text-[13px] text-gray-600 dark:text-gray-400">
+                    {profile?.resume_file ? 'ไฟล์เรซูเม่ออนไลน์ปัจจุบัน (PDF)' : 'อัปโหลดไฟล์เรซูเม่เป็น .PDF ขนาดไม่เกิน 5 MB'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                {profile?.resume_file && (
+                  <>
+                    <FileViewButton src={resumeDownloadUrl} title="เรซูเม่" data-testid="profile-resume-view" />
+                    <a
+                      href={resumeDownloadUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 text-xs font-bold text-gray-700 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+                    >
+                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      ดาวน์โหลด
+                    </a>
+                  </>
+                )}
+                <label className="inline-flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl bg-brand-blue px-3 text-xs font-bold text-white transition-colors hover:bg-blue-700">
+                  <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                  {profile?.resume_file ? 'อัปโหลดใหม่' : 'เลือกไฟล์ PDF'}
+                  <input
+                    type="file"
+                    accept=".pdf"
+                    data-testid="profile-resume-input"
+                    disabled={isSubmitting}
+                    onChange={handleResumeChange}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+            {!profile?.resume_file && (
+              <p data-testid="profile-resume-required" className="text-[13px] font-semibold text-amber-900 dark:text-amber-300">
+                จำเป็นต้องมีเรซูเม่ก่อนยื่นคำร้องขอหนังสือ — สถานประกอบการ อาจารย์ที่ปรึกษา และอาจารย์นิเทศจะเห็นไฟล์นี้
+              </p>
+            )}
+            {fileError && <p className="text-xs font-semibold text-red-700 dark:text-red-400">{fileError}</p>}
           </div>
 
           <div className="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40">

@@ -173,7 +173,9 @@ const RequestLetter: React.FC = () => {
   const blockingIntent =
     currentIntent && !CLOSED_INTENT_STATUSES.includes(currentIntent.status) ? currentIntent : null;
   const editing = editingFormId !== null;
-  const canSubmit = hasProfile && (blockingIntent === null || editing);
+  // เรซูเม่บังคับมีก่อนยื่นคำร้องใหม่ (2026-10-18) — แก้ใบที่ยื่นไปแล้วไม่ต้องใช้ · เซิร์ฟเวอร์เป็นด่านจริง (409 resume_required)
+  const resumeMissing = hasProfile && profile !== null && !profile.resume_file && !editing;
+  const canSubmit = hasProfile && !resumeMissing && (blockingIntent === null || editing);
   // แก้ใบเดิมไม่ใช่การยื่นใหม่ — ตราส่งช้าของใบเดิมคงอยู่ ไม่ถามเหตุผลซ้ำ
   const askLateReason = isLate && !editing;
   const locked = existingCompanyId !== null;
@@ -732,6 +734,21 @@ const RequestLetter: React.FC = () => {
               <p>ระบบต้องใช้ข้อมูลประวัติของคุณพิมพ์ลงแบบคำร้องและหนังสือถึงสถานประกอบการ</p>
               <Button size="sm" onClick={() => goTo('profile')}>
                 ไปกรอกประวัตินักศึกษา
+              </Button>
+            </div>
+          }
+        />
+      )}
+
+      {resumeMissing && (
+        <AlertBanner
+          variant="warning"
+          message={
+            <div className="space-y-2" data-testid="request-resume-required">
+              <p className="font-bold">ยังยื่นคำร้องไม่ได้ — ต้องอัปโหลดเรซูเม่ก่อน</p>
+              <p>สถานประกอบการ อาจารย์ที่ปรึกษา และอาจารย์นิเทศจะเห็นไฟล์เรซูเม่ของคุณ อัปโหลดเป็น PDF ได้ที่หน้าข้อมูลส่วนตัว</p>
+              <Button size="sm" data-testid="request-go-resume" onClick={() => goTo('profile')}>
+                ไปอัปโหลดเรซูเม่
               </Button>
             </div>
           }

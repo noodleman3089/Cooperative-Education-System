@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import api from '../services/api';
+import api, { API_BASE_URL } from '../services/api';
+import FileViewButton from './FileViewButton';
 import Modal, { ModalBody, ModalFooter } from './ui/Modal';
 import Button from './ui/Button';
 import AlertBanner from './ui/AlertBanner';
@@ -64,6 +65,8 @@ interface Coop03View {
   training_history: Row[] | null;
   none_sections: string[];
   missing_required: string[];
+  /** `resumes/<ชื่อไฟล์>` — เรซูเม่ที่นักศึกษาอัปโหลด (บังคับมีก่อนยื่นคำร้อง) */
+  resume_file: string | null;
 }
 
 interface Coop06View {
@@ -257,6 +260,23 @@ const Coop03Panel: React.FC<{ d: Coop03View }> = ({ d }) => {
             wide
           />
         </Grid>
+      </Section>
+
+      <Section title="เรซูเม่">
+        {d.resume_file ? (
+          <div className="flex items-center gap-2 text-sm text-gray-900 dark:text-gray-100">
+            <span data-testid="coop-view-resume-name">{d.resume_file.split('/').pop()}</span>
+            <FileViewButton
+              src={`${API_BASE_URL}/files/download/resumes/${d.resume_file.split('/').pop()}`}
+              title="เรซูเม่ของนักศึกษา"
+              data-testid="coop-view-resume"
+            />
+          </div>
+        ) : (
+          <p data-testid="coop-view-resume-missing" className="text-sm text-gray-600 dark:text-gray-400">
+            นักศึกษายังไม่ได้อัปโหลดเรซูเม่
+          </p>
+        )}
       </Section>
 
       <Section title="ข้อมูลส่วนตัว">

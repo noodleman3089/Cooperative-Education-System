@@ -63,6 +63,8 @@ export interface CoopApplicationViewData {
   none_sections: string[];
   /** ช่องบังคับที่ยังว่าง — กติกาอยู่ที่ `utils/coop03Required.ts` ที่เดียว */
   missing_required: Coop03RequiredKey[];
+  /** `resumes/<ชื่อไฟล์>` — บังคับมีก่อนยื่นคำร้อง (2026-10-18) · เปิดไฟล์ผ่าน `/files/download/resumes/…` (เจ้าหน้าที่/อาจารย์) */
+  resume_file: string | null;
 }
 
 /** ถอดรหัสให้ปลอดภัยต่อการล้มเหลว — กุญแจเปลี่ยนแล้วต้องไม่ทำให้ทั้งหน้าเปิดไม่ได้ */
@@ -94,6 +96,7 @@ export async function fetchCoopApplicationView(
             s.national_id_ciphertext, s.national_id_iv, s.national_id_tag,
             s.ethnicity_ciphertext, s.ethnicity_iv, s.ethnicity_tag,
             s.religion_ciphertext, s.religion_iv, s.religion_tag,
+            s.resume_file,
             s.family_info, s.career_objective, s.interested_job_types,
             s.activity_history, s.language_proficiency,
             s.education_history, s.training_history, s.coop03_none_sections,

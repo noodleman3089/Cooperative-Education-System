@@ -138,8 +138,8 @@ export async function seedPresentation(opts: { quiet?: boolean } = {}): Promise<
 
       await client.query(
         `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
-                               first_name, last_name, year_level, phone, advisor_id, supervisor_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 4, '0812345678', $8, $8)
+                               first_name, last_name, year_level, phone, advisor_id, supervisor_id, resume_file)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 4, '0812345678', $8, $8, 'resumes/resume-user-seed.pdf')
          ON CONFLICT (student_id) DO UPDATE SET
            student_code = EXCLUDED.student_code,
            first_name = EXCLUDED.first_name,
