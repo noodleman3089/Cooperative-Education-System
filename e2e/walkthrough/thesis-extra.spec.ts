@@ -2,7 +2,7 @@ import { test, expect, request as pwRequest } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import crypto from 'crypto';
 import { seedTestData } from '../helpers/test-seeder';
-import { seedDemo } from '../../backend/src/db/seedDemo';
+import { seedDemo } from '../helpers/walkthroughDemo';
 import pool from '../../backend/src/config/database';
 import { hashPassword } from '../../backend/src/utils/password';
 import fs from 'fs';

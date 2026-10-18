@@ -1,16 +1,22 @@
 import fs from 'fs';
 import path from 'path';
 import type { PoolClient } from 'pg';
-import { PDFDocument, StandardFonts } from 'pdf-lib';
-import pool from '../config/database';
-import { hashPassword } from '../utils/password';
-import { seedDevDemoData } from './setup';
-import { createAcceptanceLinkToken } from '../utils/acceptanceLinkToken';
-import { issueMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../utils/mentorLoginLink';
-import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from '../utils/coverLetterPdf';
+// pdf-lib ติดตั้งเฉพาะใน backend/ (root ไม่มี) — อ้างทางไฟล์ตรงเพราะไฟล์นี้ย้ายมาจาก backend/src/db/
+import { PDFDocument, StandardFonts } from '../../backend/node_modules/pdf-lib';
+import pool from '../../backend/src/config/database';
+import { hashPassword } from '../../backend/src/utils/password';
+import { BACKEND_ROOT } from './env';
+import { createAcceptanceLinkToken } from '../../backend/src/utils/acceptanceLinkToken';
+import { issueMentorLoginLink, MENTOR_LINK_TTL_SYSTEM_MS } from '../../backend/src/utils/mentorLoginLink';
+import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from '../../backend/src/utils/coverLetterPdf';
 
 /**
- * ข้อมูลเดโมสำหรับเปิดหน้าเว็บเทสด้วยมือ — "หนึ่งภาคเรียนที่เดินมาถึงกลางทาง"
+ * ⚠️ 2026-10-18 เจ้าของสั่งเอาข้อมูลเดโมนักศึกษา/สถานประกอบการ/พี่เลี้ยงออกจากสคริปต์ของโปรเจค
+ * (`npm run db:seed-demo` · `db:seed-presentation` ถูกถอด · `db:setup` ลงเฉพาะโปรไฟล์บุคลากร) —
+ * ไฟล์นี้ย้ายมาอยู่ที่ `e2e/helpers/` เป็นตัวช่วยของ walkthrough ถ่ายภาพบทที่ 4 และเทสต์ `system/seed-demo` เท่านั้น
+ * ไม่มีคำสั่งรันจากบรรทัดคำสั่งอีกแล้ว · ห้ามเอากลับไปไว้ใน `backend/` หรือผูกกับ npm script
+ *
+ * ข้อมูลเดโมสำหรับถ่ายภาพ/เปิดหน้าเว็บ — "หนึ่งภาคเรียนที่เดินมาถึงกลางทาง"
  *
  * ทำไมต้องมี: หน้าจอของพี่เลี้ยง/เจ้าหน้าที่เกือบทั้งหมดเป็นการ **ตอบกลับ** สิ่งที่ฝ่ายอื่นสร้างค้างไว้
  * ถ้าฐานว่างทุกหน้าเป็นจอเปล่าเหมือนกันหมดและดูไม่ออกว่าอันไหนถูกอันไหนพัง
@@ -33,7 +39,7 @@ import { buildCoverLetterPdf, fetchCoverLetterData, toCoverLetterData } from '..
  * วันที่นับจาก "วันนี้ตามเวลาไทยของ Postgres" ทุกครั้ง สถานะ "สัปดาห์ที่ 6 จาก 16" จึงจริงเสมอ
  * ⛔ ห้าม `pool.end()` เมื่อถูก import (E2E รันทุกไฟล์ในโปรเซสเดียว) — ปิดเฉพาะตอนรันจากบรรทัดคำสั่ง
  *
- *   npm.cmd run db:seed-demo     (ต้องเคย npm.cmd run db:setup มาก่อน)
+ * เรียกจากเทสต์เท่านั้น: `await seedTestData(); await seedDemo()` (ฐานต้องผ่าน seedTestData มาก่อน)
  */
 
 const TODAY = `(NOW() AT TIME ZONE 'Asia/Bangkok')::date`;
@@ -41,7 +47,70 @@ const TODAY = `(NOW() AT TIME ZONE 'Asia/Bangkok')::date`;
 const agoSql = (param: string): string => `LEAST(NOW() - INTERVAL '1 hour', NOW() - ${param}::int * INTERVAL '1 day')`;
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const BACKEND_DIR = path.resolve(__dirname, '../..');
+const BACKEND_DIR = BACKEND_ROOT;
+
+/**
+ * ฐานของเดโม — สำเนาของ `seedDevDemoData()` ในอดีต (ก่อนถอดข้อมูลเดโมออกจาก `db:setup`):
+ * บริษัทตัวอย่าง · mentor1 ผูกบริษัท · โปรไฟล์ staff1 · โปรไฟล์ student1
+ * ⛔ อยู่ที่นี่ที่เดียว ห้ามย้ายกลับไป `backend/src/db/setup.ts` · idempotent
+ */
+async function seedWalkthroughBase(): Promise<void> {
+  const companyName = 'บริษัท ตัวอย่าง เทคโนโลยี จำกัด';
+
+  let companyRes = await pool.query('SELECT company_id FROM companies WHERE name_th = $1 LIMIT 1', [companyName]);
+  if ((companyRes.rowCount ?? 0) === 0) {
+    companyRes = await pool.query(
+      `INSERT INTO companies (name_th, address, province, district, postal_code, phone,
+                              is_verified, created_by, contact_person, contact_position, email)
+       SELECT $1, '99 หมู่ 1 ถนนมิตรภาพ ตำบลในเมือง', 'นครราชสีมา', 'เมืองนครราชสีมา', '30000', '044123456',
+              TRUE, user_id, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', 'company-demo@example.com'
+         FROM users WHERE email = 'staff1@test.com'
+       RETURNING company_id`,
+      [companyName]
+    );
+  }
+  if ((companyRes.rowCount ?? 0) === 0) return;
+  const companyId = companyRes.rows[0].company_id;
+
+  await pool.query(
+    `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
+     SELECT user_id, $1, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888'
+       FROM users WHERE email = 'mentor1@test.com'
+     ON CONFLICT (mentor_id) DO NOTHING`,
+    [companyId]
+  );
+
+  const majorRes = await pool.query('SELECT major_id FROM master_major LIMIT 1');
+  if ((majorRes.rowCount ?? 0) > 0) {
+    await pool.query(
+      `INSERT INTO personnel (personnel_id, major_id, status, first_name, last_name)
+       SELECT user_id, $1, 'approved', 'สมใจ', 'เจ้าหน้าที่ดี'
+         FROM users WHERE email = 'staff1@test.com'
+       ON CONFLICT (personnel_id) DO NOTHING`,
+      [majorRes.rows[0].major_id]
+    );
+  }
+
+  const provinceRes = await pool.query('SELECT province_id FROM master_province LIMIT 1');
+  if ((majorRes.rowCount ?? 0) > 0 && (provinceRes.rowCount ?? 0) > 0) {
+    await pool.query(
+      `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
+                            name_prefix, first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone, resume_file)
+       SELECT user_id, '640101002', $1, $2, 3.50,
+              'นางสาว', 'สมหญิง', 'ใจดี', 'หญิง', 3, '2005-08-20', 'somying@alt.com', '0823456789', '456/78 ถนนมิตรภาพ นครราชสีมา', 'สมปอง ใจดี', '0887654321', 'resumes/resume-user-seed.pdf'
+         FROM users WHERE email = 'student1@test.com'
+       ON CONFLICT (student_id) DO NOTHING`,
+      [majorRes.rows[0].major_id, provinceRes.rows[0].province_id]
+    );
+    await pool.query(
+      `INSERT INTO eligible_students_list (student_code, cumulative_gpa, email)
+       VALUES ('640101002', 3.50, 'student1@test.com')
+       ON CONFLICT (student_code) DO UPDATE SET
+         cumulative_gpa = EXCLUDED.cumulative_gpa,
+         email = EXCLUDED.email`
+    );
+  }
+}
 
 export interface SeedDemoResult {
   acceptUrls: string[];
@@ -76,7 +145,7 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
   const log = opts.quiet ? () => undefined : (m: string) => console.log(`  ${m}`);
 
   // ของพื้นฐาน: บริษัทเดโม · mentor1 ผูกบริษัท · โปรไฟล์ staff1 · โปรไฟล์ student1
-  await seedDevDemoData();
+  await seedWalkthroughBase();
 
   const client = await pool.connect();
   let ctx: {
@@ -469,14 +538,4 @@ export async function seedDemo(opts: { quiet?: boolean } = {}): Promise<SeedDemo
   }
 
   return result;
-}
-
-if (require.main === module) {
-  seedDemo()
-    .then(() => pool.end())
-    .then(() => process.exit(0))
-    .catch((err) => {
-      console.error('\n❌ ใส่ข้อมูลเดโมไม่สำเร็จ:', err instanceof Error ? err.message : err);
-      process.exit(1);
-    });
 }

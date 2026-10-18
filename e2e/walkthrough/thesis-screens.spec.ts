@@ -5,7 +5,7 @@ import os from 'os';
 import zlib from 'zlib';
 import path from 'path';
 import { seedTestData } from '../helpers/test-seeder';
-import { seedDemo } from '../../backend/src/db/seedDemo';
+import { seedDemo } from '../helpers/walkthroughDemo';
 import { API_URL } from '../helpers/env';
 import { loginAs, apiLoginAs } from '../helpers/auth';
 import { logout } from '../helpers/nav';

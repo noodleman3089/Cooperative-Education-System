@@ -296,36 +296,10 @@ async function generateTestAssets() {
 // ⛔ ห้ามย้ายเข้า setupDatabase()/baseline: E2E seeder เรียก setupDatabase() ก่อนทุกเทสต์ และ
 //    student1 (ไม่มีโปรไฟล์) กับ mentor1 (ไม่มีแถว mentors) ถูกใช้เป็น "กรณีไม่มีโปรไฟล์" ในเทสต์
 //    หลายสิบไฟล์ · idempotent: SELECT-ก่อน-INSERT สำหรับบริษัท และ ON CONFLICT สำหรับที่เหลือ
+//
+// ⚠️ 2026-10-18 เจ้าของสั่ง: ข้อมูลเดโมเหลือแค่ **บัญชีบุคลากร** — เอาโปรไฟล์ student1 · บริษัทตัวอย่าง · การผูก mentor1 ออกแล้ว
+//    (ชุดเดโมนักศึกษา/พี่เลี้ยง/บริษัทสำหรับถ่ายภาพย้ายไป `e2e/helpers/walkthroughDemo.ts` ไม่มีคำสั่งรันจากบรรทัดคำสั่ง)
 export async function seedDevDemoData() {
-  const companyName = 'บริษัท ตัวอย่าง เทคโนโลยี จำกัด';
-
-  let companyRes = await pool.query('SELECT company_id FROM companies WHERE name_th = $1 LIMIT 1', [companyName]);
-  if ((companyRes.rowCount ?? 0) === 0) {
-    companyRes = await pool.query(
-      `INSERT INTO companies (name_th, address, province, district, postal_code, phone,
-                              is_verified, created_by, contact_person, contact_position, email)
-       SELECT $1, '99 หมู่ 1 ถนนมิตรภาพ ตำบลในเมือง', 'นครราชสีมา', 'เมืองนครราชสีมา', '30000', '044123456',
-              TRUE, user_id, 'คุณใจดี ตัวอย่าง', 'ผู้จัดการฝ่ายบุคคล', 'company-demo@example.com'
-         FROM users WHERE email = 'staff1@test.com'
-       RETURNING company_id`,
-      [companyName]
-    );
-  }
-  if ((companyRes.rowCount ?? 0) === 0) {
-    console.log('ข้าม seed เดโม: ไม่พบ staff1@test.com สำหรับสร้างบริษัท');
-    return;
-  }
-  const companyId = companyRes.rows[0].company_id;
-
-  await pool.query(
-    `INSERT INTO mentors (mentor_id, company_id, name, position, department, phone)
-     SELECT user_id, $1, 'สมศักดิ์ รักเรียน', 'Lead Engineer', 'Software Dept', '0819998888'
-       FROM users WHERE email = 'mentor1@test.com'
-     ON CONFLICT (mentor_id) DO NOTHING`,
-    [companyId]
-  );
-  console.log(`Seed เดโม: mentor1@test.com ผูกกับ ${companyName}`);
-
   const majorRes = await pool.query('SELECT major_id FROM master_major LIMIT 1');
 
   // โปรไฟล์ staff1 — baseline ไม่ให้โดยตั้งใจ (เทสต์ onboarding บุคลากร/SEC-06 พึ่งว่า staff ไม่มีโปรไฟล์)
@@ -340,28 +314,6 @@ export async function seedDevDemoData() {
       [majorRes.rows[0].major_id]
     );
     console.log('Seed เดโม: โปรไฟล์ staff1@test.com');
-  }
-
-  const provinceRes = await pool.query('SELECT province_id FROM master_province LIMIT 1');
-  if ((majorRes.rowCount ?? 0) > 0 && (provinceRes.rowCount ?? 0) > 0) {
-    // advisor_id / supervisor_id ปล่อย NULL โดยตั้งใจ
-    await pool.query(
-      `INSERT INTO students (student_id, student_code, major_id, province_id, cumulative_gpa,
-                            name_prefix, first_name, last_name, nickname, year_level, birth_date, alt_email, phone, current_address, parent_name, parent_phone, resume_file)
-       SELECT user_id, '640101002', $1, $2, 3.50,
-              'นางสาว', 'สมหญิง', 'ใจดี', 'หญิง', 3, '2005-08-20', 'somying@alt.com', '0823456789', '456/78 ถนนมิตรภาพ นครราชสีมา', 'สมปอง ใจดี', '0887654321', 'resumes/resume-user-seed.pdf'
-         FROM users WHERE email = 'student1@test.com'
-       ON CONFLICT (student_id) DO NOTHING`,
-      [majorRes.rows[0].major_id, provinceRes.rows[0].province_id]
-    );
-    await pool.query(
-      `INSERT INTO eligible_students_list (student_code, cumulative_gpa, email)
-       VALUES ('640101002', 3.50, 'student1@test.com')
-       ON CONFLICT (student_code) DO UPDATE SET
-         cumulative_gpa = EXCLUDED.cumulative_gpa,
-         email = EXCLUDED.email`
-    );
-    console.log('Seed เดโม: โปรไฟล์ student1@test.com');
   }
 }
 

@@ -2,11 +2,12 @@ import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
 import { dbRow, dbRows, dbValue } from '../helpers/db';
 import { API_URL } from '../helpers/env';
-import { seedDemo } from '../../backend/src/db/seedDemo';
+import { seedDemo } from '../helpers/walkthroughDemo';
 import { MENTOR_QUEUE_KINDS } from '../../backend/src/models/mentorQueue';
 
 /**
- * สคริปต์ข้อมูลเดโม `npm run db:seed-demo` (`backend/src/db/seedDemo.ts`) ต้องไม่เน่าเงียบ
+ * ตัวช่วยข้อมูลเดโมของ walkthrough (`e2e/helpers/walkthroughDemo.ts`) ต้องไม่เน่าเงียบ
+ * (2026-10-18: ย้ายมาจาก `npm run db:seed-demo` ที่ถูกถอดตามคำสั่งเจ้าของ — ไม่มีข้อมูลเดโมนักศึกษา/บริษัทในสคริปต์ของโปรเจคแล้ว)
  *
  * สคริปต์เก่า (`scratch/seed_company.js`) ตายเงียบเมื่อ schema เปลี่ยน — ไม่มีใครรันมันในเทสต์
  * จึงรู้ตัวตอนเจ้าของอยากใช้เท่านั้น · เทสต์นี้รันมันจริงบนฐานของ E2E แล้วพิสูจน์สามเรื่อง:
