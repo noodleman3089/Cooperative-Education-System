@@ -1,74 +1,9 @@
 import { Request, Response } from 'express';
 import { CompanyModel } from '../models/company';
-import { GoogleSearchCompanyBody } from '../types';
 import { sendUnexpectedError } from '../utils/httpError';
 import { AuditAction, writeAudit } from '../utils/audit';
 
 export class CompanyController {
-  /**
-   * Search for a company using Google Place ID.
-   * If it exists, returns the existing company_id.
-   * If it doesn't, auto-inserts the company (is_verified = false) and returns the new company_id.
-   * Route: POST /api/companies/google-search
-   * Access: student
-   */
-  static async googleSearchCompany(req: Request, res: Response): Promise<void> {
-    try {
-      if (!req.user) {
-        res.status(401).json({ message: 'Unauthorized. Please log in.' });
-        return;
-      }
-
-      const body = req.body as GoogleSearchCompanyBody;
-      const { google_place_id, name_th, address, province, district, postal_code, phone } = body;
-
-      if (!google_place_id || typeof google_place_id !== 'string') {
-        res.status(400).json({ message: 'google_place_id is required and must be a valid string.' });
-        return;
-      }
-
-      // Check if it already exists in the database
-      const existingCompany = await CompanyModel.findByGooglePlaceId(google_place_id);
-      if (existingCompany) {
-        res.status(200).json({
-          message: 'Company already exists in directory.',
-          company_id: existingCompany.company_id,
-          is_verified: existingCompany.is_verified,
-        });
-        return;
-      }
-
-      // If it doesn't exist, we must validate that other fields are provided to perform the insert
-      if (!name_th || !address || !province || !district || !postal_code || !phone) {
-        res.status(400).json({
-          message: 'Company not found. To create it, please provide: name_th, address, province, district, postal_code, phone.',
-        });
-        return;
-      }
-
-      // Create new unverified company record
-      const studentUserId = req.user.userId;
-      const newCompany = await CompanyModel.create({
-        name_th,
-        address,
-        province,
-        district,
-        postal_code,
-        phone,
-        google_place_id,
-        created_by: studentUserId,
-      });
-
-      res.status(201).json({
-        message: 'New company successfully added to directory (pending verification).',
-        company_id: newCompany.company_id,
-        is_verified: newCompany.is_verified,
-      });
-    } catch (error) {
-      sendUnexpectedError(res, error, 'Google Search Company Error', 'An internal server error occurred during company lookup.');
-    }
-  }
-
   /**
    * รับรอง / ยกเลิกการรับรองสถานประกอบการ
    * Route: PUT /api/companies/:id/verify · PUT /api/companies/:id/unverify

@@ -15,6 +15,7 @@ import {
 import { CompanyModel } from '../models/company';
 import { isCalendarClosed, isLateWindow } from '../middlewares/calendarGate';
 import { ACCEPTANCE_WORKING_DAYS, addWorkingDays } from '../utils/workingDays';
+import { isRealGooglePlace } from '../utils/googlePlaces';
 import pool, { query } from '../config/database';
 import { notifyOfficerLetterReturned, notifyStudentStatusChange, sendCoverLetterToCompany } from '../utils/email';
 import {
@@ -302,6 +303,8 @@ export class IntentFormController {
           return;
         }
 
+        await IntentFormController.vetGooglePlaceId(typed.company);
+
         // สถานที่จาก Google Maps: ถ้ามีแถวของ place นี้อยู่แล้ว (นักศึกษาคนอื่นเคยยื่น) ใช้แถวนั้น
         // ไม่สร้างซ้ำ — `companies.google_place_id` เป็น UNIQUE การ INSERT ซ้ำจะล้มทั้งคำร้อง
         const googlePlaceId = typed.company.google_place_id;
@@ -398,6 +401,19 @@ export class IntentFormController {
   }
 
   /**
+   * ตรวจ `google_place_id` ที่นักศึกษาส่งมากับ Google ก่อนใช้ (SEC-04 ข้อยกเว้น "ค้นจาก Google Maps รับรองทันที")
+   * — ตั้ง `is_verified` จากการมี place id (models/intent.ts `insertDraftCompany`) ดังนั้น id ที่ตรวจไม่ผ่านต้องไม่ไปถึงที่นั่น
+   * ตรวจไม่ผ่าน/ตรวจไม่ได้ = ทิ้ง place id เหลือแค่กรอกเอง (รอเจ้าหน้าที่) · **ไม่ปฏิเสธการยื่น**
+   * place id ที่มีแถวในฐานอยู่แล้วไม่ต้องถาม Google ซ้ำ (แถวนั้นผ่านการตรวจตอนสร้าง หรือเจ้าหน้าที่ลงเอง)
+   */
+  private static async vetGooglePlaceId(company: TypedCompanyInput): Promise<void> {
+    const placeId = company.google_place_id;
+    if (!placeId) return;
+    if (await CompanyModel.findByGooglePlaceId(placeId)) return;
+    if (!(await isRealGooglePlace(placeId))) company.google_place_id = null;
+  }
+
+  /**
    * นักศึกษาแก้สถานประกอบการของคำร้องที่ยื่นแล้ว ก่อนอัปโหลดกระดาษที่ลงนาม
    * Route: PUT /api/intents/:id/company
    * Access: student (ของตัวเองเท่านั้น — ตรวจในทรานแซกชันของโมเดล)
@@ -433,6 +449,7 @@ export class IntentFormController {
           res.status(400).json({ message: typed.error });
           return;
         }
+        await IntentFormController.vetGooglePlaceId(typed.company);
         target = { typed: typed.company };
       }
 

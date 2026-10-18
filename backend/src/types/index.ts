@@ -158,16 +158,6 @@ export interface IntentForm {
 
 // Sprint 2 API Request Bodies
 
-export interface GoogleSearchCompanyBody {
-  google_place_id: string;
-  name_th: string;
-  address: string;
-  province: string;
-  district: string;
-  postal_code: string;
-  phone: string;
-}
-
 export interface SubmitIntentBody {
   company_id: number;
   semester_id: number;

@@ -31,39 +31,6 @@ export class CompanyModel {
   }
 
   /**
-   * Create a new company record (default is_verified is false).
-   */
-  static async create(companyData: {
-    name_th: string;
-    address: string;
-    province: string;
-    district: string;
-    postal_code: string;
-    phone: string;
-    google_place_id: string | null;
-    created_by: number;
-  }): Promise<Company> {
-    const isVerified = Boolean(companyData.google_place_id);
-    const res = await query(
-      `INSERT INTO companies (name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       RETURNING company_id, name_th, address, province, district, postal_code, phone, google_place_id, is_verified, created_by, contact_person, contact_position, email`,
-      [
-        companyData.name_th,
-        companyData.address,
-        companyData.province,
-        companyData.district,
-        companyData.postal_code,
-        companyData.phone,
-        companyData.google_place_id,
-        isVerified,
-        companyData.created_by,
-      ]
-    );
-    return res.rows[0] as Company;
-  }
-
-  /**
    * Set (or clear) the co-op office's endorsement of a company.
    *
    * เดิมมีแต่ทางไป — กดรับรองผิดแล้วต้องไปแก้ที่ฐานข้อมูลเอง ซึ่งไม่ใช่สิ่งที่

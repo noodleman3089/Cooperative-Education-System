@@ -1068,7 +1068,10 @@ export class IntentFormModel {
     }
   }
 
-  /** สร้างแถวสถานประกอบการที่นักศึกษากรอกเอง — ถ้ามาจาก Google Maps ให้รับรองทันที (is_verified = TRUE) ถ้ากรอกเองให้รอเจ้าหน้าที่ตรวจ (FALSE) */
+  /**
+   * สร้างแถวสถานประกอบการที่นักศึกษากรอกเอง — ถ้ามาจาก Google Maps ให้รับรองทันที (is_verified = TRUE) ถ้ากรอกเองให้รอเจ้าหน้าที่ตรวจ (FALSE)
+   * ⛔ "มี place id" ใช้เป็นหลักฐานได้ก็ต่อเมื่อผู้เรียกผ่าน `IntentFormController.vetGooglePlaceId` มาแล้ว (ตรวจกับ Google) — ห้ามเรียกจากที่อื่นโดยไม่ตรวจ
+   */
   private static async insertDraftCompany(
     client: PoolClient,
     studentId: number,

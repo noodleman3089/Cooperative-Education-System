@@ -7,12 +7,9 @@ const router = Router();
 // Protect all company directory endpoints with authentication
 router.use(authenticateToken);
 
-// Route: POST /api/companies/google-search (Used by students to search/insert)
-router.post(
-  '/google-search',
-  authorizeRoles('student'),
-  CompanyController.googleSearchCompany
-);
+// ⛔ เคยมี POST /companies/google-search (นักศึกษาสร้างแถว is_verified = TRUE ด้วย place id ที่ส่งมาเอง ไม่มีใครเรียก) —
+// ลบ 2026-10-18 (SEC-04) · นักศึกษาเพิ่มสถานประกอบการได้ทางเดียวคือ POST /intents ซึ่งตรวจ place id กับ Google ก่อน
+// อย่าเพิ่มทางลัดให้นักศึกษาสร้างแถวที่รับรองแล้วกลับมา
 
 // Route: GET /api/companies (Company Directory with role-based filters)
 router.get(

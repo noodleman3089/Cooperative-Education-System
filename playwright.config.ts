@@ -6,7 +6,7 @@ import path from 'path';
 dotenv.config({ path: path.resolve(__dirname, 'backend/.env') });
 
 import fs from 'fs';
-import { APP_URL, BACKEND_START_COMMAND, WORKER_COUNT, workerSlot } from './e2e/helpers/env';
+import { APP_URL, BACKEND_START_COMMAND, WORKER_COUNT, placesApiBase, workerSlot } from './e2e/helpers/env';
 
 // ⛔ E2E ต้องไม่ส่งอีเมลจริงเด็ดขาด — backend/.env ในเครื่องนี้ชี้ไป Gmail จริง
 // worker ของ Playwright สืบทอด env จากโปรเซสที่โหลด config นี้ ดังนั้น spec ที่ import โมดูล backend ตรง ๆ
@@ -29,6 +29,8 @@ if (process.env.TEST_PARALLEL_INDEX !== undefined) {
   const me = workerSlot(parseInt(process.env.TEST_PARALLEL_INDEX, 10));
   process.env.DB_DATABASE = databaseOf(me.index);
   process.env.FRONTEND_URL = me.appUrl;
+  // backend ที่ spec เปิดเองสืบทอด env นี้ — ต้องไม่ถึง Google จริง (ดู env ของ webServer ข้างล่าง)
+  process.env.GOOGLE_PLACES_API_BASE = placesApiBase(me.index);
 } else {
   // โปรเซสหลัก (ก่อนเปิดเซิร์ฟเวอร์) — เตรียมโฟลเดอร์ของ worker 1 ขึ้นไป: ของที่ backend อ่านจาก cwd
   // (ฟอนต์ · ตรา · แม่แบบ · ลายเซ็นคณบดีจำลอง) คัดลอกจาก backend/ ทับทุกรอบ ให้ตรงกับของจริงเสมอ
@@ -94,6 +96,8 @@ export default defineConfig({
       env: {
         // E2E ต้องไม่ส่งอีเมลจริงเด็ดขาด — backend/.env ในเครื่องนี้ชี้ไป Gmail จริง
         MAIL_DRY_RUN: 'true',
+        // ตรวจ place id (SEC-04) ชี้ไป stub ในเครื่อง — E2E ห้ามเรียก Google จริง · ไม่มี stub รันอยู่ = ตรวจไม่ผ่าน (fail closed)
+        GOOGLE_PLACES_API_BASE: placesApiBase(slot.index),
         PORT: String(slot.backendPort),
         DB_DATABASE: databaseOf(slot.index),
         FRONTEND_URL: slot.appUrl,

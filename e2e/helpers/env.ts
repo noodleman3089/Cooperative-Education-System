@@ -33,6 +33,8 @@ export function workerSlot(index: number) {
     backendRoot: index === 0 ? BACKEND_DIR : path.join(REPO_ROOT, 'e2e', '.workers', `w${index}`),
     /** พอร์ตของ backend ตัวที่ spec เปิดเอง (rate-limit · company-mail) */
     childServerPort: 5090 + index,
+    /** พอร์ตของ Places API จำลอง — backend ของ worker นี้ถูกชี้มาที่นี่ (`GOOGLE_PLACES_API_BASE`) แทน Google จริง */
+    placesStubPort: 5190 + index,
   };
 }
 
@@ -56,6 +58,12 @@ export const BACKEND_ROOT = self.backendRoot;
 
 /** พอร์ตสำหรับ backend ตัวที่ spec เปิดเองชั่วคราว — ไม่ชนกันข้าม worker */
 export const CHILD_SERVER_PORT = self.childServerPort;
+
+/** พอร์ตของ Places API จำลองของ worker นี้ (ใช้ผ่าน `helpers/placesStub.ts`) */
+export const PLACES_STUB_PORT = self.placesStubPort;
+
+/** ที่อยู่ที่ backend ถูกบอกให้ถาม Google — E2E ห้ามถึง Google จริง (SEC-04) */
+export const placesApiBase = (index: number) => `http://127.0.0.1:${workerSlot(index).placesStubPort}`;
 
 /**
  * คำสั่งเปิด backend จาก cwd ไหนก็ได้ (ต้องใส่ `cwd: BACKEND_ROOT` เอง)
