@@ -21,9 +21,13 @@ export default defineConfig(base, {
   use: {
     trace: 'off',
     screenshot: 'off',
+    // ⛔ ต้องมีเพดานเวลา — ไม่ตั้งแล้วคลิกที่หาไม่เจอแขวนจนหมดเวลาทั้งเคส (รอบแรกค้าง 1 ชั่วโมง)
+    actionTimeout: 30_000,
+    navigationTimeout: 30_000,
     video: { mode: 'on', size: { width: 1366, height: 900 } },
     // หน่วงทุกการกระทำเล็กน้อยให้ผู้ชมตามทัน
-    launchOptions: { slowMo: 250 },
+    // หน่วงเล็กน้อยทุกการกระทำ — คำบรรยายและการพิมพ์ทีละตัวอักษรอยู่ในสเปคเอง
+    launchOptions: { slowMo: 100 },
   },
   projects: [
     {
