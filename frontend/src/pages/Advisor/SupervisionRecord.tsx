@@ -164,6 +164,11 @@ const SupervisionRecord: React.FC = () => {
       setAppointments(appRes?.data || appRes || []);
       setUnrecordedRows(homeRes?.tiles?.unrecorded_visit?.rows || []);
 
+      // ⛔ รอบพื้นหลัง (poll ทุก 10 วิ · `intent-updated`) ต้องไม่แตะฟอร์มที่อาจารย์กำลังกรอก —
+      //    เดิมรอบพื้นหลังโหลดบันทึกเดิมทับคะแนน/หมายเหตุ/วันที่ทั้งหมดกลับเป็นค่าในฐาน (ว่างถ้ายังไม่เคยบันทึก)
+      //    แบบฟอร์ม 37 ข้อกรอกนานกว่า 10 วินาทีเสมอ = ค่าที่กรอกหายกลางคัน
+      if (isBackground) return;
+
       // อ่านค่า ?student= และ ?visit= จาก URL params
       const urlStudent = searchParams.get('student');
       const urlVisit = searchParams.get('visit');

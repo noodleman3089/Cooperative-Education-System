@@ -288,6 +288,34 @@ test.describe('สหกิจ 13 — แบบบันทึกการนิ
       .toBe('advisor1@test.com');
   });
 
+  test('V11: รอบโหลดพื้นหลัง (poll ทุก 10 วิ) ต้องไม่ลบค่าที่อาจารย์กำลังกรอกอยู่ในฟอร์ม', async ({ page }) => {
+    test.setTimeout(120_000);
+
+    await loginAs(page, 'advisor1');
+    await page.getByTestId('role-btn-supervisor').click();
+    await goToMenu(page, 'supervision_record');
+    await page.getByTestId('sv-student').selectOption(String(studentId));
+    await expect(page.getByTestId('sv-item')).toHaveCount(37);
+
+    await page.getByTestId('sv-date').fill(await today());
+    await page.getByTestId('sv-score-c1_1').selectOption('5');
+    await page.getByTestId('sv-remark-c1_1').fill('กรอกค้างไว้');
+    await page.getByTestId('sv-notes').fill('ข้อสังเกตที่ยังไม่ได้บันทึก');
+
+    // ⛔ แบบฟอร์ม 37 ข้อกรอกนานกว่ารอบ poll 10 วิเสมอ — เดิมรอบพื้นหลังโหลดบันทึกเดิมทับทุกช่องกลับเป็นค่าว่าง
+    //    (พบตอนอัดวิดีโอ 2026-10-18 · เทสต์เดิมกรอกเร็วจนไม่เคยเจอ) · สั่งรอบพื้นหลังเองผ่าน `intent-updated`
+    //    (useDashboardData ฟังเหตุการณ์เดียวกับรอบ poll) แล้วรอให้คำขอของรอบนั้นจบก่อนตรวจ
+    const refreshed = page.waitForResponse((r) => r.url().includes('/supervision-records/form'));
+    await page.evaluate(() => window.dispatchEvent(new Event('intent-updated')));
+    await refreshed;
+    await page.waitForLoadState('networkidle');
+
+    await expect(page.getByTestId('sv-score-c1_1')).toHaveValue('5');
+    await expect(page.getByTestId('sv-remark-c1_1')).toHaveValue('กรอกค้างไว้');
+    await expect(page.getByTestId('sv-notes')).toHaveValue('ข้อสังเกตที่ยังไม่ได้บันทึก');
+    await expect(page.getByTestId('sv-date')).toHaveValue(await today());
+  });
+
   test('V10: หน้าจออาจารย์ — เลือกนักศึกษา กรอก บันทึก แล้วค่ายังอยู่', async ({ page }) => {
     test.setTimeout(120_000);
     const date = await today();
