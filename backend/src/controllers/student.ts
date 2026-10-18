@@ -100,9 +100,12 @@ export class StudentController {
         const intentQuery = await query(
           `SELECT i.form_id, i.company_id, c.name_th as company_name_th,
                   i.status, i.start_date, i.acceptance_evidence_path,
-                  -- ล็อกการระบุพี่เลี้ยง: ต้อง accepted เท่านั้น (ระบุล่วงหน้าได้ทันที ไม่ล็อกด้วยวันเริ่มฝึก)
-                  (i.status != 'accepted') AS mentor_locked,
-                  NULL::text AS mentor_opens_on,
+                  -- ล็อกการระบุพี่เลี้ยง: ต้อง accepted และถึงวันเริ่มฝึกแล้ว (เงื่อนไขเดียวกับ setMentorWithTransaction)
+                  -- ไม่มีวันเริ่ม = ไม่ล็อกด้วยวันที่ · mentor_opens_on = วันที่จะเปิดให้ระบุ (เฉพาะใบ accepted ที่ยังไม่ถึงวัน)
+                  NOT (i.status = 'accepted'
+                       AND (i.start_date IS NULL OR i.start_date <= (NOW() AT TIME ZONE 'Asia/Bangkok')::date)) AS mentor_locked,
+                  CASE WHEN i.status = 'accepted' AND i.start_date > (NOW() AT TIME ZONE 'Asia/Bangkok')::date
+                       THEN i.start_date::text END AS mentor_opens_on,
                   i.request_form_path, i.reject_reason, i.officer_document_no,
                   i.submitted_late, i.acceptance_due_date, i.acceptance_submitted_late,
                   i.company_mail_to, i.company_mail_sent_at, i.company_mail_count,

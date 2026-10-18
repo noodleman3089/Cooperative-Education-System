@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import pool, { query } from '../config/database';
 import { IntentForm } from '../types';
 import { recordStageEvent } from '../utils/stageEvents';
-
+import { formatThaiDate } from '../utils/thaiDate';
 
 /**
  * SEC-04: explicit allow-lists for every state transition an external party can
@@ -1503,6 +1503,16 @@ export class IntentFormModel {
       }
       assertAllowedTransition('set_mentor', row.status, ['accepted']);
 
+      // ล็อกจนถึงวันเริ่มฝึก — เทียบสตริง YYYY-MM-DD ล้วน (ห้าม new Date()) · ไม่มีวันเริ่ม = ไม่ล็อก
+      // (คำสั่งเจ้าของ 2026-10-10 · ยืนยันซ้ำ 2026-10-18 ว่าการปลดล็อกใน 2ce50d3 เป็นการหลุด ไม่ใช่ตั้งใจ)
+      const startDate = row.start_date as string | null;
+      if (startDate !== null && (row.today as string) < startDate) {
+        throw new IntentConflictError(
+          `ยังระบุพี่เลี้ยงไม่ได้ เพราะยังไม่ถึงวันเริ่มปฏิบัติงาน — ระบบจะเปิดให้ระบุตั้งแต่วันที่ ${formatThaiDate(startDate)}`,
+          'internship_not_started',
+          { opens_on: startDate }
+        );
+      }
 
       // อ่านหลังล็อกใบ — การยืนยันของอาจารย์นิเทศล็อกใบเดียวกันก่อนเปิดบัญชี สองคำขอจึงไม่สวนกัน
       if (row.mentor_id !== null) {
