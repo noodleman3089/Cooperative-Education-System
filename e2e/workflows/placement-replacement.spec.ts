@@ -263,6 +263,8 @@ test.describe('ขั้น 9 — เจ้าหน้าที่ปิดใ�
       status: 'accepted',
       closed_kind: null,
       can_reopen: false,
+      // ฟิลด์ใหม่จากงานบันทึกข้อความ (c10056b) — ไม่มีบันทึกที่คณบดีอนุมัติ = null
+      approved_memo: null,
     });
 
     const ok = await closeAccepted(request, formId, body);
@@ -294,6 +296,7 @@ test.describe('ขั้น 9 — เจ้าหน้าที่ปิดใ�
       status: 'superseded',
       closed_kind: 'sent_back',
       can_reopen: true,
+      approved_memo: null,
     });
 
     // ปิดซ้ำไม่ได้ — ใบไม่ใช่ accepted แล้ว

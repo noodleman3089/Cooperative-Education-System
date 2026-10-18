@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { seedTestData } from '../helpers/test-seeder';
-import { loginAs } from '../helpers/auth';
+import { loginAs, apiLoginAs } from '../helpers/auth';
+import { API_URL } from '../helpers/env';
+import { dbExec, dbRows, dbValue } from '../helpers/db';
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -90,5 +92,45 @@ test.describe('Google Maps Integration & Fallback Tests', () => {
     expect(checkDbResult.rows[0].status).toBe('pending_advisor');
     expect(checkDbResult.rows[0].is_verified).toBe(false);
     expect(checkDbResult.rows[0].google_place_id).toBeNull();
+  });
+
+  test('Test 3: สถานที่ที่ค้นจาก Google Maps (มี place id) รับรองทันที · กรอกเองรอเจ้าหน้าที่ (เจ้าของยืนยัน 2026-10-18)', async ({ request }) => {
+    await apiLoginAs(request, 'student2');
+    const semesterId = await dbValue<number>('SELECT semester_id FROM coop_semesters WHERE is_active = TRUE LIMIT 1');
+    const company = {
+      is_self_found: true,
+      semester_id: semesterId,
+      company_address: '1 ถนนทดสอบ',
+      company_province: 'ชลบุรี',
+      company_district: 'ศรีราชา',
+      company_postal_code: '20110',
+      company_phone: '020000000',
+      contact_person: 'นางสาวทดสอบ ระบบ',
+      contact_position: 'HR Manager',
+    };
+
+    // เส้นทาง Google Maps: มี place id → รับรองทันที ไม่ต้องรอเจ้าหน้าที่
+    const viaMaps = await request.post(`${API_URL}/intents`, {
+      data: { ...company, company_name_th: 'บริษัท จากแผนที่ จำกัด (E2E)', google_place_id: 'place-e2e-maps-verified' },
+    });
+    expect(viaMaps.status(), await viaMaps.text()).toBe(201);
+
+    // ถอนใบนั้นก่อนยื่นใหม่ — มีใบที่ยังเดินอยู่ได้ทีละใบ
+    await dbExec("DELETE FROM intent_forms WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')");
+
+    // เส้นทางกรอกเอง: ไม่มี place id → รอเจ้าหน้าที่รับรองตอนกดผ่านคำร้อง (SEC-04)
+    const typed = await request.post(`${API_URL}/intents`, {
+      data: { ...company, company_name_th: 'บริษัท กรอกเอง จำกัด (E2E)' },
+    });
+    expect(typed.status(), await typed.text()).toBe(201);
+
+    const rows = await dbRows<{ name_th: string; is_verified: boolean; google_place_id: string | null }>(
+      `SELECT name_th, is_verified, google_place_id FROM companies WHERE name_th LIKE '%(E2E)' ORDER BY name_th`
+    );
+    expect(rows.map((r) => [r.name_th, r.is_verified])).toEqual([
+      ['บริษัท กรอกเอง จำกัด (E2E)', false],
+      ['บริษัท จากแผนที่ จำกัด (E2E)', true],
+    ]);
+    expect(rows.find((r) => r.is_verified)?.google_place_id).toBe('place-e2e-maps-verified');
   });
 });
