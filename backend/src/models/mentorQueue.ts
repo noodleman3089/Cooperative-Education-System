@@ -147,6 +147,12 @@ export class MentorQueueModel {
       `SELECT i.form_id AS intent_form_id, s.student_id, s.student_code,
               btrim(coalesce(s.first_name, '') || ' ' || coalesce(s.last_name, '')) AS full_name,
               mj.major_name_th,
+              -- ข้อมูลติดต่อที่พี่เลี้ยงต้องใช้ดูแลนักศึกษา (เจ้าของสั่ง 2026-10-18): ชื่อ ชื่อเล่น เบอร์ อีเมล ผู้ปกครอง
+              -- ⛔ เฉพาะชุดนี้เท่านั้น — ไม่ส่งเกรด เลขบัตร ที่อยู่ เรซูเม่ · ขอบเขตคือนักศึกษาที่ตัวเองดูแล (WHERE ด้านล่าง · SEC-06/SEC-10)
+              s.name_prefix, s.nickname,
+              COALESCE(NULLIF(s.mobile_phone, ''), NULLIF(s.phone, '')) AS phone,
+              COALESCE(NULLIF(s.alt_email, ''), u_std.email) AS email,
+              s.parent_name, s.parent_phone,
               i.start_date, i.end_date, i.daily_log_required, i.uses_company_log_form,
               (i.end_date - 14) AS draft_due_date,
               -- จำนวนสัปดาห์คำนวณจากวันจริงเสมอ ⛔ ห้ามฮาร์ดโค้ด 16
@@ -165,6 +171,7 @@ export class MentorQueueModel {
                        WHERE e.student_id = s.student_id AND e.form_code = 'sahatkit_16') AS eval16_submitted
          FROM intent_forms i
          JOIN students s ON s.student_id = i.student_id
+         JOIN users u_std ON u_std.user_id = s.student_id
          LEFT JOIN master_major mj ON mj.major_id = s.major_id
         WHERE i.mentor_id = $1 AND i.status = 'accepted'
         ORDER BY s.student_code`,

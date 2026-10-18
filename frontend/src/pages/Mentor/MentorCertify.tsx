@@ -9,6 +9,7 @@ import Modal, { ModalBody, ModalFooter } from '../../components/ui/Modal';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import { Textarea } from '../../components/ui/Input';
+import MentorStudentContact from '../../components/MentorStudentContact';
 import { getErrorMessage } from '../../utils/errors';
 import {
   CheckCircle,
@@ -25,6 +26,12 @@ interface StudentInfo {
   student_id: number;
   student_code: string;
   full_name: string;
+  name_prefix?: string | null;
+  nickname?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  parent_name?: string | null;
+  parent_phone?: string | null;
   major_name_th: string;
   start_date: string;
   end_date: string;
@@ -603,6 +610,8 @@ const MentorCertify: React.FC = () => {
           </span>
         </div>
       </div>
+
+      {selectedStudent && <MentorStudentContact student={selectedStudent} />}
 
       {error && (
         <AlertBanner
