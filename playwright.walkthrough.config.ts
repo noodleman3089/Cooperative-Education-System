@@ -11,7 +11,8 @@ import base from './playwright.config';
 export default defineConfig(base, {
   testDir: './e2e/walkthrough',
   // config หลักกัน walkthrough ไว้ — ที่นี่ต้องเปิดคืน ไม่งั้น testIgnore ตรงทุกไฟล์
-  testIgnore: [],
+  // วิดีโอ (`video-*.spec.ts`) รันแยกด้วย playwright.video.config.ts — ไม่ให้ปนกับการถ่ายภาพ
+  testIgnore: ['**/video-*.spec.ts'],
   timeout: 300 * 1000,
   retries: 0,
   workers: 1,
