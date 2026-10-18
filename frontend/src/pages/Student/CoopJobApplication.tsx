@@ -88,28 +88,64 @@ interface FamilyInfo {
   siblings?: Row[];
 }
 
-/** คอลัมน์ของแต่ละตาราง — ต้องตรงกับ allow-list ฝั่งเซิร์ฟเวอร์ (`coopApplicationHistory.ts`) */
-const EDUCATION_COLS: { key: string; label: string }[] = [
-  { key: 'level', label: 'ระดับการศึกษา' },
+/** หนึ่งคอลัมน์ของตารางกรอก — `key` ต้องตรงกับ allow-list ฝั่งเซิร์ฟเวอร์ (`coopApplicationHistory.ts`) */
+interface Col {
+  key: string;
+  label: string;
+  /** มีรายการให้เลือก (dropdown) · เป็นฟังก์ชันได้ เมื่อตัวเลือกขึ้นกับช่องอื่นในแถวเดียวกัน */
+  options?: string[] | ((row: Row) => string[]);
+  /** เพิ่มตัวเลือก "อื่น ๆ (ระบุเอง)" ต่อท้าย — ค่าที่เก็บคือข้อความที่พิมพ์ตรง ๆ */
+  other?: boolean;
+  type?: 'number';
+  /** ตัวเลือกขึ้นกับช่องนี้ — แก้ช่องนั้นแล้วช่องนี้ถูกล้าง (เช่น เปลี่ยนระดับแล้ววุฒิเดิมใช้ไม่ได้) */
+  dependsOn?: string;
+}
+
+const EDUCATION_LEVELS = ['มัธยมต้น', 'มัธยมปลาย', 'ต่ำกว่าอนุปริญญา', 'อนุปริญญา', 'ปริญญาตรี'];
+/** วุฒิที่เลือกได้ของแต่ละระดับ — ไม่อยู่ในรายการให้เลือก "อื่น ๆ" แล้วพิมพ์เอง */
+const DEGREE_BY_LEVEL: Record<string, string[]> = {
+  มัธยมต้น: ['มัธยมศึกษาตอนต้น (ม.3)'],
+  มัธยมปลาย: ['มัธยมศึกษาตอนปลาย (ม.6)'],
+  ต่ำกว่าอนุปริญญา: ['ประกาศนียบัตรวิชาชีพ (ปวช.)'],
+  อนุปริญญา: ['ประกาศนียบัตรวิชาชีพชั้นสูง (ปวส.)', 'อนุปริญญา'],
+  ปริญญาตรี: [
+    'บริหารธุรกิจบัณฑิต (บธ.บ.)',
+    'วิทยาศาสตรบัณฑิต (วท.บ.)',
+    'ศิลปศาสตรบัณฑิต (ศศ.บ.)',
+    'เทคโนโลยีบัณฑิต (ทล.บ.)',
+  ],
+};
+/** ปี พ.ศ. ให้เลือก — ล่วงหน้า 6 ปี (ปีที่คาดว่าจะจบ) ถอยหลัง 40 ปี */
+const BE_NOW = new Date().getFullYear() + 543;
+const YEAR_OPTIONS = Array.from({ length: 47 }, (_, i) => String(BE_NOW + 6 - i));
+
+const EDUCATION_COLS: Col[] = [
+  { key: 'level', label: 'ระดับการศึกษา', options: EDUCATION_LEVELS },
   { key: 'institution', label: 'สถานศึกษา' },
-  { key: 'start_year', label: 'ปีที่เริ่ม' },
-  { key: 'end_year', label: 'ปีที่จบ' },
-  { key: 'degree', label: 'วุฒิที่ได้รับ' },
-  { key: 'major', label: 'สาขาวิชา' },
+  { key: 'start_year', label: 'ปีที่เริ่ม (พ.ศ.)', options: YEAR_OPTIONS },
+  { key: 'end_year', label: 'ปีที่จบ (พ.ศ.)', options: YEAR_OPTIONS },
+  {
+    key: 'degree',
+    label: 'วุฒิการศึกษา',
+    options: (row) => DEGREE_BY_LEVEL[row.level] ?? [],
+    other: true,
+    dependsOn: 'level',
+  },
+  { key: 'major', label: 'วิชา' },
 ];
-const TRAINING_COLS: { key: string; label: string }[] = [
+const TRAINING_COLS: Col[] = [
   { key: 'period', label: 'ระยะเวลา' },
   { key: 'institution', label: 'หน่วยงาน/สถาบัน' },
   { key: 'topic', label: 'หลักสูตร/เรื่องที่อบรม' },
 ];
-const ACTIVITY_COLS: { key: string; label: string }[] = [
+// `position` = "ตำแหน่งและหน้าที่" ช่องเดียวตามฟอร์มจริง (เดิมแยกจาก `duty` — migration 061 รวมของเก่าให้แล้ว)
+const ACTIVITY_COLS: Col[] = [
   { key: 'period', label: 'ระยะเวลา' },
-  { key: 'position', label: 'ตำแหน่ง' },
-  { key: 'duty', label: 'หน้าที่ที่รับผิดชอบ' },
+  { key: 'position', label: 'ตำแหน่งและหน้าที่' },
 ];
-const SIBLING_COLS: { key: string; label: string }[] = [
+const SIBLING_COLS: Col[] = [
   { key: 'name', label: 'ชื่อ-นามสกุล' },
-  { key: 'age', label: 'อายุ' },
+  { key: 'age', label: 'อายุ (ปี)', type: 'number' },
   { key: 'occupation', label: 'อาชีพ' },
 ];
 /**
@@ -119,11 +155,27 @@ const SIBLING_COLS: { key: string; label: string }[] = [
  *   คีย์ที่มันไม่รู้จักจึงไม่หาย — ถ้าวันหนึ่งไปเขียนใหม่เป็น `map(l => ({...}))` ตรงนั้น
  *   ข้อมูลสามช่องนี้จะหายเงียบๆ ทันที
  */
-const LANGUAGE_COLS: { key: string; label: string }[] = [
-  { key: 'language', label: 'ภาษา' },
+const LANGUAGE_LEVELS = ['ดีมาก', 'ดี', 'พอใช้', 'พื้นฐาน'];
+/** ภาษาอังกฤษมีแถวประจำบนฟอร์มจริง · ภาษาอื่นเลือกจากรายการหรือระบุเอง */
+const ENGLISH = 'ภาษาอังกฤษ';
+const isEnglishRow = (r: Row) => /อังกฤษ|english/i.test(r.language ?? '');
+const OTHER_LANGUAGES = [
+  'ภาษาจีน',
+  'ภาษาญี่ปุ่น',
+  'ภาษาเกาหลี',
+  'ภาษาฝรั่งเศส',
+  'ภาษาเยอรมัน',
+  'ภาษามลายู',
+  'ภาษาเวียดนาม',
+];
+const LANGUAGE_SKILLS = [
   { key: 'reading', label: 'อ่าน' },
   { key: 'speaking', label: 'พูด' },
   { key: 'writing', label: 'เขียน' },
+];
+const OTHER_LANGUAGE_COLS: Col[] = [
+  { key: 'language', label: 'ภาษา', options: OTHER_LANGUAGES, other: true },
+  ...LANGUAGE_SKILLS.map((s) => ({ key: s.key, label: s.label, options: LANGUAGE_LEVELS })),
 ];
 
 /** ความสัมพันธ์ของผู้ติดต่อฉุกเฉินที่พบบ่อย — ค่าที่เก็บคือข้อความนี้ตรง ๆ (ไม่มีรหัสแยก) */
@@ -167,22 +219,120 @@ const BLANK = {
  * ⛔ **แถวว่างไม่ถูกเก็บลงฐาน** — ตัวตรวจฝั่งเซิร์ฟเวอร์ตัดแถวที่ทุกช่องว่างทิ้งอยู่แล้ว
  * ฟอร์มจึงปล่อยให้มีแถวว่างค้างได้โดยไม่ทำให้ข้อมูลสกปรก
  */
+const OTHER = '__other';
+
+/** ช่องเดียวของตาราง: พิมพ์ · ตัวเลข · เลือกจากรายการ (+ "อื่น ๆ" ระบุเอง) */
+const RowField: React.FC<{
+  col: Col;
+  row: Row;
+  id: string;
+  testid: string;
+  label: string;
+  onChange: (value: string) => void;
+}> = ({ col, row, id, testid, label, onChange }) => {
+  const value = row[col.key] || '';
+  // กด "อื่น ๆ" แล้วแต่ยังไม่ได้พิมพ์ → ช่องระบุเองต้องค้างอยู่ (ค่ายังว่าง จึงอนุมานจากค่าไม่ได้)
+  const [forcedOther, setForcedOther] = useState(false);
+
+  if (!col.options) {
+    return (
+      <Input
+        id={id}
+        size="sm"
+        type={col.type}
+        min={col.type === 'number' ? 0 : undefined}
+        inputMode={col.type === 'number' ? 'numeric' : undefined}
+        data-testid={testid}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
+  const options = typeof col.options === 'function' ? col.options(row) : col.options;
+  const inList = options.includes(value);
+  const isOther = !!col.other && (forcedOther || (value !== '' && !inList));
+  // ค่าเดิมที่ไม่อยู่ในรายการและไม่มีช่อง "อื่น ๆ" (เช่น ข้อมูลที่เคยพิมพ์เองก่อนเปลี่ยนเป็น dropdown) — โชว์ต่อ ไม่ทำให้หายตอนบันทึก
+  const legacy = !col.other && value !== '' && !inList;
+
+  return (
+    <>
+      <Select
+        id={id}
+        size="sm"
+        data-testid={testid}
+        value={isOther ? OTHER : value}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === OTHER) {
+            setForcedOther(true);
+            if (inList) onChange('');
+          } else {
+            setForcedOther(false);
+            onChange(v);
+          }
+        }}
+      >
+        <option value="">-- เลือก --</option>
+        {legacy && <option value={value}>{value}</option>}
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+        {col.other && <option value={OTHER}>อื่น ๆ (ระบุเอง)</option>}
+      </Select>
+      {isOther && (
+        <Input
+          size="sm"
+          className="mt-2"
+          aria-label={`${label} (ระบุเอง)`}
+          data-testid={`${testid}-other`}
+          value={inList ? '' : value}
+          maxLength={100}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
+    </>
+  );
+};
+
 const RowTable: React.FC<{
   testid: string;
   label: string;
-  columns: { key: string; label: string }[];
+  columns: Col[];
   rows: Row[];
   onChange: (rows: Row[]) => void;
+  /** ข้อความบนปุ่มเพิ่ม (ค่าเริ่มต้น "+ เพิ่มแถว") */
+  addLabel?: string;
+  /** แถวพิเศษที่แสดงเหนือรายการ (เช่น ภาษาอังกฤษประจำ) และ `leadHasContent` = แถวนั้นมีข้อมูลแล้ว (นับเป็น "มีข้อมูล" กับช่องติ๊กไม่มี) */
+  lead?: React.ReactNode;
+  leadHasContent?: boolean;
+  /** ข้อความตอนยังไม่มีแถว (แทนข้อความมาตรฐาน) */
+  emptyText?: string;
   /**
    * หมวดบังคับ (เจ้าของสั่ง 2026-10-18): ต้องมีอย่างน้อย 1 แถว หรือติ๊ก "ไม่มีข้อมูล" — ไม่ส่ง `onNoneChange` = หมวดไม่บังคับ
    * ⛔ ห้ามบังคับแบบไม่มีทางออก คนที่ไม่เคยฝึกอบรมจริง ๆ จะตัน
    */
   none?: boolean;
   onNoneChange?: (none: boolean) => void;
-}> = ({ testid, label, columns, rows, onChange, none = false, onNoneChange }) => {
+}> = ({ testid, label, columns, rows, onChange, none = false, onNoneChange, addLabel, lead, leadHasContent = false, emptyText }) => {
   const required = !!onNoneChange;
   // มีแถวที่กรอกอะไรบางอย่างแล้ว → ติ๊ก "ไม่มี" ไม่ได้ (ขัดกัน)
-  const hasContent = rows.some((r) => Object.values(r).some((v) => (v ?? '').trim() !== ''));
+  const hasContent =
+    leadHasContent || rows.some((r) => Object.values(r).some((v) => (v ?? '').trim() !== ''));
+  const gridCols =
+    columns.length <= 2 ? 'sm:grid-cols-2' : columns.length === 4 ? 'sm:grid-cols-4' : 'sm:grid-cols-3';
+  // แก้ช่องหนึ่ง → ล้างช่องที่ตัวเลือกขึ้นกับมัน (`dependsOn`)
+  const setCell = (index: number, key: string, value: string) =>
+    onChange(
+      rows.map((r, i) => {
+        if (i !== index) return r;
+        const next = { ...r, [key]: value };
+        for (const c of columns) if (c.dependsOn === key) delete next[c.key];
+        return next;
+      })
+    );
   const showNone = none && !hasContent;
   return (
   <div>
@@ -200,7 +350,7 @@ const RowTable: React.FC<{
         }}
         className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs font-bold text-brand-blue transition-colors hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/50"
       >
-        + เพิ่มแถว
+        {addLabel ?? '+ เพิ่มแถว'}
       </button>
     </div>
 
@@ -218,13 +368,16 @@ const RowTable: React.FC<{
       </label>
     )}
 
+    {lead && <div className="mb-2">{lead}</div>}
+
     {rows.length === 0 ? (
       <p className="rounded-xl border border-dashed border-gray-300 py-4 text-center text-xs text-gray-600 dark:border-gray-700 dark:text-gray-400">
-        {!required
-          ? 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่บังคับ)'
-          : showNone
-            ? 'ยืนยันแล้วว่าไม่มีข้อมูลในหมวดนี้'
-            : 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อกรอก หรือติ๊ก "ไม่มีข้อมูลในหมวดนี้" (บังคับอย่างใดอย่างหนึ่ง)'}
+        {emptyText ??
+          (!required
+            ? 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อเริ่มกรอก (ไม่บังคับ)'
+            : showNone
+              ? 'ยืนยันแล้วว่าไม่มีข้อมูลในหมวดนี้'
+              : 'ยังไม่มีข้อมูล — กด เพิ่มแถว เพื่อกรอก หรือติ๊ก "ไม่มีข้อมูลในหมวดนี้" (บังคับอย่างใดอย่างหนึ่ง)')}
       </p>
     ) : (
       <div className="space-y-2">
@@ -234,30 +387,35 @@ const RowTable: React.FC<{
             data-testid={`ca-${testid}-row`}
             className="flex items-start gap-2 rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-800/30"
           >
-            <div className="grid flex-1 grid-cols-1 gap-2 sm:grid-cols-3">
-              {columns.map((col) => (
-                <Input
-                  key={col.key}
-                  size="sm"
-                  aria-label={`${label} ${col.label}`}
-                  data-testid={`ca-${testid}-${index}-${col.key}`}
-                  value={row[col.key] || ''}
-                  placeholder={col.label}
-                  onChange={(e) => {
-                    const next = rows.map((r, i) =>
-                      i === index ? { ...r, [col.key]: e.target.value } : r
-                    );
-                    onChange(next);
-                  }}
-                />
-              ))}
+            <span className="mt-6 w-5 shrink-0 text-xs font-bold text-gray-600 dark:text-gray-400">
+              {index + 1}.
+            </span>
+            <div className={`grid flex-1 grid-cols-1 gap-x-2 gap-y-3 ${gridCols}`}>
+              {columns.map((col) => {
+                const id = `ca-${testid}-${index}-${col.key}`;
+                return (
+                  <div key={`${col.key}:${col.dependsOn ? (row[col.dependsOn] ?? '') : ''}`}>
+                    <label htmlFor={id} className="mb-1 block text-[11px] font-medium text-gray-700 dark:text-gray-300">
+                      {col.label}
+                    </label>
+                    <RowField
+                      col={col}
+                      row={row}
+                      id={id}
+                      testid={id}
+                      label={`${label} ${col.label}`}
+                      onChange={(v) => setCell(index, col.key, v)}
+                    />
+                  </div>
+                );
+              })}
             </div>
             <button
               type="button"
               aria-label={`ลบแถวที่ ${index + 1} ของ${label}`}
               data-testid={`ca-${testid}-${index}-remove`}
               onClick={() => onChange(rows.filter((_, i) => i !== index))}
-              className="shrink-0 rounded-lg border border-red-200 px-2 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
+              className="mt-5 shrink-0 rounded-lg border border-red-200 px-2 py-1.5 text-xs font-bold text-red-700 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/30"
             >
               ลบ
             </button>
@@ -291,6 +449,22 @@ const CoopJobApplication: React.FC = () => {
   const [noneSections, setNoneSections] = useState<string[]>([]);
   const setNone = (section: string, value: boolean) =>
     setNoneSections((prev) => (value ? [...new Set([...prev, section])] : prev.filter((s) => s !== section)));
+
+  // จุดมุ่งหมายอาชีพ: เก็บเป็นข้อความบรรทัดละข้อ (คอลัมน์ TEXT เดิม ไม่ต้อง migrate) · ฟอร์มจริงมี 4 ข้อ
+  // ข้อมูลเดิมที่เป็นย่อหน้าเดียวไปอยู่ข้อ 1 · มีเกิน 4 บรรทัดก็โชว์ครบ ไม่ตัดทิ้ง
+  const careerLineList = form.career_objective.split('\n');
+  const careerLines = Array.from({ length: Math.max(4, careerLineList.length) }, (_, i) => careerLineList[i] ?? '');
+
+  // ภาษาอังกฤษมีช่องประจำ · ภาษาอื่นอยู่ในตาราง — สองส่วนนี้เก็บรวมในอาร์เรย์เดียว (`languages`) ลงคอลัมน์เดียว
+  // ⛔ แถวอังกฤษแถวแรกคือแถวที่ช่องประจำแก้ · แถวอังกฤษอื่น (ถ้ามีจากหน้าโปรไฟล์) ถูกเก็บไว้ ไม่ทิ้ง
+  const englishRows = languages.filter(isEnglishRow);
+  const otherLanguages = languages.filter((r) => !isEnglishRow(r));
+  const englishRow: Row = englishRows[0] ?? {};
+  const setEnglish = (key: string, value: string) => {
+    setNone('language', false);
+    const edited = { ...englishRow, language: ENGLISH, [key]: value };
+    setLanguages([edited, ...englishRows.slice(1), ...otherLanguages]);
+  };
 
   // ร่างที่กรอกค้าง (utils/coop03Draft.ts — ข้อมูลอ่อนไหวไม่ลงที่เก็บของเบราว์เซอร์)
   const auth = useContext(AuthContext);
@@ -426,12 +600,17 @@ const CoopJobApplication: React.FC = () => {
     try {
       const res = await api.put('/students/coop-application', {
         ...form,
+        // ตัดข้อว่างออกก่อนส่ง — ไม่งั้นบรรทัดว่างหัวข้อความถูกเซิร์ฟเวอร์ trim แล้วเลขข้อเลื่อน
+        career_objective: careerLineList.map((l) => l.trim()).filter(Boolean).join('\n'),
         sensitive_data_consent: consent,
         family_info: family,
         education_history: education,
         training_history: training,
         activity_history: activities,
-        language_proficiency: languages,
+        // แถวอังกฤษที่เลือกแล้วเลือกกลับเป็น "ไม่ระบุ" จะเหลือแค่ชื่อภาษา — ไม่ส่ง ไม่งั้นนับเป็นแถวข้อมูลทั้งที่ไม่มีระดับ
+        language_proficiency: languages.filter(
+          (r) => !isEnglishRow(r) || r.level || LANGUAGE_SKILLS.some((s) => r[s.key])
+        ),
         none_sections: noneSections,
       });
       setSuccess(res.message || 'บันทึกเรียบร้อยแล้ว');
@@ -880,24 +1059,32 @@ const CoopJobApplication: React.FC = () => {
               {who === 'father' ? 'บิดา' : 'มารดา'}
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              {(['name', 'age', 'occupation', 'phone'] as const).map((field) => (
-                <Input
-                  key={field}
-                  data-testid={`ca-${who}-${field}`}
-                  aria-label={`${who === 'father' ? 'บิดา' : 'มารดา'} ${field}`}
-                  value={family[who]?.[field] || ''}
-                  onChange={(e) =>
-                    setFamily((f) => ({ ...f, [who]: { ...(f[who] || {}), [field]: e.target.value } }))
-                  }
-                  placeholder={
-                    {
-                      name: 'ชื่อ-นามสกุล',
-                      age: 'อายุ',
-                      occupation: 'อาชีพ',
-                      phone: 'โทรศัพท์',
-                    }[field]
-                  }
-                />
+              {(
+                [
+                  ['name', 'ชื่อ-นามสกุล'],
+                  ['age', 'อายุ (ปี)'],
+                  ['occupation', 'อาชีพ'],
+                  ['phone', 'โทรศัพท์'],
+                ] as const
+              ).map(([field, fieldLabel]) => (
+                <div key={field}>
+                  <label
+                    htmlFor={`ca-${who}-${field}`}
+                    className="mb-1 block text-[11px] font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    {fieldLabel}
+                  </label>
+                  <Input
+                    id={`ca-${who}-${field}`}
+                    data-testid={`ca-${who}-${field}`}
+                    type={field === 'age' ? 'number' : undefined}
+                    min={field === 'age' ? 0 : undefined}
+                    value={family[who]?.[field] || ''}
+                    onChange={(e) =>
+                      setFamily((f) => ({ ...f, [who]: { ...(f[who] || {}), [field]: e.target.value } }))
+                    }
+                  />
+                </div>
               ))}
             </div>
           </div>
@@ -906,11 +1093,13 @@ const CoopJobApplication: React.FC = () => {
         <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label htmlFor="ca-sibling-count" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              จำนวนพี่น้อง (รวมตัวเอง)
+              จำนวนพี่น้อง (คน · รวมตัวเอง)
             </label>
             <Input
               id="ca-sibling-count"
               data-testid="ca-sibling-count"
+              type="number"
+              min={1}
               value={family.sibling_count || ''}
               onChange={(e) => setFamily((f) => ({ ...f, sibling_count: e.target.value }))}
             />
@@ -922,6 +1111,8 @@ const CoopJobApplication: React.FC = () => {
             <Input
               id="ca-birth-order"
               data-testid="ca-birth-order"
+              type="number"
+              min={1}
               value={family.birth_order || ''}
               onChange={(e) => setFamily((f) => ({ ...f, birth_order: e.target.value }))}
             />
@@ -930,7 +1121,9 @@ const CoopJobApplication: React.FC = () => {
 
         <RowTable
           testid="siblings"
-          label="พี่น้อง"
+          label="รายละเอียดพี่น้อง (ชื่อ-นามสกุล · อายุ · อาชีพ)"
+          addLabel="+ เพิ่มพี่น้อง"
+          emptyText="ยังไม่มีข้อมูล — กด เพิ่มพี่น้อง เพื่อกรอกชื่อ-นามสกุล อายุ และอาชีพของพี่น้องแต่ละคน (ไม่บังคับ)"
           columns={SIBLING_COLS}
           rows={family.siblings || []}
           onChange={(rows) => setFamily((f) => ({ ...f, siblings: rows }))}
@@ -948,6 +1141,7 @@ const CoopJobApplication: React.FC = () => {
           <RowTable
             testid="education"
             label="ประวัติการศึกษา"
+            addLabel="+ เพิ่มระดับการศึกษา"
             columns={EDUCATION_COLS}
             rows={education}
             onChange={setEducation}
@@ -965,7 +1159,8 @@ const CoopJobApplication: React.FC = () => {
           />
           <RowTable
             testid="activity"
-            label="กิจกรรมที่เคยเข้าร่วม"
+            label="กิจกรรมนอกหลักสูตร"
+            addLabel="+ เพิ่มกิจกรรม"
             columns={ACTIVITY_COLS}
             rows={activities}
             onChange={setActivities}
@@ -975,25 +1170,74 @@ const CoopJobApplication: React.FC = () => {
           <RowTable
             testid="language"
             label='ความสามารถพิเศษทางภาษา (ใช้ร่วมกับหน้า "ข้อมูลส่วนตัว & เรซูเม่")'
-            columns={LANGUAGE_COLS}
-            rows={languages}
-            onChange={setLanguages}
+            addLabel="+ เพิ่มภาษาอื่น"
+            columns={OTHER_LANGUAGE_COLS}
+            rows={otherLanguages}
+            onChange={(next) => setLanguages([...englishRows, ...next])}
             none={noneSections.includes('language')}
             onNoneChange={(v) => setNone('language', v)}
+            leadHasContent={englishRows.some((r) => LANGUAGE_SKILLS.some((s) => r[s.key]) || r.level)}
+            emptyText='ยังไม่มีภาษาอื่น — กด เพิ่มภาษาอื่น เพื่อระบุ (ภาษาอังกฤษกรอกในช่องด้านบน) หรือติ๊ก "ไม่มีข้อมูลในหมวดนี้" (บังคับอย่างใดอย่างหนึ่ง)'
+            lead={
+              <div
+                data-testid="ca-language-en"
+                className="rounded-xl border border-gray-100 bg-gray-50/60 p-3 dark:border-gray-800 dark:bg-gray-800/30"
+              >
+                <p className="mb-2 text-xs font-bold text-gray-800 dark:text-gray-200">{ENGLISH}</p>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  {LANGUAGE_SKILLS.map((s) => (
+                    <div key={s.key}>
+                      <label
+                        htmlFor={`ca-language-en-${s.key}`}
+                        className="mb-1 block text-[11px] font-medium text-gray-700 dark:text-gray-300"
+                      >
+                        {s.label}
+                      </label>
+                      <Select
+                        id={`ca-language-en-${s.key}`}
+                        size="sm"
+                        data-testid={`ca-language-en-${s.key}`}
+                        value={englishRow[s.key] || ''}
+                        onChange={(e) => setEnglish(s.key, e.target.value)}
+                      >
+                        <option value="">-- ไม่ระบุ --</option>
+                        {LANGUAGE_LEVELS.map((l) => (
+                          <option key={l} value={l}>
+                            {l}
+                          </option>
+                        ))}
+                      </Select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            }
           />
 
           <div>
-            <label htmlFor="ca-career" className="mb-1 block text-xs font-medium text-gray-700 dark:text-gray-300">
-              จุดมุ่งหมายในอาชีพ
-            </label>
-            <Textarea
-              id="ca-career"
-              data-testid="ca-career"
-              rows={4}
-              value={form.career_objective}
-              onChange={(e) => set('career_objective', e.target.value)}
-              placeholder="อยากทำงานด้านไหน ตั้งเป้าไว้อย่างไรหลังจบการศึกษา"
-            />
+            <p className="mb-1 text-xs font-bold text-gray-700 dark:text-gray-300">จุดมุ่งหมายในอาชีพ</p>
+            <p className="mb-2 text-[11px] text-gray-600 dark:text-gray-400">
+              ระบุสายงานและลักษณะงานที่สนใจ ข้อละหนึ่งเรื่อง (ไม่บังคับ)
+            </p>
+            <div className="space-y-2">
+              {careerLines.map((line, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="w-5 shrink-0 text-xs font-bold text-gray-600 dark:text-gray-400">{i + 1}.</span>
+                  <Input
+                    size="sm"
+                    data-testid={`ca-career-${i}`}
+                    aria-label={`จุดมุ่งหมายในอาชีพ ข้อ ${i + 1}`}
+                    maxLength={200}
+                    value={line}
+                    onChange={(e) => {
+                      const next = [...careerLines];
+                      next[i] = e.target.value.replace(/\r?\n/g, ' ');
+                      set('career_objective', next.join('\n'));
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </section>

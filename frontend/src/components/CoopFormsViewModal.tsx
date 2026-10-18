@@ -118,8 +118,8 @@ const EDUCATION_COLS = [
   { key: 'institution', label: 'สถานศึกษา' },
   { key: 'start_year', label: 'ปีที่เริ่ม' },
   { key: 'end_year', label: 'ปีที่จบ' },
-  { key: 'degree', label: 'วุฒิ' },
-  { key: 'major', label: 'สาขาวิชา' },
+  { key: 'degree', label: 'วุฒิการศึกษา' },
+  { key: 'major', label: 'วิชา' },
 ];
 const TRAINING_COLS = [
   { key: 'period', label: 'ระยะเวลา' },
@@ -128,8 +128,7 @@ const TRAINING_COLS = [
 ];
 const ACTIVITY_COLS = [
   { key: 'period', label: 'ระยะเวลา' },
-  { key: 'position', label: 'ตำแหน่ง' },
-  { key: 'duty', label: 'หน้าที่' },
+  { key: 'position', label: 'ตำแหน่งและหน้าที่' },
 ];
 const LANGUAGE_COLS = [
   { key: 'language', label: 'ภาษา' },
@@ -332,7 +331,16 @@ const Coop03Panel: React.FC<{ d: Coop03View }> = ({ d }) => {
 
       <Section title="จุดมุ่งหมายอาชีพและสายงานที่สนใจ">
         <Grid>
-          <Field label="จุดมุ่งหมายอาชีพ" value={d.career_objective} wide />
+          <Field
+            label="จุดมุ่งหมายอาชีพ"
+            value={text(d.career_objective)
+              .split('\n')
+              .map(text)
+              .filter(Boolean)
+              .map((l, i) => `${i + 1}. ${l}`)
+              .join('\n')}
+            wide
+          />
           <Field
             label="สายงานและลักษณะงานที่สนใจ"
             value={Array.isArray(d.interested_job_types) ? d.interested_job_types.join(' · ') : null}

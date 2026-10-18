@@ -56,7 +56,8 @@ export function sanitizeRows(
 
 export const EDUCATION_KEYS = ['level', 'institution', 'start_year', 'end_year', 'degree', 'major'] as const;
 export const TRAINING_KEYS = ['period', 'institution', 'topic'] as const;
-export const ACTIVITY_KEYS = ['period', 'position', 'duty'] as const;
+// `position` = ช่อง "ตำแหน่งและหน้าที่" ช่องเดียวตามฟอร์มจริง (2026-10-18 · เดิมแยก `duty` — migration 061 รวมของเก่าให้)
+export const ACTIVITY_KEYS = ['period', 'position'] as const;
 // `age` เพิ่มเมื่อ 2026-09-04 หลังได้ `.docx` ตัวจริง — ตารางพี่น้องบนฟอร์มมี 3 ช่อง
 // (ชื่อ-นามสกุล · อายุ · อาชีพ) ไม่ใช่ 2 ช่องอย่างที่เดาไว้ตอนไม่มีไฟล์
 export const SIBLING_KEYS = ['name', 'age', 'occupation'] as const;
