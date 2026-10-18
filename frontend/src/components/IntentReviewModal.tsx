@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import api, { API_BASE_URL } from '../services/api';
-import { Download, CheckSquare } from 'lucide-react';
+import api from '../services/api';
+import { CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/statusLabels';
 import { formatThaiDate } from '../utils/thaiDate';
@@ -135,18 +135,6 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">เบอร์ติดต่อบริษัท:</span> {intentDetail.company_phone || '-'}</p>
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">วันที่เริ่มฝึกงาน:</span> {intentDetail.start_date ? new Date(intentDetail.start_date).toLocaleDateString('th-TH') : '-'}</p>
                   </div>
-                </div>
-                
-                <div className="pt-4 border-t dark:border-gray-700">
-                  <a
-                    href={`${API_BASE_URL}/files/download/resumes/resume-user-${intentDetail.student_id}.pdf`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-lg bg-blue-50 hover:bg-blue-100 text-brand-blue dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40 font-bold transition-all text-xs border border-blue-100 dark:border-blue-900/50"
-                  >
-                    <Download className="h-4 w-4" />
-                    เปิดอ่านหรือดาวน์โหลดเรซูเม่ (PDF)
-                  </a>
                 </div>
               </div>
             </div>
