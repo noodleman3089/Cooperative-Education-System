@@ -8,6 +8,8 @@ interface FileViewButtonProps {
   src: string;
   /** ชื่อกล่องและป้ายกำกับปุ่ม เช่น "แบบคำร้องที่ส่งไป" */
   title: string;
+  /** มีค่า = ปุ่มข้อความพร้อมไอคอน (เช่น "ดูเรซูเม่") แทนไอคอนดวงตาเล็ก ๆ */
+  label?: string;
   'data-testid'?: string;
 }
 
@@ -15,7 +17,7 @@ interface FileViewButtonProps {
  * ปุ่มรูปดวงตาที่เปิดไฟล์ในกล่องหน้าเว็บ แทนลิงก์ที่พาไปแท็บใหม่แล้วให้เบราว์เซอร์โหลดไฟล์ลงเครื่อง
  * ดึงไฟล์ด้วย cookie แล้วแสดงจาก blob — เปิดดูได้เลยทั้ง PDF และรูป ไม่มีไฟล์ค้างในเครื่อง
  */
-const FileViewButton: React.FC<FileViewButtonProps> = ({ src, title, 'data-testid': testId }) => {
+const FileViewButton: React.FC<FileViewButtonProps> = ({ src, title, label, 'data-testid': testId }) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +54,14 @@ const FileViewButton: React.FC<FileViewButtonProps> = ({ src, title, 'data-testi
         title={`ดู${title}`}
         aria-label={`ดู${title}`}
         data-testid={testId}
-        className="inline-flex items-center rounded p-1 text-brand-blue transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40"
+        className={
+          label
+            ? 'inline-flex min-h-11 items-center justify-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-4 text-xs font-bold text-brand-blue transition-colors hover:bg-blue-100 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-400 dark:hover:bg-blue-900/40'
+            : 'inline-flex items-center rounded p-1 text-brand-blue transition-colors hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-950/40'
+        }
       >
         <Eye className="h-4 w-4" aria-hidden="true" />
+        {label}
       </button>
 
       {open && (

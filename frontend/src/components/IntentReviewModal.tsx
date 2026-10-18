@@ -4,6 +4,7 @@ import { CheckSquare } from 'lucide-react';
 import Modal, { ModalBody } from './ui/Modal';
 import { statusText } from './ui/statusLabels';
 import { formatThaiDate } from '../utils/thaiDate';
+import ResumeViewButton from './ResumeViewButton';
 
 /**
  * ⛔ `currentRole` กับ `onSuccess` ถูกถอดออก 2026-08-27 — มันมีไว้ให้ปุ่มอนุมัติ/ตีกลับ
@@ -36,6 +37,8 @@ interface IntentDetail {
   company_contact_person?: string | null;
   company_phone?: string | null;
   start_date?: string | null;
+  /** `resumes/<ชื่อไฟล์>` — เรซูเม่ที่นักศึกษาอัปโหลด (บังคับมีก่อนยื่นคำร้อง) */
+  resume_file?: string | null;
   /** ผู้ลงนามบนกระดาษที่เจ้าหน้าที่คีย์ — มีเฉพาะที่ส่งถึงบุคลากร (SEC-10) */
   advisor_signer_name?: string | null;
   advisor_signed_date?: string | null;
@@ -135,6 +138,12 @@ const IntentReviewModal: React.FC<IntentReviewModalProps> = ({
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">เบอร์ติดต่อบริษัท:</span> {intentDetail.company_phone || '-'}</p>
                     <p><span className="text-gray-600 dark:text-gray-400 font-medium">วันที่เริ่มฝึกงาน:</span> {intentDetail.start_date ? new Date(intentDetail.start_date).toLocaleDateString('th-TH') : '-'}</p>
                   </div>
+                </div>
+
+                {/* ปุ่มแยกสำหรับเรซูเม่อย่างเดียว (เจ้าของสั่ง 2026-10-18) — เปิดดูเฉพาะไฟล์ที่นักศึกษาอัปโหลด
+                    ลิงก์เดิมชี้ชื่อไฟล์ผิด (ไม่มีเลขสุ่มท้ายชื่อ) จึงเปิดไม่ได้ · ใช้ชื่อไฟล์จริงจาก `resume_file` */}
+                <div className="pt-4 border-t dark:border-gray-700">
+                  <ResumeViewButton resumeFile={intentDetail.resume_file} data-testid="intent-resume" />
                 </div>
               </div>
             </div>

@@ -6,6 +6,7 @@ import Button from '../../components/ui/Button';
 import ConfirmDialog from '../../components/ui/ConfirmDialog';
 import ConfirmSummary from '../../components/ui/ConfirmSummary';
 import Modal from '../../components/ui/Modal';
+import ResumeViewButton from '../../components/ResumeViewButton';
 import { Input, Select, Textarea } from '../../components/ui/Input';
 import { getErrorCode, getErrorMessage, getErrorStatus } from '../../utils/errors';
 import { formatThaiDateTime, toThaiDigits } from '../../utils/thaiDate';
@@ -48,6 +49,8 @@ interface RequestDetail {
   company_contact_person?: string | null;
   company_contact_position?: string | null;
   request_form_path?: string | null;
+  /** `resumes/<ชื่อไฟล์>` — เรซูเม่ที่นักศึกษาอัปโหลด (`GET /intents/:id`) */
+  resume_file?: string | null;
   request_uploaded_at?: string | null;
   submitted_late?: boolean;
   late_reason?: string | null;
@@ -449,6 +452,13 @@ export const RequestReviewPanel: React.FC<Props> = ({ row, onClose, onDone, onCh
 
             {/* ══ ขวา: ของที่ใช้ตัดสิน ══ */}
             <div className="flex min-w-0 flex-[1_1_400px] flex-col gap-[18px] p-5">
+              {/* ปุ่มแยกสำหรับเรซูเม่อย่างเดียว — เปิดดูเฉพาะไฟล์ที่นักศึกษาอัปโหลด (เจ้าของสั่ง 2026-10-18) */}
+              {detail && (
+                <div className="flex flex-wrap items-center gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
+                  <span className={LABEL}>เรซูเม่นักศึกษา</span>
+                  <ResumeViewButton resumeFile={detail.resume_file} data-testid="request-resume" />
+                </div>
+              )}
               {(submittedLate || review?.last_return || review?.last_letter_recall) && (
                 <div className="flex flex-col gap-3 border-b border-gray-200 pb-4 dark:border-gray-800">
                   {submittedLate && (
