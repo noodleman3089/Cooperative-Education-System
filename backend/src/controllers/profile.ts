@@ -308,7 +308,6 @@ export class ProfileController {
       const { userId } = req.user;
       const {
         province_id,
-        major_id,
         cumulative_gpa,
         first_name,
         last_name,
@@ -326,8 +325,9 @@ export class ProfileController {
       // SEC-05 (แก้ 2026-10-04 โดยเจ้าของ): student_code และ enrollment_year ยังเป็นของทะเบียน
       // — enrollment_year ขับการปิดบัญชีตอนจบ จึงอ่านจากแถวเดิมเสมอ ค่าใน body ถูกเมิน
       // `cumulative_gpa` นักศึกษาแก้เองได้แล้ว (ด่านสิทธิ์ถูกถอดตั้งแต่ SEC-02 เกรดไม่ได้ตัดสินสิทธิ์อะไร)
-      // `major_id` แก้เองได้ **เฉพาะตอนไม่มีใบแจ้งความจำนงที่ยังเดินอยู่** เพราะสาขากำหนดว่า
-      // หัวหน้าสาขาคนไหนเห็นคำร้อง (`resolveMajorScope`) ย้ายกลางทางแปลว่าเลือกผู้อนุมัติเองได้
+      // `major_id` ล็อกอีกครั้ง 2026-10-18 (เจ้าของสั่ง) — ค่าใน body ถูกเมิน อ่านจากแถวเดิมเสมอ
+      // เพราะสาขากำหนดว่าหัวหน้าสาขาคนไหนเห็นคำร้อง (`resolveMajorScope`) · เจ้าหน้าที่แก้ที่ `PUT /students/:id/registry`
+      // หรือ `PUT /users/:id` ทางเดียว
       const parsedProvinceId = province_id !== undefined && province_id !== null && province_id !== '' ? parseInt(province_id, 10) : null;
       const parsedYearLevel = year_level !== undefined && year_level !== null && year_level !== '' ? parseInt(year_level, 10) : null;
 
@@ -368,36 +368,6 @@ export class ProfileController {
         nextGpa = Math.round(parsedGpa * 100) / 100;
       }
 
-      // สาขา: เปลี่ยนได้เมื่อไม่มีใบแจ้งความจำนงที่ยังเดินอยู่ (นิยามเดียวกับด่าน "ยื่นได้ครั้งละ 1 แห่ง")
-      const previousMajorId = existingProfile.major_id;
-      let nextMajorId = previousMajorId;
-      if (hasValue(major_id)) {
-        const parsedMajorId = Number(major_id);
-        if (!Number.isInteger(parsedMajorId)) {
-          res.status(400).json({ message: 'major_id ไม่ถูกต้อง' });
-          return;
-        }
-        if (parsedMajorId !== previousMajorId) {
-          if (!(await MasterModel.verifyMajorExists(parsedMajorId))) {
-            res.status(400).json({ message: 'ไม่พบสาขาวิชาที่เลือก' });
-            return;
-          }
-          const live = await query(
-            `SELECT 1 FROM intent_forms
-              WHERE student_id = $1 AND status NOT IN ('rejected', 'company_rejected', 'superseded')
-              LIMIT 1`,
-            [userId]
-          );
-          if ((live.rowCount ?? 0) > 0) {
-            res.status(409).json({
-              message: 'เปลี่ยนสาขาไม่ได้ขณะที่ยังมีใบแจ้งความจำนงที่ดำเนินการอยู่ — แจ้งเจ้าหน้าที่สหกิจศึกษาให้แก้ให้',
-            });
-            return;
-          }
-          nextMajorId = parsedMajorId;
-        }
-      }
-
       // คำนำหน้าชื่อ: ไม่ส่งมา/ว่าง = คงค่าเดิม (ฟอร์มอื่นที่ไม่รู้จักช่องนี้ต้องไม่ล้างมัน)
       const prefix = readNamePrefix(req.body.name_prefix);
       if (!prefix.ok) {
@@ -430,7 +400,7 @@ export class ProfileController {
       const updated = await StudentModel.updateStudent(
         userId,
         lockedStudentCode,
-        nextMajorId,
+        existingProfile.major_id,
         parsedProvinceId,
         nextGpa,
         resumeFile,
@@ -452,12 +422,7 @@ export class ProfileController {
         updated.name_prefix = prefix.value;
       }
 
-      if (nextMajorId !== previousMajorId) {
-        // ที่ปรึกษา/อาจารย์นิเทศเดิมถูกตั้งโดยหัวหน้าสาขาเก่า — ไม่อยู่ในสาขาใหม่แล้ว ให้หัวหน้าสาขาใหม่ตั้งใหม่
-        await query('UPDATE students SET advisor_id = NULL, supervisor_id = NULL WHERE student_id = $1', [userId]);
-      }
-
-      if (nextMajorId !== previousMajorId || nextGpa !== previousGpa) {
+      if (nextGpa !== previousGpa) {
         writeAudit({
           action: AuditAction.REGISTRY_CHANGED,
           entityType: 'student',
@@ -465,8 +430,6 @@ export class ProfileController {
           subjectId: userId,
           detail: {
             changed_by: 'student',
-            major_id_before: previousMajorId,
-            major_id_after: nextMajorId,
             gpa_before: previousGpa,
             gpa_after: nextGpa,
           },

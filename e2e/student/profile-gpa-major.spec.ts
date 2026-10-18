@@ -9,9 +9,9 @@ import { goToMenu } from '../helpers/nav';
  * หน้าโปรไฟล์นักศึกษา — เกรดกับสาขาแก้เองได้ (เจ้าของเปลี่ยน SEC-05 เมื่อ 2026-10-04)
  *
  *   • เกรด: แก้ได้เสรี ตรวจช่วง 0.00–4.00 ที่เซิร์ฟเวอร์ · ไม่มีป้าย "แจ้งเอง" ไม่มีเกรดสองช่อง
- *   • สาขา: ⚠️ 2026-10-18 เจ้าของตั้งใจ**ล็อกบนหน้าจอ** (คณะ/สาขาเป็นช่องอ่านอย่างเดียว · P1) — แต่ backend
- *     ยังรับ `major_id` ผ่าน API ตามกติกาเดิม: แก้ได้เฉพาะตอน **ไม่มีใบแจ้งความจำนงที่ยังเดินอยู่** · เปลี่ยนแล้ว
- *     ล้างที่ปรึกษา/อาจารย์นิเทศ เพราะสาขากำหนดว่าหัวหน้าสาขาคนไหนเห็นคำร้อง (`resolveMajorScope`) (P3)
+ *   • สาขา: ⚠️ 2026-10-18 เจ้าของสั่ง**ล็อก** — หน้าจอเป็นช่องอ่านอย่างเดียว (P1) และ `PUT /profile/student`
+ *     เมิน `major_id` ทุกกรณี (P3) เพราะสาขากำหนดว่าหัวหน้าสาขาคนไหนเห็นคำร้อง (`resolveMajorScope`)
+ *     · เจ้าหน้าที่แก้ที่ `PUT /students/:id/registry` (คุมที่ staff/registry-fields)
  *   • รหัสนักศึกษากับปีที่เข้ายังล็อก — คุมที่ security-hardening SEC-05 และ staff/registry-fields
  *
  * ⛔ enrollment_year ต้อง > 2565 ไม่งั้น DeactivationScheduler ปิดบัญชีกลางเทสต์ (กฎ e2e ข้อ 12)
@@ -72,7 +72,7 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
     // รอให้คำขอทั้งหมดจบก่อนเริ่มพิมพ์
     await page.waitForLoadState('networkidle');
     // ⚠️ 2026-10-18 หน้าจอล็อกคณะ/สาขา (เจ้าของตั้งใจ) — เป็น <input readonly> ไม่ใช่ <select> อีกแล้ว
-    //    ถ้าจะคืนการเลือกสาขาเองบนหน้าจอ เทสต์นี้ต้องแดง (backend ยังรับ major_id ผ่าน API — คุมที่ P3)
+    //    ถ้าจะคืนการเลือกสาขาเองบนหน้าจอ เทสต์นี้ต้องแดง (ฝั่ง API เมิน major_id — คุมที่ P3)
     for (const id of ['profile-faculty', 'profile-major']) {
       const field = page.getByTestId(id);
       await expect(field).toHaveJSProperty('readOnly', true);
@@ -115,36 +115,54 @@ test.describe('โปรไฟล์นักศึกษา: เกรดแล
     expect(Number(await dbValue('SELECT cumulative_gpa FROM students WHERE student_id = $1', [STUDENT_ID]))).toBe(2.5);
   });
 
-  test('P3: มีใบแจ้งความจำนงที่เดินอยู่ → เปลี่ยนสาขาไม่ได้ (409) · ใบถูกปฏิเสธแล้วเปลี่ยนได้', async ({ request }) => {
+  test('P3: ส่ง major_id มาที่ API ก็ไม่เปลี่ยน — เมินทุกสถานะ (ไม่มีใบ · ใบเดินอยู่ · ใบถูกปฏิเสธ) ช่องอื่นยังบันทึก', async ({ request }) => {
     await resetStudent2();
     const target = (await otherMajorId())!;
     const original = (await dbValue<number>('SELECT major_id FROM students WHERE student_id = $1', [STUDENT_ID]))!;
+    await withDb(async (db) => {
+      const advisor = (await db.query("SELECT user_id FROM users WHERE email = 'advisor1@test.com'")).rows[0].user_id;
+      await db.query('UPDATE students SET advisor_id = $1, supervisor_id = $1 WHERE student_id = $2', [advisor, STUDENT_ID]);
+    });
     await apiLoginAs(request, 'student2');
 
-    await insertIntent('pending_advisor');
+    const majorNow = () => dbValue('SELECT major_id FROM students WHERE student_id = $1', [STUDENT_ID]);
+    const auditCount = () =>
+      dbValue<number>(
+        `SELECT COUNT(*)::int FROM audit_log
+          WHERE action = 'student.registry_changed' AND entity_id = $1 AND detail ? 'major_id_after'`,
+        [String(STUDENT_ID)]
+      );
 
-    // เลือกสาขาเดิมซ้ำระหว่างมีใบค้าง ต้องไม่ถูกขวาง (ไม่ได้เปลี่ยนอะไร)
-    const same = await request.put(`${API_URL}/profile/student`, { multipart: { major_id: String(original) } });
-    expect(same.status()).toBe(200);
+    // ⛔ ล็อกอีกครั้ง 2026-10-18 (เจ้าของสั่ง · SEC-05) — สาขากำหนดว่าหัวหน้าสาขาคนไหนเห็นคำร้อง
+    //    เมินทุกกรณี ไม่ใช่ปฏิเสธ: คำขอเดียวกันที่มีช่องอื่นมาด้วยต้องบันทึกช่องอื่นต่อได้ (หน้าเก่าที่ยังส่ง major_id ไม่แตก)
+    for (const state of ['none', 'pending_advisor', 'rejected'] as const) {
+      if (state === 'pending_advisor') await insertIntent('pending_advisor');
+      if (state === 'rejected') {
+        await withDb(async (db) => {
+          await db.query("UPDATE intent_forms SET status = 'rejected' WHERE student_id = $1", [STUDENT_ID]);
+        });
+      }
+      const res = await request.put(`${API_URL}/profile/student`, {
+        multipart: { major_id: String(target), nickname: `ชื่อเล่น-${state}` },
+      });
+      expect(res.status(), `${state}: ${await res.text()}`).toBe(200);
+      expect(await majorNow(), state).toBe(original);
+      expect(await dbValue('SELECT nickname FROM students WHERE student_id = $1', [STUDENT_ID]), state).toBe(`ชื่อเล่น-${state}`);
+    }
 
-    const blocked = await request.put(`${API_URL}/profile/student`, {
-      multipart: { major_id: String(target), cumulative_gpa: '1.00' },
-    });
-    expect(blocked.status()).toBe(409);
-    // คำขอที่ตกด่านต้องไม่เขียนอะไรเลย — เกรดที่มาพร้อมกันก็ต้องไม่เข้า
-    expect(await dbValue('SELECT major_id FROM students WHERE student_id = $1', [STUDENT_ID])).toBe(original);
-    expect(Number(await dbValue('SELECT cumulative_gpa FROM students WHERE student_id = $1', [STUDENT_ID]))).toBe(3.75);
+    // สาขาที่ไม่มีอยู่จริง / ค่าไม่ใช่ตัวเลข ก็ถูกเมินเช่นกัน (ไม่ใช่ 400)
+    for (const bad of ['999999', 'abc']) {
+      const res = await request.put(`${API_URL}/profile/student`, { multipart: { major_id: bad } });
+      expect(res.status(), bad).toBe(200);
+      expect(await majorNow(), bad).toBe(original);
+    }
 
-    // ใบที่ถูกปฏิเสธไม่นับว่าเดินอยู่
-    await withDb(async (db) => {
-      await db.query("UPDATE intent_forms SET status = 'rejected' WHERE student_id = $1", [STUDENT_ID]);
-    });
-    const allowed = await request.put(`${API_URL}/profile/student`, { multipart: { major_id: String(target) } });
-    expect(allowed.status()).toBe(200);
-    expect(await dbValue('SELECT major_id FROM students WHERE student_id = $1', [STUDENT_ID])).toBe(target);
-
-    // สาขาที่ไม่มีอยู่จริง
-    const missing = await request.put(`${API_URL}/profile/student`, { multipart: { major_id: '999999' } });
-    expect(missing.status()).toBe(400);
+    // ที่ปรึกษา/อาจารย์นิเทศไม่ถูกล้าง และไม่มี audit ว่าเปลี่ยนสาขา
+    expect(
+      (await withDb(async (db) =>
+        (await db.query('SELECT advisor_id, supervisor_id FROM students WHERE student_id = $1', [STUDENT_ID])).rows[0]
+      )).advisor_id
+    ).not.toBeNull();
+    expect(await auditCount()).toBe(0);
   });
 });

@@ -191,7 +191,8 @@ test.describe('Security hardening regressions', () => {
   });
 
   // SEC-05 (แก้ 2026-10-04) — รหัสนักศึกษากับปีที่เข้ายังเป็นของทะเบียน: นักศึกษาส่งมาผ่าน
-  // PUT /api/profile/student แล้วต้องถูกเมิน · เกรดกับสาขาแก้เองได้แล้ว (คุมที่ student/profile-gpa-major)
+  // PUT /api/profile/student แล้วต้องถูกเมิน · เกรดแก้เองได้ (คุมที่ student/profile-gpa-major)
+  // · major_id ล็อกอีกครั้ง 2026-10-18 (เจ้าของสั่ง) — ถูกเมินเช่นกัน (คุมที่ profile-gpa-major P3)
   test('SEC-05: student_code and enrollment_year sent by a student are ignored', async ({ request }) => {
     await withDb(async (db) => {
       // 2568 ไม่ใช่ 2565 โดยตั้งใจ — 2565 + 4 = 2569 = academic_year (พ.ศ.) ที่ seed ไว้

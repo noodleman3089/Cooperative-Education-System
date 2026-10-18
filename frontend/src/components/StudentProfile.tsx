@@ -213,9 +213,7 @@ const StudentProfile: React.FC = () => {
 
     try {
       const formData = new FormData();
-      if (selectedMajorId !== '') {
-        formData.append('major_id', String(selectedMajorId));
-      }
+      // สาขาไม่ถูกส่งไป — ล็อกที่เซิร์ฟเวอร์ (SEC-05 · เจ้าหน้าที่แก้ให้)
       formData.append('cumulative_gpa', cumulativeGpa.trim());
       // ว่าง = เซิร์ฟเวอร์คงค่าเดิม (ล้างคำนำหน้าที่ตั้งแล้วไม่ได้ — หนังสือราชการต้องมี)
       formData.append('name_prefix', namePrefix);
