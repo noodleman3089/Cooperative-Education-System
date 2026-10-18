@@ -323,7 +323,13 @@ test.describe('ลิงก์ตอบรับของสถานประ�
     }
 
     // Resume: ไม่มี → has_resume false + 404 · มี → true + เปิดได้ (ไฟล์ทดสอบลบทิ้งเมื่อเสร็จ)
-    expect(body.has_resume).toBe(false);
+    // seed ให้ student2 มีเรซูเม่ติดมาแล้ว (บังคับก่อนยื่นคำร้อง 2026-10-18) — ล้างก่อนเพื่อวัดกรณี "ไม่มี"
+    await dbExec(
+      `UPDATE students SET resume_file = NULL
+        WHERE student_id = (SELECT user_id FROM users WHERE email = 'student2@test.com')`
+    );
+    const noResume = await (await anon.get(`${PUB}?token=${token}`)).json();
+    expect(noResume.has_resume).toBe(false);
     expect((await anon.get(`${PUB}/resume?token=${token}`)).status()).toBe(404);
 
     const resumeName = `resume-l3-${Date.now()}.pdf`;

@@ -162,12 +162,22 @@ test.describe('ทำเนียบสถานประกอบการ — 
     await page.waitForTimeout(500);
     await expect(dialog).toBeHidden();
 
-    // ที่มาของแถว: แถวที่นักศึกษาสร้าง (กรอกมือ ไม่มี Google place · ยังไม่มีใบผูก) ต้องขึ้นว่านักศึกษาสร้าง
-    // — เดิมเดาจาก "มี place id หรือมีคนใช้" แถวแบบนี้จึงขึ้นว่าเจ้าหน้าที่เพิ่มเอง และแถวของเจ้าหน้าที่เปลี่ยนป้ายเมื่อมีคนใช้
+    // ที่มาของแถว: 2026-10-18 (8dc4840) หน้าทำเนียบเหลือป้ายสองแบบตามช่องทางที่ข้อมูลเข้ามา —
+    // "Google Maps" (มี place id) กับ "กรอกเอง" (ไม่มี) · ไม่แยกเจ้าหน้าที่/นักศึกษาด้วยป้ายแล้ว
+    // และแถวกรอกเองยังไม่เปลี่ยนป้ายเมื่อมีคนใช้ (ป้ายอ่านจาก place id อย่างเดียว ไม่ใช่จากการมีใบผูก)
     const seed = (await companyByName(SEED_COMPANY))!;
-    await expect(page.getByTestId(`company-row-${seed.company_id}`)).toContainText('เจ้าหน้าที่เพิ่มเอง');
+    await expect(page.getByTestId(`company-row-${seed.company_id}`)).toContainText('กรอกเอง');
     const studentMade = (await companyByName(STUDENT_COMPANY))!;
-    await expect(page.getByTestId(`company-row-${studentMade.company_id}`)).toContainText('นักศึกษาสร้างตอนยื่นคำร้อง');
+    await expect(page.getByTestId(`company-row-${studentMade.company_id}`)).toContainText('กรอกเอง');
+    await expect(page.getByTestId(`company-row-${studentMade.company_id}`)).not.toContainText('Google Maps');
+
+    // มี place id → ป้าย Google Maps
+    await dbExec('UPDATE companies SET google_place_id = $2 WHERE company_id = $1', [
+      studentMade.company_id,
+      'place-directory-label',
+    ]);
+    await page.reload();
+    await expect(page.getByTestId(`company-row-${studentMade.company_id}`)).toContainText('Google Maps');
   });
 
   test('D3: ชื่อซ้ำถูกปฏิเสธด้วย 409 ไม่ใช่ 500 และแก้แถวตัวเองไม่นับว่าซ้ำ', async ({ request }) => {

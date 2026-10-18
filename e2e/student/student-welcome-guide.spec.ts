@@ -116,7 +116,8 @@ test.describe('คำแนะนำขั้นตอนเริ่มต้�
     // ซ่อนแล้วต้องไม่ใช่หน้าว่าง — การ์ดเดิมพร้อมปุ่มไปกรอกประวัติต้องมาแทน
     await expect(page.getByText(GUIDE_BADGE)).toHaveCount(0);
     await expect(page.getByText(FALLBACK_CARD)).toBeVisible();
-    await expect(page.getByRole('button', { name: 'กรอกประวัตินักศึกษา' })).toBeVisible();
+    // exact: เมนูที่ล็อก (nav-job_application · nav-accommodation_plan) มีคำนี้อยู่ใน tooltip จึงตรงแบบไม่ exact หลายปุ่ม
+    await expect(page.getByRole('button', { name: 'กรอกประวัตินักศึกษา', exact: true })).toBeVisible();
 
     // ปุ่มบอกว่า "ซ่อน" ไม่ใช่ "ไม่ต้องแสดงอีก" — รีเฟรชแล้วจึงต้องเห็นอีกครั้ง
     // (ถ้าวันหนึ่งมีคนเอา localStorage กลับมา เทสต์บรรทัดนี้จะแดง)

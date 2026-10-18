@@ -98,8 +98,9 @@ async function makePeer(tag: string): Promise<{ email: string; id: number }> {
     await db.query(`INSERT INTO user_roles (user_id, role_name) VALUES ($1, 'student')`, [userId]);
     // enrollment_year ใหม่พอที่ DeactivationScheduler จะไม่ปิดบัญชีกลางเทสต์
     await db.query(
-      `INSERT INTO students (student_id, student_code, major_id, cumulative_gpa, enrollment_year, first_name, last_name, advisor_id)
-       SELECT $1, $2, s.major_id, 3.00, 2569, 'เพื่อน', $3, s.advisor_id FROM students s WHERE s.student_id = ${STUDENT2}`,
+      // resume_file: ต้องมีเรซูเม่ก่อนยื่นคำร้อง (2026-10-18) — ตัวเทียบต้องยื่นถึงด่านที่เทสต์ตั้งใจวัด ไม่ตกที่ด่านเรซูเม่
+      `INSERT INTO students (student_id, student_code, major_id, cumulative_gpa, enrollment_year, first_name, last_name, advisor_id, resume_file)
+       SELECT $1, $2, s.major_id, 3.00, 2569, 'เพื่อน', $3, s.advisor_id, 'resumes/resume-user-seed.pdf' FROM students s WHERE s.student_id = ${STUDENT2}`,
       [userId, `6599${String(userId).padStart(4, '0')}`, `ทดสอบ${tag}`]
     );
     return userId;

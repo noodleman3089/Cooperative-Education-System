@@ -106,10 +106,18 @@ test.describe('ข้อมูลที่อยู่ประเทศไท�
 
     // ต้นฉบับต้องไม่ถูก import เข้าโค้ด ไม่งั้นมันจะกลับเข้า bundle
     // (คอมเมนต์ที่พูดถึงชื่อไฟล์ไม่นับ — จับเฉพาะ import จริง)
-    const imports = execSync(
-      `git grep -nE "(from|import\\()\\s*['\\"][^'\\"]*thai_geography\\.source" -- frontend/src || true`,
-      { cwd: path.resolve(__dirname, '../..'), encoding: 'utf8' }
-    ).trim();
+    // ⛔ ห้ามต่อ `|| true` ท้ายคำสั่ง — execSync บน Windows รันผ่าน cmd.exe ซึ่งไม่มีคำสั่ง `true`
+    //    และ `git grep` ที่ไม่เจออะไรคืน exit 1 (= ผลที่เราต้องการ) จึงไปตกที่ `true` แล้วเทสต์พังด้วยเหตุที่ไม่เกี่ยวกับข้อมูล
+    let imports = '';
+    try {
+      imports = execSync(
+        `git grep -nE "(from|import\\()\\s*['\\"][^'\\"]*thai_geography\\.source" -- frontend/src`,
+        { cwd: path.resolve(__dirname, '../..'), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }
+      ).trim();
+    } catch (err) {
+      // exit 1 = ไม่เจอ (ผ่าน) · อย่างอื่น (git ใช้ไม่ได้) ต้องแดง ไม่ใช่เงียบ
+      if ((err as { status?: number }).status !== 1) throw err;
+    }
     expect(imports, `ต้นฉบับ 2 MB ถูก import เข้าโค้ด: ${imports}`).toBe('');
   });
 });
